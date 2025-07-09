@@ -3,61 +3,128 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple NFC Reader</title>
+    <title>Web NFC Reader</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 2rem; }
-        #scanButton { padding: 1rem 2rem; font-size: 1.2rem; cursor: pointer; }
-        #log { margin-top: 1rem; padding: 1rem; background-color: #f0f0f0; border-radius: 8px; min-height: 50px; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+        }
+        #scanButton {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: white;
+            background-color: #007bff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        #scanButton:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #status {
+            text-align: center;
+            margin: 1rem 0;
+            font-weight: 500;
+        }
+        #log {
+            list-style-type: none;
+            padding: 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        #log li {
+            padding: 10px 15px;
+            border-bottom: 1px solid #ddd;
+        }
+        #log li:last-child {
+            border-bottom: none;
+        }
+        strong {
+            color: #0056b3;
+        }
     </style>
 </head>
 <body>
 
-    <h1>Simple Web NFC Reader</h1>
-    <p>Press the button and tap an NTAG213 tag.</p>
+    <h1>Web NFC Tag Reader</h1>
 
-    <button id="scanButton">Scan NFC Tag</button>
+    <button id="scanButton">Start Scan</button>
+    <p id="status">Web NFC is supported. Click the button to start.</p>
 
-    <h2>Log:</h2>
-    <div id="log">Awaiting scan...</div>
+    <h2>Scan Log:</h2>
+    <ul id="log">
+        </ul>
 
     <script>
         const scanButton = document.getElementById('scanButton');
-        const logElement = document.getElementById('log');
+        const status = document.getElementById('status');
+        const log = document.getElementById('log');
 
-        function log(message) {
-            logElement.textContent = message;
-            console.log(message);
+        // Check for Web NFC availability
+        if (!('NDEFReader' in window)) {
+            status.textContent = "Web NFC is not supported on this browser.";
+            scanButton.disabled = true;
         }
 
         scanButton.addEventListener('click', async () => {
-            if ('NDEFReader' in window) {
-                log('Web NFC is supported.');
-                try {
-                    const ndef = new NDEFReader();
-                    await ndef.scan();
-                    log('Scan started successfully. Awaiting tag...');
+            status.textContent = "Click button again to stop scan...";
+            console.log("User clicked scan button");
 
-                    ndef.addEventListener('readingerror', () => {
-                        log('Error: Cannot read data from the NFC tag.');
-                    });
+            try {
+                const reader = new NDEFReader();
+                // The scan() method returns a Promise that resolves when the scan is started.
+                await reader.scan();
+                console.log("Scan started successfully.");
+                status.textContent = "Scan started. Bring a tag near your device...";
 
-                    ndef.addEventListener('reading', ({ message }) => {
-                        log('NDEF message read successfully!');
-                        // Assuming the first record is a text record
-                        const textRecord = message.records[0];
-                        const textDecoder = new TextDecoder(textRecord.encoding);
-                        const textData = textDecoder.decode(textRecord.data);
-                        log(`Tag says: ${textData}`);
-                    });
+                reader.addEventListener('error', (event) => {
+                    console.error("NFC Error:", event);
+                    status.textContent = `Error! ${event.message}`;
+                });
 
-                } catch (error) {
-                    log(`Error: Scan failed to start. ${error}`);
-                }
-            } else {
-                log('Web NFC is not supported on this browser.');
+                reader.addEventListener('reading', ({ message, serialNumber }) => {
+                    console.log(`Serial Number: ${serialNumber}`);
+                    console.log("NDEF Message:", message);
+
+                    // Create a new list item for the log
+                    const li = document.createElement('li');
+                    
+                    // Display the serial number
+                    let content = `Serial Number: <strong>${serialNumber}</strong><br>`;
+                    
+                    // Loop through records in the NDEF message
+                    for (const record of message.records) {
+                        content += `Record Type: <strong>${record.recordType}</strong><br>`;
+                        
+                        // Decode text records
+                        if (record.recordType === "text") {
+                            const textDecoder = new TextDecoder(record.encoding);
+                            const text = textDecoder.decode(record.data);
+                            content += `Content: ${text}<br>`;
+                        }
+                    }
+
+                    li.innerHTML = content;
+                    // Add the new log entry to the top of the list
+                    log.prepend(li);
+                });
+
+            } catch (error) {
+                console.error("Starting scan failed:", error);
+                status.textContent = `Error! ${error.message}`;
             }
         });
     </script>
-
 </body>
 </html>
