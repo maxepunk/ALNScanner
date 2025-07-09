@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web NFC Reader</title>
+    <title>Web NFC Reader (Fixed)</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -46,12 +46,18 @@
         #log li {
             padding: 10px 15px;
             border-bottom: 1px solid #ddd;
+            word-wrap: break-word; /* Prevents long text from overflowing */
         }
         #log li:last-child {
             border-bottom: none;
         }
         strong {
             color: #0056b3;
+        }
+        .record-block {
+            padding-left: 10px;
+            margin-top: 5px;
+            border-left: 3px solid #eee;
         }
     </style>
 </head>
@@ -60,7 +66,7 @@
     <h1>Web NFC Tag Reader</h1>
 
     <button id="scanButton">Start Scan</button>
-    <p id="status">Web NFC is supported. Click the button to start.</p>
+    <p id="status">Click the button to start scanning.</p>
 
     <h2>Scan Log:</h2>
     <ul id="log">
@@ -71,60 +77,75 @@
         const status = document.getElementById('status');
         const log = document.getElementById('log');
 
-        // Check for Web NFC availability
         if (!('NDEFReader' in window)) {
             status.textContent = "Web NFC is not supported on this browser.";
             scanButton.disabled = true;
         }
 
         scanButton.addEventListener('click', async () => {
-            status.textContent = "Click button again to stop scan...";
-            console.log("User clicked scan button");
-
+            status.textContent = "User interaction detected. Starting scan...";
             try {
                 const reader = new NDEFReader();
-                // The scan() method returns a Promise that resolves when the scan is started.
                 await reader.scan();
-                console.log("Scan started successfully.");
-                status.textContent = "Scan started. Bring a tag near your device...";
+                
+                status.textContent = "✅ Scan started. Bring a tag near your device...";
 
                 reader.addEventListener('error', (event) => {
-                    console.error("NFC Error:", event);
-                    status.textContent = `Error! ${event.message}`;
+                    status.textContent = `Error: ${event.message}`;
                 });
 
                 reader.addEventListener('reading', ({ message, serialNumber }) => {
-                    console.log(`Serial Number: ${serialNumber}`);
-                    console.log("NDEF Message:", message);
-
-                    // Create a new list item for the log
+                    // Prepend a new entry to the log for this tag
                     const li = document.createElement('li');
-                    
-                    // Display the serial number
-                    let content = `Serial Number: <strong>${serialNumber}</strong><br>`;
-                    
-                    // Loop through records in the NDEF message
-                    for (const record of message.records) {
-                        content += `Record Type: <strong>${record.recordType}</strong><br>`;
-                        
-                        // Decode text records
-                        if (record.recordType === "text") {
-                            const textDecoder = new TextDecoder(record.encoding);
-                            const text = textDecoder.decode(record.data);
-                            content += `Content: ${text}<br>`;
-                        }
-                    }
-
+                    let content = `Serial Number: <strong>${serialNumber}</strong>`;
                     li.innerHTML = content;
-                    // Add the new log entry to the top of the list
+
+                    const recordContainer = document.createElement('div');
+                    recordContainer.className = 'record-block';
+                    
+                    // Decode and display each record in the message
+                    for (const record of message.records) {
+                        recordContainer.appendChild(decodeRecord(record));
+                    }
+                    
+                    li.appendChild(recordContainer);
                     log.prepend(li);
+                    
+                    status.textContent = "✅ Scan successful. Bring another tag near...";
                 });
 
             } catch (error) {
-                console.error("Starting scan failed:", error);
-                status.textContent = `Error! ${error.message}`;
+                status.textContent = `Error starting scan: ${error}`;
             }
         });
+
+        function decodeRecord(record) {
+            const recordDiv = document.createElement('div');
+            const textDecoder = new TextDecoder('utf-8');
+            let content = `Record Type: <strong>${record.recordType}</strong><br>`;
+
+            switch (record.recordType) {
+                case "text":
+                    const textPayload = new TextDecoder(record.encoding).decode(record.data);
+                    content += `Content: ${textPayload}`;
+                    break;
+                case "url":
+                    const urlPayload = textDecoder.decode(record.data);
+                    content += `URL: <a href="${urlPayload}" target="_blank">${urlPayload}</a>`;
+                    break;
+                case "mime":
+                    content += `MIME Type: <strong>${record.mediaType}</strong><br>`;
+                    content += `Data: (Binary data of ${record.data.byteLength} bytes)`;
+                    break;
+                default:
+                    // For external types or other unknown types
+                    content += `Data: (Binary data of ${record.data.byteLength} bytes)`;
+                    break;
+            }
+            recordDiv.innerHTML = content;
+            return recordDiv;
+        }
+
     </script>
 </body>
 </html>
