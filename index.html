@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple NFC Reader</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 2rem; }
+        #scanButton { padding: 1rem 2rem; font-size: 1.2rem; cursor: pointer; }
+        #log { margin-top: 1rem; padding: 1rem; background-color: #f0f0f0; border-radius: 8px; min-height: 50px; }
+    </style>
+</head>
+<body>
+
+    <h1>Simple Web NFC Reader</h1>
+    <p>Press the button and tap an NTAG213 tag.</p>
+
+    <button id="scanButton">Scan NFC Tag</button>
+
+    <h2>Log:</h2>
+    <div id="log">Awaiting scan...</div>
+
+    <script>
+        const scanButton = document.getElementById('scanButton');
+        const logElement = document.getElementById('log');
+
+        function log(message) {
+            logElement.textContent = message;
+            console.log(message);
+        }
+
+        scanButton.addEventListener('click', async () => {
+            if ('NDEFReader' in window) {
+                log('Web NFC is supported.');
+                try {
+                    const ndef = new NDEFReader();
+                    await ndef.scan();
+                    log('Scan started successfully. Awaiting tag...');
+
+                    ndef.addEventListener('readingerror', () => {
+                        log('Error: Cannot read data from the NFC tag.');
+                    });
+
+                    ndef.addEventListener('reading', ({ message }) => {
+                        log('NDEF message read successfully!');
+                        // Assuming the first record is a text record
+                        const textRecord = message.records[0];
+                        const textDecoder = new TextDecoder(textRecord.encoding);
+                        const textData = textDecoder.decode(textRecord.data);
+                        log(`Tag says: ${textData}`);
+                    });
+
+                } catch (error) {
+                    log(`Error: Scan failed to start. ${error}`);
+                }
+            } else {
+                log('Web NFC is not supported on this browser.');
+            }
+        });
+    </script>
+
+</body>
+</html>
