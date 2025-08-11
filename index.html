@@ -1057,6 +1057,7 @@
         const DataManager = {
             transactions: [],
             currentSession: [],
+            scannedTokens: new Set(),  // Global registry of scanned tokens
             
             loadTransactions() {
                 try {
@@ -1071,12 +1072,43 @@
                 }
             },
             
+            loadScannedTokens() {
+                try {
+                    const stored = localStorage.getItem('scannedTokens');
+                    if (stored) {
+                        this.scannedTokens = new Set(JSON.parse(stored));
+                        Debug.log(`Loaded ${this.scannedTokens.size} scanned tokens`);
+                    }
+                } catch (e) {
+                    Debug.log('Error loading scanned tokens', true);
+                    this.scannedTokens = new Set();
+                }
+            },
+            
             saveTransactions() {
                 try {
                     localStorage.setItem('transactions', JSON.stringify(this.transactions));
                 } catch (e) {
                     Debug.log('Error saving transactions', true);
                 }
+            },
+            
+            saveScannedTokens() {
+                try {
+                    localStorage.setItem('scannedTokens', JSON.stringify([...this.scannedTokens]));
+                    Debug.log(`Saved ${this.scannedTokens.size} scanned tokens`);
+                } catch (e) {
+                    Debug.log('Error saving scanned tokens', true);
+                }
+            },
+            
+            isTokenScanned(tokenId) {
+                return this.scannedTokens.has(tokenId);
+            },
+            
+            markTokenAsScanned(tokenId) {
+                this.scannedTokens.add(tokenId);
+                this.saveScannedTokens();
             },
             
             addTransaction(transaction) {
@@ -1158,7 +1190,9 @@
                 if (confirm('Clear all transaction data? This cannot be undone.')) {
                     this.transactions = [];
                     this.currentSession = [];
+                    this.scannedTokens.clear();
                     localStorage.removeItem('transactions');
+                    localStorage.removeItem('scannedTokens');
                     UIManager.updateHistoryBadge();
                     alert('All data cleared');
                     location.reload();
@@ -1387,8 +1421,9 @@
                 // Load settings
                 Settings.load();
                 
-                // Load transaction history
+                // Load transaction history and scanned tokens
                 DataManager.loadTransactions();
+                DataManager.loadScannedTokens();
                 UIManager.updateHistoryBadge();
                 
                 // Check NFC support
@@ -1495,6 +1530,13 @@
             processNFCRead(result) {
                 Debug.log(`Processing token: ${result.id} (from ${result.source})`);
                 
+                // Check for duplicate FIRST
+                if (DataManager.isTokenScanned(result.id)) {
+                    Debug.log(`Duplicate token detected: ${result.id}`, true);
+                    this.showDuplicateError(result.id);
+                    return;  // Stop processing
+                }
+                
                 const tokenData = TokenManager.findToken(result.id);
                 
                 if (!tokenData) {
@@ -1504,6 +1546,31 @@
                     // Known token
                     this.recordTransaction(tokenData.token, tokenData.matchedId, false);
                 }
+            },
+            
+            showDuplicateError(tokenId) {
+                // Reset scan button
+                const button = document.getElementById('scanButton');
+                button.disabled = false;
+                button.textContent = 'Start Scanning';
+                
+                // Show error on result screen
+                const statusEl = document.getElementById('resultStatus');
+                statusEl.className = 'status-message error';
+                statusEl.innerHTML = `
+                    <h2>Token Already Scanned</h2>
+                    <p style="font-size: 14px;">This token has been used</p>
+                    <p style="font-size: 12px; color: #666;">ID: ${tokenId}</p>
+                `;
+                
+                // Show simple result screen with just the error
+                document.getElementById('resultRfid').textContent = tokenId;
+                document.getElementById('resultType').textContent = 'DUPLICATE';
+                document.getElementById('resultType').style.color = '#FF5722';
+                document.getElementById('resultGroup').textContent = 'Previously scanned';
+                document.getElementById('resultValue').textContent = 'No points awarded';
+                
+                UIManager.showScreen('result');
             },
             
             recordTransaction(token, tokenId, isUnknown) {
@@ -1520,6 +1587,10 @@
                 };
                 
                 DataManager.addTransaction(transaction);
+                
+                // Mark this token as scanned globally
+                DataManager.markTokenAsScanned(tokenId);
+                
                 UIManager.updateSessionStats();
                 UIManager.showTokenResult(token, tokenId, isUnknown);
                 
