@@ -612,6 +612,82 @@
         }
         
         /* ============================================
+           TEAM DETAILS STYLES
+           ============================================ */
+        .token-detail-card {
+            background: #f9f9f9;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #FF5722;
+            transition: all 0.2s;
+        }
+        
+        .token-detail-card:hover {
+            background: #f0f0f0;
+            transform: translateX(5px);
+        }
+        
+        .token-detail-card.unknown {
+            border-left-color: #9E9E9E;
+            opacity: 0.8;
+        }
+        
+        .token-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-weight: bold;
+        }
+        
+        .token-detail-value {
+            font-size: 20px;
+            color: #FF5722;
+        }
+        
+        .token-detail-card.unknown .token-detail-value {
+            color: #9E9E9E;
+        }
+        
+        .token-detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-size: 14px;
+        }
+        
+        .token-detail-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .token-detail-label {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 2px;
+        }
+        
+        .token-detail-info {
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .token-calculation {
+            grid-column: 1 / -1;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 13px;
+            color: #666;
+            text-align: center;
+        }
+        
+        .token-calculation strong {
+            color: #333;
+        }
+        
+        /* ============================================
            EMPTY STATE
            ============================================ */
         .empty-state {
@@ -865,6 +941,36 @@
             </div>
             
             <button class="btn btn-primary" onclick="App.closeScoreboard()">Back</button>
+        </div>
+
+        <!-- Team Details Screen -->
+        <div id="teamDetailsScreen" class="screen">
+            <div class="header" style="margin-bottom: 20px;">
+                <h2 id="teamDetailsTitle">Team Details</h2>
+                <p id="teamDetailsSummary" style="color: #666; font-size: 14px;"></p>
+            </div>
+            
+            <div id="teamDetailsContainer" class="history-container">
+                <!-- Populated by JavaScript -->
+            </div>
+            
+            <div class="transaction-result">
+                <h3>Score Breakdown</h3>
+                <div class="transaction-detail">
+                    <label>Base Score:</label>
+                    <span class="value" id="teamBaseScore">$0</span>
+                </div>
+                <div class="transaction-detail">
+                    <label>Group Bonuses:</label>
+                    <span class="value" id="teamBonusScore">$0</span>
+                </div>
+                <div class="transaction-detail" style="font-weight: bold; font-size: 18px; margin-top: 10px; padding-top: 10px; border-top: 2px solid #667eea;">
+                    <label>Total Score:</label>
+                    <span class="value" id="teamTotalScore">$0</span>
+                </div>
+            </div>
+            
+            <button class="btn btn-primary" onclick="App.closeTeamDetails()">Back to Scoreboard</button>
         </div>
     </div>
 
@@ -1164,6 +1270,20 @@
                     'Technical': 5,
                     'Personal': 1,
                     'Business': 3,
+                    'Classified': 3,  // Added Classified type
+                    'Corporate': 3,   // Added from test data
+                    'Medical': 2,     // Added from test data
+                    'Military': 4,    // Added from test data
+                    'Research': 3,    // Added from test data
+                    'Legal': 2,       // Added from test data
+                    'Educational': 1, // Added from test data
+                    'Intelligence': 4,// Added from test data
+                    'Communications': 2, // Added from test data
+                    'Entertainment': 1,  // Added from test data
+                    'Scientific': 3,     // Added from test data
+                    'Diplomatic': 4,     // Added from test data
+                    'Social': 1,         // Added from test data
+                    'Test': 2,           // Added from test data
                     'UNKNOWN': 0  // Unknown tokens worth 0
                 }
             },
@@ -1281,9 +1401,9 @@
             getTeamScores() {
                 const teamGroups = {};
                 
-                // Only Black Market transactions count for scoreboard
+                // Get all Black Market transactions (including unknowns for count)
                 const blackMarketTransactions = this.transactions.filter(t => 
-                    t.stationMode === 'blackmarket' && !t.isUnknown
+                    t.stationMode === 'blackmarket'
                 );
                 
                 blackMarketTransactions.forEach(t => {
@@ -1295,6 +1415,7 @@
                 
                 const teamScores = Object.keys(teamGroups).map(teamId => {
                     const transactions = teamGroups[teamId];
+                    // Calculate score (unknowns contribute 0)
                     const totalScore = transactions.reduce((sum, t) => {
                         return sum + this.calculateTokenValue(t);
                     }, 0);
@@ -1302,13 +1423,38 @@
                     return {
                         teamId: teamId,
                         score: totalScore,
-                        tokenCount: transactions.length,
-                        transactions: transactions  // Keep for Phase 4
+                        tokenCount: transactions.length,  // Count includes unknowns
+                        transactions: transactions
                     };
                 });
                 
                 teamScores.sort((a, b) => b.score - a.score);
                 return teamScores;
+            },
+            
+            // New method for Phase 4: Get sorted team transactions
+            getTeamTransactions(teamId) {
+                // Get all transactions for this team (including unknowns)
+                const transactions = this.transactions.filter(t => 
+                    t.teamId === teamId && 
+                    t.stationMode === 'blackmarket'
+                );
+                
+                // Sort by: group name, then value rating (high to low), then timestamp
+                transactions.sort((a, b) => {
+                    // First by group name
+                    const groupCompare = a.group.localeCompare(b.group);
+                    if (groupCompare !== 0) return groupCompare;
+                    
+                    // Then by value rating (descending)
+                    const valueCompare = (b.valueRating || 0) - (a.valueRating || 0);
+                    if (valueCompare !== 0) return valueCompare;
+                    
+                    // Finally by timestamp (scan order)
+                    return new Date(a.timestamp) - new Date(b.timestamp);
+                });
+                
+                return transactions;
             },
             
             exportData(format) {
@@ -1387,7 +1533,8 @@
                     scan: document.getElementById('scanScreen'),
                     result: document.getElementById('resultScreen'),
                     history: document.getElementById('historyScreen'),
-                    scoreboard: document.getElementById('scoreboardScreen')  // Add scoreboard screen
+                    scoreboard: document.getElementById('scoreboardScreen'),
+                    teamDetails: document.getElementById('teamDetailsScreen')  // Add team details screen
                 };
             },
             
@@ -1395,7 +1542,8 @@
                 // Track previous screen for back navigation
                 const current = document.querySelector('.screen.active');
                 if (current && current.id !== 'historyScreen' && current.id !== 'scoreboardScreen' && 
-                    screenName !== 'history' && screenName !== 'scoreboard') {
+                    current.id !== 'teamDetailsScreen' && screenName !== 'history' && 
+                    screenName !== 'scoreboard' && screenName !== 'teamDetails') {
                     this.previousScreen = current.id.replace('Screen', '');
                 }
                 
@@ -1509,10 +1657,82 @@
                                 Team ${team.teamId}
                                 <span class="scoreboard-tokens">(${team.tokenCount} tokens)</span>
                             </div>
-                            <div class="scoreboard-score">$${team.score.toLocaleString()}</div>
+                            <div class="scoreboard-score">${team.score.toLocaleString()}</div>
                         </div>
                     `;
                 }).join('');
+            },
+            
+            // New method for Phase 4: Render team details
+            renderTeamDetails(teamId, transactions) {
+                // Update header
+                document.getElementById('teamDetailsTitle').textContent = `Team ${teamId}`;
+                document.getElementById('teamDetailsSummary').textContent = 
+                    `${transactions.length} token${transactions.length !== 1 ? 's' : ''} collected`;
+                
+                // Render token list
+                const container = document.getElementById('teamDetailsContainer');
+                let baseTotal = 0;
+                
+                if (transactions.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <h3>No Tokens</h3>
+                            <p>This team hasn't scanned any tokens yet</p>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = transactions.map(t => {
+                        const tokenValue = DataManager.calculateTokenValue(t);
+                        baseTotal += tokenValue;
+                        const isUnknown = t.isUnknown || t.memoryType === 'UNKNOWN';
+                        
+                        // Format calculation details
+                        let calculationText = '';
+                        if (!isUnknown) {
+                            const baseValue = DataManager.SCORING_CONFIG.BASE_VALUES[t.valueRating] || 0;
+                            const multiplier = DataManager.SCORING_CONFIG.TYPE_MULTIPLIERS[t.memoryType] || 1;
+                            calculationText = `<strong>${t.valueRating}</strong> rating × <strong>${baseValue.toLocaleString()}</strong> base × <strong>${multiplier}x</strong> ${t.memoryType}`;
+                        } else {
+                            calculationText = 'Unknown token - No value';
+                        }
+                        
+                        return `
+                            <div class="token-detail-card ${isUnknown ? 'unknown' : ''}">
+                                <div class="token-detail-header">
+                                    <span>${t.group}</span>
+                                    <span class="token-detail-value">${tokenValue.toLocaleString()}</span>
+                                </div>
+                                <div class="token-detail-grid">
+                                    <div class="token-detail-item">
+                                        <span class="token-detail-label">RFID</span>
+                                        <span class="token-detail-info">${t.rfid}</span>
+                                    </div>
+                                    <div class="token-detail-item">
+                                        <span class="token-detail-label">Memory Type</span>
+                                        <span class="token-detail-info">${t.memoryType}</span>
+                                    </div>
+                                    <div class="token-detail-item">
+                                        <span class="token-detail-label">Base Rating</span>
+                                        <span class="token-detail-info">${isUnknown ? 'N/A' : `⭐${'⭐'.repeat(t.valueRating - 1)} (${(DataManager.SCORING_CONFIG.BASE_VALUES[t.valueRating] || 0).toLocaleString()})`}</span>
+                                    </div>
+                                    <div class="token-detail-item">
+                                        <span class="token-detail-label">Type Multiplier</span>
+                                        <span class="token-detail-info">${isUnknown ? 'N/A' : DataManager.SCORING_CONFIG.TYPE_MULTIPLIERS[t.memoryType] + 'x'}</span>
+                                    </div>
+                                    <div class="token-calculation">
+                                        ${calculationText}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+                
+                // Update totals (Phase 5 will add group bonuses)
+                document.getElementById('teamBaseScore').textContent = `${baseTotal.toLocaleString()}`;
+                document.getElementById('teamBonusScore').textContent = '$0'; // Phase 5
+                document.getElementById('teamTotalScore').textContent = `${baseTotal.toLocaleString()}`;
             },
             
             renderTransactions(filtered = null) {
@@ -1953,11 +2173,15 @@
                 UIManager.showScreen(UIManager.previousScreen);
             },
             
-            // Placeholder for Phase 4
+            // Phase 4: Team details methods
             showTeamDetails(teamId) {
-                // Phase 4 implementation will go here
-                Debug.log(`Team details for ${teamId} - Phase 4 feature`);
-                alert(`Team ${teamId} details will be available in Phase 4`);
+                const transactions = DataManager.getTeamTransactions(teamId);
+                UIManager.renderTeamDetails(teamId, transactions);
+                UIManager.showScreen('teamDetails');
+            },
+            
+            closeTeamDetails() {
+                UIManager.showScreen('scoreboard');
             },
             
             // Testing
