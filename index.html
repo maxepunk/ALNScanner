@@ -1072,40 +1072,62 @@
                 nfcReader.addEventListener("reading", ({ message, serialNumber }) => {
                     console.log('=== NFC Tag Detected ===');
                     console.log(`Serial Number: ${serialNumber}`);
-                    console.log(`Records: ${message.records.length}`);
+                    console.log(`Number of Records: ${message.records.length}`);
                     
-                    // Log all records for debugging
-                    if (message.records.length > 0) {
+                    let tokenId = null;
+                    
+                    // Look for record at index 1 (second record)
+                    if (message.records.length > 1) {
+                        const record = message.records[1];
+                        console.log('Record 1 found:', {
+                            recordType: record.recordType,
+                            mediaType: record.mediaType,
+                            id: record.id,
+                            data: record.data,
+                            encoding: record.encoding,
+                            lang: record.lang
+                        });
+                        
+                        // Try to decode the data from record 1
+                        if (record.data) {
+                            try {
+                                const decoder = new TextDecoder();
+                                tokenId = decoder.decode(record.data).trim();
+                                console.log(`Record 1 decoded as token ID: "${tokenId}"`);
+                            } catch (e) {
+                                console.error('Could not decode record 1:', e);
+                            }
+                        }
+                    } else {
+                        console.warn(`Only ${message.records.length} record(s) found. Need at least 2 records.`);
+                        console.log('Available records:');
                         message.records.forEach((record, index) => {
-                            console.log(`Record ${index}:`, {
-                                recordType: record.recordType,
-                                mediaType: record.mediaType,
-                                id: record.id,
-                                data: record.data,
-                                encoding: record.encoding,
-                                lang: record.lang
-                            });
-                            
-                            // Try to decode the data if it exists
+                            console.log(`Record ${index}:`, record);
                             if (record.data) {
                                 try {
                                     const decoder = new TextDecoder();
                                     const text = decoder.decode(record.data);
-                                    console.log(`Record ${index} decoded text:`, text);
+                                    console.log(`Record ${index} text: "${text}"`);
                                 } catch (e) {
-                                    console.log(`Could not decode record ${index}:`, e);
+                                    console.log(`Record ${index} could not be decoded`);
                                 }
                             }
                         });
                     }
                     
+                    // Fall back to serial number if no valid record 1
+                    if (!tokenId) {
+                        console.log('No valid record 1 found, falling back to serial number');
+                        tokenId = serialNumber;
+                    }
+                    
                     // Update scan status to show what was detected
                     document.getElementById('scanStatus').innerHTML = `
-                        Detected: ${serialNumber}<br>
-                        <small style="font-size: 10px;">Check console for details</small>
+                        Detected Token ID: ${tokenId}<br>
+                        <small style="font-size: 10px;">Serial: ${serialNumber}</small>
                     `;
                     
-                    processToken(serialNumber);
+                    processToken(tokenId);
                 });
                 
                 nfcReader.addEventListener("readingerror", (event) => {
