@@ -815,6 +815,7 @@
                 <button class="btn btn-secondary" onclick="DataManager.exportData('csv')">Export CSV</button>
                 <button class="btn btn-secondary" onclick="DataManager.clearData()">Clear All Data</button>
                 <button class="btn btn-secondary" onclick="App.testTokenMatch()">Test Token Match</button>
+                <button class="btn btn-secondary" onclick="App.testGroupParsing()">Test Group Parsing</button>
             </div>
         </div>
 
@@ -1455,6 +1456,42 @@
                 });
                 
                 return transactions;
+            },
+            
+            // Phase 5 Step 1: Group Parsing Utilities
+            parseGroupInfo(groupName) {
+                if (!groupName) {
+                    return { name: 'Unknown', multiplier: 1 };
+                }
+                
+                // Match pattern: "Group Name (xN)" where N is a number
+                const match = groupName.match(/^(.+?)\s*\(x(\d+)\)$/);
+                
+                if (match) {
+                    const name = match[1].trim();
+                    const multiplier = parseInt(match[2]) || 1;
+                    
+                    // Handle edge cases
+                    if (multiplier < 1) {
+                        Debug.log(`Warning: Invalid multiplier ${multiplier} for group "${name}", using 1`, true);
+                        return { name, multiplier: 1 };
+                    }
+                    
+                    return { name, multiplier };
+                }
+                
+                // No multiplier found, treat as x1
+                return { name: groupName.trim(), multiplier: 1 };
+            },
+            
+            normalizeGroupName(name) {
+                if (!name) return '';
+                
+                return name
+                    .trim()                    // Remove leading/trailing whitespace
+                    .toLowerCase()             // Convert to lowercase
+                    .replace(/\s+/g, ' ')     // Normalize multiple spaces to single space
+                    .replace(/['']/g, "'");   // Normalize apostrophes
             },
             
             exportData(format) {
@@ -2105,8 +2142,12 @@
                 // Show immediate score feedback for Black Market mode
                 if (Settings.stationMode === 'blackmarket' && !isUnknown) {
                     const tokenScore = DataManager.calculateTokenValue(transaction);
-                    Debug.log(`Token scored: $${tokenScore.toLocaleString()}`);
+                    Debug.log(`Token scored: ${tokenScore.toLocaleString()}`);
                     Debug.log(`Formula: ${transaction.valueRating} (rating) × ${DataManager.SCORING_CONFIG.BASE_VALUES[transaction.valueRating]} (base) × ${DataManager.SCORING_CONFIG.TYPE_MULTIPLIERS[transaction.memoryType]} (${transaction.memoryType})`);
+                    
+                    // Phase 5 Debug: Show group parsing
+                    const groupInfo = DataManager.parseGroupInfo(transaction.group);
+                    Debug.log(`Group: "${groupInfo.name}" with ${groupInfo.multiplier}x multiplier`);
                 }
                 
                 UIManager.updateSessionStats();
@@ -2195,6 +2236,50 @@
                         alert(`No match found for: ${testId}`);
                     }
                 }
+            },
+            
+            // Phase 5 Step 1 Testing: Test group parsing
+            testGroupParsing() {
+                const testCases = [
+                    'Server Logs (x5)',
+                    'Marcus\' Memories (x1)',
+                    'Government Files (x3)',
+                    'No Multiplier Group',
+                    'Bad Format (x)',
+                    'Zero Multiplier (x0)',
+                    'Large Multiplier (x999)',
+                    '  Spaces Everywhere  (x3)  ',
+                    'Special!@# Characters (x2)',
+                    '',
+                    null
+                ];
+                
+                console.log('=== Testing Group Parsing ===');
+                testCases.forEach(testCase => {
+                    const parsed = DataManager.parseGroupInfo(testCase);
+                    const normalized = DataManager.normalizeGroupName(parsed.name);
+                    console.log(`Input: "${testCase}"`);
+                    console.log(`  Parsed: name="${parsed.name}", multiplier=${parsed.multiplier}`);
+                    console.log(`  Normalized: "${normalized}"`);
+                    console.log('---');
+                });
+                
+                // Test normalization consistency
+                console.log('=== Testing Normalization ===');
+                const variations = [
+                    'Server Logs',
+                    'server logs',
+                    'SERVER LOGS',
+                    '  Server   Logs  ',
+                    'Server  Logs'
+                ];
+                
+                console.log('These should all normalize to the same value:');
+                variations.forEach(v => {
+                    console.log(`"${v}" → "${DataManager.normalizeGroupName(v)}"`);
+                });
+                
+                alert('Check console for test results');
             }
         };
 
