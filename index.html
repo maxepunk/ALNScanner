@@ -537,6 +537,81 @@
         }
         
         /* ============================================
+           SCOREBOARD STYLES
+           ============================================ */
+        .scoreboard-container {
+            max-height: 500px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+
+        .scoreboard-entry {
+            background: #f9f9f9;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .scoreboard-entry:hover {
+            background: #f0f0f0;
+            transform: translateX(5px);
+        }
+
+        .scoreboard-entry.rank-1 {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: white;
+            font-weight: bold;
+        }
+
+        .scoreboard-entry.rank-2 {
+            background: linear-gradient(135deg, #C0C0C0 0%, #B8B8B8 100%);
+        }
+
+        .scoreboard-entry.rank-3 {
+            background: linear-gradient(135deg, #CD7F32 0%, #B87333 100%);
+        }
+
+        .scoreboard-rank {
+            font-size: 24px;
+            font-weight: bold;
+            min-width: 40px;
+        }
+
+        .scoreboard-team {
+            flex: 1;
+            margin: 0 15px;
+            font-size: 18px;
+        }
+
+        .scoreboard-score {
+            font-size: 20px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .scoreboard-entry.rank-1 .scoreboard-score,
+        .scoreboard-entry.rank-2 .scoreboard-score,
+        .scoreboard-entry.rank-3 .scoreboard-score {
+            color: inherit;
+        }
+
+        .scoreboard-tokens {
+            font-size: 12px;
+            color: #666;
+            margin-left: 10px;
+        }
+
+        .scoreboard-entry.rank-1 .scoreboard-tokens,
+        .scoreboard-entry.rank-2 .scoreboard-tokens,
+        .scoreboard-entry.rank-3 .scoreboard-tokens {
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        /* ============================================
            EMPTY STATE
            ============================================ */
         .empty-state {
@@ -614,9 +689,12 @@
 <body>
     <div class="container">
         <div class="header">
-            <div class="header-nav">
+            <div class="header-nav" id="headerNav">
                 <button class="nav-button" onclick="App.showHistory()" title="View transaction history">
                     📋<span id="historyBadge" class="badge" style="display: none;">0</span>
+                </button>
+                <button class="nav-button" id="scoreboardButton" onclick="App.showScoreboard()" title="View scoreboard" style="display: none;">
+                    🏆
                 </button>
                 <button class="nav-button" onclick="App.showSettings()" title="Settings">
                     ⚙️
@@ -773,6 +851,20 @@
             </div>
             
             <button class="btn btn-primary" onclick="App.closeHistory()">Back</button>
+        </div>
+
+        <!-- Scoreboard Screen -->
+        <div id="scoreboardScreen" class="screen">
+            <div class="header" style="margin-bottom: 20px;">
+                <h2>🏆 Black Market Scoreboard</h2>
+                <p style="color: #666; font-size: 14px;">Team Rankings</p>
+            </div>
+            
+            <div id="scoreboardContainer" class="scoreboard-container">
+                <!-- Populated by JavaScript -->
+            </div>
+            
+            <button class="btn btn-primary" onclick="App.closeScoreboard()">Back</button>
         </div>
     </div>
 
@@ -1185,6 +1277,40 @@
                 return { total, teams, totalValue, avgValue, blackMarketScore, detectiveValue };
             },
             
+            // New method for Phase 3: Get team scores
+            getTeamScores() {
+                const teamGroups = {};
+                
+                // Only Black Market transactions count for scoreboard
+                const blackMarketTransactions = this.transactions.filter(t => 
+                    t.stationMode === 'blackmarket' && !t.isUnknown
+                );
+                
+                blackMarketTransactions.forEach(t => {
+                    if (!teamGroups[t.teamId]) {
+                        teamGroups[t.teamId] = [];
+                    }
+                    teamGroups[t.teamId].push(t);
+                });
+                
+                const teamScores = Object.keys(teamGroups).map(teamId => {
+                    const transactions = teamGroups[teamId];
+                    const totalScore = transactions.reduce((sum, t) => {
+                        return sum + this.calculateTokenValue(t);
+                    }, 0);
+                    
+                    return {
+                        teamId: teamId,
+                        score: totalScore,
+                        tokenCount: transactions.length,
+                        transactions: transactions  // Keep for Phase 4
+                    };
+                });
+                
+                teamScores.sort((a, b) => b.score - a.score);
+                return teamScores;
+            },
+            
             exportData(format) {
                 if (this.transactions.length === 0) {
                     alert('No transactions to export');
@@ -1260,14 +1386,16 @@
                     teamEntry: document.getElementById('teamEntryScreen'),
                     scan: document.getElementById('scanScreen'),
                     result: document.getElementById('resultScreen'),
-                    history: document.getElementById('historyScreen')
+                    history: document.getElementById('historyScreen'),
+                    scoreboard: document.getElementById('scoreboardScreen')  // Add scoreboard screen
                 };
             },
             
             showScreen(screenName) {
                 // Track previous screen for back navigation
                 const current = document.querySelector('.screen.active');
-                if (current && current.id !== 'historyScreen' && screenName !== 'history') {
+                if (current && current.id !== 'historyScreen' && current.id !== 'scoreboardScreen' && 
+                    screenName !== 'history' && screenName !== 'scoreboard') {
                     this.previousScreen = current.id.replace('Screen', '');
                 }
                 
@@ -1298,6 +1426,17 @@
                     if (modeText) modeText.textContent = 'Detective Mode';
                     if (toggle) toggle.checked = false;
                 }
+                
+                // Update navigation buttons visibility
+                this.updateNavigationButtons();
+            },
+            
+            // New method to update navigation buttons based on mode
+            updateNavigationButtons() {
+                const scoreboardButton = document.getElementById('scoreboardButton');
+                if (scoreboardButton) {
+                    scoreboardButton.style.display = Settings.stationMode === 'blackmarket' ? 'block' : 'none';
+                }
             },
             
             updateTeamDisplay(teamId) {
@@ -1315,7 +1454,7 @@
                 
                 if (Settings.stationMode === 'blackmarket') {
                     // Show score as currency in Black Market mode
-                    valueElement.textContent = `${stats.totalScore.toLocaleString()}`;
+                    valueElement.textContent = `$${stats.totalScore.toLocaleString()}`;
                     if (labelElement) labelElement.textContent = 'Score';
                 } else {
                     // Show star rating total in Detective mode
@@ -1343,6 +1482,39 @@
                 document.getElementById('avgValue').textContent = stats.avgValue;
             },
             
+            // New method for Phase 3: Render scoreboard
+            renderScoreboard() {
+                const container = document.getElementById('scoreboardContainer');
+                const teamScores = DataManager.getTeamScores();
+                
+                if (teamScores.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <h3>No Teams Yet</h3>
+                            <p>Teams will appear here after scanning tokens</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = teamScores.map((team, index) => {
+                    const rank = index + 1;
+                    const rankClass = rank <= 3 ? `rank-${rank}` : '';
+                    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+                    
+                    return `
+                        <div class="scoreboard-entry ${rankClass}" onclick="App.showTeamDetails('${team.teamId}')">
+                            <div class="scoreboard-rank">${medal}</div>
+                            <div class="scoreboard-team">
+                                Team ${team.teamId}
+                                <span class="scoreboard-tokens">(${team.tokenCount} tokens)</span>
+                            </div>
+                            <div class="scoreboard-score">$${team.score.toLocaleString()}</div>
+                        </div>
+                    `;
+                }).join('');
+            },
+            
             renderTransactions(filtered = null) {
                 const container = document.getElementById('historyContainer');
                 const transactions = filtered || DataManager.transactions;
@@ -1365,7 +1537,7 @@
                     // Calculate value display based on mode
                     let valueDisplay;
                     if (t.stationMode === 'blackmarket') {
-                        valueDisplay = `${DataManager.calculateTokenValue(t).toLocaleString()}`;
+                        valueDisplay = `$${DataManager.calculateTokenValue(t).toLocaleString()}`;
                     } else {
                         valueDisplay = isUnknown ? 'N/A' : '⭐'.repeat(t.valueRating || 0);
                     }
@@ -1449,7 +1621,7 @@
                             memoryType: token.SF_MemoryType,
                             isUnknown: false
                         });
-                        valueEl.textContent = `${tokenScore.toLocaleString()}`;
+                        valueEl.textContent = `$${tokenScore.toLocaleString()}`;
                     } else {
                         valueEl.textContent = '⭐'.repeat(token.SF_ValueRating || 0);
                     }
@@ -1713,7 +1885,7 @@
                 // Show immediate score feedback for Black Market mode
                 if (Settings.stationMode === 'blackmarket' && !isUnknown) {
                     const tokenScore = DataManager.calculateTokenValue(transaction);
-                    Debug.log(`Token scored: ${tokenScore.toLocaleString()}`);
+                    Debug.log(`Token scored: $${tokenScore.toLocaleString()}`);
                     Debug.log(`Formula: ${transaction.valueRating} (rating) × ${DataManager.SCORING_CONFIG.BASE_VALUES[transaction.valueRating]} (base) × ${DataManager.SCORING_CONFIG.TYPE_MULTIPLIERS[transaction.memoryType]} (${transaction.memoryType})`);
                 }
                 
@@ -1765,6 +1937,27 @@
             
             closeHistory() {
                 UIManager.showScreen(UIManager.previousScreen);
+            },
+            
+            // Phase 3: Scoreboard methods
+            showScoreboard() {
+                if (Settings.stationMode !== 'blackmarket') {
+                    Debug.log('Scoreboard only available in Black Market mode');
+                    return;
+                }
+                UIManager.renderScoreboard();
+                UIManager.showScreen('scoreboard');
+            },
+            
+            closeScoreboard() {
+                UIManager.showScreen(UIManager.previousScreen);
+            },
+            
+            // Placeholder for Phase 4
+            showTeamDetails(teamId) {
+                // Phase 4 implementation will go here
+                Debug.log(`Team details for ${teamId} - Phase 4 feature`);
+                alert(`Team ${teamId} details will be available in Phase 4`);
             },
             
             // Testing
