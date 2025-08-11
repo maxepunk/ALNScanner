@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Memory Transaction Station</title>
     <style>
+        /* ============================================
+           BASE STYLES
+           ============================================ */
         * {
             margin: 0;
             padding: 0;
@@ -19,7 +22,6 @@
             justify-content: center;
             align-items: center;
             padding: 10px;
-            margin: 0;
         }
         
         .container {
@@ -31,27 +33,16 @@
             padding: 20px;
             animation: slideIn 0.3s ease-out;
             position: relative;
-            overflow: visible;
-        }
-        
-        @media (max-width: 480px) {
-            .container {
-                padding: 15px;
-                border-radius: 15px;
-            }
         }
         
         @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
+        /* ============================================
+           HEADER STYLES
+           ============================================ */
         .header {
             text-align: center;
             margin-bottom: 30px;
@@ -97,6 +88,9 @@
             margin-bottom: 10px;
         }
         
+        /* ============================================
+           MODE INDICATOR
+           ============================================ */
         .mode-indicator {
             display: inline-block;
             padding: 5px 15px;
@@ -114,54 +108,14 @@
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
         
-        .mode-indicator:active {
-            transform: scale(0.98);
-        }
-        
         .mode-detective {
             background: #4CAF50;
             color: white;
-            position: relative;
-        }
-        
-        .mode-detective::after {
-            content: "→ Click to switch";
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 10px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            white-space: nowrap;
-            margin-top: 2px;
-        }
-        
-        .mode-detective:hover::after {
-            opacity: 0.6;
         }
         
         .mode-blackmarket {
             background: #FF5722;
             color: white;
-            position: relative;
-        }
-        
-        .mode-blackmarket::after {
-            content: "→ Click to switch";
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 10px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            white-space: nowrap;
-            margin-top: 2px;
-        }
-        
-        .mode-blackmarket:hover::after {
-            opacity: 0.6;
         }
         
         .station-id {
@@ -169,6 +123,9 @@
             font-size: 14px;
         }
         
+        /* ============================================
+           SCREEN MANAGEMENT
+           ============================================ */
         .screen {
             display: none;
         }
@@ -177,6 +134,9 @@
             display: block;
         }
         
+        /* ============================================
+           STATUS MESSAGES
+           ============================================ */
         .status-message {
             background: #f5f5f5;
             border-radius: 10px;
@@ -196,6 +156,14 @@
             color: #2e7d32;
         }
         
+        .status-message.warning {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+        
+        /* ============================================
+           NUMPAD
+           ============================================ */
         .numpad {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -229,6 +197,9 @@
             background: #c8e6c9;
         }
         
+        /* ============================================
+           TEAM DISPLAY
+           ============================================ */
         .team-display {
             font-size: 36px;
             text-align: center;
@@ -244,6 +215,9 @@
             color: #333;
         }
         
+        /* ============================================
+           SCAN AREA
+           ============================================ */
         .scan-area {
             text-align: center;
             padding: 40px;
@@ -260,16 +234,13 @@
         }
         
         @keyframes pulse {
-            0%, 100% {
-                transform: scale(1);
-                opacity: 1;
-            }
-            50% {
-                transform: scale(1.1);
-                opacity: 0.8;
-            }
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
         }
         
+        /* ============================================
+           BUTTONS
+           ============================================ */
         .btn {
             width: 100%;
             padding: 15px;
@@ -305,6 +276,9 @@
             cursor: not-allowed;
         }
         
+        /* ============================================
+           TRANSACTION RESULTS
+           ============================================ */
         .transaction-result {
             background: #f5f5f5;
             border-radius: 10px;
@@ -337,6 +311,9 @@
             color: #333;
         }
         
+        /* ============================================
+           SETTINGS PANEL
+           ============================================ */
         .settings-panel {
             background: #f5f5f5;
             border-radius: 10px;
@@ -360,8 +337,7 @@
             font-size: 14px;
         }
         
-        .settings-group input,
-        .settings-group select {
+        .settings-group input {
             width: 100%;
             padding: 10px;
             border: 1px solid #ddd;
@@ -369,15 +345,14 @@
             font-size: 16px;
         }
         
+        /* ============================================
+           TOGGLE SWITCH
+           ============================================ */
         .toggle-switch {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 10px 0;
-        }
-        
-        .toggle-switch label {
-            margin: 0;
         }
         
         .switch {
@@ -425,6 +400,154 @@
             transform: translateX(26px);
         }
         
+        /* ============================================
+           HISTORY & TRANSACTIONS
+           ============================================ */
+        .history-container {
+            max-height: 500px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+        
+        .transaction-card {
+            background: #f9f9f9;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+            transition: all 0.2s;
+        }
+        
+        .transaction-card:hover {
+            background: #f0f0f0;
+            transform: translateX(5px);
+        }
+        
+        .transaction-card.detective {
+            border-left-color: #4CAF50;
+        }
+        
+        .transaction-card.blackmarket {
+            border-left-color: #FF5722;
+        }
+        
+        .transaction-card.unknown {
+            border-left-color: #9E9E9E;
+            background: #fafafa;
+            opacity: 0.9;
+        }
+        
+        .transaction-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        
+        .transaction-time {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .transaction-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+            font-size: 14px;
+        }
+        
+        .transaction-details .detail {
+            color: #666;
+        }
+        
+        .transaction-details .detail span {
+            color: #333;
+            font-weight: 500;
+        }
+        
+        /* ============================================
+           STATISTICS
+           ============================================ */
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 15px;
+        }
+        
+        .summary-stat {
+            text-align: center;
+        }
+        
+        .summary-stat .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .summary-stat .label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+        }
+        
+        /* ============================================
+           FILTERS
+           ============================================ */
+        .filter-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-bar input,
+        .filter-bar select {
+            flex: 1;
+            min-width: 120px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        /* ============================================
+           EMPTY STATE
+           ============================================ */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        
+        /* ============================================
+           DEBUG PANEL
+           ============================================ */
         .debug-panel {
             position: fixed;
             bottom: 10px;
@@ -433,8 +556,8 @@
             max-height: 200px;
             background: rgba(0, 0, 0, 0.9);
             color: #0f0;
-            font-family: monospace;
-            font-size: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
             padding: 10px;
             border-radius: 5px;
             overflow-y: auto;
@@ -468,146 +591,23 @@
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
         }
         
-        .history-container {
-            max-height: 500px;
-            overflow-y: auto;
-            margin: 20px 0;
-        }
-        
-        .transaction-card {
-            background: #f9f9f9;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 10px;
-            border-left: 4px solid #667eea;
-            transition: all 0.2s;
-        }
-        
-        .transaction-card:hover {
-            background: #f0f0f0;
-            transform: translateX(5px);
-        }
-        
-        .transaction-card.detective {
-            border-left-color: #4CAF50;
-        }
-        
-        .transaction-card.blackmarket {
-            border-left-color: #FF5722;
-        }
-        
-        .transaction-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
-            font-weight: bold;
-        }
-        
-        .transaction-time {
-            color: #666;
-            font-size: 12px;
-        }
-        
-        .transaction-details {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 5px;
-            font-size: 14px;
-        }
-        
-        .transaction-details .detail {
-            color: #666;
-        }
-        
-        .transaction-details .detail span {
-            color: #333;
-            font-weight: 500;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: #999;
-        }
-        
-        .transaction-card.unknown {
-            border-left-color: #9E9E9E;
-            background: #fafafa;
-            opacity: 0.9;
-        }
-        
-        .transaction-card.unknown .transaction-header {
-            color: #666;
-        }
-        
-        .status-message.warning {
-            background: #fff3e0;
-            color: #f57c00;
-        }
-        
-        .filter-bar {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .filter-bar input,
-        .filter-bar select {
-            flex: 1;
-            min-width: 120px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        
-        .stats {
-            display: flex;
-            justify-content: space-around;
-            margin: 20px 0;
-        }
-        
-        .stat-item {
-            text-align: center;
-        }
-        
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
-        }
-        
-        .stat-label {
-            font-size: 12px;
-            color: #666;
-            text-transform: uppercase;
-        }
-        
-        .summary-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-            background: #f5f5f5;
-            border-radius: 10px;
-            padding: 15px;
-        }
-        
-        .summary-stat {
-            text-align: center;
-        }
-        
-        .summary-stat .value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
-        }
-        
-        .summary-stat .label {
-            font-size: 12px;
-            color: #666;
-            text-transform: uppercase;
-            margin-top: 5px;
+        /* ============================================
+           RESPONSIVE
+           ============================================ */
+        @media (max-width: 480px) {
+            .container {
+                padding: 15px;
+                border-radius: 15px;
+            }
+            
+            h1 {
+                font-size: 20px;
+            }
+            
+            .numpad button {
+                padding: 20px;
+                font-size: 20px;
+            }
         }
     </style>
 </head>
@@ -615,15 +615,15 @@
     <div class="container">
         <div class="header">
             <div class="header-nav">
-                <button class="nav-button" onclick="showHistory()" title="View transaction history">
+                <button class="nav-button" onclick="App.showHistory()" title="View transaction history">
                     📋<span id="historyBadge" class="badge" style="display: none;">0</span>
                 </button>
-                <button class="nav-button" onclick="showSettings()" title="Settings">
+                <button class="nav-button" onclick="App.showSettings()" title="Settings">
                     ⚙️
                 </button>
             </div>
             <h1>Transaction Station</h1>
-            <div id="modeIndicator" class="mode-indicator mode-detective" onclick="toggleMode()" title="Click to switch mode">Detective Mode</div>
+            <div id="modeIndicator" class="mode-indicator mode-detective" onclick="App.toggleMode()" title="Click to switch mode">Detective Mode</div>
             <div class="station-id">Station ID: <span id="stationIdDisplay">001</span></div>
         </div>
 
@@ -646,7 +646,7 @@
                 <div class="toggle-switch">
                     <label>Station Mode</label>
                     <label class="switch">
-                        <input type="checkbox" id="modeToggle">
+                        <input type="checkbox" id="modeToggle" onchange="App.updateModeFromToggle()">
                         <span class="slider"></span>
                     </label>
                 </div>
@@ -654,16 +654,13 @@
                     <span id="modeText">Detective Mode</span>
                 </p>
             </div>
-            <button class="btn btn-primary" onclick="saveSettings()">Start Station</button>
-            <div class="export-section">
+            <button class="btn btn-primary" onclick="App.saveSettings()">Start Station</button>
+            <div class="settings-panel" style="margin-top: 20px;">
                 <h3>Data Management</h3>
-                <button class="btn btn-secondary" onclick="exportData('json')">Export JSON</button>
-                <button class="btn btn-secondary" onclick="exportData('csv')">Export CSV</button>
-                <button class="btn btn-secondary" onclick="clearData()">Clear All Data</button>
-                <div style="margin-top: 10px;">
-                    <button class="btn btn-secondary" onclick="debugStorage()">Debug Storage</button>
-                    <button class="btn btn-secondary" onclick="testTokenMatch()">Test Token Match</button>
-                </div>
+                <button class="btn btn-secondary" onclick="DataManager.exportData('json')">Export JSON</button>
+                <button class="btn btn-secondary" onclick="DataManager.exportData('csv')">Export CSV</button>
+                <button class="btn btn-secondary" onclick="DataManager.clearData()">Clear All Data</button>
+                <button class="btn btn-secondary" onclick="App.testTokenMatch()">Test Token Match</button>
             </div>
         </div>
 
@@ -671,22 +668,18 @@
         <div id="teamEntryScreen" class="screen">
             <div class="team-display" id="teamDisplay">_</div>
             <div class="numpad">
-                <button onclick="appendNumber(1)">1</button>
-                <button onclick="appendNumber(2)">2</button>
-                <button onclick="appendNumber(3)">3</button>
-                <button onclick="appendNumber(4)">4</button>
-                <button onclick="appendNumber(5)">5</button>
-                <button onclick="appendNumber(6)">6</button>
-                <button onclick="appendNumber(7)">7</button>
-                <button onclick="appendNumber(8)">8</button>
-                <button onclick="appendNumber(9)">9</button>
-                <button class="clear" onclick="clearTeamId()">Clear</button>
-                <button onclick="appendNumber(0)">0</button>
-                <button class="enter" onclick="confirmTeamId()">Enter</button>
-            </div>
-            <div style="display: flex; gap: 10px; margin-top: 10px;">
-                <button class="btn btn-secondary" style="flex: 1;" onclick="showHistory()">📋 History</button>
-                <button class="btn btn-secondary" style="flex: 1;" onclick="showSettings()">⚙️ Settings</button>
+                <button onclick="App.appendNumber(1)">1</button>
+                <button onclick="App.appendNumber(2)">2</button>
+                <button onclick="App.appendNumber(3)">3</button>
+                <button onclick="App.appendNumber(4)">4</button>
+                <button onclick="App.appendNumber(5)">5</button>
+                <button onclick="App.appendNumber(6)">6</button>
+                <button onclick="App.appendNumber(7)">7</button>
+                <button onclick="App.appendNumber(8)">8</button>
+                <button onclick="App.appendNumber(9)">9</button>
+                <button class="clear" onclick="App.clearTeamId()">Clear</button>
+                <button onclick="App.appendNumber(0)">0</button>
+                <button class="enter" onclick="App.confirmTeamId()">Enter</button>
             </div>
         </div>
 
@@ -700,9 +693,9 @@
                 <h2>Tap Memory Token</h2>
                 <p id="scanStatus">Waiting for NFC tag...</p>
             </div>
-            <button id="scanButton" class="btn btn-primary" onclick="startScan()">Start Scanning</button>
-            <button class="btn btn-secondary" onclick="manualEntry()">Manual Entry (Debug)</button>
-            <button class="btn btn-secondary" onclick="cancelScan()">Back to Team Entry</button>
+            <button id="scanButton" class="btn btn-primary" onclick="App.startScan()">Start Scanning</button>
+            <button class="btn btn-secondary" onclick="App.manualEntry()">Manual Entry (Debug)</button>
+            <button class="btn btn-secondary" onclick="App.cancelScan()">Back to Team Entry</button>
             <div class="stats">
                 <div class="stat-item">
                     <div class="stat-value" id="teamTokenCount">0</div>
@@ -717,7 +710,7 @@
 
         <!-- Result Screen -->
         <div id="resultScreen" class="screen">
-            <div class="status-message success">
+            <div id="resultStatus" class="status-message success">
                 <h2>Transaction Complete!</h2>
             </div>
             <div class="transaction-result">
@@ -739,8 +732,8 @@
                     <span class="value" id="resultValue">-</span>
                 </div>
             </div>
-            <button class="btn btn-primary" onclick="continueScan()">Scan Another Token</button>
-            <button class="btn btn-secondary" onclick="finishTeam()">Finish Team</button>
+            <button class="btn btn-primary" onclick="App.continueScan()">Scan Another Token</button>
+            <button class="btn btn-secondary" onclick="App.finishTeam()">Finish Team</button>
         </div>
 
         <!-- History Screen -->
@@ -765,871 +758,838 @@
             </div>
             
             <div class="filter-bar">
-                <input type="text" id="searchFilter" placeholder="Search RFID, Team, Type..." onkeyup="filterTransactions()">
-                <select id="modeFilter" onchange="filterTransactions()">
+                <input type="text" id="searchFilter" placeholder="Search..." onkeyup="UIManager.filterTransactions()">
+                <select id="modeFilter" onchange="UIManager.filterTransactions()">
                     <option value="">All Modes</option>
                     <option value="detective">Detective Only</option>
                     <option value="blackmarket">Black Market Only</option>
-                </select>
-                <select id="sortFilter" onchange="filterTransactions()">
-                    <option value="newest">Newest First</option>
-                    <option value="oldest">Oldest First</option>
-                    <option value="value-high">Highest Value</option>
-                    <option value="value-low">Lowest Value</option>
                 </select>
             </div>
             
             <div id="historyContainer" class="history-container">
                 <div class="empty-state">
-                    <div class="icon">📋</div>
                     <h3>No Transactions Yet</h3>
-                    <p>Scanned tokens will appear here</p>
                 </div>
             </div>
             
-            <button class="btn btn-primary" onclick="closeHistory()">Back</button>
-            <div style="display: flex; gap: 10px; margin-top: 10px;">
-                <button class="btn btn-secondary" style="flex: 1;" onclick="exportData('csv')">Export CSV</button>
-                <button class="btn btn-secondary" style="flex: 1;" onclick="clearData()">Clear All</button>
-            </div>
+            <button class="btn btn-primary" onclick="App.closeHistory()">Back</button>
         </div>
     </div>
 
+    <!-- Debug Panel -->
+    <button class="debug-toggle" onclick="Debug.toggle()">🐛</button>
+    <div id="debugPanel" class="debug-panel">
+        <pre id="debugContent"></pre>
+    </div>
+
     <script>
-        // Global variables
-        let tokenDatabase = {};
-        let currentTeamId = '';
-        let currentSession = [];
-        let transactions = [];
-        let stationMode = 'detective';
-        let stationId = '001';
-        let nfcReader = null;
-        let isScanning = false;
-        let previousScreen = 'teamEntryScreen';  // Track where we came from
-        let debugMessages = [];  // Store debug messages
-        
-        // Debug panel functions
-        function toggleDebug() {
-            const panel = document.getElementById('debugPanel');
-            panel.classList.toggle('active');
-        }
-        
-        function debugLog(message, isError = false) {
-            // Add to debug panel
-            const timestamp = new Date().toLocaleTimeString();
-            const prefix = isError ? '❌' : '✓';
-            const formattedMessage = `[${timestamp}] ${prefix} ${message}`;
+        // ============================================
+        // MODULE: Debug
+        // ============================================
+        const Debug = {
+            messages: [],
+            maxMessages: 50,
             
-            debugMessages.push(formattedMessage);
-            if (debugMessages.length > 50) {
-                debugMessages.shift(); // Keep only last 50 messages
-            }
-            
-            const debugContent = document.getElementById('debugContent');
-            if (debugContent) {
-                debugContent.textContent = debugMessages.join('\n');
-                // Auto-scroll to bottom
-                const panel = document.getElementById('debugPanel');
-                if (panel) {
-                    panel.scrollTop = panel.scrollHeight;
-                }
-            }
-            
-            // Also log to regular console
-            if (isError) {
-                console.error(message);
-            } else {
-                console.log(message);
-            }
-        }
-        
-        // Override console for mobile debugging
-        const originalConsoleLog = console.log;
-        const originalConsoleError = console.error;
-        
-        console.log = function(...args) {
-            debugLog(args.map(arg => 
-                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
-            ).join(' '));
-            originalConsoleLog.apply(console, args);
-        };
-        
-        console.error = function(...args) {
-            debugLog(args.map(arg => 
-                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
-            ).join(' '), true);
-            originalConsoleError.apply(console, args);
-        };
-
-        // Initialize on load
-        window.addEventListener('DOMContentLoaded', async () => {
-            debugLog('App starting...');
-            
-            // Load settings from localStorage
-            loadSettings();
-            
-            // Load transaction history
-            loadTransactions();
-            
-            // Load token database
-            try {
-                debugLog('Loading token database...');
-                const response = await fetch('tokens.json');
-                if (!response.ok) {
-                    throw new Error('Failed to load token database');
-                }
-                tokenDatabase = await response.json();
-                const tokenCount = Object.keys(tokenDatabase).filter(k => !k.startsWith('_')).length;
-                debugLog(`✅ Loaded ${tokenCount} tokens`);
+            log(message, isError = false) {
+                const timestamp = new Date().toLocaleTimeString();
+                const prefix = isError ? '❌' : '✓';
+                const formatted = `[${timestamp}] ${prefix} ${message}`;
                 
-                // Check for NFC support
-                if ('NDEFReader' in window) {
-                    debugLog('✅ NFC supported');
-                    showScreen('teamEntryScreen');
+                this.messages.push(formatted);
+                if (this.messages.length > this.maxMessages) {
+                    this.messages.shift();
+                }
+                
+                this.updatePanel();
+                
+                if (isError) {
+                    console.error(message);
                 } else {
-                    debugLog('⚠️ NFC not supported - demo mode', true);
-                    showScreen('teamEntryScreen');
+                    console.log(message);
                 }
-            } catch (error) {
-                debugLog(`Error: ${error.message}`, true);
-                document.querySelector('#loadingScreen .status-message').innerHTML = 
-                    '<p class="error">Error loading token database. Using demo mode.</p>' +
-                    '<button class="btn btn-primary" onclick="useDemoData()">Use Demo Data</button>';
-            }
+            },
             
-            // Check URL parameters
-            const urlParams = new URLSearchParams(window.location.search);
-            const modeParam = urlParams.get('mode');
-            if (modeParam === 'black-market' || modeParam === 'blackmarket') {
-                stationMode = 'blackmarket';
-                updateModeDisplay();
-                debugLog('Mode: Black Market (from URL)');
-            }
-        });
-
-        // Load demo data if needed
-        function useDemoData() {
-            tokenDatabase = {
-                "a1b2c3d4": {
-                    "SF_RFID": "a1b2c3d4",
-                    "SF_ValueRating": 3,
-                    "SF_MemoryType": "Technical",
-                    "SF_Group": "Server Logs (x5)"
-                },
-                "deadbeef": {
-                    "SF_RFID": "deadbeef",
-                    "SF_ValueRating": 2,
-                    "SF_MemoryType": "Personal",
-                    "SF_Group": "Marcus' Memories (x1)"
-                },
-                "test1234": {
-                    "SF_RFID": "test1234",
-                    "SF_ValueRating": 5,
-                    "SF_MemoryType": "Classified",
-                    "SF_Group": "Government Files (x3)"
+            updatePanel() {
+                const content = document.getElementById('debugContent');
+                if (content) {
+                    content.textContent = this.messages.join('\n');
+                    const panel = document.getElementById('debugPanel');
+                    if (panel && panel.classList.contains('active')) {
+                        panel.scrollTop = panel.scrollHeight;
+                    }
                 }
-            };
-            showScreen('teamEntryScreen');
-        }
-
-        // Screen management
-        function showScreen(screenId) {
-            // Track previous screen for back navigation
-            const currentActive = document.querySelector('.screen.active');
-            if (currentActive && currentActive.id !== 'historyScreen' && screenId !== 'historyScreen') {
-                previousScreen = currentActive.id;
+            },
+            
+            toggle() {
+                const panel = document.getElementById('debugPanel');
+                panel.classList.toggle('active');
+            },
+            
+            clear() {
+                this.messages = [];
+                this.updatePanel();
             }
-            
-            document.querySelectorAll('.screen').forEach(screen => {
-                screen.classList.remove('active');
-            });
-            document.getElementById(screenId).classList.add('active');
-        }
+        };
 
-        // History view functions
-        function showHistory() {
-            updateHistoryStats();
-            renderTransactions();
-            showScreen('historyScreen');
-        }
-
-        function closeHistory() {
-            showScreen(previousScreen || 'teamEntryScreen');
-        }
-
-        function updateHistoryStats() {
-            // Calculate statistics
-            const totalScans = transactions.length;
-            const uniqueTeams = [...new Set(transactions.map(t => t.teamId))].length;
-            const knownTransactions = transactions.filter(t => !t.isUnknown);
-            const totalValue = knownTransactions.reduce((sum, t) => sum + (t.valueRating || 0), 0);
-            const avgValue = knownTransactions.length > 0 ? (totalValue / knownTransactions.length).toFixed(1) : 0;
+        // ============================================
+        // MODULE: NFC Handler (Correct Implementation)
+        // ============================================
+        const NFCHandler = {
+            reader: null,
+            isScanning: false,
             
-            // Update display
-            document.getElementById('totalScans').textContent = totalScans;
-            document.getElementById('uniqueTeams').textContent = uniqueTeams;
-            document.getElementById('totalValue').textContent = totalValue;
-            document.getElementById('avgValue').textContent = avgValue;
+            async init() {
+                return 'NDEFReader' in window;
+            },
             
-            // Log unknown tokens for debugging
-            const unknownCount = transactions.filter(t => t.isUnknown).length;
-            if (unknownCount > 0) {
-                console.log(`${unknownCount} unknown tokens in history`);
-            }
-        }
-
-        function renderTransactions(filteredTransactions = null) {
-            const container = document.getElementById('historyContainer');
-            const transactionsToShow = filteredTransactions || transactions;
-            
-            if (transactionsToShow.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <div class="icon">📋</div>
-                        <h3>No Transactions Yet</h3>
-                        <p>Scanned tokens will appear here</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            container.innerHTML = transactionsToShow.map(t => {
-                const date = new Date(t.timestamp);
-                const timeStr = date.toLocaleTimeString();
-                const dateStr = date.toLocaleDateString();
-                const isUnknown = t.isUnknown || t.memoryType === 'UNKNOWN';
-                
-                return `
-                    <div class="transaction-card ${t.stationMode} ${isUnknown ? 'unknown' : ''}">
-                        <div class="transaction-header">
-                            <span>Team ${t.teamId}</span>
-                            <span class="transaction-time">${dateStr} ${timeStr}</span>
-                        </div>
-                        <div class="transaction-details">
-                            <div class="detail">RFID: <span>${t.rfid}</span></div>
-                            <div class="detail">Value: <span>${isUnknown ? 'N/A' : '⭐'.repeat(t.valueRating)}</span></div>
-                            <div class="detail">Type: <span style="${isUnknown ? 'color: #FF5722;' : ''}">${t.memoryType}</span></div>
-                            <div class="detail">Mode: <span>${t.stationMode === 'blackmarket' ? 'Black Market' : 'Detective'}</span></div>
-                            <div class="detail" style="grid-column: 1 / -1;">Group: <span>${t.group}</span></div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        function filterTransactions() {
-            const searchTerm = document.getElementById('searchFilter').value.toLowerCase();
-            const modeFilter = document.getElementById('modeFilter').value;
-            const sortFilter = document.getElementById('sortFilter').value;
-            
-            // Filter
-            let filtered = transactions.filter(t => {
-                const matchesSearch = !searchTerm || 
-                    t.rfid.toLowerCase().includes(searchTerm) ||
-                    t.teamId.toLowerCase().includes(searchTerm) ||
-                    t.memoryType.toLowerCase().includes(searchTerm) ||
-                    t.group.toLowerCase().includes(searchTerm);
-                
-                const matchesMode = !modeFilter || t.stationMode === modeFilter;
-                
-                return matchesSearch && matchesMode;
-            });
-            
-            // Sort
-            filtered.sort((a, b) => {
-                switch(sortFilter) {
-                    case 'oldest':
-                        return new Date(a.timestamp) - new Date(b.timestamp);
-                    case 'value-high':
-                        return b.valueRating - a.valueRating;
-                    case 'value-low':
-                        return a.valueRating - b.valueRating;
-                    case 'newest':
-                    default:
-                        return new Date(b.timestamp) - new Date(a.timestamp);
+            async startScan(onRead, onError) {
+                if (!('NDEFReader' in window)) {
+                    throw new Error('NFC not supported');
                 }
-            });
-            
-            renderTransactions(filtered);
-        }
-
-        function updateHistoryBadge() {
-            const badge = document.getElementById('historyBadge');
-            if (transactions.length > 0) {
-                badge.textContent = transactions.length;
-                badge.style.display = 'inline';
-            } else {
-                badge.style.display = 'none';
-            }
-        }
-
-        // Settings management
-        function loadSettings() {
-            stationId = localStorage.getItem('stationId') || '001';
-            stationMode = localStorage.getItem('stationMode') || 'detective';
-            document.getElementById('stationId').value = stationId;
-            document.getElementById('stationIdDisplay').textContent = stationId;
-            document.getElementById('modeToggle').checked = stationMode === 'blackmarket';
-            updateModeDisplay();
-        }
-
-        function saveSettings() {
-            stationId = document.getElementById('stationId').value || '001';
-            stationMode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
-            localStorage.setItem('stationId', stationId);
-            localStorage.setItem('stationMode', stationMode);
-            document.getElementById('stationIdDisplay').textContent = stationId;
-            updateModeDisplay();
-            showScreen('teamEntryScreen');
-        }
-
-        function updateModeDisplay() {
-            const indicator = document.getElementById('modeIndicator');
-            const modeText = document.getElementById('modeText');
-            const modeToggle = document.getElementById('modeToggle');
-            
-            if (stationMode === 'blackmarket') {
-                indicator.className = 'mode-indicator mode-blackmarket';
-                indicator.textContent = 'Black Market Mode';
-                if (modeText) modeText.textContent = 'Black Market Mode';
-                if (modeToggle) modeToggle.checked = true;
-            } else {
-                indicator.className = 'mode-indicator mode-detective';
-                indicator.textContent = 'Detective Mode';
-                if (modeText) modeText.textContent = 'Detective Mode';
-                if (modeToggle) modeToggle.checked = false;
-            }
-        }
-
-        function toggleMode() {
-            // Toggle the mode
-            stationMode = stationMode === 'detective' ? 'blackmarket' : 'detective';
-            
-            // Save to localStorage
-            localStorage.setItem('stationMode', stationMode);
-            
-            // Update display
-            updateModeDisplay();
-            
-            // Visual feedback
-            const indicator = document.getElementById('modeIndicator');
-            indicator.style.transform = 'scale(1.1)';
-            setTimeout(() => {
-                indicator.style.transform = 'scale(1)';
-            }, 200);
-        }
-
-        function showSettings() {
-            showScreen('settingsScreen');
-        }
-
-        // Team entry functions
-        function appendNumber(num) {
-            if (currentTeamId.length < 6) {
-                currentTeamId += num;
-                updateTeamDisplay();
-            }
-        }
-
-        function clearTeamId() {
-            currentTeamId = '';
-            updateTeamDisplay();
-        }
-
-        function updateTeamDisplay() {
-            const display = document.getElementById('teamDisplay');
-            display.textContent = currentTeamId || '_';
-        }
-
-        function confirmTeamId() {
-            if (currentTeamId.length > 0) {
-                document.getElementById('currentTeam').textContent = currentTeamId;
-                currentSession = [];
-                updateSessionStats();
-                showScreen('scanScreen');
-            }
-        }
-
-        // NFC Scanning
-        async function startScan() {
-            if (!('NDEFReader' in window)) {
-                // Fallback for testing
-                simulateScan();
-                return;
-            }
-
-            try {
-                nfcReader = new NDEFReader();
-                await nfcReader.scan();
-                isScanning = true;
                 
-                document.getElementById('scanStatus').textContent = 'Scanning... Tap a token';
-                document.getElementById('scanButton').textContent = 'Scanning...';
-                document.getElementById('scanButton').disabled = true;
-                
-                nfcReader.addEventListener("reading", async ({ message, serialNumber }) => {
-                    debugLog('═══ NFC TAG DETECTED ═══');
-                    debugLog(`Serial: ${serialNumber}`);
-                    debugLog(`Records: ${message.records?.length || 0}`);
+                try {
+                    this.reader = new NDEFReader();
+                    await this.reader.scan();
+                    this.isScanning = true;
                     
-                    let tokenId = null;
-                    let recordSource = 'none';
+                    this.reader.addEventListener("reading", ({ message, serialNumber }) => {
+                        const result = this.extractTokenId(message, serialNumber);
+                        onRead(result);
+                    });
                     
-                    // Check if we have records
-                    if (!message.records || message.records.length === 0) {
-                        debugLog('No NDEF records found!', true);
-                        tokenId = serialNumber;
-                        recordSource = 'serial-fallback';
-                    } else {
-                        debugLog(`Reading ${message.records.length} record(s)...`);
-                        
-                        // Process first record
-                        const record = message.records[0];
-                        debugLog(`Record type: ${record.recordType}`);
-                        
-                        if (record.data) {
-                            try {
-                                if (record.recordType === 'text') {
-                                    // Parse NDEF text record
-                                    const dataView = new DataView(record.data.buffer, record.data.byteOffset, record.data.byteLength);
-                                    const statusByte = dataView.getUint8(0);
-                                    const langCodeLength = statusByte & 0x3F;
-                                    
-                                    // Extract text (skip status + lang code)
-                                    const textStart = 1 + langCodeLength;
-                                    const textBytes = new Uint8Array(record.data.buffer, record.data.byteOffset + textStart, record.data.byteLength - textStart);
-                                    tokenId = new TextDecoder('utf-8').decode(textBytes);
-                                    
-                                    debugLog(`✅ Text extracted: ${tokenId}`);
-                                    recordSource = 'ndef-text';
-                                } else {
-                                    // Try as plain text
-                                    tokenId = new TextDecoder('utf-8').decode(record.data);
-                                    debugLog(`✅ Decoded: ${tokenId}`);
-                                    recordSource = 'plain-text';
-                                }
-                            } catch (error) {
-                                debugLog(`Error: ${error.message}`, true);
+                    this.reader.addEventListener("readingerror", (event) => {
+                        Debug.log(`NFC Read Error: ${event}`, true);
+                        if (onError) onError(event);
+                    });
+                    
+                } catch (error) {
+                    Debug.log(`Error starting NFC: ${error.message}`, true);
+                    throw error;
+                }
+            },
+            
+            extractTokenId(message, serialNumber) {
+                Debug.log('═══ NFC TAG DETECTED ═══');
+                Debug.log(`Serial: ${serialNumber}`);
+                Debug.log(`Records: ${message.records?.length || 0}`);
+                
+                // No records? Use serial number
+                if (!message.records || message.records.length === 0) {
+                    Debug.log('No NDEF records, using serial');
+                    return {
+                        id: serialNumber,
+                        source: 'serial-fallback',
+                        raw: serialNumber
+                    };
+                }
+                
+                // Process records using the CORRECT API approach
+                for (const record of message.records) {
+                    Debug.log(`Record type: ${record.recordType}`);
+                    
+                    if (record.recordType === "text") {
+                        // The Web NFC API handles NDEF format for us!
+                        const decoder = new TextDecoder(record.encoding || "utf-8");
+                        const text = decoder.decode(record.data);
+                        Debug.log(`✅ Text record: ${text}`);
+                        return {
+                            id: text.trim(),
+                            source: 'text-record',
+                            raw: text
+                        };
+                    }
+                    
+                    if (record.recordType === "url") {
+                        const decoder = new TextDecoder();
+                        const url = decoder.decode(record.data);
+                        Debug.log(`✅ URL record: ${url}`);
+                        return {
+                            id: url,
+                            source: 'url-record',
+                            raw: url
+                        };
+                    }
+                    
+                    // Try generic text decoding for other types
+                    if (record.data) {
+                        try {
+                            const text = new TextDecoder().decode(record.data);
+                            if (text && text.trim()) {
+                                Debug.log(`✅ Generic decode: ${text}`);
+                                return {
+                                    id: text.trim(),
+                                    source: 'generic-decode',
+                                    raw: text
+                                };
                             }
+                        } catch (e) {
+                            Debug.log(`Decode failed: ${e.message}`);
                         }
                     }
-                    
-                    // Fallback to serial
-                    if (!tokenId || tokenId.trim() === '') {
-                        debugLog('Using serial as fallback');
-                        tokenId = serialNumber;
-                        recordSource = 'serial-fallback';
-                    } else {
-                        tokenId = tokenId.trim();
+                }
+                
+                // Fallback to serial if no readable records
+                Debug.log('No readable records, using serial');
+                return {
+                    id: serialNumber,
+                    source: 'serial-fallback',
+                    raw: serialNumber
+                };
+            },
+            
+            stopScan() {
+                this.isScanning = false;
+                // Note: Web NFC doesn't have a stop method
+                // Scan continues until page closes
+            },
+            
+            simulateScan() {
+                // For testing without NFC hardware
+                const testIds = [
+                    'a1b2c3d4',
+                    'deadbeef', 
+                    'test1234',
+                    'unknown_' + Math.random().toString(36).substr(2, 9)
+                ];
+                const randomId = testIds[Math.floor(Math.random() * testIds.length)];
+                
+                return {
+                    id: randomId,
+                    source: 'simulated',
+                    raw: randomId
+                };
+            }
+        };
+
+        // ============================================
+        // MODULE: Token Manager
+        // ============================================
+        const TokenManager = {
+            database: {},
+            
+            async loadDatabase() {
+                try {
+                    const response = await fetch('tokens.json');
+                    if (!response.ok) {
+                        throw new Error('Failed to load tokens.json');
                     }
+                    this.database = await response.json();
+                    Debug.log(`Loaded ${Object.keys(this.database).length} tokens`);
+                    return true;
+                } catch (error) {
+                    Debug.log(`Token database error: ${error.message}`, true);
+                    this.loadDemoData();
+                    return false;
+                }
+            },
+            
+            loadDemoData() {
+                this.database = {
+                    "a1b2c3d4": {
+                        "SF_RFID": "a1b2c3d4",
+                        "SF_ValueRating": 3,
+                        "SF_MemoryType": "Technical",
+                        "SF_Group": "Server Logs (x5)"
+                    },
+                    "deadbeef": {
+                        "SF_RFID": "deadbeef",
+                        "SF_ValueRating": 2,
+                        "SF_MemoryType": "Personal",
+                        "SF_Group": "Marcus' Memories (x1)"
+                    },
+                    "test1234": {
+                        "SF_RFID": "test1234",
+                        "SF_ValueRating": 5,
+                        "SF_MemoryType": "Classified",
+                        "SF_Group": "Government Files (x3)"
+                    }
+                };
+                Debug.log('Loaded demo token data');
+            },
+            
+            findToken(id) {
+                // Direct match
+                if (this.database[id]) {
+                    Debug.log(`Direct match: ${id}`);
+                    return { token: this.database[id], matchedId: id };
+                }
+                
+                // Try case variations
+                const lower = id.toLowerCase();
+                const upper = id.toUpperCase();
+                
+                if (this.database[lower]) {
+                    Debug.log(`Matched lowercase: ${lower}`);
+                    return { token: this.database[lower], matchedId: lower };
+                }
+                
+                if (this.database[upper]) {
+                    Debug.log(`Matched uppercase: ${upper}`);
+                    return { token: this.database[upper], matchedId: upper };
+                }
+                
+                // Try without colons
+                if (id.includes(':')) {
+                    const noColons = id.replace(/[:-]/g, '');
+                    if (this.database[noColons]) {
+                        Debug.log(`Matched without colons: ${noColons}`);
+                        return { token: this.database[noColons], matchedId: noColons };
+                    }
+                }
+                
+                // Try adding colons (for hex strings)
+                if (!id.includes(':') && id.length >= 4) {
+                    const withColons = id.match(/.{1,2}/g)?.join(':') || id;
+                    if (this.database[withColons]) {
+                        Debug.log(`Matched with colons: ${withColons}`);
+                        return { token: this.database[withColons], matchedId: withColons };
+                    }
+                }
+                
+                Debug.log(`No match found for: ${id}`, true);
+                return null;
+            }
+        };
+
+        // ============================================
+        // MODULE: Data Manager
+        // ============================================
+        const DataManager = {
+            transactions: [],
+            currentSession: [],
+            
+            loadTransactions() {
+                try {
+                    const stored = localStorage.getItem('transactions');
+                    if (stored) {
+                        this.transactions = JSON.parse(stored);
+                        Debug.log(`Loaded ${this.transactions.length} transactions`);
+                    }
+                } catch (e) {
+                    Debug.log('Error loading transactions', true);
+                    this.transactions = [];
+                }
+            },
+            
+            saveTransactions() {
+                try {
+                    localStorage.setItem('transactions', JSON.stringify(this.transactions));
+                } catch (e) {
+                    Debug.log('Error saving transactions', true);
+                }
+            },
+            
+            addTransaction(transaction) {
+                this.transactions.push(transaction);
+                this.currentSession.push(transaction);
+                this.saveTransactions();
+                UIManager.updateHistoryBadge();
+            },
+            
+            clearSession() {
+                this.currentSession = [];
+            },
+            
+            getSessionStats() {
+                const count = this.currentSession.length;
+                const knownTokens = this.currentSession.filter(t => !t.isUnknown);
+                const totalValue = knownTokens.reduce((sum, t) => sum + (t.valueRating || 0), 0);
+                return { count, totalValue };
+            },
+            
+            getGlobalStats() {
+                const total = this.transactions.length;
+                const teams = [...new Set(this.transactions.map(t => t.teamId))].length;
+                const known = this.transactions.filter(t => !t.isUnknown);
+                const totalValue = known.reduce((sum, t) => sum + (t.valueRating || 0), 0);
+                const avgValue = known.length > 0 ? (totalValue / known.length).toFixed(1) : 0;
+                
+                return { total, teams, totalValue, avgValue };
+            },
+            
+            exportData(format) {
+                if (this.transactions.length === 0) {
+                    alert('No transactions to export');
+                    return;
+                }
+                
+                let data, filename, type;
+                
+                if (format === 'json') {
+                    data = JSON.stringify(this.transactions, null, 2);
+                    filename = `transactions_${Date.now()}.json`;
+                    type = 'application/json';
+                } else {
+                    // CSV format
+                    const headers = ['timestamp', 'stationId', 'stationMode', 'teamId', 'rfid', 'memoryType', 'group', 'valueRating'];
+                    const rows = [headers.join(',')];
                     
-                    debugLog(`═══ RESULT ═══`);
-                    debugLog(`Token ID: ${tokenId}`);
-                    debugLog(`Source: ${recordSource}`);
+                    this.transactions.forEach(t => {
+                        const row = [
+                            t.timestamp,
+                            t.stationId,
+                            t.stationMode,
+                            t.teamId,
+                            t.rfid,
+                            `"${t.memoryType}"`,
+                            `"${t.group}"`,
+                            t.valueRating || 0
+                        ];
+                        rows.push(row.join(','));
+                    });
                     
-                    // Update UI
-                    document.getElementById('scanStatus').innerHTML = `
-                        <strong>Token:</strong> ${tokenId}<br>
-                        <small>From: ${recordSource}</small>
+                    data = rows.join('\n');
+                    filename = `transactions_${Date.now()}.csv`;
+                    type = 'text/csv';
+                }
+                
+                const blob = new Blob([data], { type });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            },
+            
+            clearData() {
+                if (confirm('Clear all transaction data? This cannot be undone.')) {
+                    this.transactions = [];
+                    this.currentSession = [];
+                    localStorage.removeItem('transactions');
+                    UIManager.updateHistoryBadge();
+                    alert('All data cleared');
+                    location.reload();
+                }
+            }
+        };
+
+        // ============================================
+        // MODULE: UI Manager
+        // ============================================
+        const UIManager = {
+            screens: {},
+            previousScreen: 'teamEntryScreen',
+            
+            init() {
+                this.screens = {
+                    loading: document.getElementById('loadingScreen'),
+                    settings: document.getElementById('settingsScreen'),
+                    teamEntry: document.getElementById('teamEntryScreen'),
+                    scan: document.getElementById('scanScreen'),
+                    result: document.getElementById('resultScreen'),
+                    history: document.getElementById('historyScreen')
+                };
+            },
+            
+            showScreen(screenName) {
+                // Track previous screen for back navigation
+                const current = document.querySelector('.screen.active');
+                if (current && current.id !== 'historyScreen' && screenName !== 'history') {
+                    this.previousScreen = current.id.replace('Screen', '');
+                }
+                
+                // Hide all screens
+                Object.values(this.screens).forEach(screen => {
+                    screen.classList.remove('active');
+                });
+                
+                // Show requested screen
+                if (this.screens[screenName]) {
+                    this.screens[screenName].classList.add('active');
+                }
+            },
+            
+            updateModeDisplay(mode) {
+                const indicator = document.getElementById('modeIndicator');
+                const modeText = document.getElementById('modeText');
+                const toggle = document.getElementById('modeToggle');
+                
+                if (mode === 'blackmarket') {
+                    indicator.className = 'mode-indicator mode-blackmarket';
+                    indicator.textContent = 'Black Market Mode';
+                    if (modeText) modeText.textContent = 'Black Market Mode';
+                    if (toggle) toggle.checked = true;
+                } else {
+                    indicator.className = 'mode-indicator mode-detective';
+                    indicator.textContent = 'Detective Mode';
+                    if (modeText) modeText.textContent = 'Detective Mode';
+                    if (toggle) toggle.checked = false;
+                }
+            },
+            
+            updateTeamDisplay(teamId) {
+                const display = document.getElementById('teamDisplay');
+                display.textContent = teamId || '_';
+            },
+            
+            updateSessionStats() {
+                const stats = DataManager.getSessionStats();
+                document.getElementById('teamTokenCount').textContent = stats.count;
+                document.getElementById('teamTotalValue').textContent = stats.totalValue;
+            },
+            
+            updateHistoryBadge() {
+                const badge = document.getElementById('historyBadge');
+                const count = DataManager.transactions.length;
+                if (count > 0) {
+                    badge.textContent = count;
+                    badge.style.display = 'inline';
+                } else {
+                    badge.style.display = 'none';
+                }
+            },
+            
+            updateHistoryStats() {
+                const stats = DataManager.getGlobalStats();
+                document.getElementById('totalScans').textContent = stats.total;
+                document.getElementById('uniqueTeams').textContent = stats.teams;
+                document.getElementById('totalValue').textContent = stats.totalValue;
+                document.getElementById('avgValue').textContent = stats.avgValue;
+            },
+            
+            renderTransactions(filtered = null) {
+                const container = document.getElementById('historyContainer');
+                const transactions = filtered || DataManager.transactions;
+                
+                if (transactions.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <h3>No Transactions Yet</h3>
+                        </div>
                     `;
+                    return;
+                }
+                
+                container.innerHTML = transactions.map(t => {
+                    const date = new Date(t.timestamp);
+                    const timeStr = date.toLocaleTimeString();
+                    const dateStr = date.toLocaleDateString();
+                    const isUnknown = t.isUnknown || t.memoryType === 'UNKNOWN';
                     
-                    setTimeout(() => {
-                        processToken(tokenId);
-                    }, 100);
+                    return `
+                        <div class="transaction-card ${t.stationMode} ${isUnknown ? 'unknown' : ''}">
+                            <div class="transaction-header">
+                                <span>Team ${t.teamId}</span>
+                                <span class="transaction-time">${dateStr} ${timeStr}</span>
+                            </div>
+                            <div class="transaction-details">
+                                <div class="detail">RFID: <span>${t.rfid}</span></div>
+                                <div class="detail">Value: <span>${isUnknown ? 'N/A' : '⭐'.repeat(t.valueRating || 0)}</span></div>
+                                <div class="detail">Type: <span>${t.memoryType}</span></div>
+                                <div class="detail">Mode: <span>${t.stationMode === 'blackmarket' ? 'Black Market' : 'Detective'}</span></div>
+                                <div class="detail" style="grid-column: 1 / -1;">Group: <span>${t.group}</span></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            },
+            
+            filterTransactions() {
+                const search = document.getElementById('searchFilter').value.toLowerCase();
+                const mode = document.getElementById('modeFilter').value;
+                
+                let filtered = DataManager.transactions.filter(t => {
+                    const matchesSearch = !search || 
+                        t.rfid.toLowerCase().includes(search) ||
+                        t.teamId.toLowerCase().includes(search) ||
+                        t.memoryType.toLowerCase().includes(search) ||
+                        t.group.toLowerCase().includes(search);
+                    
+                    const matchesMode = !mode || t.stationMode === mode;
+                    
+                    return matchesSearch && matchesMode;
                 });
                 
-                nfcReader.addEventListener("readingerror", (event) => {
-                    console.error("❌ NFC Read Error:", event);
-                    document.getElementById('scanStatus').textContent = 'Read error. Try again.';
-                });
+                // Sort newest first
+                filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
                 
-            } catch (error) {
-                console.error("❌ Error starting NFC scan:", error);
-                document.getElementById('scanStatus').textContent = 'NFC not available. Using demo mode.';
-                simulateScan();
-            }
-        }
-
-        function simulateScan() {
-            // Simulate a scan for testing
-            const testTokens = Object.keys(tokenDatabase);
+                this.renderTransactions(filtered);
+            },
             
-            // Sometimes generate an unknown token for testing
-            const shouldGenerateUnknown = Math.random() < 0.3; // 30% chance
-            
-            let simulatedRfid;
-            if (shouldGenerateUnknown) {
-                // Generate a random unknown RFID
-                simulatedRfid = 'unknown_' + Math.random().toString(36).substr(2, 9);
-                console.log('Simulating unknown token:', simulatedRfid);
-            } else if (testTokens.length > 0) {
-                // Use a known token
-                simulatedRfid = testTokens[Math.floor(Math.random() * testTokens.length)];
-                console.log('Simulating known token:', simulatedRfid);
-            } else {
-                // No tokens available
-                simulatedRfid = 'test_' + Date.now();
-                console.log('No tokens in database, generating test ID:', simulatedRfid);
-            }
-            
-            document.getElementById('scanStatus').innerHTML = `
-                Demo Mode: Simulating scan...<br>
-                <small>ID: ${simulatedRfid}</small>
-            `;
-            
-            setTimeout(() => {
-                processToken(simulatedRfid);
-            }, 1000);
-        }
-
-        function processToken(rfid) {
-            debugLog(`Processing token: ${rfid}`);
-            
-            // Try various formats to find a match
-            let token = tokenDatabase[rfid];
-            let matchedKey = rfid;
-            
-            // Try lowercase version
-            if (!token) {
-                const lowerRfid = rfid.toLowerCase();
-                token = tokenDatabase[lowerRfid];
-                if (token) {
-                    matchedKey = lowerRfid;
-                    debugLog(`Matched lowercase: ${lowerRfid}`);
-                }
-            }
-            
-            // Try uppercase version
-            if (!token) {
-                const upperRfid = rfid.toUpperCase();
-                token = tokenDatabase[upperRfid];
-                if (token) {
-                    matchedKey = upperRfid;
-                    debugLog(`Matched uppercase: ${upperRfid}`);
-                }
-            }
-            
-            // Try without colons
-            if (!token && rfid.includes(':')) {
-                const normalizedRfid = rfid.replace(/:/g, '');
-                token = tokenDatabase[normalizedRfid];
-                if (token) {
-                    matchedKey = normalizedRfid;
-                    debugLog(`Matched no colons: ${normalizedRfid}`);
-                }
-            }
-            
-            // Try adding colons if not present
-            if (!token && !rfid.includes(':') && rfid.length >= 4) {
-                const colonRfid = rfid.match(/.{1,2}/g)?.join(':') || rfid;
-                token = tokenDatabase[colonRfid];
-                if (token) {
-                    matchedKey = colonRfid;
-                    debugLog(`Matched with colons: ${colonRfid}`);
-                }
-            }
-            
-            if (!token) {
-                // Unknown token
-                debugLog(`Unknown token: ${rfid}`, true);
-                debugLog(`Available keys: ${Object.keys(tokenDatabase).slice(0, 5).join(', ')}...`);
+            showTokenResult(token, tokenId, isUnknown) {
+                const statusEl = document.getElementById('resultStatus');
+                const rfidEl = document.getElementById('resultRfid');
+                const typeEl = document.getElementById('resultType');
+                const groupEl = document.getElementById('resultGroup');
+                const valueEl = document.getElementById('resultValue');
                 
-                // Create a debug transaction record
-                const debugTransaction = {
+                if (isUnknown) {
+                    statusEl.className = 'status-message error';
+                    statusEl.innerHTML = `
+                        <h2>Unknown Token</h2>
+                        <p style="font-size: 14px;">Not in database</p>
+                    `;
+                    rfidEl.textContent = tokenId;
+                    typeEl.textContent = 'UNKNOWN';
+                    typeEl.style.color = '#FF5722';
+                    groupEl.textContent = `Raw ID: ${tokenId}`;
+                    valueEl.textContent = 'No Value';
+                } else {
+                    statusEl.className = 'status-message success';
+                    statusEl.innerHTML = '<h2>Transaction Complete!</h2>';
+                    rfidEl.textContent = tokenId;
+                    typeEl.textContent = token.SF_MemoryType;
+                    typeEl.style.color = '#333';
+                    groupEl.textContent = token.SF_Group;
+                    valueEl.textContent = '⭐'.repeat(token.SF_ValueRating || 0);
+                }
+                
+                this.showScreen('result');
+            }
+        };
+
+        // ============================================
+        // MODULE: Settings Manager
+        // ============================================
+        const Settings = {
+            stationId: '001',
+            stationMode: 'detective',
+            
+            load() {
+                this.stationId = localStorage.getItem('stationId') || '001';
+                this.stationMode = localStorage.getItem('stationMode') || 'detective';
+                
+                document.getElementById('stationId').value = this.stationId;
+                document.getElementById('stationIdDisplay').textContent = this.stationId;
+                document.getElementById('modeToggle').checked = this.stationMode === 'blackmarket';
+                
+                UIManager.updateModeDisplay(this.stationMode);
+            },
+            
+            save() {
+                this.stationId = document.getElementById('stationId').value || '001';
+                this.stationMode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
+                
+                localStorage.setItem('stationId', this.stationId);
+                localStorage.setItem('stationMode', this.stationMode);
+                
+                document.getElementById('stationIdDisplay').textContent = this.stationId;
+                UIManager.updateModeDisplay(this.stationMode);
+            }
+        };
+
+        // ============================================
+        // MODULE: Main Application
+        // ============================================
+        const App = {
+            currentTeamId: '',
+            nfcSupported: false,
+            
+            async init() {
+                Debug.log('App initializing...');
+                
+                // Initialize UI
+                UIManager.init();
+                
+                // Load settings
+                Settings.load();
+                
+                // Load transaction history
+                DataManager.loadTransactions();
+                UIManager.updateHistoryBadge();
+                
+                // Check NFC support
+                this.nfcSupported = await NFCHandler.init();
+                Debug.log(`NFC support: ${this.nfcSupported}`);
+                
+                // Load token database
+                const dbLoaded = await TokenManager.loadDatabase();
+                
+                // Check URL parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                const modeParam = urlParams.get('mode');
+                if (modeParam === 'blackmarket' || modeParam === 'black-market') {
+                    Settings.stationMode = 'blackmarket';
+                    Settings.save();
+                }
+                
+                // Show first screen
+                UIManager.showScreen('teamEntry');
+            },
+            
+            // Settings
+            showSettings() {
+                UIManager.showScreen('settings');
+            },
+            
+            saveSettings() {
+                Settings.save();
+                UIManager.showScreen('teamEntry');
+            },
+            
+            toggleMode() {
+                Settings.stationMode = Settings.stationMode === 'detective' ? 'blackmarket' : 'detective';
+                Settings.save();
+            },
+            
+            updateModeFromToggle() {
+                Settings.stationMode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
+                UIManager.updateModeDisplay(Settings.stationMode);
+            },
+            
+            // Team Entry
+            appendNumber(num) {
+                if (this.currentTeamId.length < 6) {
+                    this.currentTeamId += num;
+                    UIManager.updateTeamDisplay(this.currentTeamId);
+                }
+            },
+            
+            clearTeamId() {
+                this.currentTeamId = '';
+                UIManager.updateTeamDisplay(this.currentTeamId);
+            },
+            
+            confirmTeamId() {
+                if (this.currentTeamId.length > 0) {
+                    document.getElementById('currentTeam').textContent = this.currentTeamId;
+                    DataManager.clearSession();
+                    UIManager.updateSessionStats();
+                    UIManager.showScreen('scan');
+                }
+            },
+            
+            // Scanning
+            async startScan() {
+                const button = document.getElementById('scanButton');
+                const status = document.getElementById('scanStatus');
+                
+                if (!this.nfcSupported) {
+                    this.simulateScan();
+                    return;
+                }
+                
+                try {
+                    button.disabled = true;
+                    button.textContent = 'Scanning...';
+                    status.textContent = 'Scanning... Tap a token';
+                    
+                    await NFCHandler.startScan(
+                        (result) => this.processNFCRead(result),
+                        (error) => {
+                            status.textContent = 'Read error. Try again.';
+                            button.disabled = false;
+                            button.textContent = 'Start Scanning';
+                        }
+                    );
+                } catch (error) {
+                    Debug.log(`Scan error: ${error.message}`, true);
+                    status.textContent = 'NFC not available. Using demo mode.';
+                    this.simulateScan();
+                }
+            },
+            
+            simulateScan() {
+                const status = document.getElementById('scanStatus');
+                status.textContent = 'Demo Mode: Simulating scan...';
+                
+                setTimeout(() => {
+                    const result = NFCHandler.simulateScan();
+                    this.processNFCRead(result);
+                }, 1000);
+            },
+            
+            processNFCRead(result) {
+                Debug.log(`Processing token: ${result.id} (from ${result.source})`);
+                
+                const tokenData = TokenManager.findToken(result.id);
+                
+                if (!tokenData) {
+                    // Unknown token
+                    this.recordTransaction(null, result.id, true);
+                } else {
+                    // Known token
+                    this.recordTransaction(tokenData.token, tokenData.matchedId, false);
+                }
+            },
+            
+            recordTransaction(token, tokenId, isUnknown) {
+                const transaction = {
                     timestamp: new Date().toISOString(),
-                    stationId: stationId,
-                    stationMode: stationMode,
-                    teamId: currentTeamId,
-                    rfid: rfid,
-                    memoryType: 'UNKNOWN',
-                    group: `Unrecognized Token: ${rfid}`,
-                    valueRating: 0,
-                    isUnknown: true
+                    stationId: Settings.stationId,
+                    stationMode: Settings.stationMode,
+                    teamId: this.currentTeamId,
+                    rfid: tokenId,
+                    memoryType: isUnknown ? 'UNKNOWN' : token.SF_MemoryType,
+                    group: isUnknown ? `Unknown: ${tokenId}` : token.SF_Group,
+                    valueRating: isUnknown ? 0 : token.SF_ValueRating,
+                    isUnknown: isUnknown
                 };
                 
-                // Display result with unknown token info
-                document.getElementById('resultRfid').textContent = rfid;
-                document.getElementById('resultType').textContent = 'UNKNOWN TOKEN';
-                document.getElementById('resultType').style.color = '#FF5722';
-                document.getElementById('resultGroup').textContent = `Raw ID: ${rfid}`;
-                document.getElementById('resultValue').textContent = 'No Value (Unknown)';
+                DataManager.addTransaction(transaction);
+                UIManager.updateSessionStats();
+                UIManager.showTokenResult(token, tokenId, isUnknown);
                 
-                // Still save it for debugging purposes
-                currentSession.push(debugTransaction);
-                transactions.push(debugTransaction);
-                saveTransactions();
-                
-                // Show alert for debugging
-                const statusMsg = document.querySelector('#resultScreen .status-message');
-                statusMsg.classList.remove('success');
-                statusMsg.classList.add('error');
-                statusMsg.innerHTML = `
-                    <h2>Unknown Token Detected</h2>
-                    <p style="font-size: 14px; margin-top: 10px;">RFID: ${rfid}</p>
-                    <p style="font-size: 12px; color: #666;">This token is not in the database</p>
-                    <p style="font-size: 10px; color: #888;">Check debug panel (🐛 button)</p>
-                `;
-                
-                stopScan();
-                showScreen('resultScreen');
-                return;
-            }
+                // Reset scan button
+                const button = document.getElementById('scanButton');
+                button.disabled = false;
+                button.textContent = 'Start Scanning';
+            },
             
-            // Known token - process normally
-            debugLog(`✅ Token matched: ${token.SF_Group}`);
-            const transaction = {
-                timestamp: new Date().toISOString(),
-                stationId: stationId,
-                stationMode: stationMode,
-                teamId: currentTeamId,
-                rfid: matchedKey,
-                memoryType: token.SF_MemoryType,
-                group: token.SF_Group,
-                valueRating: token.SF_ValueRating,
-                isUnknown: false
-            };
-            
-            currentSession.push(transaction);
-            transactions.push(transaction);
-            saveTransactions();
-            
-            // Display result for known token
-            document.getElementById('resultRfid').textContent = matchedKey;
-            document.getElementById('resultType').textContent = token.SF_MemoryType;
-            document.getElementById('resultType').style.color = '#333';
-            document.getElementById('resultGroup').textContent = token.SF_Group;
-            document.getElementById('resultValue').textContent = token.SF_ValueRating;
-            
-            // Reset status message for success
-            const statusMsg = document.querySelector('#resultScreen .status-message');
-            statusMsg.classList.remove('error');
-            statusMsg.classList.add('success');
-            statusMsg.innerHTML = '<h2>Transaction Complete!</h2>';
-            
-            stopScan();
-            showScreen('resultScreen');
-        }
-
-        function stopScan() {
-            if (nfcReader && isScanning) {
-                // Note: There's no official stop method in Web NFC API
-                // The scan continues until the page is closed or navigated away
-                isScanning = false;
-            }
-            document.getElementById('scanButton').textContent = 'Start Scanning';
-            document.getElementById('scanButton').disabled = false;
-        }
-
-        function cancelScan() {
-            stopScan();
-            currentTeamId = '';
-            updateTeamDisplay();
-            showScreen('teamEntryScreen');
-        }
-
-        function manualEntry() {
-            const rfid = prompt('Enter RFID manually for debugging:\n(This helps test specific IDs)');
-            if (rfid && rfid.trim()) {
-                console.log('Manual entry RFID:', rfid.trim());
-                processToken(rfid.trim());
-            }
-        }
-
-        function continueScan() {
-            updateSessionStats();
-            showScreen('scanScreen');
-        }
-
-        function finishTeam() {
-            currentTeamId = '';
-            currentSession = [];
-            updateTeamDisplay();
-            showScreen('teamEntryScreen');
-        }
-
-        function updateSessionStats() {
-            const tokenCount = currentSession.length;
-            const knownTokens = currentSession.filter(t => !t.isUnknown);
-            const totalValue = knownTokens.reduce((sum, t) => sum + (t.valueRating || 0), 0);
-            document.getElementById('teamTokenCount').textContent = tokenCount;
-            document.getElementById('teamTotalValue').textContent = totalValue;
-        }
-
-        // Data management
-        function loadTransactions() {
-            const stored = localStorage.getItem('transactions');
-            if (stored) {
-                try {
-                    transactions = JSON.parse(stored);
-                    console.log('Loaded', transactions.length, 'transactions from storage');
-                } catch (e) {
-                    console.error('Error parsing stored transactions:', e);
-                    transactions = [];
-                    localStorage.removeItem('transactions');
+            manualEntry() {
+                const rfid = prompt('Enter RFID manually:');
+                if (rfid && rfid.trim()) {
+                    this.processNFCRead({
+                        id: rfid.trim(),
+                        source: 'manual',
+                        raw: rfid.trim()
+                    });
                 }
-            } else {
-                transactions = [];
-            }
-            updateHistoryBadge();
-        }
-
-        function saveTransactions() {
-            try {
-                localStorage.setItem('transactions', JSON.stringify(transactions));
-                updateHistoryBadge();
-                console.log('Saved', transactions.length, 'transactions to storage');
-            } catch (e) {
-                console.error('Error saving transactions:', e);
-                alert('Warning: Could not save transactions to storage');
-            }
-        }
-
-        function exportData(format) {
-            if (transactions.length === 0) {
-                alert('No transactions to export');
-                return;
-            }
+            },
             
-            let data, filename, type;
+            cancelScan() {
+                NFCHandler.stopScan();
+                this.currentTeamId = '';
+                UIManager.updateTeamDisplay('');
+                UIManager.showScreen('teamEntry');
+            },
             
-            if (format === 'json') {
-                data = JSON.stringify(transactions, null, 2);
-                filename = `transactions_${Date.now()}.json`;
-                type = 'application/json';
-            } else {
-                // CSV format
-                const headers = ['timestamp', 'stationId', 'stationMode', 'teamId', 'rfid', 'memoryType', 'group', 'valueRating'];
-                const csvRows = [headers.join(',')];
-                
-                transactions.forEach(t => {
-                    const row = [
-                        t.timestamp,
-                        t.stationId,
-                        t.stationMode,
-                        t.teamId,
-                        t.rfid,
-                        `"${t.memoryType}"`,
-                        `"${t.group}"`,
-                        t.valueRating
-                    ];
-                    csvRows.push(row.join(','));
-                });
-                
-                data = csvRows.join('\n');
-                filename = `transactions_${Date.now()}.csv`;
-                type = 'text/csv';
-            }
+            continueScan() {
+                UIManager.updateSessionStats();
+                UIManager.showScreen('scan');
+            },
             
-            // Create download
-            const blob = new Blob([data], { type });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }
-
-        function clearData() {
-            if (confirm('Clear all transaction data? This cannot be undone.')) {
-                // Clear all data from memory
-                transactions = [];
-                currentSession = [];
-                
-                // Clear ALL localStorage items related to this app
-                const keysToRemove = [];
-                for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i);
-                    if (key === 'transactions' || key === 'currentSession' || key.includes('transaction')) {
-                        keysToRemove.push(key);
+            finishTeam() {
+                this.currentTeamId = '';
+                DataManager.clearSession();
+                UIManager.updateTeamDisplay('');
+                UIManager.showScreen('teamEntry');
+            },
+            
+            // History
+            showHistory() {
+                UIManager.updateHistoryStats();
+                UIManager.renderTransactions();
+                UIManager.showScreen('history');
+            },
+            
+            closeHistory() {
+                UIManager.showScreen(UIManager.previousScreen);
+            },
+            
+            // Testing
+            testTokenMatch() {
+                const testId = prompt('Enter a token ID to test:');
+                if (testId) {
+                    const result = TokenManager.findToken(testId);
+                    if (result) {
+                        alert(`Match found!\nID: ${result.matchedId}\nType: ${result.token.SF_MemoryType}\nGroup: ${result.token.SF_Group}`);
+                    } else {
+                        alert(`No match found for: ${testId}`);
                     }
                 }
-                keysToRemove.forEach(key => localStorage.removeItem(key));
-                
-                // Update the UI immediately
-                updateHistoryBadge();
-                
-                // If we're currently viewing history, refresh it
-                const historyScreen = document.getElementById('historyScreen');
-                if (historyScreen && historyScreen.classList.contains('active')) {
-                    updateHistoryStats();
-                    renderTransactions();
-                }
-                
-                // Also update team session stats if on scan screen
-                const scanScreen = document.getElementById('scanScreen');
-                if (scanScreen && scanScreen.classList.contains('active')) {
-                    updateSessionStats();
-                }
-                
-                alert('All data cleared successfully. The page will now reload.');
-                
-                // Force reload the page to ensure clean state
-                setTimeout(() => {
-                    window.location.reload(true);
-                }, 500);
             }
-        }
-        
-        function debugStorage() {
-            const stored = localStorage.getItem('transactions');
-            let message = 'Debug Information:\n\n';
-            
-            // Show token database keys
-            message += '📚 TOKEN DATABASE KEYS:\n';
-            message += '─'.repeat(30) + '\n';
-            const dbKeys = Object.keys(tokenDatabase);
-            if (dbKeys.length > 0) {
-                dbKeys.forEach(key => {
-                    const token = tokenDatabase[key];
-                    message += `"${key}" -> ${token.SF_Group}\n`;
-                });
-            } else {
-                message += 'No tokens loaded!\n';
-            }
-            message += '\n';
-            
-            // Show transaction data
-            if (stored) {
-                try {
-                    const data = JSON.parse(stored);
-                    message += `📊 STORED TRANSACTIONS:\n`;
-                    message += '─'.repeat(30) + '\n';
-                    message += `Total: ${data.length} transactions\n`;
-                    message += `In Memory: ${transactions.length} transactions\n\n`;
-                    
-                    if (data.length > 0) {
-                        message += 'Last 3 transactions:\n';
-                        data.slice(-3).forEach((t, i) => {
-                            message += `${i+1}. Team ${t.teamId}: ${t.rfid} (${t.memoryType})\n`;
-                        });
-                    }
-                } catch (e) {
-                    message += 'Error parsing localStorage: ' + e.message;
-                }
-            } else {
-                message += 'No transactions in localStorage\n';
-            }
-            
-            console.log(message);
-            alert(message);
-        }
-        
-        function testTokenMatch() {
-            const testId = prompt('Enter a token ID to test matching:');
-            if (testId) {
-                console.log('Testing token ID:', testId);
-                const originalCount = transactions.length;
-                processToken(testId);
-                // Remove the test transaction
-                if (transactions.length > originalCount) {
-                    transactions.pop();
-                    saveTransactions();
-                }
-            }
-        }
+        };
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        window.addEventListener('DOMContentLoaded', () => {
+            App.init();
+        });
     </script>
 </body>
 </html>
