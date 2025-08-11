@@ -703,7 +703,7 @@
                 </div>
                 <div class="stat-item">
                     <div class="stat-value" id="teamTotalValue">0</div>
-                    <div class="stat-label">Total Value</div>
+                    <div class="stat-label" id="teamValueLabel">Total Value</div>
                 </div>
             </div>
         </div>
@@ -1059,6 +1059,23 @@
             currentSession: [],
             scannedTokens: new Set(),  // Global registry of scanned tokens
             
+            // Scoring configuration for Black Market mode
+            SCORING_CONFIG: {
+                BASE_VALUES: {
+                    1: 100,
+                    2: 500,
+                    3: 1000,
+                    4: 5000,
+                    5: 10000
+                },
+                TYPE_MULTIPLIERS: {
+                    'Technical': 5,
+                    'Personal': 1,
+                    'Business': 3,
+                    'UNKNOWN': 0  // Unknown tokens worth 0
+                }
+            },
+            
             loadTransactions() {
                 try {
                     const stored = localStorage.getItem('transactions');
@@ -1126,17 +1143,46 @@
                 const count = this.currentSession.length;
                 const knownTokens = this.currentSession.filter(t => !t.isUnknown);
                 const totalValue = knownTokens.reduce((sum, t) => sum + (t.valueRating || 0), 0);
-                return { count, totalValue };
+                
+                // Calculate score for Black Market mode
+                const totalScore = this.currentSession.reduce((sum, t) => {
+                    return sum + this.calculateTokenValue(t);
+                }, 0);
+                
+                return { count, totalValue, totalScore };
+            },
+            
+            calculateTokenValue(transaction) {
+                if (transaction.isUnknown) return 0;
+                
+                const baseValue = this.SCORING_CONFIG.BASE_VALUES[transaction.valueRating] || 0;
+                const multiplier = this.SCORING_CONFIG.TYPE_MULTIPLIERS[transaction.memoryType] || 1;
+                
+                return baseValue * multiplier;
             },
             
             getGlobalStats() {
                 const total = this.transactions.length;
                 const teams = [...new Set(this.transactions.map(t => t.teamId))].length;
                 const known = this.transactions.filter(t => !t.isUnknown);
-                const totalValue = known.reduce((sum, t) => sum + (t.valueRating || 0), 0);
+                
+                // For Black Market transactions, calculate score; for Detective, use star ratings
+                const blackMarketTransactions = known.filter(t => t.stationMode === 'blackmarket');
+                const detectiveTransactions = known.filter(t => t.stationMode === 'detective');
+                
+                const blackMarketScore = blackMarketTransactions.reduce((sum, t) => {
+                    return sum + this.calculateTokenValue(t);
+                }, 0);
+                
+                const detectiveValue = detectiveTransactions.reduce((sum, t) => {
+                    return sum + (t.valueRating || 0);
+                }, 0);
+                
+                // Combined value for display (just for stats)
+                const totalValue = detectiveValue + Math.floor(blackMarketScore / 1000); // Convert $ to rough star equivalent
                 const avgValue = known.length > 0 ? (totalValue / known.length).toFixed(1) : 0;
                 
-                return { total, teams, totalValue, avgValue };
+                return { total, teams, totalValue, avgValue, blackMarketScore, detectiveValue };
             },
             
             exportData(format) {
@@ -1262,7 +1308,20 @@
             updateSessionStats() {
                 const stats = DataManager.getSessionStats();
                 document.getElementById('teamTokenCount').textContent = stats.count;
-                document.getElementById('teamTotalValue').textContent = stats.totalValue;
+                
+                // Show different value based on mode
+                const valueElement = document.getElementById('teamTotalValue');
+                const labelElement = document.getElementById('teamValueLabel');
+                
+                if (Settings.stationMode === 'blackmarket') {
+                    // Show score as currency in Black Market mode
+                    valueElement.textContent = `${stats.totalScore.toLocaleString()}`;
+                    if (labelElement) labelElement.textContent = 'Score';
+                } else {
+                    // Show star rating total in Detective mode
+                    valueElement.textContent = stats.totalValue;
+                    if (labelElement) labelElement.textContent = 'Total Value';
+                }
             },
             
             updateHistoryBadge() {
@@ -1303,6 +1362,14 @@
                     const dateStr = date.toLocaleDateString();
                     const isUnknown = t.isUnknown || t.memoryType === 'UNKNOWN';
                     
+                    // Calculate value display based on mode
+                    let valueDisplay;
+                    if (t.stationMode === 'blackmarket') {
+                        valueDisplay = `${DataManager.calculateTokenValue(t).toLocaleString()}`;
+                    } else {
+                        valueDisplay = isUnknown ? 'N/A' : '⭐'.repeat(t.valueRating || 0);
+                    }
+                    
                     return `
                         <div class="transaction-card ${t.stationMode} ${isUnknown ? 'unknown' : ''}">
                             <div class="transaction-header">
@@ -1311,7 +1378,7 @@
                             </div>
                             <div class="transaction-details">
                                 <div class="detail">RFID: <span>${t.rfid}</span></div>
-                                <div class="detail">Value: <span>${isUnknown ? 'N/A' : '⭐'.repeat(t.valueRating || 0)}</span></div>
+                                <div class="detail">Value: <span>${valueDisplay}</span></div>
                                 <div class="detail">Type: <span>${t.memoryType}</span></div>
                                 <div class="detail">Mode: <span>${t.stationMode === 'blackmarket' ? 'Black Market' : 'Detective'}</span></div>
                                 <div class="detail" style="grid-column: 1 / -1;">Group: <span>${t.group}</span></div>
@@ -1360,7 +1427,13 @@
                     typeEl.textContent = 'UNKNOWN';
                     typeEl.style.color = '#FF5722';
                     groupEl.textContent = `Raw ID: ${tokenId}`;
-                    valueEl.textContent = 'No Value';
+                    
+                    // Show $0 for Black Market, "No Value" for Detective
+                    if (Settings.stationMode === 'blackmarket') {
+                        valueEl.textContent = '$0';
+                    } else {
+                        valueEl.textContent = 'No Value';
+                    }
                 } else {
                     statusEl.className = 'status-message success';
                     statusEl.innerHTML = '<h2>Transaction Complete!</h2>';
@@ -1368,7 +1441,18 @@
                     typeEl.textContent = token.SF_MemoryType;
                     typeEl.style.color = '#333';
                     groupEl.textContent = token.SF_Group;
-                    valueEl.textContent = '⭐'.repeat(token.SF_ValueRating || 0);
+                    
+                    // Show score for Black Market mode, stars for Detective mode
+                    if (Settings.stationMode === 'blackmarket') {
+                        const tokenScore = DataManager.calculateTokenValue({
+                            valueRating: token.SF_ValueRating,
+                            memoryType: token.SF_MemoryType,
+                            isUnknown: false
+                        });
+                        valueEl.textContent = `${tokenScore.toLocaleString()}`;
+                    } else {
+                        valueEl.textContent = '⭐'.repeat(token.SF_ValueRating || 0);
+                    }
                 }
                 
                 this.showScreen('result');
@@ -1453,16 +1537,34 @@
             saveSettings() {
                 Settings.save();
                 UIManager.showScreen('teamEntry');
+                
+                // Update stats if returning to scan screen later
+                const scanScreen = document.getElementById('scanScreen');
+                if (scanScreen && scanScreen.classList.contains('active')) {
+                    UIManager.updateSessionStats();
+                }
             },
             
             toggleMode() {
                 Settings.stationMode = Settings.stationMode === 'detective' ? 'blackmarket' : 'detective';
                 Settings.save();
+                
+                // Update stats display if on scan screen
+                const scanScreen = document.getElementById('scanScreen');
+                if (scanScreen && scanScreen.classList.contains('active')) {
+                    UIManager.updateSessionStats();
+                }
             },
             
             updateModeFromToggle() {
                 Settings.stationMode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
                 UIManager.updateModeDisplay(Settings.stationMode);
+                
+                // Update stats display if on scan screen
+                const scanScreen = document.getElementById('scanScreen');
+                if (scanScreen && scanScreen.classList.contains('active')) {
+                    UIManager.updateSessionStats();
+                }
             },
             
             // Team Entry
@@ -1482,7 +1584,7 @@
                 if (this.currentTeamId.length > 0) {
                     document.getElementById('currentTeam').textContent = this.currentTeamId;
                     DataManager.clearSession();
-                    UIManager.updateSessionStats();
+                    UIManager.updateSessionStats();  // Update stats for current mode
                     UIManager.showScreen('scan');
                 }
             },
@@ -1591,6 +1693,13 @@
                 // Mark this token as scanned globally
                 DataManager.markTokenAsScanned(tokenId);
                 
+                // Show immediate score feedback for Black Market mode
+                if (Settings.stationMode === 'blackmarket' && !isUnknown) {
+                    const tokenScore = DataManager.calculateTokenValue(transaction);
+                    Debug.log(`Token scored: ${tokenScore.toLocaleString()}`);
+                    Debug.log(`Formula: ${transaction.valueRating} (rating) × ${DataManager.SCORING_CONFIG.BASE_VALUES[transaction.valueRating]} (base) × ${DataManager.SCORING_CONFIG.TYPE_MULTIPLIERS[transaction.memoryType]} (${transaction.memoryType})`);
+                }
+                
                 UIManager.updateSessionStats();
                 UIManager.showTokenResult(token, tokenId, isUnknown);
                 
@@ -1619,7 +1728,7 @@
             },
             
             continueScan() {
-                UIManager.updateSessionStats();
+                UIManager.updateSessionStats();  // Ensure stats reflect current mode
                 UIManager.showScreen('scan');
             },
             
