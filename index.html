@@ -493,10 +493,19 @@
             color: #999;
         }
         
-        .empty-state .icon {
-            font-size: 48px;
-            margin-bottom: 20px;
-            opacity: 0.5;
+        .transaction-card.unknown {
+            border-left-color: #9E9E9E;
+            background: #fafafa;
+            opacity: 0.9;
+        }
+        
+        .transaction-card.unknown .transaction-header {
+            color: #666;
+        }
+        
+        .status-message.warning {
+            background: #fff3e0;
+            color: #f57c00;
         }
         
         .filter-bar {
@@ -652,6 +661,7 @@
                 <p id="scanStatus">Waiting for NFC tag...</p>
             </div>
             <button id="scanButton" class="btn btn-primary" onclick="startScan()">Start Scanning</button>
+            <button class="btn btn-secondary" onclick="manualEntry()">Manual Entry (Debug)</button>
             <button class="btn btn-secondary" onclick="cancelScan()">Back to Team Entry</button>
             <div class="stats">
                 <div class="stat-item">
@@ -853,14 +863,21 @@
             // Calculate statistics
             const totalScans = transactions.length;
             const uniqueTeams = [...new Set(transactions.map(t => t.teamId))].length;
-            const totalValue = transactions.reduce((sum, t) => sum + t.valueRating, 0);
-            const avgValue = totalScans > 0 ? (totalValue / totalScans).toFixed(1) : 0;
+            const knownTransactions = transactions.filter(t => !t.isUnknown);
+            const totalValue = knownTransactions.reduce((sum, t) => sum + (t.valueRating || 0), 0);
+            const avgValue = knownTransactions.length > 0 ? (totalValue / knownTransactions.length).toFixed(1) : 0;
             
             // Update display
             document.getElementById('totalScans').textContent = totalScans;
             document.getElementById('uniqueTeams').textContent = uniqueTeams;
             document.getElementById('totalValue').textContent = totalValue;
             document.getElementById('avgValue').textContent = avgValue;
+            
+            // Log unknown tokens for debugging
+            const unknownCount = transactions.filter(t => t.isUnknown).length;
+            if (unknownCount > 0) {
+                console.log(`${unknownCount} unknown tokens in history`);
+            }
         }
 
         function renderTransactions(filteredTransactions = null) {
@@ -882,17 +899,18 @@
                 const date = new Date(t.timestamp);
                 const timeStr = date.toLocaleTimeString();
                 const dateStr = date.toLocaleDateString();
+                const isUnknown = t.isUnknown || t.memoryType === 'UNKNOWN';
                 
                 return `
-                    <div class="transaction-card ${t.stationMode}">
+                    <div class="transaction-card ${t.stationMode} ${isUnknown ? 'unknown' : ''}">
                         <div class="transaction-header">
                             <span>Team ${t.teamId}</span>
                             <span class="transaction-time">${dateStr} ${timeStr}</span>
                         </div>
                         <div class="transaction-details">
                             <div class="detail">RFID: <span>${t.rfid}</span></div>
-                            <div class="detail">Value: <span>${'⭐'.repeat(t.valueRating)}</span></div>
-                            <div class="detail">Type: <span>${t.memoryType}</span></div>
+                            <div class="detail">Value: <span>${isUnknown ? 'N/A' : '⭐'.repeat(t.valueRating)}</span></div>
+                            <div class="detail">Type: <span style="${isUnknown ? 'color: #FF5722;' : ''}">${t.memoryType}</span></div>
                             <div class="detail">Mode: <span>${t.stationMode === 'blackmarket' ? 'Black Market' : 'Detective'}</span></div>
                             <div class="detail" style="grid-column: 1 / -1;">Group: <span>${t.group}</span></div>
                         </div>
@@ -1052,19 +1070,51 @@
                 document.getElementById('scanButton').disabled = true;
                 
                 nfcReader.addEventListener("reading", ({ message, serialNumber }) => {
-                    console.log(`> Serial: ${serialNumber}`);
-                    console.log(`> Records: ${message.records.length}`);
+                    console.log('=== NFC Tag Detected ===');
+                    console.log(`Serial Number: ${serialNumber}`);
+                    console.log(`Records: ${message.records.length}`);
+                    
+                    // Log all records for debugging
+                    if (message.records.length > 0) {
+                        message.records.forEach((record, index) => {
+                            console.log(`Record ${index}:`, {
+                                recordType: record.recordType,
+                                mediaType: record.mediaType,
+                                id: record.id,
+                                data: record.data,
+                                encoding: record.encoding,
+                                lang: record.lang
+                            });
+                            
+                            // Try to decode the data if it exists
+                            if (record.data) {
+                                try {
+                                    const decoder = new TextDecoder();
+                                    const text = decoder.decode(record.data);
+                                    console.log(`Record ${index} decoded text:`, text);
+                                } catch (e) {
+                                    console.log(`Could not decode record ${index}:`, e);
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Update scan status to show what was detected
+                    document.getElementById('scanStatus').innerHTML = `
+                        Detected: ${serialNumber}<br>
+                        <small style="font-size: 10px;">Check console for details</small>
+                    `;
                     
                     processToken(serialNumber);
                 });
                 
-                nfcReader.addEventListener("readingerror", () => {
-                    console.log("Cannot read data from the NFC tag");
+                nfcReader.addEventListener("readingerror", (event) => {
+                    console.error("NFC Read Error:", event);
                     document.getElementById('scanStatus').textContent = 'Read error. Try again.';
                 });
                 
             } catch (error) {
-                console.log("Error: " + error);
+                console.log("Error starting NFC scan:", error);
                 document.getElementById('scanStatus').textContent = 'NFC not available. Using demo mode.';
                 simulateScan();
             }
@@ -1073,24 +1123,83 @@
         function simulateScan() {
             // Simulate a scan for testing
             const testTokens = Object.keys(tokenDatabase);
-            if (testTokens.length > 0) {
-                const randomToken = testTokens[Math.floor(Math.random() * testTokens.length)];
-                setTimeout(() => {
-                    processToken(randomToken);
-                }, 1000);
+            
+            // Sometimes generate an unknown token for testing
+            const shouldGenerateUnknown = Math.random() < 0.3; // 30% chance
+            
+            let simulatedRfid;
+            if (shouldGenerateUnknown) {
+                // Generate a random unknown RFID
+                simulatedRfid = 'unknown_' + Math.random().toString(36).substr(2, 9);
+                console.log('Simulating unknown token:', simulatedRfid);
+            } else if (testTokens.length > 0) {
+                // Use a known token
+                simulatedRfid = testTokens[Math.floor(Math.random() * testTokens.length)];
+                console.log('Simulating known token:', simulatedRfid);
+            } else {
+                // No tokens available
+                simulatedRfid = 'test_' + Date.now();
+                console.log('No tokens in database, generating test ID:', simulatedRfid);
             }
+            
+            document.getElementById('scanStatus').innerHTML = `
+                Demo Mode: Simulating scan...<br>
+                <small>ID: ${simulatedRfid}</small>
+            `;
+            
+            setTimeout(() => {
+                processToken(simulatedRfid);
+            }, 1000);
         }
 
         function processToken(rfid) {
             const token = tokenDatabase[rfid];
             
             if (!token) {
-                // Unknown token
-                document.getElementById('scanStatus').textContent = 'Unknown token!';
+                // Unknown token - still display and log it for debugging
+                console.log('Unknown token scanned:', rfid);
+                
+                // Create a debug transaction record
+                const debugTransaction = {
+                    timestamp: new Date().toISOString(),
+                    stationId: stationId,
+                    stationMode: stationMode,
+                    teamId: currentTeamId,
+                    rfid: rfid,
+                    memoryType: 'UNKNOWN',
+                    group: `Unrecognized Token: ${rfid}`,
+                    valueRating: 0,
+                    isUnknown: true
+                };
+                
+                // Display result with unknown token info
+                document.getElementById('resultRfid').textContent = rfid;
+                document.getElementById('resultType').textContent = 'UNKNOWN TOKEN';
+                document.getElementById('resultType').style.color = '#FF5722';
+                document.getElementById('resultGroup').textContent = `Raw ID: ${rfid}`;
+                document.getElementById('resultValue').textContent = 'No Value (Unknown)';
+                
+                // Still save it for debugging purposes
+                currentSession.push(debugTransaction);
+                transactions.push(debugTransaction);
+                saveTransactions();
+                
+                // Show alert for debugging
+                const statusMsg = document.querySelector('#resultScreen .status-message');
+                statusMsg.classList.remove('success');
+                statusMsg.classList.add('error');
+                statusMsg.innerHTML = `
+                    <h2>Unknown Token Detected</h2>
+                    <p style="font-size: 14px; margin-top: 10px;">RFID: ${rfid}</p>
+                    <p style="font-size: 12px; color: #666;">This token is not in the database</p>
+                `;
+                
+                stopScan();
+                showScreen('resultScreen');
                 return;
             }
             
-            // Record transaction
+            // Known token - process normally
             const transaction = {
                 timestamp: new Date().toISOString(),
                 stationId: stationId,
@@ -1099,18 +1208,26 @@
                 rfid: rfid,
                 memoryType: token.SF_MemoryType,
                 group: token.SF_Group,
-                valueRating: token.SF_ValueRating
+                valueRating: token.SF_ValueRating,
+                isUnknown: false
             };
             
             currentSession.push(transaction);
             transactions.push(transaction);
             saveTransactions();
             
-            // Display result
+            // Display result for known token
             document.getElementById('resultRfid').textContent = rfid;
             document.getElementById('resultType').textContent = token.SF_MemoryType;
+            document.getElementById('resultType').style.color = '#333';
             document.getElementById('resultGroup').textContent = token.SF_Group;
             document.getElementById('resultValue').textContent = token.SF_ValueRating;
+            
+            // Reset status message for success
+            const statusMsg = document.querySelector('#resultScreen .status-message');
+            statusMsg.classList.remove('error');
+            statusMsg.classList.add('success');
+            statusMsg.innerHTML = '<h2>Transaction Complete!</h2>';
             
             stopScan();
             showScreen('resultScreen');
@@ -1133,6 +1250,14 @@
             showScreen('teamEntryScreen');
         }
 
+        function manualEntry() {
+            const rfid = prompt('Enter RFID manually for debugging:\n(This helps test specific IDs)');
+            if (rfid && rfid.trim()) {
+                console.log('Manual entry RFID:', rfid.trim());
+                processToken(rfid.trim());
+            }
+        }
+
         function continueScan() {
             updateSessionStats();
             showScreen('scanScreen');
@@ -1147,7 +1272,8 @@
 
         function updateSessionStats() {
             const tokenCount = currentSession.length;
-            const totalValue = currentSession.reduce((sum, t) => sum + t.valueRating, 0);
+            const knownTokens = currentSession.filter(t => !t.isUnknown);
+            const totalValue = knownTokens.reduce((sum, t) => sum + (t.valueRating || 0), 0);
             document.getElementById('teamTokenCount').textContent = tokenCount;
             document.getElementById('teamTotalValue').textContent = totalValue;
         }
