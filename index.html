@@ -425,10 +425,47 @@
             transform: translateX(26px);
         }
         
-        .export-section {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
+        .debug-panel {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            max-height: 200px;
+            background: rgba(0, 0, 0, 0.9);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-y: auto;
+            z-index: 9999;
+            display: none;
+        }
+        
+        .debug-panel.active {
+            display: block;
+        }
+        
+        .debug-panel pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .debug-toggle {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 10000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
         }
         
         .history-container {
@@ -769,9 +806,65 @@
         let nfcReader = null;
         let isScanning = false;
         let previousScreen = 'teamEntryScreen';  // Track where we came from
+        let debugMessages = [];  // Store debug messages
+        
+        // Debug panel functions
+        function toggleDebug() {
+            const panel = document.getElementById('debugPanel');
+            panel.classList.toggle('active');
+        }
+        
+        function debugLog(message, isError = false) {
+            // Add to debug panel
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = isError ? '❌' : '✓';
+            const formattedMessage = `[${timestamp}] ${prefix} ${message}`;
+            
+            debugMessages.push(formattedMessage);
+            if (debugMessages.length > 50) {
+                debugMessages.shift(); // Keep only last 50 messages
+            }
+            
+            const debugContent = document.getElementById('debugContent');
+            if (debugContent) {
+                debugContent.textContent = debugMessages.join('\n');
+                // Auto-scroll to bottom
+                const panel = document.getElementById('debugPanel');
+                if (panel) {
+                    panel.scrollTop = panel.scrollHeight;
+                }
+            }
+            
+            // Also log to regular console
+            if (isError) {
+                console.error(message);
+            } else {
+                console.log(message);
+            }
+        }
+        
+        // Override console for mobile debugging
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        
+        console.log = function(...args) {
+            debugLog(args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+            ).join(' '));
+            originalConsoleLog.apply(console, args);
+        };
+        
+        console.error = function(...args) {
+            debugLog(args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+            ).join(' '), true);
+            originalConsoleError.apply(console, args);
+        };
 
         // Initialize on load
         window.addEventListener('DOMContentLoaded', async () => {
+            debugLog('App starting...');
+            
             // Load settings from localStorage
             loadSettings();
             
@@ -780,24 +873,25 @@
             
             // Load token database
             try {
+                debugLog('Loading token database...');
                 const response = await fetch('tokens.json');
                 if (!response.ok) {
                     throw new Error('Failed to load token database');
                 }
                 tokenDatabase = await response.json();
-                console.log('Token database loaded:', Object.keys(tokenDatabase).length, 'tokens');
+                const tokenCount = Object.keys(tokenDatabase).filter(k => !k.startsWith('_')).length;
+                debugLog(`✅ Loaded ${tokenCount} tokens`);
                 
                 // Check for NFC support
                 if ('NDEFReader' in window) {
-                    console.log('Web NFC is supported');
+                    debugLog('✅ NFC supported');
                     showScreen('teamEntryScreen');
                 } else {
-                    console.warn('Web NFC is not supported on this device');
+                    debugLog('⚠️ NFC not supported - demo mode', true);
                     showScreen('teamEntryScreen');
-                    // Still allow manual entry for testing
                 }
             } catch (error) {
-                console.error('Error loading token database:', error);
+                debugLog(`Error: ${error.message}`, true);
                 document.querySelector('#loadingScreen .status-message').innerHTML = 
                     '<p class="error">Error loading token database. Using demo mode.</p>' +
                     '<button class="btn btn-primary" onclick="useDemoData()">Use Demo Data</button>';
@@ -809,6 +903,7 @@
             if (modeParam === 'black-market' || modeParam === 'blackmarket') {
                 stationMode = 'blackmarket';
                 updateModeDisplay();
+                debugLog('Mode: Black Market (from URL)');
             }
         });
 
@@ -1073,120 +1168,71 @@
                 document.getElementById('scanButton').disabled = true;
                 
                 nfcReader.addEventListener("reading", async ({ message, serialNumber }) => {
-                    console.log('╔══════════════════════════════════════╗');
-                    console.log('║        NFC TAG SCAN RESULTS          ║');
-                    console.log('╚══════════════════════════════════════╝');
-                    console.log('Serial Number:', serialNumber);
-                    console.log('Total Records:', message.records?.length || 0);
+                    debugLog('═══ NFC TAG DETECTED ═══');
+                    debugLog(`Serial: ${serialNumber}`);
+                    debugLog(`Records: ${message.records?.length || 0}`);
                     
                     let tokenId = null;
                     let recordSource = 'none';
                     
                     // Check if we have records
                     if (!message.records || message.records.length === 0) {
-                        console.error('❌ No NDEF records found on this tag!');
+                        debugLog('No NDEF records found!', true);
                         tokenId = serialNumber;
                         recordSource = 'serial-fallback';
                     } else {
-                        console.log('\n📋 Analyzing NDEF Records:');
-                        console.log('─'.repeat(40));
+                        debugLog(`Reading ${message.records.length} record(s)...`);
                         
-                        // Process each record
-                        for (let i = 0; i < message.records.length; i++) {
-                            const record = message.records[i];
-                            console.log(`\n📌 Record ${i}:`);
-                            console.log('  Type:', record.recordType);
-                            console.log('  Media Type:', record.mediaType);
-                            console.log('  Encoding:', record.encoding);
-                            console.log('  Lang:', record.lang);
-                            console.log('  Data available:', !!record.data);
-                            console.log('  Data length:', record.data?.byteLength || 0);
-                            
-                            // Only process the first record for token ID
-                            if (i === 0 && record.data) {
-                                try {
-                                    // Handle different record types
-                                    if (record.recordType === 'text') {
-                                        // NDEF Text Record Format:
-                                        // [Status Byte: 1 byte][Language Code: n bytes][Text: remaining bytes]
-                                        const dataView = new DataView(record.data.buffer, record.data.byteOffset, record.data.byteLength);
-                                        const statusByte = dataView.getUint8(0);
-                                        const langCodeLength = statusByte & 0x3F; // Bottom 6 bits
-                                        const isUTF16 = (statusByte & 0x80) !== 0; // Top bit
-                                        
-                                        console.log('  📝 Text Record Details:');
-                                        console.log('    Status Byte:', statusByte.toString(16));
-                                        console.log('    Language Code Length:', langCodeLength);
-                                        console.log('    UTF-16:', isUTF16);
-                                        
-                                        // Extract language code
-                                        const langBytes = new Uint8Array(record.data.buffer, record.data.byteOffset + 1, langCodeLength);
-                                        const langCode = new TextDecoder('utf-8').decode(langBytes);
-                                        console.log('    Language Code:', langCode);
-                                        
-                                        // Extract actual text (skip status byte + language code)
-                                        const textStart = 1 + langCodeLength;
-                                        const textBytes = new Uint8Array(record.data.buffer, record.data.byteOffset + textStart, record.data.byteLength - textStart);
-                                        
-                                        // Decode text using appropriate encoding
-                                        const encoding = isUTF16 ? 'utf-16be' : 'utf-8';
-                                        tokenId = new TextDecoder(encoding).decode(textBytes);
-                                        
-                                        console.log('    ✅ Extracted Text:', tokenId);
-                                        recordSource = 'ndef-text-record';
-                                        
-                                    } else if (record.recordType === 'url' || record.recordType === 'U') {
-                                        // URL records - skip for token ID
-                                        console.log('  ⏭️ Skipping URL record');
-                                        
-                                    } else if (record.mediaType === 'text/plain') {
-                                        // Plain text media type
-                                        tokenId = new TextDecoder('utf-8').decode(record.data);
-                                        console.log('  ✅ Plain Text:', tokenId);
-                                        recordSource = 'plain-text';
-                                        
-                                    } else {
-                                        // Try to decode as text anyway
-                                        const text = new TextDecoder('utf-8').decode(record.data);
-                                        if (text && text.trim()) {
-                                            tokenId = text.trim();
-                                            console.log('  ✅ Decoded as Text:', tokenId);
-                                            recordSource = 'decoded-text';
-                                        }
-                                    }
+                        // Process first record
+                        const record = message.records[0];
+                        debugLog(`Record type: ${record.recordType}`);
+                        
+                        if (record.data) {
+                            try {
+                                if (record.recordType === 'text') {
+                                    // Parse NDEF text record
+                                    const dataView = new DataView(record.data.buffer, record.data.byteOffset, record.data.byteLength);
+                                    const statusByte = dataView.getUint8(0);
+                                    const langCodeLength = statusByte & 0x3F;
                                     
-                                } catch (error) {
-                                    console.error('  ❌ Error processing record:', error);
+                                    // Extract text (skip status + lang code)
+                                    const textStart = 1 + langCodeLength;
+                                    const textBytes = new Uint8Array(record.data.buffer, record.data.byteOffset + textStart, record.data.byteLength - textStart);
+                                    tokenId = new TextDecoder('utf-8').decode(textBytes);
+                                    
+                                    debugLog(`✅ Text extracted: ${tokenId}`);
+                                    recordSource = 'ndef-text';
+                                } else {
+                                    // Try as plain text
+                                    tokenId = new TextDecoder('utf-8').decode(record.data);
+                                    debugLog(`✅ Decoded: ${tokenId}`);
+                                    recordSource = 'plain-text';
                                 }
+                            } catch (error) {
+                                debugLog(`Error: ${error.message}`, true);
                             }
                         }
                     }
                     
-                    // Final fallback to serial if no text found
+                    // Fallback to serial
                     if (!tokenId || tokenId.trim() === '') {
-                        console.log('\n⚠️ No text content found in records, using serial number');
+                        debugLog('Using serial as fallback');
                         tokenId = serialNumber;
-                        recordSource = 'serial-fallback-no-text';
+                        recordSource = 'serial-fallback';
                     } else {
                         tokenId = tokenId.trim();
                     }
                     
-                    // Summary
-                    console.log('\n' + '═'.repeat(40));
-                    console.log('📊 SCAN SUMMARY:');
-                    console.log('  Token ID:', tokenId);
-                    console.log('  Source:', recordSource);
-                    console.log('  Serial:', serialNumber);
-                    console.log('═'.repeat(40));
+                    debugLog(`═══ RESULT ═══`);
+                    debugLog(`Token ID: ${tokenId}`);
+                    debugLog(`Source: ${recordSource}`);
                     
-                    // Update UI to show what we're using
+                    // Update UI
                     document.getElementById('scanStatus').innerHTML = `
-                        <strong>Token ID:</strong> ${tokenId}<br>
-                        <small>Source: ${recordSource}</small><br>
-                        <small>Serial: ${serialNumber}</small>
+                        <strong>Token:</strong> ${tokenId}<br>
+                        <small>From: ${recordSource}</small>
                     `;
                     
-                    // Add small delay to allow UI update
                     setTimeout(() => {
                         processToken(tokenId);
                     }, 100);
@@ -1237,6 +1283,8 @@
         }
 
         function processToken(rfid) {
+            debugLog(`Processing token: ${rfid}`);
+            
             // Try various formats to find a match
             let token = tokenDatabase[rfid];
             let matchedKey = rfid;
@@ -1247,7 +1295,7 @@
                 token = tokenDatabase[lowerRfid];
                 if (token) {
                     matchedKey = lowerRfid;
-                    console.log(`Matched with lowercase: ${lowerRfid}`);
+                    debugLog(`Matched lowercase: ${lowerRfid}`);
                 }
             }
             
@@ -1257,7 +1305,7 @@
                 token = tokenDatabase[upperRfid];
                 if (token) {
                     matchedKey = upperRfid;
-                    console.log(`Matched with uppercase: ${upperRfid}`);
+                    debugLog(`Matched uppercase: ${upperRfid}`);
                 }
             }
             
@@ -1267,37 +1315,24 @@
                 token = tokenDatabase[normalizedRfid];
                 if (token) {
                     matchedKey = normalizedRfid;
-                    console.log(`Matched without colons: ${normalizedRfid}`);
-                } else {
-                    // Also try uppercase/lowercase without colons
-                    token = tokenDatabase[normalizedRfid.toLowerCase()] || tokenDatabase[normalizedRfid.toUpperCase()];
-                    if (token) {
-                        matchedKey = normalizedRfid;
-                        console.log(`Matched normalized: ${normalizedRfid}`);
-                    }
+                    debugLog(`Matched no colons: ${normalizedRfid}`);
                 }
             }
             
             // Try adding colons if not present
             if (!token && !rfid.includes(':') && rfid.length >= 4) {
                 const colonRfid = rfid.match(/.{1,2}/g)?.join(':') || rfid;
-                token = tokenDatabase[colonRfid] || tokenDatabase[colonRfid.toLowerCase()] || tokenDatabase[colonRfid.toUpperCase()];
+                token = tokenDatabase[colonRfid];
                 if (token) {
                     matchedKey = colonRfid;
-                    console.log(`Matched with added colons: ${colonRfid}`);
+                    debugLog(`Matched with colons: ${colonRfid}`);
                 }
             }
             
             if (!token) {
-                // Unknown token - still display and log it for debugging
-                console.log('Unknown token scanned:', rfid);
-                console.log('Tried variations:', {
-                    original: rfid,
-                    lowercase: rfid.toLowerCase(),
-                    uppercase: rfid.toUpperCase(),
-                    withoutColons: rfid.replace(/:/g, ''),
-                    withColons: rfid.match(/.{1,2}/g)?.join(':')
-                });
+                // Unknown token
+                debugLog(`Unknown token: ${rfid}`, true);
+                debugLog(`Available keys: ${Object.keys(tokenDatabase).slice(0, 5).join(', ')}...`);
                 
                 // Create a debug transaction record
                 const debugTransaction = {
@@ -1332,7 +1367,7 @@
                     <h2>Unknown Token Detected</h2>
                     <p style="font-size: 14px; margin-top: 10px;">RFID: ${rfid}</p>
                     <p style="font-size: 12px; color: #666;">This token is not in the database</p>
-                    <p style="font-size: 10px; color: #888;">Check console for attempted matches</p>
+                    <p style="font-size: 10px; color: #888;">Check debug panel (🐛 button)</p>
                 `;
                 
                 stopScan();
@@ -1341,7 +1376,7 @@
             }
             
             // Known token - process normally
-            console.log(`Token matched! Key: ${matchedKey}`);
+            debugLog(`✅ Token matched: ${token.SF_Group}`);
             const transaction = {
                 timestamp: new Date().toISOString(),
                 stationId: stationId,
