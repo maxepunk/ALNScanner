@@ -623,7 +623,10 @@
                 <button class="btn btn-secondary" onclick="exportData('json')">Export JSON</button>
                 <button class="btn btn-secondary" onclick="exportData('csv')">Export CSV</button>
                 <button class="btn btn-secondary" onclick="clearData()">Clear All Data</button>
-                <button class="btn btn-secondary" onclick="debugStorage()">Debug Storage</button>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-secondary" onclick="debugStorage()">Debug Storage</button>
+                    <button class="btn btn-secondary" onclick="testTokenMatch()">Test Token Match</button>
+                </div>
             </div>
         </div>
 
@@ -1069,94 +1072,133 @@
                 document.getElementById('scanButton').textContent = 'Scanning...';
                 document.getElementById('scanButton').disabled = true;
                 
-                nfcReader.addEventListener("reading", ({ message, serialNumber }) => {
-                    console.log('=== NFC Tag Detected ===');
-                    console.log(`Serial Number: ${serialNumber}`);
-                    console.log(`Number of Records: ${message.records.length}`);
+                nfcReader.addEventListener("reading", async ({ message, serialNumber }) => {
+                    console.log('╔══════════════════════════════════════╗');
+                    console.log('║        NFC TAG SCAN RESULTS          ║');
+                    console.log('╚══════════════════════════════════════╝');
+                    console.log('Serial Number:', serialNumber);
+                    console.log('Total Records:', message.records?.length || 0);
                     
                     let tokenId = null;
+                    let recordSource = 'none';
                     
-                    // Try to read all records and find a valid text record
-                    if (message.records && message.records.length > 0) {
-                        console.log('Processing records...');
+                    // Check if we have records
+                    if (!message.records || message.records.length === 0) {
+                        console.error('❌ No NDEF records found on this tag!');
+                        tokenId = serialNumber;
+                        recordSource = 'serial-fallback';
+                    } else {
+                        console.log('\n📋 Analyzing NDEF Records:');
+                        console.log('─'.repeat(40));
                         
+                        // Process each record
                         for (let i = 0; i < message.records.length; i++) {
                             const record = message.records[i];
-                            console.log(`\nRecord ${i} (NFC Tools Record ${i + 1}):`, {
-                                recordType: record.recordType,
-                                mediaType: record.mediaType,
-                                id: record.id,
-                                encoding: record.encoding,
-                                lang: record.lang,
-                                data: record.data
-                            });
+                            console.log(`\n📌 Record ${i}:`);
+                            console.log('  Type:', record.recordType);
+                            console.log('  Media Type:', record.mediaType);
+                            console.log('  Encoding:', record.encoding);
+                            console.log('  Lang:', record.lang);
+                            console.log('  Data available:', !!record.data);
+                            console.log('  Data length:', record.data?.byteLength || 0);
                             
-                            // Try to decode as text if it's a text record
-                            if (record.recordType === 'text' || 
-                                record.mediaType === 'text/plain' || 
-                                (record.data && !tokenId)) {
-                                
+                            // Only process the first record for token ID
+                            if (i === 0 && record.data) {
                                 try {
-                                    if (record.data) {
-                                        const decoder = new TextDecoder(record.encoding || 'utf-8');
-                                        let text = decoder.decode(record.data);
+                                    // Handle different record types
+                                    if (record.recordType === 'text') {
+                                        // NDEF Text Record Format:
+                                        // [Status Byte: 1 byte][Language Code: n bytes][Text: remaining bytes]
+                                        const dataView = new DataView(record.data.buffer, record.data.byteOffset, record.data.byteLength);
+                                        const statusByte = dataView.getUint8(0);
+                                        const langCodeLength = statusByte & 0x3F; // Bottom 6 bits
+                                        const isUTF16 = (statusByte & 0x80) !== 0; // Top bit
                                         
-                                        // For text records, there might be a language code prefix
-                                        // The format is: [status byte][language code][text]
-                                        // We need to skip the language code bytes
-                                        if (record.recordType === 'text') {
-                                            const statusByte = new Uint8Array(record.data)[0];
-                                            const languageCodeLength = statusByte & 0x3f; // Bottom 6 bits
-                                            // Skip status byte + language code to get actual text
-                                            const textData = new Uint8Array(record.data).slice(1 + languageCodeLength);
-                                            text = new TextDecoder('utf-8').decode(textData);
-                                        }
+                                        console.log('  📝 Text Record Details:');
+                                        console.log('    Status Byte:', statusByte.toString(16));
+                                        console.log('    Language Code Length:', langCodeLength);
+                                        console.log('    UTF-16:', isUTF16);
                                         
-                                        text = text.trim();
-                                        console.log(`  -> Decoded text: "${text}"`);
+                                        // Extract language code
+                                        const langBytes = new Uint8Array(record.data.buffer, record.data.byteOffset + 1, langCodeLength);
+                                        const langCode = new TextDecoder('utf-8').decode(langBytes);
+                                        console.log('    Language Code:', langCode);
                                         
-                                        // Use the first non-empty text as token ID
-                                        if (!tokenId && text) {
-                                            tokenId = text;
-                                            console.log(`Using this as token ID: "${tokenId}"`);
+                                        // Extract actual text (skip status byte + language code)
+                                        const textStart = 1 + langCodeLength;
+                                        const textBytes = new Uint8Array(record.data.buffer, record.data.byteOffset + textStart, record.data.byteLength - textStart);
+                                        
+                                        // Decode text using appropriate encoding
+                                        const encoding = isUTF16 ? 'utf-16be' : 'utf-8';
+                                        tokenId = new TextDecoder(encoding).decode(textBytes);
+                                        
+                                        console.log('    ✅ Extracted Text:', tokenId);
+                                        recordSource = 'ndef-text-record';
+                                        
+                                    } else if (record.recordType === 'url' || record.recordType === 'U') {
+                                        // URL records - skip for token ID
+                                        console.log('  ⏭️ Skipping URL record');
+                                        
+                                    } else if (record.mediaType === 'text/plain') {
+                                        // Plain text media type
+                                        tokenId = new TextDecoder('utf-8').decode(record.data);
+                                        console.log('  ✅ Plain Text:', tokenId);
+                                        recordSource = 'plain-text';
+                                        
+                                    } else {
+                                        // Try to decode as text anyway
+                                        const text = new TextDecoder('utf-8').decode(record.data);
+                                        if (text && text.trim()) {
+                                            tokenId = text.trim();
+                                            console.log('  ✅ Decoded as Text:', tokenId);
+                                            recordSource = 'decoded-text';
                                         }
                                     }
-                                } catch (e) {
-                                    console.error(`  -> Error decoding record ${i}:`, e);
+                                    
+                                } catch (error) {
+                                    console.error('  ❌ Error processing record:', error);
                                 }
                             }
                         }
-                    } else {
-                        console.warn('No records found on tag or records array is invalid!');
                     }
                     
-                    // Fall back to serial number if no valid text record found
-                    if (!tokenId) {
-                        console.log('No valid text record found, falling back to serial number');
+                    // Final fallback to serial if no text found
+                    if (!tokenId || tokenId.trim() === '') {
+                        console.log('\n⚠️ No text content found in records, using serial number');
                         tokenId = serialNumber;
-                        
-                        // Alert user that we're using serial number as fallback
-                        document.getElementById('scanStatus').innerHTML = `
-                            ⚠️ Using Serial (No Text Record)<br>
-                            <small style="font-size: 10px;">Check console for details</small>
-                        `;
+                        recordSource = 'serial-fallback-no-text';
                     } else {
-                        document.getElementById('scanStatus').innerHTML = `
-                            Token ID: ${tokenId}<br>
-                            <small style="font-size: 10px;">Serial: ${serialNumber}</small>
-                        `;
+                        tokenId = tokenId.trim();
                     }
                     
-                    processToken(tokenId);
+                    // Summary
+                    console.log('\n' + '═'.repeat(40));
+                    console.log('📊 SCAN SUMMARY:');
+                    console.log('  Token ID:', tokenId);
+                    console.log('  Source:', recordSource);
+                    console.log('  Serial:', serialNumber);
+                    console.log('═'.repeat(40));
+                    
+                    // Update UI to show what we're using
+                    document.getElementById('scanStatus').innerHTML = `
+                        <strong>Token ID:</strong> ${tokenId}<br>
+                        <small>Source: ${recordSource}</small><br>
+                        <small>Serial: ${serialNumber}</small>
+                    `;
+                    
+                    // Add small delay to allow UI update
+                    setTimeout(() => {
+                        processToken(tokenId);
+                    }, 100);
                 });
                 
                 nfcReader.addEventListener("readingerror", (event) => {
-                    console.error("NFC Read Error:", event);
+                    console.error("❌ NFC Read Error:", event);
                     document.getElementById('scanStatus').textContent = 'Read error. Try again.';
                 });
                 
             } catch (error) {
-                console.log("Error starting NFC scan:", error);
+                console.error("❌ Error starting NFC scan:", error);
                 document.getElementById('scanStatus').textContent = 'NFC not available. Using demo mode.';
                 simulateScan();
             }
@@ -1500,32 +1542,58 @@
             const stored = localStorage.getItem('transactions');
             let message = 'Debug Information:\n\n';
             
+            // Show token database keys
+            message += '📚 TOKEN DATABASE KEYS:\n';
+            message += '─'.repeat(30) + '\n';
+            const dbKeys = Object.keys(tokenDatabase);
+            if (dbKeys.length > 0) {
+                dbKeys.forEach(key => {
+                    const token = tokenDatabase[key];
+                    message += `"${key}" -> ${token.SF_Group}\n`;
+                });
+            } else {
+                message += 'No tokens loaded!\n';
+            }
+            message += '\n';
+            
+            // Show transaction data
             if (stored) {
                 try {
                     const data = JSON.parse(stored);
-                    message += `localStorage has ${data.length} transactions\n`;
-                    message += `Memory array has ${transactions.length} transactions\n\n`;
+                    message += `📊 STORED TRANSACTIONS:\n`;
+                    message += '─'.repeat(30) + '\n';
+                    message += `Total: ${data.length} transactions\n`;
+                    message += `In Memory: ${transactions.length} transactions\n\n`;
                     
                     if (data.length > 0) {
-                        message += 'First transaction:\n';
-                        message += JSON.stringify(data[0], null, 2).substring(0, 200) + '...\n\n';
-                    }
-                    
-                    message += 'All localStorage keys:\n';
-                    for (let i = 0; i < localStorage.length; i++) {
-                        const key = localStorage.key(i);
-                        message += `- ${key}: ${localStorage.getItem(key).substring(0, 50)}...\n`;
+                        message += 'Last 3 transactions:\n';
+                        data.slice(-3).forEach((t, i) => {
+                            message += `${i+1}. Team ${t.teamId}: ${t.rfid} (${t.memoryType})\n`;
+                        });
                     }
                 } catch (e) {
                     message += 'Error parsing localStorage: ' + e.message;
                 }
             } else {
                 message += 'No transactions in localStorage\n';
-                message += `Memory array has ${transactions.length} transactions\n`;
             }
             
             console.log(message);
             alert(message);
+        }
+        
+        function testTokenMatch() {
+            const testId = prompt('Enter a token ID to test matching:');
+            if (testId) {
+                console.log('Testing token ID:', testId);
+                const originalCount = transactions.length;
+                processToken(testId);
+                // Remove the test transaction
+                if (transactions.length > originalCount) {
+                    transactions.pop();
+                    saveTransactions();
+                }
+            }
         }
     </script>
 </body>
