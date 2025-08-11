@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head><title>NFC Test</title></head>
+<body>
+    <button onclick="test()">Test NFC</button>
+    <pre id="output"></pre>
+    <script>
+        async function test() {
+            const output = document.getElementById('output');
+            try {
+                const reader = new NDEFReader();
+                await reader.scan();
+                
+                reader.addEventListener("reading", ({ message, serialNumber }) => {
+                    console.log("Raw event:", { message, serialNumber });
+                    
+                    // Log first record details
+                    if (message.records && message.records[0]) {
+                        const record = message.records[0];
+                        console.log("First record:", {
+                            recordType: record.recordType,
+                            encoding: record.encoding,
+                            lang: record.lang,
+                            data: record.data,
+                            dataType: record.data?.constructor?.name
+                        });
+                        
+                        // Try decoding if text
+                        if (record.recordType === "text") {
+                            const decoder = new TextDecoder(record.encoding || "utf-8");
+                            const text = decoder.decode(record.data);
+                            console.log("Decoded text:", text);
+                            output.textContent = `Text: ${text}`;
+                        }
+                    }
+                });
+            } catch (error) {
+                output.textContent = error.toString();
+            }
+        }
+    </script>
+</body>
+</html>
