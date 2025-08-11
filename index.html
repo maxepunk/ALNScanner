@@ -1478,8 +1478,12 @@
             },
             
             save() {
-                this.stationId = document.getElementById('stationId').value || '001';
-                this.stationMode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
+                // Only read from form elements if we're on the settings screen
+                const settingsScreen = document.getElementById('settingsScreen');
+                if (settingsScreen && settingsScreen.classList.contains('active')) {
+                    this.stationId = document.getElementById('stationId').value || '001';
+                    this.stationMode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
+                }
                 
                 localStorage.setItem('stationId', this.stationId);
                 localStorage.setItem('stationMode', this.stationMode);
@@ -1546,14 +1550,27 @@
             },
             
             toggleMode() {
+                // Toggle the mode
                 Settings.stationMode = Settings.stationMode === 'detective' ? 'blackmarket' : 'detective';
-                Settings.save();
+                
+                // Save directly to localStorage (don't call Settings.save() as it reads from DOM)
+                localStorage.setItem('stationMode', Settings.stationMode);
+                
+                // Update the UI
+                UIManager.updateModeDisplay(Settings.stationMode);
                 
                 // Update stats display if on scan screen
                 const scanScreen = document.getElementById('scanScreen');
                 if (scanScreen && scanScreen.classList.contains('active')) {
                     UIManager.updateSessionStats();
                 }
+                
+                // Visual feedback
+                const indicator = document.getElementById('modeIndicator');
+                indicator.style.transform = 'scale(1.1)';
+                setTimeout(() => {
+                    indicator.style.transform = 'scale(1)';
+                }, 200);
             },
             
             updateModeFromToggle() {
