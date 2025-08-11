@@ -2,150 +2,1305 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web NFC Reader (Fixed)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Memory Transaction Station</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            line-height: 1.6;
-            max-width: 600px;
-            margin: 2rem auto;
-            padding: 0 1rem;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            margin: 0;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 20px;
+            animation: slideIn 0.3s ease-out;
+            position: relative;
+            overflow: visible;
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 15px;
+                border-radius: 15px;
+            }
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            position: relative;
+        }
+        
+        .header-nav {
+            position: absolute;
+            top: 0;
+            right: 0;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .nav-button {
+            padding: 8px 12px;
+            background: rgba(103, 126, 234, 0.1);
+            border: 1px solid #667eea;
+            border-radius: 8px;
+            color: #667eea;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .nav-button:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        .nav-button .badge {
+            background: #ff4444;
+            color: white;
+            border-radius: 10px;
+            padding: 2px 6px;
+            margin-left: 5px;
+            font-size: 10px;
+        }
+        
+        h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .mode-indicator {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+        
+        .mode-indicator:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .mode-indicator:active {
+            transform: scale(0.98);
+        }
+        
+        .mode-detective {
+            background: #4CAF50;
+            color: white;
+            position: relative;
+        }
+        
+        .mode-detective::after {
+            content: "→ Click to switch";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            white-space: nowrap;
+            margin-top: 2px;
+        }
+        
+        .mode-detective:hover::after {
+            opacity: 0.6;
+        }
+        
+        .mode-blackmarket {
+            background: #FF5722;
+            color: white;
+            position: relative;
+        }
+        
+        .mode-blackmarket::after {
+            content: "→ Click to switch";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            white-space: nowrap;
+            margin-top: 2px;
+        }
+        
+        .mode-blackmarket:hover::after {
+            opacity: 0.6;
+        }
+        
+        .station-id {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .screen {
+            display: none;
+        }
+        
+        .screen.active {
+            display: block;
+        }
+        
+        .status-message {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #666;
+        }
+        
+        .status-message.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .status-message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .numpad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .numpad button {
+            padding: 25px;
+            font-size: 24px;
+            border: none;
+            border-radius: 10px;
+            background: #f0f0f0;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .numpad button:hover {
+            background: #e0e0e0;
+        }
+        
+        .numpad button:active {
+            transform: scale(0.95);
+        }
+        
+        .numpad button.clear {
+            background: #ffecb3;
+        }
+        
+        .numpad button.enter {
+            background: #c8e6c9;
+        }
+        
+        .team-display {
+            font-size: 36px;
+            text-align: center;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
             color: #333;
         }
-        h1 {
+        
+        .scan-area {
             text-align: center;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            color: white;
+            margin: 20px 0;
         }
-        #scanButton {
-            display: block;
+        
+        .scan-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.1);
+                opacity: 0.8;
+            }
+        }
+        
+        .btn {
             width: 100%;
             padding: 15px;
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: white;
-            background-color: #007bff;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
             cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 10px;
         }
-        #scanButton:disabled {
-            background-color: #cccccc;
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+        
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
             cursor: not-allowed;
         }
-        #status {
-            text-align: center;
-            margin: 1rem 0;
-            font-weight: 500;
+        
+        .transaction-result {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
         }
-        #log {
-            list-style-type: none;
-            padding: 0;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+        
+        .transaction-result h3 {
+            color: #333;
+            margin-bottom: 15px;
         }
-        #log li {
-            padding: 10px 15px;
-            border-bottom: 1px solid #ddd;
-            word-wrap: break-word; /* Prevents long text from overflowing */
+        
+        .transaction-detail {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
         }
-        #log li:last-child {
+        
+        .transaction-detail:last-child {
             border-bottom: none;
         }
-        strong {
-            color: #0056b3;
+        
+        .transaction-detail label {
+            color: #666;
         }
-        .record-block {
-            padding-left: 10px;
+        
+        .transaction-detail .value {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .settings-panel {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .settings-panel h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .settings-group {
+            margin-bottom: 15px;
+        }
+        
+        .settings-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .settings-group input,
+        .settings-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        
+        .toggle-switch {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+        }
+        
+        .toggle-switch label {
+            margin: 0;
+        }
+        
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #4CAF50;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background-color: #FF5722;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        .export-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+        
+        .history-container {
+            max-height: 500px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+        
+        .transaction-card {
+            background: #f9f9f9;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+            transition: all 0.2s;
+        }
+        
+        .transaction-card:hover {
+            background: #f0f0f0;
+            transform: translateX(5px);
+        }
+        
+        .transaction-card.detective {
+            border-left-color: #4CAF50;
+        }
+        
+        .transaction-card.blackmarket {
+            border-left-color: #FF5722;
+        }
+        
+        .transaction-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        
+        .transaction-time {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .transaction-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+            font-size: 14px;
+        }
+        
+        .transaction-details .detail {
+            color: #666;
+        }
+        
+        .transaction-details .detail span {
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        
+        .empty-state .icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .filter-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-bar input,
+        .filter-bar select {
+            flex: 1;
+            min-width: 120px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+        }
+        
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 15px;
+        }
+        
+        .summary-stat {
+            text-align: center;
+        }
+        
+        .summary-stat .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .summary-stat .label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
             margin-top: 5px;
-            border-left: 3px solid #eee;
         }
     </style>
 </head>
 <body>
+    <div class="container">
+        <div class="header">
+            <div class="header-nav">
+                <button class="nav-button" onclick="showHistory()" title="View transaction history">
+                    📋<span id="historyBadge" class="badge" style="display: none;">0</span>
+                </button>
+                <button class="nav-button" onclick="showSettings()" title="Settings">
+                    ⚙️
+                </button>
+            </div>
+            <h1>Transaction Station</h1>
+            <div id="modeIndicator" class="mode-indicator mode-detective" onclick="toggleMode()" title="Click to switch mode">Detective Mode</div>
+            <div class="station-id">Station ID: <span id="stationIdDisplay">001</span></div>
+        </div>
 
-    <h1>Web NFC Tag Reader</h1>
+        <!-- Loading Screen -->
+        <div id="loadingScreen" class="screen active">
+            <div class="status-message">
+                <div class="scan-icon">⏳</div>
+                <p>Loading token database...</p>
+            </div>
+        </div>
 
-    <button id="scanButton">Start Scan</button>
-    <p id="status">Click the button to start scanning.</p>
+        <!-- Settings Screen -->
+        <div id="settingsScreen" class="screen">
+            <div class="settings-panel">
+                <h3>Station Configuration</h3>
+                <div class="settings-group">
+                    <label for="stationId">Station ID</label>
+                    <input type="text" id="stationId" placeholder="001" maxlength="10">
+                </div>
+                <div class="toggle-switch">
+                    <label>Station Mode</label>
+                    <label class="switch">
+                        <input type="checkbox" id="modeToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <p style="text-align: center; color: #666; margin-top: 10px;">
+                    <span id="modeText">Detective Mode</span>
+                </p>
+            </div>
+            <button class="btn btn-primary" onclick="saveSettings()">Start Station</button>
+            <div class="export-section">
+                <h3>Data Management</h3>
+                <button class="btn btn-secondary" onclick="exportData('json')">Export JSON</button>
+                <button class="btn btn-secondary" onclick="exportData('csv')">Export CSV</button>
+                <button class="btn btn-secondary" onclick="clearData()">Clear All Data</button>
+                <button class="btn btn-secondary" onclick="debugStorage()">Debug Storage</button>
+            </div>
+        </div>
 
-    <h2>Scan Log:</h2>
-    <ul id="log">
-        </ul>
+        <!-- Team Entry Screen -->
+        <div id="teamEntryScreen" class="screen">
+            <div class="team-display" id="teamDisplay">_</div>
+            <div class="numpad">
+                <button onclick="appendNumber(1)">1</button>
+                <button onclick="appendNumber(2)">2</button>
+                <button onclick="appendNumber(3)">3</button>
+                <button onclick="appendNumber(4)">4</button>
+                <button onclick="appendNumber(5)">5</button>
+                <button onclick="appendNumber(6)">6</button>
+                <button onclick="appendNumber(7)">7</button>
+                <button onclick="appendNumber(8)">8</button>
+                <button onclick="appendNumber(9)">9</button>
+                <button class="clear" onclick="clearTeamId()">Clear</button>
+                <button onclick="appendNumber(0)">0</button>
+                <button class="enter" onclick="confirmTeamId()">Enter</button>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button class="btn btn-secondary" style="flex: 1;" onclick="showHistory()">📋 History</button>
+                <button class="btn btn-secondary" style="flex: 1;" onclick="showSettings()">⚙️ Settings</button>
+            </div>
+        </div>
+
+        <!-- Scan Screen -->
+        <div id="scanScreen" class="screen">
+            <div class="status-message">
+                Team <strong id="currentTeam"></strong> Ready
+            </div>
+            <div class="scan-area">
+                <div class="scan-icon">📡</div>
+                <h2>Tap Memory Token</h2>
+                <p id="scanStatus">Waiting for NFC tag...</p>
+            </div>
+            <button id="scanButton" class="btn btn-primary" onclick="startScan()">Start Scanning</button>
+            <button class="btn btn-secondary" onclick="cancelScan()">Back to Team Entry</button>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="teamTokenCount">0</div>
+                    <div class="stat-label">Tokens</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="teamTotalValue">0</div>
+                    <div class="stat-label">Total Value</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Result Screen -->
+        <div id="resultScreen" class="screen">
+            <div class="status-message success">
+                <h2>Transaction Complete!</h2>
+            </div>
+            <div class="transaction-result">
+                <h3>Token Details</h3>
+                <div class="transaction-detail">
+                    <label>RFID:</label>
+                    <span class="value" id="resultRfid">-</span>
+                </div>
+                <div class="transaction-detail">
+                    <label>Memory Type:</label>
+                    <span class="value" id="resultType">-</span>
+                </div>
+                <div class="transaction-detail">
+                    <label>Group:</label>
+                    <span class="value" id="resultGroup">-</span>
+                </div>
+                <div class="transaction-detail">
+                    <label>Value Rating:</label>
+                    <span class="value" id="resultValue">-</span>
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="continueScan()">Scan Another Token</button>
+            <button class="btn btn-secondary" onclick="finishTeam()">Finish Team</button>
+        </div>
+
+        <!-- History Screen -->
+        <div id="historyScreen" class="screen">
+            <div class="summary-stats">
+                <div class="summary-stat">
+                    <div class="value" id="totalScans">0</div>
+                    <div class="label">Total Scans</div>
+                </div>
+                <div class="summary-stat">
+                    <div class="value" id="uniqueTeams">0</div>
+                    <div class="label">Teams</div>
+                </div>
+                <div class="summary-stat">
+                    <div class="value" id="totalValue">0</div>
+                    <div class="label">Total Value</div>
+                </div>
+                <div class="summary-stat">
+                    <div class="value" id="avgValue">0</div>
+                    <div class="label">Avg Value</div>
+                </div>
+            </div>
+            
+            <div class="filter-bar">
+                <input type="text" id="searchFilter" placeholder="Search RFID, Team, Type..." onkeyup="filterTransactions()">
+                <select id="modeFilter" onchange="filterTransactions()">
+                    <option value="">All Modes</option>
+                    <option value="detective">Detective Only</option>
+                    <option value="blackmarket">Black Market Only</option>
+                </select>
+                <select id="sortFilter" onchange="filterTransactions()">
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="value-high">Highest Value</option>
+                    <option value="value-low">Lowest Value</option>
+                </select>
+            </div>
+            
+            <div id="historyContainer" class="history-container">
+                <div class="empty-state">
+                    <div class="icon">📋</div>
+                    <h3>No Transactions Yet</h3>
+                    <p>Scanned tokens will appear here</p>
+                </div>
+            </div>
+            
+            <button class="btn btn-primary" onclick="closeHistory()">Back</button>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button class="btn btn-secondary" style="flex: 1;" onclick="exportData('csv')">Export CSV</button>
+                <button class="btn btn-secondary" style="flex: 1;" onclick="clearData()">Clear All</button>
+            </div>
+        </div>
+    </div>
 
     <script>
-        const scanButton = document.getElementById('scanButton');
-        const status = document.getElementById('status');
-        const log = document.getElementById('log');
+        // Global variables
+        let tokenDatabase = {};
+        let currentTeamId = '';
+        let currentSession = [];
+        let transactions = [];
+        let stationMode = 'detective';
+        let stationId = '001';
+        let nfcReader = null;
+        let isScanning = false;
+        let previousScreen = 'teamEntryScreen';  // Track where we came from
 
-        if (!('NDEFReader' in window)) {
-            status.textContent = "Web NFC is not supported on this browser.";
-            scanButton.disabled = true;
-        }
-
-        scanButton.addEventListener('click', async () => {
-            status.textContent = "User interaction detected. Starting scan...";
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', async () => {
+            // Load settings from localStorage
+            loadSettings();
+            
+            // Load transaction history
+            loadTransactions();
+            
+            // Load token database
             try {
-                const reader = new NDEFReader();
-                await reader.scan();
+                const response = await fetch('tokens.json');
+                if (!response.ok) {
+                    throw new Error('Failed to load token database');
+                }
+                tokenDatabase = await response.json();
+                console.log('Token database loaded:', Object.keys(tokenDatabase).length, 'tokens');
                 
-                status.textContent = "✅ Scan started. Bring a tag near your device...";
-
-                reader.addEventListener('error', (event) => {
-                    status.textContent = `Error: ${event.message}`;
-                });
-
-                reader.addEventListener('reading', ({ message, serialNumber }) => {
-                    // Prepend a new entry to the log for this tag
-                    const li = document.createElement('li');
-                    let content = `Serial Number: <strong>${serialNumber}</strong>`;
-                    li.innerHTML = content;
-
-                    const recordContainer = document.createElement('div');
-                    recordContainer.className = 'record-block';
-                    
-                    // Decode and display each record in the message
-                    for (const record of message.records) {
-                        recordContainer.appendChild(decodeRecord(record));
-                    }
-                    
-                    li.appendChild(recordContainer);
-                    log.prepend(li);
-                    
-                    status.textContent = "✅ Scan successful. Bring another tag near...";
-                });
-
+                // Check for NFC support
+                if ('NDEFReader' in window) {
+                    console.log('Web NFC is supported');
+                    showScreen('teamEntryScreen');
+                } else {
+                    console.warn('Web NFC is not supported on this device');
+                    showScreen('teamEntryScreen');
+                    // Still allow manual entry for testing
+                }
             } catch (error) {
-                status.textContent = `Error starting scan: ${error}`;
+                console.error('Error loading token database:', error);
+                document.querySelector('#loadingScreen .status-message').innerHTML = 
+                    '<p class="error">Error loading token database. Using demo mode.</p>' +
+                    '<button class="btn btn-primary" onclick="useDemoData()">Use Demo Data</button>';
+            }
+            
+            // Check URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const modeParam = urlParams.get('mode');
+            if (modeParam === 'black-market' || modeParam === 'blackmarket') {
+                stationMode = 'blackmarket';
+                updateModeDisplay();
             }
         });
 
-        function decodeRecord(record) {
-            const recordDiv = document.createElement('div');
-            const textDecoder = new TextDecoder('utf-8');
-            let content = `Record Type: <strong>${record.recordType}</strong><br>`;
-
-            switch (record.recordType) {
-                case "text":
-                    const textPayload = new TextDecoder(record.encoding).decode(record.data);
-                    content += `Content: ${textPayload}`;
-                    break;
-                case "url":
-                    const urlPayload = textDecoder.decode(record.data);
-                    content += `URL: <a href="${urlPayload}" target="_blank">${urlPayload}</a>`;
-                    break;
-                case "mime":
-                    content += `MIME Type: <strong>${record.mediaType}</strong><br>`;
-                    content += `Data: (Binary data of ${record.data.byteLength} bytes)`;
-                    break;
-                default:
-                    // For external types or other unknown types
-                    content += `Data: (Binary data of ${record.data.byteLength} bytes)`;
-                    break;
-            }
-            recordDiv.innerHTML = content;
-            return recordDiv;
+        // Load demo data if needed
+        function useDemoData() {
+            tokenDatabase = {
+                "a1b2c3d4": {
+                    "SF_RFID": "a1b2c3d4",
+                    "SF_ValueRating": 3,
+                    "SF_MemoryType": "Technical",
+                    "SF_Group": "Server Logs (x5)"
+                },
+                "deadbeef": {
+                    "SF_RFID": "deadbeef",
+                    "SF_ValueRating": 2,
+                    "SF_MemoryType": "Personal",
+                    "SF_Group": "Marcus' Memories (x1)"
+                },
+                "test1234": {
+                    "SF_RFID": "test1234",
+                    "SF_ValueRating": 5,
+                    "SF_MemoryType": "Classified",
+                    "SF_Group": "Government Files (x3)"
+                }
+            };
+            showScreen('teamEntryScreen');
         }
 
+        // Screen management
+        function showScreen(screenId) {
+            // Track previous screen for back navigation
+            const currentActive = document.querySelector('.screen.active');
+            if (currentActive && currentActive.id !== 'historyScreen' && screenId !== 'historyScreen') {
+                previousScreen = currentActive.id;
+            }
+            
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        // History view functions
+        function showHistory() {
+            updateHistoryStats();
+            renderTransactions();
+            showScreen('historyScreen');
+        }
+
+        function closeHistory() {
+            showScreen(previousScreen || 'teamEntryScreen');
+        }
+
+        function updateHistoryStats() {
+            // Calculate statistics
+            const totalScans = transactions.length;
+            const uniqueTeams = [...new Set(transactions.map(t => t.teamId))].length;
+            const totalValue = transactions.reduce((sum, t) => sum + t.valueRating, 0);
+            const avgValue = totalScans > 0 ? (totalValue / totalScans).toFixed(1) : 0;
+            
+            // Update display
+            document.getElementById('totalScans').textContent = totalScans;
+            document.getElementById('uniqueTeams').textContent = uniqueTeams;
+            document.getElementById('totalValue').textContent = totalValue;
+            document.getElementById('avgValue').textContent = avgValue;
+        }
+
+        function renderTransactions(filteredTransactions = null) {
+            const container = document.getElementById('historyContainer');
+            const transactionsToShow = filteredTransactions || transactions;
+            
+            if (transactionsToShow.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">📋</div>
+                        <h3>No Transactions Yet</h3>
+                        <p>Scanned tokens will appear here</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = transactionsToShow.map(t => {
+                const date = new Date(t.timestamp);
+                const timeStr = date.toLocaleTimeString();
+                const dateStr = date.toLocaleDateString();
+                
+                return `
+                    <div class="transaction-card ${t.stationMode}">
+                        <div class="transaction-header">
+                            <span>Team ${t.teamId}</span>
+                            <span class="transaction-time">${dateStr} ${timeStr}</span>
+                        </div>
+                        <div class="transaction-details">
+                            <div class="detail">RFID: <span>${t.rfid}</span></div>
+                            <div class="detail">Value: <span>${'⭐'.repeat(t.valueRating)}</span></div>
+                            <div class="detail">Type: <span>${t.memoryType}</span></div>
+                            <div class="detail">Mode: <span>${t.stationMode === 'blackmarket' ? 'Black Market' : 'Detective'}</span></div>
+                            <div class="detail" style="grid-column: 1 / -1;">Group: <span>${t.group}</span></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterTransactions() {
+            const searchTerm = document.getElementById('searchFilter').value.toLowerCase();
+            const modeFilter = document.getElementById('modeFilter').value;
+            const sortFilter = document.getElementById('sortFilter').value;
+            
+            // Filter
+            let filtered = transactions.filter(t => {
+                const matchesSearch = !searchTerm || 
+                    t.rfid.toLowerCase().includes(searchTerm) ||
+                    t.teamId.toLowerCase().includes(searchTerm) ||
+                    t.memoryType.toLowerCase().includes(searchTerm) ||
+                    t.group.toLowerCase().includes(searchTerm);
+                
+                const matchesMode = !modeFilter || t.stationMode === modeFilter;
+                
+                return matchesSearch && matchesMode;
+            });
+            
+            // Sort
+            filtered.sort((a, b) => {
+                switch(sortFilter) {
+                    case 'oldest':
+                        return new Date(a.timestamp) - new Date(b.timestamp);
+                    case 'value-high':
+                        return b.valueRating - a.valueRating;
+                    case 'value-low':
+                        return a.valueRating - b.valueRating;
+                    case 'newest':
+                    default:
+                        return new Date(b.timestamp) - new Date(a.timestamp);
+                }
+            });
+            
+            renderTransactions(filtered);
+        }
+
+        function updateHistoryBadge() {
+            const badge = document.getElementById('historyBadge');
+            if (transactions.length > 0) {
+                badge.textContent = transactions.length;
+                badge.style.display = 'inline';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        // Settings management
+        function loadSettings() {
+            stationId = localStorage.getItem('stationId') || '001';
+            stationMode = localStorage.getItem('stationMode') || 'detective';
+            document.getElementById('stationId').value = stationId;
+            document.getElementById('stationIdDisplay').textContent = stationId;
+            document.getElementById('modeToggle').checked = stationMode === 'blackmarket';
+            updateModeDisplay();
+        }
+
+        function saveSettings() {
+            stationId = document.getElementById('stationId').value || '001';
+            stationMode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
+            localStorage.setItem('stationId', stationId);
+            localStorage.setItem('stationMode', stationMode);
+            document.getElementById('stationIdDisplay').textContent = stationId;
+            updateModeDisplay();
+            showScreen('teamEntryScreen');
+        }
+
+        function updateModeDisplay() {
+            const indicator = document.getElementById('modeIndicator');
+            const modeText = document.getElementById('modeText');
+            const modeToggle = document.getElementById('modeToggle');
+            
+            if (stationMode === 'blackmarket') {
+                indicator.className = 'mode-indicator mode-blackmarket';
+                indicator.textContent = 'Black Market Mode';
+                if (modeText) modeText.textContent = 'Black Market Mode';
+                if (modeToggle) modeToggle.checked = true;
+            } else {
+                indicator.className = 'mode-indicator mode-detective';
+                indicator.textContent = 'Detective Mode';
+                if (modeText) modeText.textContent = 'Detective Mode';
+                if (modeToggle) modeToggle.checked = false;
+            }
+        }
+
+        function toggleMode() {
+            // Toggle the mode
+            stationMode = stationMode === 'detective' ? 'blackmarket' : 'detective';
+            
+            // Save to localStorage
+            localStorage.setItem('stationMode', stationMode);
+            
+            // Update display
+            updateModeDisplay();
+            
+            // Visual feedback
+            const indicator = document.getElementById('modeIndicator');
+            indicator.style.transform = 'scale(1.1)';
+            setTimeout(() => {
+                indicator.style.transform = 'scale(1)';
+            }, 200);
+        }
+
+        function showSettings() {
+            showScreen('settingsScreen');
+        }
+
+        // Team entry functions
+        function appendNumber(num) {
+            if (currentTeamId.length < 6) {
+                currentTeamId += num;
+                updateTeamDisplay();
+            }
+        }
+
+        function clearTeamId() {
+            currentTeamId = '';
+            updateTeamDisplay();
+        }
+
+        function updateTeamDisplay() {
+            const display = document.getElementById('teamDisplay');
+            display.textContent = currentTeamId || '_';
+        }
+
+        function confirmTeamId() {
+            if (currentTeamId.length > 0) {
+                document.getElementById('currentTeam').textContent = currentTeamId;
+                currentSession = [];
+                updateSessionStats();
+                showScreen('scanScreen');
+            }
+        }
+
+        // NFC Scanning
+        async function startScan() {
+            if (!('NDEFReader' in window)) {
+                // Fallback for testing
+                simulateScan();
+                return;
+            }
+
+            try {
+                nfcReader = new NDEFReader();
+                await nfcReader.scan();
+                isScanning = true;
+                
+                document.getElementById('scanStatus').textContent = 'Scanning... Tap a token';
+                document.getElementById('scanButton').textContent = 'Scanning...';
+                document.getElementById('scanButton').disabled = true;
+                
+                nfcReader.addEventListener("reading", ({ message, serialNumber }) => {
+                    console.log(`> Serial: ${serialNumber}`);
+                    console.log(`> Records: ${message.records.length}`);
+                    
+                    processToken(serialNumber);
+                });
+                
+                nfcReader.addEventListener("readingerror", () => {
+                    console.log("Cannot read data from the NFC tag");
+                    document.getElementById('scanStatus').textContent = 'Read error. Try again.';
+                });
+                
+            } catch (error) {
+                console.log("Error: " + error);
+                document.getElementById('scanStatus').textContent = 'NFC not available. Using demo mode.';
+                simulateScan();
+            }
+        }
+
+        function simulateScan() {
+            // Simulate a scan for testing
+            const testTokens = Object.keys(tokenDatabase);
+            if (testTokens.length > 0) {
+                const randomToken = testTokens[Math.floor(Math.random() * testTokens.length)];
+                setTimeout(() => {
+                    processToken(randomToken);
+                }, 1000);
+            }
+        }
+
+        function processToken(rfid) {
+            const token = tokenDatabase[rfid];
+            
+            if (!token) {
+                // Unknown token
+                document.getElementById('scanStatus').textContent = 'Unknown token!';
+                return;
+            }
+            
+            // Record transaction
+            const transaction = {
+                timestamp: new Date().toISOString(),
+                stationId: stationId,
+                stationMode: stationMode,
+                teamId: currentTeamId,
+                rfid: rfid,
+                memoryType: token.SF_MemoryType,
+                group: token.SF_Group,
+                valueRating: token.SF_ValueRating
+            };
+            
+            currentSession.push(transaction);
+            transactions.push(transaction);
+            saveTransactions();
+            
+            // Display result
+            document.getElementById('resultRfid').textContent = rfid;
+            document.getElementById('resultType').textContent = token.SF_MemoryType;
+            document.getElementById('resultGroup').textContent = token.SF_Group;
+            document.getElementById('resultValue').textContent = token.SF_ValueRating;
+            
+            stopScan();
+            showScreen('resultScreen');
+        }
+
+        function stopScan() {
+            if (nfcReader && isScanning) {
+                // Note: There's no official stop method in Web NFC API
+                // The scan continues until the page is closed or navigated away
+                isScanning = false;
+            }
+            document.getElementById('scanButton').textContent = 'Start Scanning';
+            document.getElementById('scanButton').disabled = false;
+        }
+
+        function cancelScan() {
+            stopScan();
+            currentTeamId = '';
+            updateTeamDisplay();
+            showScreen('teamEntryScreen');
+        }
+
+        function continueScan() {
+            updateSessionStats();
+            showScreen('scanScreen');
+        }
+
+        function finishTeam() {
+            currentTeamId = '';
+            currentSession = [];
+            updateTeamDisplay();
+            showScreen('teamEntryScreen');
+        }
+
+        function updateSessionStats() {
+            const tokenCount = currentSession.length;
+            const totalValue = currentSession.reduce((sum, t) => sum + t.valueRating, 0);
+            document.getElementById('teamTokenCount').textContent = tokenCount;
+            document.getElementById('teamTotalValue').textContent = totalValue;
+        }
+
+        // Data management
+        function loadTransactions() {
+            const stored = localStorage.getItem('transactions');
+            if (stored) {
+                try {
+                    transactions = JSON.parse(stored);
+                    console.log('Loaded', transactions.length, 'transactions from storage');
+                } catch (e) {
+                    console.error('Error parsing stored transactions:', e);
+                    transactions = [];
+                    localStorage.removeItem('transactions');
+                }
+            } else {
+                transactions = [];
+            }
+            updateHistoryBadge();
+        }
+
+        function saveTransactions() {
+            try {
+                localStorage.setItem('transactions', JSON.stringify(transactions));
+                updateHistoryBadge();
+                console.log('Saved', transactions.length, 'transactions to storage');
+            } catch (e) {
+                console.error('Error saving transactions:', e);
+                alert('Warning: Could not save transactions to storage');
+            }
+        }
+
+        function exportData(format) {
+            if (transactions.length === 0) {
+                alert('No transactions to export');
+                return;
+            }
+            
+            let data, filename, type;
+            
+            if (format === 'json') {
+                data = JSON.stringify(transactions, null, 2);
+                filename = `transactions_${Date.now()}.json`;
+                type = 'application/json';
+            } else {
+                // CSV format
+                const headers = ['timestamp', 'stationId', 'stationMode', 'teamId', 'rfid', 'memoryType', 'group', 'valueRating'];
+                const csvRows = [headers.join(',')];
+                
+                transactions.forEach(t => {
+                    const row = [
+                        t.timestamp,
+                        t.stationId,
+                        t.stationMode,
+                        t.teamId,
+                        t.rfid,
+                        `"${t.memoryType}"`,
+                        `"${t.group}"`,
+                        t.valueRating
+                    ];
+                    csvRows.push(row.join(','));
+                });
+                
+                data = csvRows.join('\n');
+                filename = `transactions_${Date.now()}.csv`;
+                type = 'text/csv';
+            }
+            
+            // Create download
+            const blob = new Blob([data], { type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function clearData() {
+            if (confirm('Clear all transaction data? This cannot be undone.')) {
+                // Clear all data from memory
+                transactions = [];
+                currentSession = [];
+                
+                // Clear ALL localStorage items related to this app
+                const keysToRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key === 'transactions' || key === 'currentSession' || key.includes('transaction')) {
+                        keysToRemove.push(key);
+                    }
+                }
+                keysToRemove.forEach(key => localStorage.removeItem(key));
+                
+                // Update the UI immediately
+                updateHistoryBadge();
+                
+                // If we're currently viewing history, refresh it
+                const historyScreen = document.getElementById('historyScreen');
+                if (historyScreen && historyScreen.classList.contains('active')) {
+                    updateHistoryStats();
+                    renderTransactions();
+                }
+                
+                // Also update team session stats if on scan screen
+                const scanScreen = document.getElementById('scanScreen');
+                if (scanScreen && scanScreen.classList.contains('active')) {
+                    updateSessionStats();
+                }
+                
+                alert('All data cleared successfully. The page will now reload.');
+                
+                // Force reload the page to ensure clean state
+                setTimeout(() => {
+                    window.location.reload(true);
+                }, 500);
+            }
+        }
+        
+        function debugStorage() {
+            const stored = localStorage.getItem('transactions');
+            let message = 'Debug Information:\n\n';
+            
+            if (stored) {
+                try {
+                    const data = JSON.parse(stored);
+                    message += `localStorage has ${data.length} transactions\n`;
+                    message += `Memory array has ${transactions.length} transactions\n\n`;
+                    
+                    if (data.length > 0) {
+                        message += 'First transaction:\n';
+                        message += JSON.stringify(data[0], null, 2).substring(0, 200) + '...\n\n';
+                    }
+                    
+                    message += 'All localStorage keys:\n';
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        message += `- ${key}: ${localStorage.getItem(key).substring(0, 50)}...\n`;
+                    }
+                } catch (e) {
+                    message += 'Error parsing localStorage: ' + e.message;
+                }
+            } else {
+                message += 'No transactions in localStorage\n';
+                message += `Memory array has ${transactions.length} transactions\n`;
+            }
+            
+            console.log(message);
+            alert(message);
+        }
     </script>
 </body>
 </html>
