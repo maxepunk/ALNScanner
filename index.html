@@ -1076,10 +1076,10 @@
                     
                     let tokenId = null;
                     
-                    // Look for record at index 1 (second record)
-                    if (message.records.length > 1) {
-                        const record = message.records[1];
-                        console.log('Record 1 found:', {
+                    // Look for the first record (index 0) which contains the token ID
+                    if (message.records.length > 0) {
+                        const record = message.records[0]; // First record (shown as Record 1 in NFC Tools)
+                        console.log('First record found:', {
                             recordType: record.recordType,
                             mediaType: record.mediaType,
                             id: record.id,
@@ -1088,42 +1088,44 @@
                             lang: record.lang
                         });
                         
-                        // Try to decode the data from record 1
+                        // Try to decode the data from the first record
                         if (record.data) {
                             try {
                                 const decoder = new TextDecoder();
                                 tokenId = decoder.decode(record.data).trim();
-                                console.log(`Record 1 decoded as token ID: "${tokenId}"`);
+                                console.log(`First record decoded as token ID: "${tokenId}"`);
                             } catch (e) {
-                                console.error('Could not decode record 1:', e);
+                                console.error('Could not decode first record:', e);
                             }
                         }
                     } else {
-                        console.warn(`Only ${message.records.length} record(s) found. Need at least 2 records.`);
-                        console.log('Available records:');
-                        message.records.forEach((record, index) => {
-                            console.log(`Record ${index}:`, record);
-                            if (record.data) {
-                                try {
-                                    const decoder = new TextDecoder();
-                                    const text = decoder.decode(record.data);
-                                    console.log(`Record ${index} text: "${text}"`);
-                                } catch (e) {
-                                    console.log(`Record ${index} could not be decoded`);
-                                }
-                            }
-                        });
+                        console.warn('No records found on tag!');
                     }
                     
-                    // Fall back to serial number if no valid record 1
+                    // Log all records for debugging
+                    console.log('All records on tag:');
+                    message.records.forEach((record, index) => {
+                        console.log(`Array index ${index} (NFC Tools Record ${index + 1}):`, record);
+                        if (record.data) {
+                            try {
+                                const decoder = new TextDecoder();
+                                const text = decoder.decode(record.data);
+                                console.log(`  -> Decoded text: "${text}"`);
+                            } catch (e) {
+                                console.log(`  -> Could not decode`);
+                            }
+                        }
+                    });
+                    
+                    // Fall back to serial number if no valid first record
                     if (!tokenId) {
-                        console.log('No valid record 1 found, falling back to serial number');
+                        console.log('No valid first record found, falling back to serial number');
                         tokenId = serialNumber;
                     }
                     
                     // Update scan status to show what was detected
                     document.getElementById('scanStatus').innerHTML = `
-                        Detected Token ID: ${tokenId}<br>
+                        Token ID: ${tokenId}<br>
                         <small style="font-size: 10px;">Serial: ${serialNumber}</small>
                     `;
                     
@@ -1175,7 +1177,23 @@
         }
 
         function processToken(rfid) {
-            const token = tokenDatabase[rfid];
+            // Try both the original RFID and a normalized version (without colons)
+            let token = tokenDatabase[rfid];
+            
+            // If not found, try without colons
+            if (!token && rfid.includes(':')) {
+                const normalizedRfid = rfid.replace(/:/g, '');
+                token = tokenDatabase[normalizedRfid];
+                console.log(`Trying normalized ID without colons: ${normalizedRfid}`);
+            }
+            
+            // Also try with colons if the original doesn't have them
+            if (!token && !rfid.includes(':')) {
+                // Try to format as XX:XX:XX:XX pattern
+                const colonRfid = rfid.match(/.{1,2}/g)?.join(':') || rfid;
+                token = tokenDatabase[colonRfid];
+                console.log(`Trying ID with colons: ${colonRfid}`);
+            }
             
             if (!token) {
                 // Unknown token - still display and log it for debugging
