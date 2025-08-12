@@ -816,6 +816,9 @@
                 <button class="btn btn-secondary" onclick="DataManager.clearData()">Clear All Data</button>
                 <button class="btn btn-secondary" onclick="App.testTokenMatch()">Test Token Match</button>
                 <button class="btn btn-secondary" onclick="App.testGroupParsing()">Test Group Parsing</button>
+                <button class="btn btn-secondary" onclick="App.testGroupInventory()">Test Group Inventory</button>
+                <button class="btn btn-secondary" onclick="App.testCompletionDetection()">Test Completions</button>
+                <button class="btn btn-secondary" onclick="App.testBonusCalculations()">Test Bonuses</button>
             </div>
         </div>
 
@@ -1165,6 +1168,7 @@
         // ============================================
         const TokenManager = {
             database: {},
+            groupInventory: null,  // Phase 5: Cache for group data
             
             async loadDatabase() {
                 try {
@@ -1174,6 +1178,11 @@
                     }
                     this.database = await response.json();
                     Debug.log(`Loaded ${Object.keys(this.database).length} tokens`);
+                    
+                    // Phase 5 Step 2: Build group inventory after loading
+                    this.groupInventory = this.buildGroupInventory();
+                    this.logGroupStats();
+                    
                     return true;
                 } catch (error) {
                     Debug.log(`Token database error: ${error.message}`, true);
@@ -1184,26 +1193,159 @@
             
             loadDemoData() {
                 this.database = {
+                    // Server Logs group (x5) - only 2 tokens, incomplete
                     "a1b2c3d4": {
                         "SF_RFID": "a1b2c3d4",
                         "SF_ValueRating": 3,
                         "SF_MemoryType": "Technical",
                         "SF_Group": "Server Logs (x5)"
                     },
+                    "deed3456": {
+                        "SF_RFID": "deed3456",
+                        "SF_ValueRating": 2,
+                        "SF_MemoryType": "Technical",
+                        "SF_Group": "Server Logs (x5)"
+                    },
+                    
+                    // Marcus' Memories (x1) - only 1 token
                     "deadbeef": {
                         "SF_RFID": "deadbeef",
                         "SF_ValueRating": 2,
                         "SF_MemoryType": "Personal",
                         "SF_Group": "Marcus' Memories (x1)"
                     },
-                    "test1234": {
-                        "SF_RFID": "test1234",
+                    
+                    // Government Files (x3) - complete set of 3
+                    "cafe1234": {
+                        "SF_RFID": "cafe1234",
                         "SF_ValueRating": 5,
                         "SF_MemoryType": "Classified",
                         "SF_Group": "Government Files (x3)"
+                    },
+                    "babe2468": {
+                        "SF_RFID": "babe2468",
+                        "SF_ValueRating": 1,
+                        "SF_MemoryType": "Personal",
+                        "SF_Group": "Government Files (x3)"
+                    },
+                    "feed5678": {
+                        "SF_RFID": "feed5678",
+                        "SF_ValueRating": 4,
+                        "SF_MemoryType": "Corporate",
+                        "SF_Group": "Government Files (x3)"
+                    },
+                    
+                    // Test case: inconsistent naming
+                    "test1234": {
+                        "SF_RFID": "test1234",
+                        "SF_ValueRating": 5,
+                        "SF_MemoryType": "Test",
+                        "SF_Group": "government files (x3)"  // lowercase variation
                     }
                 };
                 Debug.log('Loaded demo token data');
+                
+                // Phase 5 Step 2: Build group inventory for demo data too
+                this.groupInventory = this.buildGroupInventory();
+                this.logGroupStats();
+            },
+            
+            // Phase 5 Step 2: Build inventory of all groups and their tokens
+            buildGroupInventory() {
+                const groups = {};
+                const issues = [];
+                
+                Object.entries(this.database).forEach(([rfid, token]) => {
+                    const groupInfo = DataManager.parseGroupInfo(token.SF_Group);
+                    const normalizedName = DataManager.normalizeGroupName(groupInfo.name);
+                    
+                    if (!groups[normalizedName]) {
+                        groups[normalizedName] = {
+                            displayName: groupInfo.name,  // Original case for display
+                            normalizedName: normalizedName,
+                            multiplier: groupInfo.multiplier,
+                            tokens: new Set(),
+                            rawGroupNames: new Set(),
+                            memoryTypes: new Set()
+                        };
+                    }
+                    
+                    // Add token to group
+                    groups[normalizedName].tokens.add(rfid);
+                    groups[normalizedName].rawGroupNames.add(token.SF_Group);
+                    groups[normalizedName].memoryTypes.add(token.SF_MemoryType);
+                    
+                    // Check for multiplier consistency
+                    if (groups[normalizedName].multiplier !== groupInfo.multiplier) {
+                        issues.push(`Group "${groupInfo.name}" has inconsistent multipliers: ${groups[normalizedName].multiplier}x vs ${groupInfo.multiplier}x`);
+                        // Keep the higher multiplier
+                        groups[normalizedName].multiplier = Math.max(groups[normalizedName].multiplier, groupInfo.multiplier);
+                    }
+                    
+                    // Update display name if this one is "better" (longer, has capitals)
+                    if (groupInfo.name.length > groups[normalizedName].displayName.length ||
+                        (groupInfo.name.length === groups[normalizedName].displayName.length && 
+                         groupInfo.name > groups[normalizedName].displayName)) {
+                        groups[normalizedName].displayName = groupInfo.name;
+                    }
+                });
+                
+                // Log any issues found
+                if (issues.length > 0) {
+                    Debug.log('=== Group Inventory Issues ===', true);
+                    issues.forEach(issue => Debug.log(issue, true));
+                }
+                
+                return groups;
+            },
+            
+            // Phase 5 Step 2: Log group statistics for debugging
+            logGroupStats() {
+                if (!this.groupInventory) return;
+                
+                Debug.log('=== Group Inventory Summary ===');
+                const groups = Object.values(this.groupInventory);
+                
+                Debug.log(`Total Groups: ${groups.length}`);
+                
+                // Find interesting stats
+                const completableGroups = groups.filter(g => g.multiplier > 1 && g.tokens.size > 1);
+                const singleTokenGroups = groups.filter(g => g.tokens.size === 1);
+                const largestGroup = groups.reduce((max, g) => g.tokens.size > max.tokens.size ? g : max, groups[0] || {tokens: new Set()});
+                const highestMultiplier = groups.reduce((max, g) => g.multiplier > max.multiplier ? g : max, groups[0] || {multiplier: 1});
+                
+                Debug.log(`Completable Groups (2+ tokens, 2x+ bonus): ${completableGroups.length}`);
+                Debug.log(`Single Token Groups: ${singleTokenGroups.length}`);
+                
+                if (largestGroup.displayName) {
+                    Debug.log(`Largest Group: "${largestGroup.displayName}" (${largestGroup.tokens.size} tokens)`);
+                }
+                
+                if (highestMultiplier.displayName && highestMultiplier.multiplier > 1) {
+                    Debug.log(`Highest Multiplier: "${highestMultiplier.displayName}" (${highestMultiplier.multiplier}x)`);
+                }
+                
+                // Log details for each group
+                Debug.log('=== Group Details ===');
+                groups.sort((a, b) => b.tokens.size - a.tokens.size).forEach(group => {
+                    Debug.log(`"${group.displayName}": ${group.tokens.size} tokens, ${group.multiplier}x multiplier`);
+                    
+                    // Warn about potential issues
+                    if (group.tokens.size === 1 && group.multiplier > 1) {
+                        Debug.log(`  ⚠️ Only 1 token but ${group.multiplier}x multiplier - can't complete!`, true);
+                    }
+                    if (group.rawGroupNames.size > 1) {
+                        Debug.log(`  ⚠️ Inconsistent naming: ${[...group.rawGroupNames].join(', ')}`, true);
+                    }
+                });
+            },
+            
+            // Phase 5 Step 2: Get group inventory (with caching)
+            getGroupInventory() {
+                if (!this.groupInventory) {
+                    this.groupInventory = this.buildGroupInventory();
+                }
+                return this.groupInventory;
             },
             
             findToken(id) {
@@ -1357,10 +1499,19 @@
                 const knownTokens = this.currentSession.filter(t => !t.isUnknown);
                 const totalValue = knownTokens.reduce((sum, t) => sum + (t.valueRating || 0), 0);
                 
-                // Calculate score for Black Market mode
-                const totalScore = this.currentSession.reduce((sum, t) => {
-                    return sum + this.calculateTokenValue(t);
-                }, 0);
+                // Calculate score for Black Market mode (Phase 5: with bonuses!)
+                let totalScore = 0;
+                if (Settings.stationMode === 'blackmarket' && this.currentSession.length > 0) {
+                    // Get team ID from first transaction in session
+                    const teamId = this.currentSession[0].teamId;
+                    const scoreData = this.calculateTeamScoreWithBonuses(teamId);
+                    totalScore = scoreData.totalScore;
+                } else {
+                    // Fallback to simple calculation
+                    totalScore = this.currentSession.reduce((sum, t) => {
+                        return sum + this.calculateTokenValue(t);
+                    }, 0);
+                }
                 
                 return { count, totalValue, totalScore };
             },
@@ -1398,7 +1549,80 @@
                 return { total, teams, totalValue, avgValue, blackMarketScore, detectiveValue };
             },
             
-            // New method for Phase 3: Get team scores
+            // Phase 5 Step 4: Calculate team score with group bonuses
+            calculateTeamScoreWithBonuses(teamId) {
+                const transactions = this.transactions.filter(t => 
+                    t.teamId === teamId && 
+                    t.stationMode === 'blackmarket' &&
+                    !t.isUnknown
+                );
+                
+                const completedGroups = this.getTeamCompletedGroups(teamId);
+                const completedGroupNames = new Set(
+                    completedGroups.map(g => g.normalizedName)
+                );
+                
+                let baseScore = 0;
+                let bonusScore = 0;
+                const groupBreakdown = {};
+                
+                // Initialize breakdown for completed groups
+                completedGroups.forEach(group => {
+                    groupBreakdown[group.name] = {
+                        tokens: 0,
+                        baseValue: 0,
+                        bonusValue: 0,
+                        multiplier: group.multiplier
+                    };
+                });
+                
+                // Calculate scores for each transaction
+                transactions.forEach(t => {
+                    const tokenBaseValue = this.calculateTokenValue(t);
+                    baseScore += tokenBaseValue;
+                    
+                    // Check if this token's group is completed
+                    const groupInfo = this.parseGroupInfo(t.group);
+                    const normalizedGroupName = this.normalizeGroupName(groupInfo.name);
+                    
+                    if (completedGroupNames.has(normalizedGroupName)) {
+                        // Apply bonus (multiplier - 1) × base value
+                        const bonusAmount = tokenBaseValue * (groupInfo.multiplier - 1);
+                        bonusScore += bonusAmount;
+                        
+                        // Track in breakdown
+                        if (groupBreakdown[groupInfo.name]) {
+                            groupBreakdown[groupInfo.name].tokens++;
+                            groupBreakdown[groupInfo.name].baseValue += tokenBaseValue;
+                            groupBreakdown[groupInfo.name].bonusValue += bonusAmount;
+                        }
+                    }
+                });
+                
+                Debug.log(`=== Score Calculation for Team ${teamId} ===`);
+                Debug.log(`Base Score: ${baseScore.toLocaleString()}`);
+                Debug.log(`Bonus Score: ${bonusScore.toLocaleString()}`);
+                Debug.log(`Total Score: ${(baseScore + bonusScore).toLocaleString()}`);
+                
+                if (completedGroups.length > 0) {
+                    Debug.log('Group Bonuses:');
+                    Object.entries(groupBreakdown).forEach(([groupName, data]) => {
+                        if (data.bonusValue > 0) {
+                            Debug.log(`  ${groupName} (${data.multiplier}x): +${data.bonusValue.toLocaleString()}`);
+                        }
+                    });
+                }
+                
+                return {
+                    baseScore,
+                    bonusScore,
+                    totalScore: baseScore + bonusScore,
+                    completedGroups: completedGroups.length,
+                    groupBreakdown
+                };
+            },
+            
+            // Update existing method to use bonus calculations
             getTeamScores() {
                 const teamGroups = {};
                 
@@ -1416,15 +1640,17 @@
                 
                 const teamScores = Object.keys(teamGroups).map(teamId => {
                     const transactions = teamGroups[teamId];
-                    // Calculate score (unknowns contribute 0)
-                    const totalScore = transactions.reduce((sum, t) => {
-                        return sum + this.calculateTokenValue(t);
-                    }, 0);
+                    
+                    // Phase 5: Use new calculation with bonuses
+                    const scoreData = this.calculateTeamScoreWithBonuses(teamId);
                     
                     return {
                         teamId: teamId,
-                        score: totalScore,
+                        score: scoreData.totalScore,  // Now includes bonuses!
+                        baseScore: scoreData.baseScore,
+                        bonusScore: scoreData.bonusScore,
                         tokenCount: transactions.length,  // Count includes unknowns
+                        completedGroups: scoreData.completedGroups,
                         transactions: transactions
                     };
                 });
@@ -1492,6 +1718,100 @@
                     .toLowerCase()             // Convert to lowercase
                     .replace(/\s+/g, ' ')     // Normalize multiple spaces to single space
                     .replace(/['']/g, "'");   // Normalize apostrophes
+            },
+            
+            // Phase 5 Step 3: Get completed groups for a team
+            getTeamCompletedGroups(teamId) {
+                const groupInventory = TokenManager.getGroupInventory();
+                
+                // Get all tokens this team has scanned (Black Market only, excluding unknowns)
+                const teamTokens = new Set(
+                    this.transactions
+                        .filter(t => 
+                            t.teamId === teamId && 
+                            t.stationMode === 'blackmarket' &&
+                            !t.isUnknown
+                        )
+                        .map(t => t.rfid)
+                );
+                
+                Debug.log(`=== Checking completions for Team ${teamId} ===`);
+                Debug.log(`Team has scanned ${teamTokens.size} valid tokens`);
+                
+                const completedGroups = [];
+                
+                // Check each group in the inventory
+                Object.entries(groupInventory).forEach(([normalizedName, groupData]) => {
+                    // Skip groups with only 1 token (can't be "completed")
+                    if (groupData.tokens.size <= 1) {
+                        Debug.log(`Skipping "${groupData.displayName}" - only ${groupData.tokens.size} token`);
+                        return;
+                    }
+                    
+                    // Skip groups with no bonus (x1 multiplier)
+                    if (groupData.multiplier <= 1) {
+                        Debug.log(`Skipping "${groupData.displayName}" - no bonus (${groupData.multiplier}x)`);
+                        return;
+                    }
+                    
+                    // Check if team has ALL tokens in this group
+                    const groupTokenArray = [...groupData.tokens];
+                    const hasAllTokens = groupTokenArray.every(tokenId => teamTokens.has(tokenId));
+                    
+                    if (hasAllTokens) {
+                        Debug.log(`✅ COMPLETE: "${groupData.displayName}" (${groupData.tokens.size} tokens, ${groupData.multiplier}x)`);
+                        completedGroups.push({
+                            name: groupData.displayName,
+                            normalizedName: normalizedName,
+                            multiplier: groupData.multiplier,
+                            tokenCount: groupData.tokens.size,
+                            tokens: groupTokenArray
+                        });
+                    } else {
+                        // Calculate progress for debugging
+                        const collectedCount = groupTokenArray.filter(tokenId => teamTokens.has(tokenId)).length;
+                        Debug.log(`❌ Incomplete: "${groupData.displayName}" (${collectedCount}/${groupData.tokens.size} tokens)`);
+                    }
+                });
+                
+                Debug.log(`Team ${teamId} has completed ${completedGroups.length} groups`);
+                return completedGroups;
+            },
+            
+            // Phase 5 Step 3: Get team's progress for all groups (for UI display)
+            getTeamGroupProgress(teamId) {
+                const groupInventory = TokenManager.getGroupInventory();
+                
+                // Get all tokens this team has scanned (Black Market only, excluding unknowns)
+                const teamTokens = new Set(
+                    this.transactions
+                        .filter(t => 
+                            t.teamId === teamId && 
+                            t.stationMode === 'blackmarket' &&
+                            !t.isUnknown
+                        )
+                        .map(t => t.rfid)
+                );
+                
+                const groupProgress = {};
+                
+                // Calculate progress for each group
+                Object.entries(groupInventory).forEach(([normalizedName, groupData]) => {
+                    const groupTokenArray = [...groupData.tokens];
+                    const collectedCount = groupTokenArray.filter(tokenId => teamTokens.has(tokenId)).length;
+                    
+                    groupProgress[normalizedName] = {
+                        displayName: groupData.displayName,
+                        multiplier: groupData.multiplier,
+                        totalTokens: groupData.tokens.size,
+                        collectedTokens: collectedCount,
+                        isComplete: collectedCount === groupData.tokens.size && groupData.tokens.size > 1 && groupData.multiplier > 1,
+                        progress: `${collectedCount}/${groupData.tokens.size}`,
+                        percentage: Math.round((collectedCount / groupData.tokens.size) * 100)
+                    };
+                });
+                
+                return groupProgress;
             },
             
             exportData(format) {
@@ -2280,6 +2600,229 @@
                 });
                 
                 alert('Check console for test results');
+            },
+            
+            // Phase 5 Step 2 Testing: Show group inventory
+            testGroupInventory() {
+                const inventory = TokenManager.getGroupInventory();
+                
+                console.log('=== Group Inventory Test ===');
+                console.log('Total groups:', Object.keys(inventory).length);
+                console.log('\nGroup Details:');
+                
+                Object.entries(inventory).forEach(([normalizedName, groupData]) => {
+                    console.log(`\nGroup: "${groupData.displayName}"`);
+                    console.log(`  Normalized name: "${normalizedName}"`);
+                    console.log(`  Multiplier: ${groupData.multiplier}x`);
+                    console.log(`  Token count: ${groupData.tokens.size}`);
+                    console.log(`  Token IDs:`, [...groupData.tokens]);
+                    console.log(`  Memory types:`, [...groupData.memoryTypes]);
+                    console.log(`  Raw variations:`, [...groupData.rawGroupNames]);
+                    
+                    // Check for completion possibility
+                    if (groupData.tokens.size === 1 && groupData.multiplier > 1) {
+                        console.warn(`  ⚠️ WARNING: Only 1 token but ${groupData.multiplier}x multiplier!`);
+                    }
+                });
+                
+                // Test specific lookups
+                console.log('\n=== Lookup Tests ===');
+                const testLookups = ['server logs', 'GOVERNMENT FILES', 'marcus\' memories'];
+                testLookups.forEach(lookup => {
+                    const normalized = DataManager.normalizeGroupName(lookup);
+                    const group = inventory[normalized];
+                    if (group) {
+                        console.log(`"${lookup}" → Found: "${group.displayName}" (${group.tokens.size} tokens)`);
+                    } else {
+                        console.log(`"${lookup}" → Not found`);
+                    }
+                });
+                
+                alert('Check console for group inventory details');
+            },
+            
+            // Phase 5 Step 3 Testing: Test completion detection
+            testCompletionDetection() {
+                console.log('=== Testing Group Completion Detection ===\n');
+                
+                // First check if we have real data
+                const realTeams = [...new Set(DataManager.transactions
+                    .filter(t => t.stationMode === 'blackmarket')
+                    .map(t => t.teamId))];
+                
+                if (realTeams.length > 0) {
+                    console.log('=== Testing with REAL data ===');
+                    realTeams.forEach(teamId => {
+                        console.log(`\nTeam ${teamId}:`);
+                        const completed = DataManager.getTeamCompletedGroups(teamId);
+                        const progress = DataManager.getTeamGroupProgress(teamId);
+                        
+                        console.log(`Completed groups: ${completed.length}`);
+                        completed.forEach(group => {
+                            console.log(`  ✅ "${group.name}" - ${group.tokenCount} tokens, ${group.multiplier}x bonus`);
+                        });
+                        
+                        console.log('All group progress:');
+                        Object.values(progress)
+                            .filter(p => p.collectedTokens > 0)
+                            .forEach(p => {
+                                const icon = p.isComplete ? '✅' : '🔶';
+                                console.log(`  ${icon} "${p.displayName}": ${p.progress} (${p.percentage}%)`);
+                            });
+                    });
+                }
+                
+                // Also run synthetic test
+                console.log('\n=== Testing with SYNTHETIC data ===');
+                
+                // Create test transactions
+                const testTransactions = [
+                    // Team 100: Has all Government Files tokens
+                    { teamId: '100', rfid: 'cafe1234', stationMode: 'blackmarket', isUnknown: false },
+                    { teamId: '100', rfid: 'babe2468', stationMode: 'blackmarket', isUnknown: false },
+                    { teamId: '100', rfid: 'feed5678', stationMode: 'blackmarket', isUnknown: false },
+                    { teamId: '100', rfid: 'test1234', stationMode: 'blackmarket', isUnknown: false },
+                    // Team 100: Also has 1/2 Server Logs
+                    { teamId: '100', rfid: 'a1b2c3d4', stationMode: 'blackmarket', isUnknown: false },
+                    
+                    // Team 200: Has partial Government Files (3/4)
+                    { teamId: '200', rfid: 'cafe1234', stationMode: 'blackmarket', isUnknown: false },
+                    { teamId: '200', rfid: 'babe2468', stationMode: 'blackmarket', isUnknown: false },
+                    { teamId: '200', rfid: 'feed5678', stationMode: 'blackmarket', isUnknown: false },
+                    
+                    // Team 300: Has different tokens including unknowns
+                    { teamId: '300', rfid: 'deadbeef', stationMode: 'blackmarket', isUnknown: false },
+                    { teamId: '300', rfid: 'unknown1', stationMode: 'blackmarket', isUnknown: true },
+                    { teamId: '300', rfid: 'a1b2c3d4', stationMode: 'blackmarket', isUnknown: false },
+                    
+                    // Detective mode transactions (should be ignored)
+                    { teamId: '100', rfid: 'deed3456', stationMode: 'detective', isUnknown: false }
+                ];
+                
+                // Temporarily replace transactions
+                const originalTransactions = DataManager.transactions;
+                DataManager.transactions = testTransactions;
+                
+                // Test each team
+                ['100', '200', '300'].forEach(teamId => {
+                    console.log(`\n=== Team ${teamId} ===`);
+                    
+                    // Get completed groups
+                    const completed = DataManager.getTeamCompletedGroups(teamId);
+                    console.log(`Completed groups: ${completed.length}`);
+                    completed.forEach(group => {
+                        console.log(`  ✅ "${group.name}" - ${group.tokenCount} tokens, ${group.multiplier}x bonus`);
+                    });
+                    
+                    // Get progress for all groups
+                    const progress = DataManager.getTeamGroupProgress(teamId);
+                    console.log('\nAll group progress:');
+                    Object.values(progress).forEach(p => {
+                        const icon = p.isComplete ? '✅' : p.collectedTokens > 0 ? '🔶' : '⬜';
+                        console.log(`  ${icon} "${p.displayName}": ${p.progress} (${p.percentage}%)`);
+                    });
+                });
+                
+                // Restore original transactions
+                DataManager.transactions = originalTransactions;
+                
+                console.log('\n=== Test Complete ===');
+                alert('Check console for completion detection test results');
+            },
+            
+            // Phase 5 Step 4 Testing: Test bonus calculations
+            testBonusCalculations() {
+                console.log('=== Testing Bonus Score Calculations ===\n');
+                
+                // Create comprehensive test data
+                const testTransactions = [
+                    // Team 100: Complete Government Files (x3)
+                    { teamId: '100', rfid: 'cafe1234', stationMode: 'blackmarket', isUnknown: false, 
+                      valueRating: 5, memoryType: 'Classified', group: 'Government Files (x3)' },  // $50,000
+                    { teamId: '100', rfid: 'babe2468', stationMode: 'blackmarket', isUnknown: false,
+                      valueRating: 1, memoryType: 'Personal', group: 'Government Files (x3)' },    // $100
+                    { teamId: '100', rfid: 'feed5678', stationMode: 'blackmarket', isUnknown: false,
+                      valueRating: 4, memoryType: 'Corporate', group: 'Government Files (x3)' },    // $15,000
+                    { teamId: '100', rfid: 'test1234', stationMode: 'blackmarket', isUnknown: false,
+                      valueRating: 5, memoryType: 'Test', group: 'Government Files (x3)' },         // $20,000
+                    // Incomplete Server Logs
+                    { teamId: '100', rfid: 'a1b2c3d4', stationMode: 'blackmarket', isUnknown: false,
+                      valueRating: 3, memoryType: 'Technical', group: 'Server Logs (x5)' },         // $15,000
+                    
+                    // Team 200: Incomplete Government Files (missing test1234)
+                    { teamId: '200', rfid: 'cafe1234', stationMode: 'blackmarket', isUnknown: false,
+                      valueRating: 5, memoryType: 'Classified', group: 'Government Files (x3)' },
+                    { teamId: '200', rfid: 'babe2468', stationMode: 'blackmarket', isUnknown: false,
+                      valueRating: 1, memoryType: 'Personal', group: 'Government Files (x3)' },
+                    { teamId: '200', rfid: 'feed5678', stationMode: 'blackmarket', isUnknown: false,
+                      valueRating: 4, memoryType: 'Corporate', group: 'Government Files (x3)' }
+                ];
+                
+                // Temporarily use test data
+                const originalTransactions = DataManager.transactions;
+                DataManager.transactions = testTransactions;
+                
+                // Test Team 100 (has complete group)
+                console.log('=== Team 100 (Complete Government Files) ===');
+                const team100Score = DataManager.calculateTeamScoreWithBonuses('100');
+                console.log(`Base Score: ${team100Score.baseScore.toLocaleString()}`);
+                console.log(`Bonus Score: ${team100Score.bonusScore.toLocaleString()}`);
+                console.log(`Total Score: ${team100Score.totalScore.toLocaleString()}`);
+                console.log('\nDetailed Calculation:');
+                console.log('Government Files tokens:');
+                console.log('  cafe1234: 5★ × $10,000 × 3 (Classified) = $50,000 base');
+                console.log('  babe2468: 1★ × $100 × 1 (Personal) = $100 base');
+                console.log('  feed5678: 4★ × $5,000 × 3 (Corporate) = $15,000 base');
+                console.log('  test1234: 5★ × $10,000 × 2 (Test) = $20,000 base');
+                console.log('  Subtotal: $85,100 × 3x multiplier = $255,300 (bonus: +$170,200)');
+                console.log('Server Logs tokens (incomplete):');
+                console.log('  a1b2c3d4: 3★ × $1,000 × 5 (Technical) = $15,000 (no bonus)');
+                console.log('\nExpected: Base=$100,100, Bonus=$170,200, Total=$270,300');
+                
+                // Test Team 200 (incomplete group)
+                console.log('\n=== Team 200 (Incomplete Government Files) ===');
+                const team200Score = DataManager.calculateTeamScoreWithBonuses('200');
+                console.log(`Base Score: ${team200Score.baseScore.toLocaleString()}`);
+                console.log(`Bonus Score: ${team200Score.bonusScore.toLocaleString()} (should be 0)`);
+                console.log(`Total Score: ${team200Score.totalScore.toLocaleString()}`);
+                
+                // Test scoreboard calculation
+                console.log('\n=== Scoreboard Test ===');
+                const teamScores = DataManager.getTeamScores();
+                teamScores.forEach((team, index) => {
+                    console.log(`${index + 1}. Team ${team.teamId}: ${team.score.toLocaleString()}`);
+                    console.log(`   Base: ${team.baseScore.toLocaleString()}, Bonus: ${team.bonusScore.toLocaleString()}`);
+                    console.log(`   Completed Groups: ${team.completedGroups}`);
+                });
+                
+                // Restore original data
+                DataManager.transactions = originalTransactions;
+                
+                // Test with real data if available
+                const realTeams = [...new Set(DataManager.transactions
+                    .filter(t => t.stationMode === 'blackmarket')
+                    .map(t => t.teamId))];
+                
+                if (realTeams.length > 0) {
+                    console.log('\n=== Testing with REAL data ===');
+                    realTeams.forEach(teamId => {
+                        const scoreData = DataManager.calculateTeamScoreWithBonuses(teamId);
+                        console.log(`\nTeam ${teamId}:`);
+                        console.log(`  Base Score: ${scoreData.baseScore.toLocaleString()}`);
+                        console.log(`  Bonus Score: ${scoreData.bonusScore.toLocaleString()}`);
+                        console.log(`  Total Score: ${scoreData.totalScore.toLocaleString()}`);
+                        if (scoreData.bonusScore > 0) {
+                            console.log('  Group Bonuses:');
+                            Object.entries(scoreData.groupBreakdown).forEach(([groupName, data]) => {
+                                if (data.bonusValue > 0) {
+                                    console.log(`    ${groupName} (${data.multiplier}x): +${data.bonusValue.toLocaleString()}`);
+                                }
+                            });
+                        }
+                    });
+                }
+                
+                alert('Check console for bonus calculation test results');
             }
         };
 
