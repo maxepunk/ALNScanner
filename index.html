@@ -633,6 +633,11 @@
             opacity: 0.8;
         }
         
+        .token-detail-card.bonus-applied {
+            border-left-color: #4CAF50;
+            background: #F1F8E9;
+        }
+        
         .token-detail-header {
             display: flex;
             justify-content: space-between;
@@ -648,6 +653,10 @@
         
         .token-detail-card.unknown .token-detail-value {
             color: #9E9E9E;
+        }
+        
+        .token-detail-card.bonus-applied .token-detail-value {
+            color: #4CAF50;
         }
         
         .token-detail-grid {
@@ -688,8 +697,136 @@
         }
         
         /* ============================================
+           GROUP SECTIONS
+           ============================================ */
+        .group-section {
+            margin-bottom: 30px;
+        }
+        
+        .group-header {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            cursor: default;
+        }
+        
+        .group-header.completed {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+        }
+        
+        .group-header.in-progress {
+            background: #FFF3E0;
+            border: 2px solid #FF9800;
+            color: #E65100;
+        }
+        
+        .group-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 5px;
+            flex-wrap: wrap;
+        }
+        
+        .completion-badge,
+        .progress-badge {
+            font-size: 20px;
+        }
+        
+        .group-name {
+            font-size: 18px;
+            font-weight: bold;
+            flex: 1;
+        }
+        
+        .completion-text {
+            font-size: 14px;
+            text-transform: uppercase;
+            opacity: 0.9;
+        }
+        
+        .progress-text {
+            font-size: 14px;
+            font-weight: normal;
+        }
+        
+        .bonus-amount {
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #FF9800;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        /* ============================================
+           BONUS BREAKDOWN
+           ============================================ */
+        .bonus-breakdown {
+            background: #F5F5F5;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        
+        .bonus-breakdown h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .bonus-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            color: #4CAF50;
+            font-weight: 500;
+        }
+        
+        .bonus-item .bonus-group {
+            flex: 1;
+        }
+        
+        .bonus-item .bonus-value {
+            font-weight: bold;
+        }
+        
+        /* ============================================
+           SECTION HEADERS
+           ============================================ */
+        .section-divider {
+            margin: 30px 0 20px 0;
+            padding: 10px 0;
+            border-top: 2px solid #E0E0E0;
+            font-size: 14px;
+            font-weight: bold;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* ============================================
            EMPTY STATE
            ============================================ */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
         .empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -818,7 +955,8 @@
                 <button class="btn btn-secondary" onclick="App.testGroupParsing()">Test Group Parsing</button>
                 <button class="btn btn-secondary" onclick="App.testGroupInventory()">Test Group Inventory</button>
                 <button class="btn btn-secondary" onclick="App.testCompletionDetection()">Test Completions</button>
-                <button class="btn btn-secondary" onclick="App.testScoreCalculations()">Test Scoring</button>
+                <button class="btn btn-secondary" onclick="App.testBonusCalculations()">Test Bonuses</button>
+                <button class="btn btn-secondary" onclick="App.testEnhancedUI()">Test Enhanced UI</button>
             </div>
         </div>
 
@@ -1499,13 +1637,15 @@
                 const knownTokens = this.currentSession.filter(t => !t.isUnknown);
                 const totalValue = knownTokens.reduce((sum, t) => sum + (t.valueRating || 0), 0);
                 
-                // Calculate score for Black Market mode (Phase 5: includes bonuses)
+                // Calculate score for Black Market mode (Phase 5: with bonuses!)
                 let totalScore = 0;
-                if (Settings.stationMode === 'blackmarket' && App.currentTeamId) {
-                    const scoreData = this.calculateTeamScoreWithBonuses(App.currentTeamId);
+                if (Settings.stationMode === 'blackmarket' && this.currentSession.length > 0) {
+                    // Get team ID from first transaction in session
+                    const teamId = this.currentSession[0].teamId;
+                    const scoreData = this.calculateTeamScoreWithBonuses(teamId);
                     totalScore = scoreData.totalScore;
                 } else {
-                    // Fallback to basic calculation
+                    // Fallback to simple calculation
                     totalScore = this.currentSession.reduce((sum, t) => {
                         return sum + this.calculateTokenValue(t);
                     }, 0);
@@ -1521,64 +1661,6 @@
                 const multiplier = this.SCORING_CONFIG.TYPE_MULTIPLIERS[transaction.memoryType] || 1;
                 
                 return baseValue * multiplier;
-            },
-            
-            // Phase 5 Step 4: Calculate team score with group bonuses
-            calculateTeamScoreWithBonuses(teamId) {
-                const transactions = this.transactions.filter(t => 
-                    t.teamId === teamId && 
-                    t.stationMode === 'blackmarket'
-                );
-                
-                const completedGroups = this.getTeamCompletedGroups(teamId);
-                const completedGroupNames = new Set(
-                    completedGroups.map(g => g.normalizedName)
-                );
-                
-                let baseScore = 0;
-                let bonusScore = 0;
-                const groupBonusBreakdown = {};
-                
-                // Calculate scores for each transaction
-                transactions.forEach(t => {
-                    if (t.isUnknown) return;
-                    
-                    const tokenBaseValue = this.calculateTokenValue(t);
-                    baseScore += tokenBaseValue;
-                    
-                    // Check if this token's group is completed
-                    const groupInfo = this.parseGroupInfo(t.group);
-                    const normalizedGroupName = this.normalizeGroupName(groupInfo.name);
-                    
-                    if (completedGroupNames.has(normalizedGroupName) && groupInfo.multiplier > 1) {
-                        const tokenBonus = tokenBaseValue * (groupInfo.multiplier - 1);
-                        bonusScore += tokenBonus;
-                        
-                        // Track bonus per group for breakdown
-                        if (!groupBonusBreakdown[groupInfo.name]) {
-                            groupBonusBreakdown[groupInfo.name] = {
-                                multiplier: groupInfo.multiplier,
-                                bonusAmount: 0,
-                                tokenCount: 0
-                            };
-                        }
-                        groupBonusBreakdown[groupInfo.name].bonusAmount += tokenBonus;
-                        groupBonusBreakdown[groupInfo.name].tokenCount += 1;
-                    }
-                });
-                
-                Debug.log(`=== Score Calculation for Team ${teamId} ===`);
-                Debug.log(`Base Score: ${baseScore.toLocaleString()}`);
-                Debug.log(`Group Bonuses: ${bonusScore.toLocaleString()}`);
-                Debug.log(`Total Score: ${(baseScore + bonusScore).toLocaleString()}`);
-                
-                return {
-                    baseScore,
-                    bonusScore,
-                    totalScore: baseScore + bonusScore,
-                    completedGroups: completedGroups.length,
-                    groupBonusBreakdown
-                };
             },
             
             getGlobalStats() {
@@ -1605,7 +1687,80 @@
                 return { total, teams, totalValue, avgValue, blackMarketScore, detectiveValue };
             },
             
-            // New method for Phase 3: Get team scores
+            // Phase 5 Step 4: Calculate team score with group bonuses
+            calculateTeamScoreWithBonuses(teamId) {
+                const transactions = this.transactions.filter(t => 
+                    t.teamId === teamId && 
+                    t.stationMode === 'blackmarket' &&
+                    !t.isUnknown
+                );
+                
+                const completedGroups = this.getTeamCompletedGroups(teamId);
+                const completedGroupNames = new Set(
+                    completedGroups.map(g => g.normalizedName)
+                );
+                
+                let baseScore = 0;
+                let bonusScore = 0;
+                const groupBreakdown = {};
+                
+                // Initialize breakdown for completed groups
+                completedGroups.forEach(group => {
+                    groupBreakdown[group.name] = {
+                        tokens: 0,
+                        baseValue: 0,
+                        bonusValue: 0,
+                        multiplier: group.multiplier
+                    };
+                });
+                
+                // Calculate scores for each transaction
+                transactions.forEach(t => {
+                    const tokenBaseValue = this.calculateTokenValue(t);
+                    baseScore += tokenBaseValue;
+                    
+                    // Check if this token's group is completed
+                    const groupInfo = this.parseGroupInfo(t.group);
+                    const normalizedGroupName = this.normalizeGroupName(groupInfo.name);
+                    
+                    if (completedGroupNames.has(normalizedGroupName)) {
+                        // Apply bonus (multiplier - 1) × base value
+                        const bonusAmount = tokenBaseValue * (groupInfo.multiplier - 1);
+                        bonusScore += bonusAmount;
+                        
+                        // Track in breakdown
+                        if (groupBreakdown[groupInfo.name]) {
+                            groupBreakdown[groupInfo.name].tokens++;
+                            groupBreakdown[groupInfo.name].baseValue += tokenBaseValue;
+                            groupBreakdown[groupInfo.name].bonusValue += bonusAmount;
+                        }
+                    }
+                });
+                
+                Debug.log(`=== Score Calculation for Team ${teamId} ===`);
+                Debug.log(`Base Score: ${baseScore.toLocaleString()}`);
+                Debug.log(`Bonus Score: ${bonusScore.toLocaleString()}`);
+                Debug.log(`Total Score: ${(baseScore + bonusScore).toLocaleString()}`);
+                
+                if (completedGroups.length > 0) {
+                    Debug.log('Group Bonuses:');
+                    Object.entries(groupBreakdown).forEach(([groupName, data]) => {
+                        if (data.bonusValue > 0) {
+                            Debug.log(`  ${groupName} (${data.multiplier}x): +${data.bonusValue.toLocaleString()}`);
+                        }
+                    });
+                }
+                
+                return {
+                    baseScore,
+                    bonusScore,
+                    totalScore: baseScore + bonusScore,
+                    completedGroups: completedGroups.length,
+                    groupBreakdown
+                };
+            },
+            
+            // Update existing method to use bonus calculations
             getTeamScores() {
                 const teamGroups = {};
                 
@@ -1614,7 +1769,6 @@
                     t.stationMode === 'blackmarket'
                 );
                 
-                // Group transactions by team
                 blackMarketTransactions.forEach(t => {
                     if (!teamGroups[t.teamId]) {
                         teamGroups[t.teamId] = [];
@@ -1622,11 +1776,10 @@
                     teamGroups[t.teamId].push(t);
                 });
                 
-                // Calculate scores with bonuses for each team
                 const teamScores = Object.keys(teamGroups).map(teamId => {
                     const transactions = teamGroups[teamId];
                     
-                    // Phase 5: Use new calculation method that includes bonuses
+                    // Phase 5: Use new calculation with bonuses
                     const scoreData = this.calculateTeamScoreWithBonuses(teamId);
                     
                     return {
@@ -1703,6 +1856,110 @@
                     .toLowerCase()             // Convert to lowercase
                     .replace(/\s+/g, ' ')     // Normalize multiple spaces to single space
                     .replace(/['']/g, "'");   // Normalize apostrophes
+            },
+            
+            // Phase 5 Step 5: Prepare grouped data for UI display
+            getEnhancedTeamTransactions(teamId) {
+                const transactions = this.getTeamTransactions(teamId);
+                const groupInventory = TokenManager.getGroupInventory();
+                const completedGroups = this.getTeamCompletedGroups(teamId);
+                const completedGroupNames = new Set(completedGroups.map(g => g.normalizedName));
+                
+                // Calculate bonus values for completed groups
+                const groupBonusData = {};
+                completedGroups.forEach(group => {
+                    groupBonusData[group.normalizedName] = {
+                        displayName: group.name,
+                        multiplier: group.multiplier,
+                        tokens: [],
+                        totalBaseValue: 0,
+                        bonusValue: 0
+                    };
+                });
+                
+                // Organize transactions
+                const completedGroupTokens = {};
+                const incompleteGroupTokens = {};
+                const ungroupedTokens = [];
+                const unknownTokens = [];
+                
+                transactions.forEach(t => {
+                    // Unknown tokens go in separate section
+                    if (t.isUnknown) {
+                        unknownTokens.push(t);
+                        return;
+                    }
+                    
+                    const groupInfo = this.parseGroupInfo(t.group);
+                    const normalizedGroupName = this.normalizeGroupName(groupInfo.name);
+                    const groupData = groupInventory[normalizedGroupName];
+                    
+                    // Single token groups treated as ungrouped
+                    if (!groupData || groupData.tokens.size <= 1) {
+                        ungroupedTokens.push(t);
+                        return;
+                    }
+                    
+                    // Calculate token value
+                    const tokenValue = this.calculateTokenValue(t);
+                    
+                    // Add to appropriate section
+                    if (completedGroupNames.has(normalizedGroupName)) {
+                        // Completed group
+                        if (!completedGroupTokens[normalizedGroupName]) {
+                            completedGroupTokens[normalizedGroupName] = [];
+                        }
+                        completedGroupTokens[normalizedGroupName].push(t);
+                        
+                        // Track bonus data
+                        if (groupBonusData[normalizedGroupName]) {
+                            groupBonusData[normalizedGroupName].tokens.push(t);
+                            groupBonusData[normalizedGroupName].totalBaseValue += tokenValue;
+                            groupBonusData[normalizedGroupName].bonusValue += tokenValue * (groupInfo.multiplier - 1);
+                        }
+                    } else {
+                        // Incomplete group
+                        if (!incompleteGroupTokens[normalizedGroupName]) {
+                            incompleteGroupTokens[normalizedGroupName] = {
+                                displayName: groupData.displayName,
+                                multiplier: groupData.multiplier,
+                                tokens: [],
+                                totalTokens: groupData.tokens.size,
+                                collectedTokens: 0
+                            };
+                        }
+                        incompleteGroupTokens[normalizedGroupName].tokens.push(t);
+                    }
+                });
+                
+                // Calculate progress for incomplete groups
+                Object.keys(incompleteGroupTokens).forEach(normalizedName => {
+                    const group = incompleteGroupTokens[normalizedName];
+                    group.collectedTokens = group.tokens.length;
+                    group.progress = `${group.collectedTokens}/${group.totalTokens}`;
+                    group.percentage = Math.round((group.collectedTokens / group.totalTokens) * 100);
+                });
+                
+                // Convert to arrays and sort
+                const completedGroupsArray = Object.entries(completedGroupTokens).map(([normalizedName, tokens]) => ({
+                    ...groupBonusData[normalizedName],
+                    normalizedName,
+                    tokens
+                })).sort((a, b) => b.bonusValue - a.bonusValue); // Sort by bonus value
+                
+                const incompleteGroupsArray = Object.values(incompleteGroupTokens)
+                    .sort((a, b) => b.percentage - a.percentage); // Sort by completion percentage
+                
+                return {
+                    completedGroups: completedGroupsArray,
+                    incompleteGroups: incompleteGroupsArray,
+                    ungroupedTokens,
+                    unknownTokens,
+                    hasCompletedGroups: completedGroupsArray.length > 0,
+                    hasIncompleteGroups: incompleteGroupsArray.length > 0,
+                    hasUngroupedTokens: ungroupedTokens.length > 0,
+                    hasUnknownTokens: unknownTokens.length > 0
+                };
             },
             
             // Phase 5 Step 3: Get completed groups for a team
@@ -1797,6 +2054,110 @@
                 });
                 
                 return groupProgress;
+            },
+            
+            // Phase 5 Step 5: Prepare grouped data for UI display
+            getEnhancedTeamTransactions(teamId) {
+                const transactions = this.getTeamTransactions(teamId);
+                const groupInventory = TokenManager.getGroupInventory();
+                const completedGroups = this.getTeamCompletedGroups(teamId);
+                const completedGroupNames = new Set(completedGroups.map(g => g.normalizedName));
+                
+                // Calculate bonus values for completed groups
+                const groupBonusData = {};
+                completedGroups.forEach(group => {
+                    groupBonusData[group.normalizedName] = {
+                        displayName: group.name,
+                        multiplier: group.multiplier,
+                        tokens: [],
+                        totalBaseValue: 0,
+                        bonusValue: 0
+                    };
+                });
+                
+                // Organize transactions
+                const completedGroupTokens = {};
+                const incompleteGroupTokens = {};
+                const ungroupedTokens = [];
+                const unknownTokens = [];
+                
+                transactions.forEach(t => {
+                    // Unknown tokens go in separate section
+                    if (t.isUnknown) {
+                        unknownTokens.push(t);
+                        return;
+                    }
+                    
+                    const groupInfo = this.parseGroupInfo(t.group);
+                    const normalizedGroupName = this.normalizeGroupName(groupInfo.name);
+                    const groupData = groupInventory[normalizedGroupName];
+                    
+                    // Single token groups treated as ungrouped
+                    if (!groupData || groupData.tokens.size <= 1) {
+                        ungroupedTokens.push(t);
+                        return;
+                    }
+                    
+                    // Calculate token value
+                    const tokenValue = this.calculateTokenValue(t);
+                    
+                    // Add to appropriate section
+                    if (completedGroupNames.has(normalizedGroupName)) {
+                        // Completed group
+                        if (!completedGroupTokens[normalizedGroupName]) {
+                            completedGroupTokens[normalizedGroupName] = [];
+                        }
+                        completedGroupTokens[normalizedGroupName].push(t);
+                        
+                        // Track bonus data
+                        if (groupBonusData[normalizedGroupName]) {
+                            groupBonusData[normalizedGroupName].tokens.push(t);
+                            groupBonusData[normalizedGroupName].totalBaseValue += tokenValue;
+                            groupBonusData[normalizedGroupName].bonusValue += tokenValue * (groupInfo.multiplier - 1);
+                        }
+                    } else {
+                        // Incomplete group
+                        if (!incompleteGroupTokens[normalizedGroupName]) {
+                            incompleteGroupTokens[normalizedGroupName] = {
+                                displayName: groupData.displayName,
+                                multiplier: groupData.multiplier,
+                                tokens: [],
+                                totalTokens: groupData.tokens.size,
+                                collectedTokens: 0
+                            };
+                        }
+                        incompleteGroupTokens[normalizedGroupName].tokens.push(t);
+                    }
+                });
+                
+                // Calculate progress for incomplete groups
+                Object.keys(incompleteGroupTokens).forEach(normalizedName => {
+                    const group = incompleteGroupTokens[normalizedName];
+                    group.collectedTokens = group.tokens.length;
+                    group.progress = `${group.collectedTokens}/${group.totalTokens}`;
+                    group.percentage = Math.round((group.collectedTokens / group.totalTokens) * 100);
+                });
+                
+                // Convert to arrays and sort
+                const completedGroupsArray = Object.entries(completedGroupTokens).map(([normalizedName, tokens]) => ({
+                    ...groupBonusData[normalizedName],
+                    normalizedName,
+                    tokens
+                })).sort((a, b) => b.bonusValue - a.bonusValue); // Sort by bonus value
+                
+                const incompleteGroupsArray = Object.values(incompleteGroupTokens)
+                    .sort((a, b) => b.percentage - a.percentage); // Sort by completion percentage
+                
+                return {
+                    completedGroups: completedGroupsArray,
+                    incompleteGroups: incompleteGroupsArray,
+                    ungroupedTokens,
+                    unknownTokens,
+                    hasCompletedGroups: completedGroupsArray.length > 0,
+                    hasIncompleteGroups: incompleteGroupsArray.length > 0,
+                    hasUngroupedTokens: ungroupedTokens.length > 0,
+                    hasUnknownTokens: unknownTokens.length > 0
+                };
             },
             
             exportData(format) {
@@ -2522,11 +2883,7 @@
             // Phase 4: Team details methods
             showTeamDetails(teamId) {
                 const transactions = DataManager.getTeamTransactions(teamId);
-                
-                // Phase 5: Get score breakdown with bonuses
-                const scoreData = DataManager.calculateTeamScoreWithBonuses(teamId);
-                
-                UIManager.renderTeamDetails(teamId, transactions, scoreData);
+                UIManager.renderTeamDetails(teamId, transactions);
                 UIManager.showScreen('teamDetails');
             },
             
@@ -2589,11 +2946,6 @@
                 });
                 
                 alert('Check console for test results');
-            },
-            
-            // Phase 5 Step 4 Testing: Test score calculations with bonuses
-            testScoreCalculations() {
-                DataManager.testScoreCalculations();
             },
             
             // Phase 5 Step 2 Testing: Show group inventory
@@ -2724,93 +3076,99 @@
                 alert('Check console for completion detection test results');
             },
             
-            // Phase 5 Step 4 Testing: Test score calculations with bonuses
-            testScoreCalculations() {
-                console.log('=== Testing Score Calculations with Bonuses ===\n');
+            // Phase 5 Step 4 Testing: Test bonus calculations
+            testBonusCalculations() {
+                console.log('=== Testing Bonus Score Calculations ===\n');
                 
                 // Create comprehensive test data
                 const testTransactions = [
-                    // Team 100: Complete Government Files (x3 bonus)
+                    // Team 100: Complete Government Files (x3)
                     { teamId: '100', rfid: 'cafe1234', stationMode: 'blackmarket', isUnknown: false, 
-                      valueRating: 5, memoryType: 'Classified', group: 'Government Files (x3)' }, // 5 * 10k * 3 = 150k
+                      valueRating: 5, memoryType: 'Classified', group: 'Government Files (x3)' },  // $50,000
                     { teamId: '100', rfid: 'babe2468', stationMode: 'blackmarket', isUnknown: false,
-                      valueRating: 1, memoryType: 'Personal', group: 'Government Files (x3)' },   // 1 * 100 * 1 = 100
+                      valueRating: 1, memoryType: 'Personal', group: 'Government Files (x3)' },    // $100
                     { teamId: '100', rfid: 'feed5678', stationMode: 'blackmarket', isUnknown: false,
-                      valueRating: 4, memoryType: 'Corporate', group: 'Government Files (x3)' },   // 4 * 5k * 3 = 60k
+                      valueRating: 4, memoryType: 'Corporate', group: 'Government Files (x3)' },    // $15,000
                     { teamId: '100', rfid: 'test1234', stationMode: 'blackmarket', isUnknown: false,
-                      valueRating: 5, memoryType: 'Test', group: 'government files (x3)' },        // 5 * 10k * 2 = 100k
-                    
-                    // Team 100: Incomplete Server Logs (no bonus)
+                      valueRating: 5, memoryType: 'Test', group: 'Government Files (x3)' },         // $20,000
+                    // Incomplete Server Logs
                     { teamId: '100', rfid: 'a1b2c3d4', stationMode: 'blackmarket', isUnknown: false,
-                      valueRating: 3, memoryType: 'Technical', group: 'Server Logs (x5)' },        // 3 * 1k * 5 = 15k
+                      valueRating: 3, memoryType: 'Technical', group: 'Server Logs (x5)' },         // $15,000
                     
-                    // Team 200: Incomplete Government Files (no bonus)
+                    // Team 200: Incomplete Government Files (missing test1234)
                     { teamId: '200', rfid: 'cafe1234', stationMode: 'blackmarket', isUnknown: false,
-                      valueRating: 5, memoryType: 'Classified', group: 'Government Files (x3)' },  // 5 * 10k * 3 = 150k
+                      valueRating: 5, memoryType: 'Classified', group: 'Government Files (x3)' },
                     { teamId: '200', rfid: 'babe2468', stationMode: 'blackmarket', isUnknown: false,
-                      valueRating: 1, memoryType: 'Personal', group: 'Government Files (x3)' },    // 1 * 100 * 1 = 100
+                      valueRating: 1, memoryType: 'Personal', group: 'Government Files (x3)' },
                     { teamId: '200', rfid: 'feed5678', stationMode: 'blackmarket', isUnknown: false,
-                      valueRating: 4, memoryType: 'Corporate', group: 'Government Files (x3)' },    // 4 * 5k * 3 = 60k
-                    // Missing test1234 - group incomplete!
+                      valueRating: 4, memoryType: 'Corporate', group: 'Government Files (x3)' }
                 ];
                 
-                // Look up real token data
-                const realTokens = {};
-                testTransactions.forEach(t => {
-                    const token = TokenManager.database[t.rfid];
-                    if (token) {
-                        realTokens[t.rfid] = token;
-                        // Update transaction with real data
-                        t.valueRating = token.SF_ValueRating;
-                        t.memoryType = token.SF_MemoryType;
-                        t.group = token.SF_Group;
-                    }
-                });
-                
-                // Temporarily replace transactions
+                // Temporarily use test data
                 const originalTransactions = DataManager.transactions;
                 DataManager.transactions = testTransactions;
                 
-                // Test Team 100 (complete group)
+                // Test Team 100 (has complete group)
                 console.log('=== Team 100 (Complete Government Files) ===');
-                const team100Scores = DataManager.calculateTeamScoreWithBonuses('100');
-                console.log(`Base Score: ${team100Scores.baseScore.toLocaleString()}`);
-                console.log(`Bonus Score: ${team100Scores.bonusScore.toLocaleString()}`);
-                console.log(`Total Score: ${team100Scores.totalScore.toLocaleString()}`);
-                console.log('Group Bonuses:');
-                Object.entries(team100Scores.groupBonusBreakdown).forEach(([group, data]) => {
-                    console.log(`  • ${group} (${data.multiplier}x): +${data.bonusAmount.toLocaleString()} from ${data.tokenCount} tokens`);
-                });
+                const team100Score = DataManager.calculateTeamScoreWithBonuses('100');
+                console.log(`Base Score: ${team100Score.baseScore.toLocaleString()}`);
+                console.log(`Bonus Score: ${team100Score.bonusScore.toLocaleString()}`);
+                console.log(`Total Score: ${team100Score.totalScore.toLocaleString()}`);
+                console.log('\nDetailed Calculation:');
+                console.log('Government Files tokens:');
+                console.log('  cafe1234: 5★ × $10,000 × 3 (Classified) = $50,000 base');
+                console.log('  babe2468: 1★ × $100 × 1 (Personal) = $100 base');
+                console.log('  feed5678: 4★ × $5,000 × 3 (Corporate) = $15,000 base');
+                console.log('  test1234: 5★ × $10,000 × 2 (Test) = $20,000 base');
+                console.log('  Subtotal: $85,100 × 3x multiplier = $255,300 (bonus: +$170,200)');
+                console.log('Server Logs tokens (incomplete):');
+                console.log('  a1b2c3d4: 3★ × $1,000 × 5 (Technical) = $15,000 (no bonus)');
+                console.log('\nExpected: Base=$100,100, Bonus=$170,200, Total=$270,300');
                 
                 // Test Team 200 (incomplete group)
                 console.log('\n=== Team 200 (Incomplete Government Files) ===');
-                const team200Scores = DataManager.calculateTeamScoreWithBonuses('200');
-                console.log(`Base Score: ${team200Scores.baseScore.toLocaleString()}`);
-                console.log(`Bonus Score: ${team200Scores.bonusScore.toLocaleString()} (should be 0)`);
-                console.log(`Total Score: ${team200Scores.totalScore.toLocaleString()}`);
+                const team200Score = DataManager.calculateTeamScoreWithBonuses('200');
+                console.log(`Base Score: ${team200Score.baseScore.toLocaleString()}`);
+                console.log(`Bonus Score: ${team200Score.bonusScore.toLocaleString()} (should be 0)`);
+                console.log(`Total Score: ${team200Score.totalScore.toLocaleString()}`);
                 
                 // Test scoreboard calculation
                 console.log('\n=== Scoreboard Test ===');
                 const teamScores = DataManager.getTeamScores();
                 teamScores.forEach((team, index) => {
                     console.log(`${index + 1}. Team ${team.teamId}: ${team.score.toLocaleString()}`);
-                    console.log(`   Base: ${team.baseScore.toLocaleString()}, Bonus: ${team.bonusScore.toLocaleString()}, Groups: ${team.completedGroups}`);
+                    console.log(`   Base: ${team.baseScore.toLocaleString()}, Bonus: ${team.bonusScore.toLocaleString()}`);
+                    console.log(`   Completed Groups: ${team.completedGroups}`);
                 });
                 
-                // Calculate expected values
-                console.log('\n=== Expected Calculations ===');
-                console.log('Team 100 Government Files tokens:');
-                testTransactions.filter(t => t.teamId === '100' && t.group.toLowerCase().includes('government')).forEach(t => {
-                    const base = DataManager.calculateTokenValue(t);
-                    const bonus = base * 2; // x3 multiplier means 2x bonus
-                    console.log(`  ${t.rfid}: Base=${base.toLocaleString()}, Bonus=${bonus.toLocaleString()}`);
-                });
-                
-                // Restore original transactions
+                // Restore original data
                 DataManager.transactions = originalTransactions;
                 
-                console.log('\n=== Test Complete ===');
-                alert('Check console for score calculation test results');
+                // Test with real data if available
+                const realTeams = [...new Set(DataManager.transactions
+                    .filter(t => t.stationMode === 'blackmarket')
+                    .map(t => t.teamId))];
+                
+                if (realTeams.length > 0) {
+                    console.log('\n=== Testing with REAL data ===');
+                    realTeams.forEach(teamId => {
+                        const scoreData = DataManager.calculateTeamScoreWithBonuses(teamId);
+                        console.log(`\nTeam ${teamId}:`);
+                        console.log(`  Base Score: ${scoreData.baseScore.toLocaleString()}`);
+                        console.log(`  Bonus Score: ${scoreData.bonusScore.toLocaleString()}`);
+                        console.log(`  Total Score: ${scoreData.totalScore.toLocaleString()}`);
+                        if (scoreData.bonusScore > 0) {
+                            console.log('  Group Bonuses:');
+                            Object.entries(scoreData.groupBreakdown).forEach(([groupName, data]) => {
+                                if (data.bonusValue > 0) {
+                                    console.log(`    ${groupName} (${data.multiplier}x): +${data.bonusValue.toLocaleString()}`);
+                                }
+                            });
+                        }
+                    });
+                }
+                
+                alert('Check console for bonus calculation test results');
             }
         };
 
