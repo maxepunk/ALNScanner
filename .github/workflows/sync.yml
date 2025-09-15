@@ -1,0 +1,27 @@
+name: Sync & Deploy GM Scanner
+
+on:
+  workflow_dispatch:  # Manual trigger via GitHub UI - the "Run workflow" button
+
+jobs:
+  sync-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ github.token }}
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      
+      # Note: GM Scanner doesn't need qrcode library since it uses NFC
+      - name: Sync and Deploy
+        run: python3 sync.py --deploy
+        
+      # The sync.py script handles all git operations including push
+      # No additional dependencies or QR generation needed for GM Scanner

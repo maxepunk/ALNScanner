@@ -366,3 +366,31 @@ DataManager.calculateTeamScoreWithBonuses('teamId')
 // Export current state
 DataManager.exportData('json')
 ```
+
+## 🔄 Token Database Synchronization
+
+### Overview
+The GM Scanner uses a shared token database that's synchronized between the Player Scanner and GM Scanner apps. Tokens are maintained in a central repository and synced via git submodule.
+
+### Quick Sync
+To get the latest token updates:
+```bash
+python3 sync.py
+```
+
+To sync and deploy the GM interface:
+```bash
+python3 sync.py --deploy
+```
+
+### Sync Workflow
+1. **Automatic bidirectional sync** - Push local changes, pull remote changes
+2. **No QR generation** - GM Scanner uses NFC tokens (QR codes handled by Player Scanner)
+3. **GitHub Pages deployment** - Optional `--deploy` flag publishes to live site
+
+### Token Management Details
+See [MAINTENANCE.md](MAINTENANCE.md) for detailed synchronization instructions and [SUBMODULE_INFO.md](SUBMODULE_INFO.md) for token database structure.
+
+## 📄 License
+
+MIT License - See LICENSE file for details
