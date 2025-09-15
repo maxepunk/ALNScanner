@@ -1367,9 +1367,15 @@
              */
             async loadDatabase() {
                 try {
-                    const response = await fetch('tokens.json');
+                    // Try loading from submodule path first
+                    let response = await fetch('data/tokens.json');
                     if (!response.ok) {
-                        throw new Error('Failed to load tokens.json');
+                        Debug.log('Trying root directory for tokens.json');
+                        // Fallback to root directory for backward compatibility
+                        response = await fetch('tokens.json');
+                        if (!response.ok) {
+                            throw new Error('Failed to load tokens.json from data/ or root');
+                        }
                     }
                     this.database = await response.json();
                     Debug.log(`Loaded ${Object.keys(this.database).length} tokens`);
