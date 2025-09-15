@@ -1378,7 +1378,8 @@
                         }
                     }
                     this.database = await response.json();
-                    Debug.log(`Loaded ${Object.keys(this.database).length} tokens`);
+                    Debug.log(`✅ Loaded ${Object.keys(this.database).length} tokens from ${response.url}`);
+                    Debug.log(`Sample keys: ${Object.keys(this.database).slice(0, 3).join(', ')}`);
                     
                     // Build group inventory for bonus calculations
                     this.groupInventory = this.buildGroupInventory();
@@ -1554,9 +1555,13 @@
              * @returns {Object|null} Token data and matched ID
              */
             findToken(id) {
+                Debug.log(`🔍 findToken called with: "${id}"`);
+                Debug.log(`Database has ${Object.keys(this.database).length} tokens`);
+                Debug.log(`First 5 keys: ${Object.keys(this.database).slice(0, 5).join(', ')}`);
+                
                 // Direct match
                 if (this.database[id]) {
-                    Debug.log(`Direct match: ${id}`);
+                    Debug.log(`✅ Direct match: ${id}`);
                     return { token: this.database[id], matchedId: id };
                 }
                 
@@ -1580,6 +1585,12 @@
                     if (this.database[noColons]) {
                         Debug.log(`Matched without colons: ${noColons}`);
                         return { token: this.database[noColons], matchedId: noColons };
+                    }
+                    // Also try lowercase without colons
+                    const noColonsLower = noColons.toLowerCase();
+                    if (this.database[noColonsLower]) {
+                        Debug.log(`Matched lowercase without colons: ${noColonsLower}`);
+                        return { token: this.database[noColonsLower], matchedId: noColonsLower };
                     }
                 }
                 
@@ -2841,19 +2852,24 @@
             },
             
             processNFCRead(result) {
-                Debug.log(`Processing token: ${result.id} (from ${result.source})`);
+                Debug.log(`Processing token: "${result.id}" (from ${result.source})`);
+                Debug.log(`Token ID length: ${result.id.length} characters`);
+                
+                // Trim any whitespace
+                const cleanId = result.id.trim();
+                Debug.log(`Cleaned ID: "${cleanId}" (length: ${cleanId.length})`);
                 
                 // Check for duplicate
-                if (DataManager.isTokenScanned(result.id)) {
-                    Debug.log(`Duplicate token detected: ${result.id}`, true);
-                    this.showDuplicateError(result.id);
+                if (DataManager.isTokenScanned(cleanId)) {
+                    Debug.log(`Duplicate token detected: ${cleanId}`, true);
+                    this.showDuplicateError(cleanId);
                     return;
                 }
                 
-                const tokenData = TokenManager.findToken(result.id);
+                const tokenData = TokenManager.findToken(cleanId);
                 
                 if (!tokenData) {
-                    this.recordTransaction(null, result.id, true);
+                    this.recordTransaction(null, cleanId, true);
                 } else {
                     this.recordTransaction(tokenData.token, tokenData.matchedId, false);
                 }
