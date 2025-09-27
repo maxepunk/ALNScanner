@@ -87,7 +87,72 @@
             font-size: 24px;
             margin-bottom: 10px;
         }
-        
+
+        /* ============================================
+           CONNECTION STATUS INDICATOR
+           ============================================ */
+        .connection-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            margin-right: 15px;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #888;
+            animation: pulse 2s infinite;
+        }
+
+        .connection-status.connected .status-dot {
+            background-color: #4CAF50;
+        }
+
+        .connection-status.connected .status-text {
+            color: #4CAF50;
+        }
+
+        .connection-status.connecting .status-dot {
+            background-color: #FFA500;
+            animation: pulse 1s infinite;
+        }
+
+        .connection-status.connecting .status-text {
+            color: #FFA500;
+        }
+
+        .connection-status.disconnected .status-dot {
+            background-color: #F44336;
+            animation: none;
+        }
+
+        .connection-status.disconnected .status-text {
+            color: #F44336;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.2);
+                opacity: 0.7;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
         /* ============================================
            MODE INDICATOR
            ============================================ */
@@ -904,6 +969,11 @@
     <div class="container">
         <div class="header">
             <div class="header-nav" id="headerNav">
+                <!-- Connection Status Indicator -->
+                <div id="connectionStatus" class="connection-status disconnected" title="Orchestrator connection status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Disconnected</span>
+                </div>
                 <button class="nav-button" onclick="App.showHistory()" title="View transaction history">
                     📋<span id="historyBadge" class="badge" style="display: none;">0</span>
                 </button>
@@ -1737,7 +1807,52 @@
             clearSession() {
                 this.currentSession = [];
             },
-            
+
+            /**
+             * Update game state from orchestrator
+             */
+            updateGameState(state) {
+                if (state && typeof state === 'object') {
+                    // Update any relevant local state
+                    if (state.sessionId && this.currentSessionId !== state.sessionId) {
+                        this.currentSessionId = state.sessionId;
+                        Debug.log(`Session updated: ${state.sessionId}`);
+                    }
+
+                    if (state.gameMode && state.gameMode !== this.gameMode) {
+                        this.gameMode = state.gameMode;
+                        Debug.log(`Game mode updated: ${state.gameMode}`);
+                    }
+
+                    // If state includes new transactions, add them
+                    if (state.transactions && Array.isArray(state.transactions)) {
+                        state.transactions.forEach(transaction => {
+                            // Only add if we don't already have this transaction
+                            const exists = this.transactions.find(t =>
+                                t.id === transaction.id ||
+                                (t.rfid === transaction.tokenId && t.timestamp === transaction.timestamp)
+                            );
+                            if (!exists) {
+                                const localTransaction = {
+                                    id: transaction.id || Date.now().toString(),
+                                    rfid: transaction.tokenId,
+                                    teamId: transaction.teamId || 'Unknown',
+                                    timestamp: transaction.timestamp || new Date().toISOString(),
+                                    memoryType: transaction.memoryType || 'Unknown',
+                                    group: transaction.group || 'Unknown',
+                                    rating: transaction.rating || 1,
+                                    stationMode: Settings.stationMode || 'detective'
+                                };
+                                this.transactions.push(localTransaction);
+                            }
+                        });
+                        this.saveTransactions();
+                        UIManager.updateHistoryBadge();
+                        UIManager.updateSessionStats();
+                    }
+                }
+            },
+
             /**
              * Get current session statistics
              * @returns {Object} Session stats
@@ -3134,5 +3249,651 @@
             });
         });
     </script>
+
+    <!-- ============================================
+         ORCHESTRATOR WEBSOCKET INTEGRATION
+         ============================================ -->
+    <!-- Socket.io v4 Client Library -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+    <script>
+        /**
+         * OrchestratorClient - WebSocket integration for GM Scanner
+         * Provides real-time communication with the orchestrator backend
+         */
+        class OrchestratorClient {
+            constructor(config = {}) {
+                this.config = {
+                    url: config.url || 'http://localhost:3000',
+                    stationId: config.stationId || 'GM_STATION_UNKNOWN',
+                    version: config.version || '1.0.0',
+                    transports: ['websocket'],
+                    reconnection: config.reconnection !== false,
+                    reconnectionDelay: config.reconnectionDelay || 1000,
+                    reconnectionAttempts: config.reconnectionAttempts || Infinity,
+                    connectionTimeout: config.connectionTimeout || 30000,
+                    enableHeartbeat: config.enableHeartbeat !== false,
+                    heartbeatInterval: config.heartbeatInterval || 30000,
+                    heartbeatTimeout: config.heartbeatTimeout || 60000,
+                    enableOfflineQueue: config.enableOfflineQueue !== false,
+                    maxQueueSize: config.maxQueueSize || 100,
+                    persistQueue: config.persistQueue !== false,
+                    ...config.options
+                };
+
+                this.socket = null;
+                this.isConnected = false;
+                this.connectionStatus = 'disconnected'; // disconnected, connecting, connected, error
+                this.sessionId = null;
+                this.connectedDevices = [];
+                this.eventHandlers = {};
+                this.heartbeatTimer = null;
+                this.lastHeartbeat = null;
+
+                // Offline queue functionality
+                this.offlineQueue = [];
+                this.rateLimitQueue = [];
+                this.stateRequestCooldown = 0;
+
+                // Validate required config
+                if (!this.config.stationId || this.config.stationId === 'GM_STATION_UNKNOWN') {
+                    console.warn('OrchestratorClient: stationId not configured');
+                }
+            }
+
+            /**
+             * Connect to the orchestrator WebSocket server
+             */
+            connect() {
+                if (this.socket && this.socket.connected) {
+                    console.warn('OrchestratorClient: Already connected');
+                    return;
+                }
+
+                this.connectionStatus = 'connecting';
+                this.emit('status:changed', 'connecting');
+
+                try {
+                    this.socket = io(this.config.url, {
+                        transports: this.config.transports,
+                        reconnection: this.config.reconnection,
+                        reconnectionDelay: this.config.reconnectionDelay,
+                        reconnectionAttempts: this.config.reconnectionAttempts,
+                        timeout: this.config.connectionTimeout
+                    });
+
+                    this.setupSocketEventHandlers();
+
+                } catch (error) {
+                    this.connectionStatus = 'error';
+                    this.emit('status:changed', 'error');
+                    this.emit('connection:error', error);
+                    console.error('OrchestratorClient: Connection failed:', error);
+                }
+            }
+
+            /**
+             * Disconnect from the orchestrator
+             */
+            disconnect() {
+                if (this.socket) {
+                    this.socket.disconnect();
+                }
+                this.cleanup();
+            }
+
+            /**
+             * Setup Socket.io event handlers
+             */
+            setupSocketEventHandlers() {
+                if (!this.socket) return;
+
+                this.socket.on('connect', () => {
+                    this.isConnected = true;
+                    this.connectionStatus = 'connected';
+                    this.emit('status:changed', 'connected');
+                    this.startIdentification();
+                    this.startHeartbeat();
+                    this.processOfflineQueue();
+                });
+
+                this.socket.on('disconnect', (reason) => {
+                    this.isConnected = false;
+                    this.connectionStatus = 'disconnected';
+                    this.emit('status:changed', 'disconnected');
+                    this.emit('disconnect', reason);
+                    this.stopHeartbeat();
+
+                    // Handle server-initiated disconnects
+                    if (reason === 'io server disconnect') {
+                        this.socket.connect();
+                    }
+                });
+
+                this.socket.on('connect_error', (error) => {
+                    this.connectionStatus = 'error';
+                    this.emit('status:changed', 'error');
+                    this.emit('connection:error', error);
+
+                    // Set connection timeout
+                    setTimeout(() => {
+                        if (!this.isConnected) {
+                            this.emit('connection:timeout');
+                        }
+                    }, this.config.connectionTimeout);
+                });
+
+                this.socket.on('reconnecting', (attemptNumber) => {
+                    this.emit('reconnecting', attemptNumber);
+                });
+
+                this.socket.on('reconnect', (attemptNumber) => {
+                    this.emit('reconnect', attemptNumber);
+                    // Request state sync after reconnection
+                    this.requestStateSync();
+                });
+
+                // Server event handlers
+                this.socket.on('gm:identified', (data) => {
+                    this.sessionId = data.sessionId;
+                    this.emit('gm:identified', data);
+                });
+
+                this.socket.on('state:update', (data) => {
+                    this.emit('state:update', data);
+                    this.updateDataManager(data);
+                });
+
+                this.socket.on('transaction:new', (data) => {
+                    this.emit('transaction:new', data);
+                    this.updateDataManager({ newTransaction: data });
+                });
+
+                this.socket.on('video:status', (data) => {
+                    this.emit('video:status', data);
+                });
+
+                this.socket.on('device:connected', (data) => {
+                    this.connectedDevices.push(data);
+                    this.emit('device:connected', data);
+                });
+
+                this.socket.on('device:disconnected', (data) => {
+                    this.connectedDevices = this.connectedDevices.filter(d => d.deviceId !== data.deviceId);
+                    this.emit('device:disconnected', data);
+                });
+
+                this.socket.on('sync:full', (data) => {
+                    if (data.devices) {
+                        this.connectedDevices = data.devices;
+                    }
+                    this.emit('sync:full', data);
+                });
+
+                this.socket.on('error', (error) => {
+                    this.emit('error', error);
+                    console.error('OrchestratorClient: Server error:', error);
+                });
+
+                this.socket.on('heartbeat:ack', (data) => {
+                    this.lastHeartbeat = Date.now();
+                    this.emit('heartbeat:ack', data);
+                });
+            }
+
+            /**
+             * Start GM identification process
+             */
+            startIdentification() {
+                if (!this.socket || !this.socket.connected) return;
+
+                const identifyData = {
+                    stationId: this.config.stationId,
+                    version: this.config.version
+                };
+
+                // Validate identification data
+                if (!identifyData.stationId || identifyData.stationId === 'GM_STATION_UNKNOWN') {
+                    this.emit('error', {
+                        code: 'INVALID_DATA',
+                        message: 'Station ID is required for GM identification'
+                    });
+                    return;
+                }
+
+                this.socket.emit('gm:identify', identifyData);
+            }
+
+            /**
+             * Request full state synchronization
+             */
+            requestStateSync() {
+                if (!this.socket || !this.socket.connected) {
+                    console.warn('OrchestratorClient: Cannot request state sync - not connected');
+                    return;
+                }
+
+                // Rate limiting for state requests
+                const now = Date.now();
+                if (now - this.stateRequestCooldown < 5000) {
+                    console.warn('OrchestratorClient: State request rate limited');
+                    return;
+                }
+
+                this.stateRequestCooldown = now;
+                this.socket.emit('state:request', {});
+            }
+
+            /**
+             * Submit a transaction to the server
+             */
+            submitTransaction(transaction) {
+                if (!transaction || !transaction.tokenId) {
+                    this.emit('error', {
+                        code: 'INVALID_DATA',
+                        message: 'Transaction must include tokenId'
+                    });
+                    return;
+                }
+
+                const transactionData = {
+                    tokenId: transaction.tokenId,
+                    teamId: transaction.teamId,
+                    scannerId: transaction.scannerId || this.config.stationId
+                };
+
+                if (this.socket && this.socket.connected) {
+                    // Apply rate limiting (10 per second)
+                    this.addToRateLimitQueue(() => {
+                        this.socket.emit('transaction:submit', transactionData);
+                    });
+                } else if (this.config.enableOfflineQueue) {
+                    // Queue for later submission
+                    this.addToOfflineQueue('transaction:submit', transactionData);
+                }
+            }
+
+            /**
+             * Start heartbeat mechanism
+             */
+            startHeartbeat() {
+                if (!this.config.enableHeartbeat || this.heartbeatTimer) return;
+
+                this.heartbeatTimer = setInterval(() => {
+                    if (this.socket && this.socket.connected) {
+                        this.socket.emit('heartbeat', {
+                            stationId: this.config.stationId
+                        });
+
+                        // Check for heartbeat timeout
+                        if (this.lastHeartbeat &&
+                            Date.now() - this.lastHeartbeat > this.config.heartbeatTimeout) {
+                            this.emit('heartbeat:timeout');
+                        }
+                    }
+                }, this.config.heartbeatInterval);
+            }
+
+            /**
+             * Stop heartbeat mechanism
+             */
+            stopHeartbeat() {
+                if (this.heartbeatTimer) {
+                    clearInterval(this.heartbeatTimer);
+                    this.heartbeatTimer = null;
+                }
+            }
+
+            /**
+             * Add event to offline queue
+             */
+            addToOfflineQueue(event, data) {
+                if (this.offlineQueue.length >= this.config.maxQueueSize) {
+                    // Remove oldest event
+                    this.offlineQueue.shift();
+                }
+
+                this.offlineQueue.push({
+                    event,
+                    data,
+                    timestamp: Date.now()
+                });
+
+                if (this.config.persistQueue) {
+                    // Performance: Use throttled save to reduce I/O
+                    this.throttledSaveQueue();
+                }
+            }
+
+            /**
+             * Process offline queue when reconnected
+             */
+            processOfflineQueue() {
+                if (!this.socket || !this.socket.connected || this.offlineQueue.length === 0) {
+                    return;
+                }
+
+                // Performance optimization: Process in batches to avoid blocking
+                const BATCH_SIZE = 10;
+                let processed = 0;
+
+                const processBatch = () => {
+                    const batch = this.offlineQueue.splice(0, BATCH_SIZE);
+
+                    batch.forEach(item => {
+                        this.socket.emit(item.event, item.data);
+                        processed++;
+                    });
+
+                    if (this.offlineQueue.length > 0) {
+                        // Use requestAnimationFrame for non-blocking batch processing
+                        if (typeof requestAnimationFrame !== 'undefined') {
+                            requestAnimationFrame(processBatch);
+                        } else {
+                            setTimeout(processBatch, 0);
+                        }
+                    } else {
+                        // All done
+                        if (this.config.persistQueue) {
+                            this.throttledSaveQueue();
+                        }
+                        this.emit('queue:processed', processed);
+                    }
+                };
+
+                processBatch();
+            }
+
+            /**
+             * Add to rate limit queue
+             */
+            addToRateLimitQueue(fn) {
+                this.rateLimitQueue.push(fn);
+
+                if (this.rateLimitQueue.length === 1) {
+                    this.processRateLimitQueue();
+                }
+            }
+
+            /**
+             * Process rate-limited events
+             * Performance optimized: Use single timer for better efficiency
+             */
+            processRateLimitQueue() {
+                if (this.rateLimitQueue.length === 0) {
+                    this.rateLimitTimer = null;
+                    return;
+                }
+
+                // Process next item
+                const fn = this.rateLimitQueue.shift();
+                if (fn) fn();
+
+                // Schedule next processing using optimized timer
+                if (this.rateLimitQueue.length > 0 && !this.rateLimitTimer) {
+                    this.rateLimitTimer = setTimeout(() => {
+                        this.rateLimitTimer = null;
+                        this.processRateLimitQueue();
+                    }, 100); // 10/second max
+                }
+            }
+
+            /**
+             * Save offline queue to localStorage
+             * Performance optimized: Throttled to reduce I/O operations
+             */
+            saveQueueToStorage() {
+                // Limit queue size to prevent memory issues
+                if (this.offlineQueue.length > this.config.maxQueueSize) {
+                    this.offlineQueue = this.offlineQueue.slice(-this.config.maxQueueSize);
+                    console.warn(`OrchestratorClient: Queue trimmed to ${this.config.maxQueueSize} items`);
+                }
+
+                try {
+                    localStorage.setItem('orchestratorOfflineQueue', JSON.stringify(this.offlineQueue));
+                } catch (e) {
+                    console.warn('OrchestratorClient: Failed to save queue to storage:', e);
+                    // Clear some space if storage is full
+                    if (e.name === 'QuotaExceededError') {
+                        this.offlineQueue = this.offlineQueue.slice(-50); // Keep only last 50
+                        try {
+                            localStorage.setItem('orchestratorOfflineQueue', JSON.stringify(this.offlineQueue));
+                        } catch (e2) {
+                            console.error('OrchestratorClient: Storage critically full', e2);
+                        }
+                    }
+                }
+            }
+
+            /**
+             * Throttled version of saveQueueToStorage
+             * Performance: Prevents excessive localStorage writes
+             */
+            throttledSaveQueue() {
+                if (this.saveTimer) return;
+
+                this.saveTimer = setTimeout(() => {
+                    this.saveQueueToStorage();
+                    this.saveTimer = null;
+                }, 1000); // Save at most once per second
+            }
+
+            /**
+             * Load offline queue from localStorage
+             */
+            loadQueueFromStorage() {
+                try {
+                    const stored = localStorage.getItem('orchestratorOfflineQueue');
+                    if (stored) {
+                        this.offlineQueue = JSON.parse(stored);
+                    }
+                } catch (e) {
+                    console.warn('OrchestratorClient: Failed to load queue from storage:', e);
+                    this.offlineQueue = [];
+                }
+            }
+
+            /**
+             * Update DataManager with received data
+             */
+            updateDataManager(data) {
+                if (typeof DataManager !== 'undefined') {
+                    if (data.newTransaction) {
+                        // Add new transaction to DataManager
+                        DataManager.addTransaction(data.newTransaction);
+                    }
+
+                    if (data.state) {
+                        // Update game state in DataManager
+                        DataManager.updateGameState(data.state);
+                    }
+
+                    // Trigger UI update
+                    if (typeof App !== 'undefined' && App.updateDisplay) {
+                        App.updateDisplay();
+                    }
+                }
+            }
+
+            /**
+             * Get current connection status
+             */
+            getConnectionStatus() {
+                return {
+                    isConnected: this.isConnected,
+                    status: this.connectionStatus,
+                    sessionId: this.sessionId,
+                    connectedDevices: this.connectedDevices.length,
+                    queueSize: this.offlineQueue.length
+                };
+            }
+
+            /**
+             * Event emitter functionality
+             */
+            on(event, handler) {
+                if (!this.eventHandlers[event]) {
+                    this.eventHandlers[event] = [];
+                }
+                this.eventHandlers[event].push(handler);
+            }
+
+            off(event, handler) {
+                if (this.eventHandlers[event]) {
+                    if (handler) {
+                        this.eventHandlers[event] = this.eventHandlers[event].filter(h => h !== handler);
+                    } else {
+                        this.eventHandlers[event] = [];
+                    }
+                }
+            }
+
+            emit(event, data) {
+                if (this.eventHandlers[event]) {
+                    this.eventHandlers[event].forEach(handler => {
+                        try {
+                            handler(data);
+                        } catch (error) {
+                            console.error(`OrchestratorClient: Error in event handler for ${event}:`, error);
+                        }
+                    });
+                }
+            }
+
+            /**
+             * Cleanup resources
+             * Performance: Proper cleanup prevents memory leaks
+             */
+            cleanup() {
+                // Stop all timers
+                this.stopHeartbeat();
+                if (this.rateLimitTimer) {
+                    clearTimeout(this.rateLimitTimer);
+                    this.rateLimitTimer = null;
+                }
+                if (this.saveTimer) {
+                    clearTimeout(this.saveTimer);
+                    this.saveTimer = null;
+                }
+
+                // Clear state
+                this.isConnected = false;
+                this.connectionStatus = 'disconnected';
+                this.sessionId = null;
+                this.connectedDevices = [];
+
+                // Limit memory usage - clear old queue items
+                if (this.offlineQueue.length > 100) {
+                    this.offlineQueue = this.offlineQueue.slice(-100);
+                    if (this.config.persistQueue) {
+                        this.saveQueueToStorage();
+                    }
+                }
+
+                // Clear rate limit queue if too large
+                if (this.rateLimitQueue.length > 50) {
+                    this.rateLimitQueue = this.rateLimitQueue.slice(-50);
+                }
+            }
+        }
+
+        // Make OrchestratorClient available globally
+        window.OrchestratorClient = OrchestratorClient;
+
+        // Initialize orchestrator client if configured
+        window.orchestratorClient = null;
+
+        // Auto-initialize if configuration exists
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check for orchestrator configuration
+            const orchestratorConfig = localStorage.getItem('orchestratorConfig');
+            if (orchestratorConfig) {
+                try {
+                    const config = JSON.parse(orchestratorConfig);
+                    window.orchestratorClient = new OrchestratorClient(config);
+
+                    // Load any persisted offline queue
+                    if (window.orchestratorClient.config.persistQueue) {
+                        window.orchestratorClient.loadQueueFromStorage();
+                    }
+
+                    // Set up connection status indicator
+                    const updateConnectionStatus = (status, text) => {
+                        const indicator = document.getElementById('connectionStatus');
+                        const statusText = indicator.querySelector('.status-text');
+
+                        // Remove all status classes
+                        indicator.classList.remove('connected', 'connecting', 'disconnected');
+
+                        // Add new status class
+                        indicator.classList.add(status);
+                        statusText.textContent = text;
+                    };
+
+                    // Wire up connection events to UI
+                    window.orchestratorClient.on('connect', () => {
+                        updateConnectionStatus('connected', 'Connected');
+                        console.log('Orchestrator connected - UI updated');
+                    });
+
+                    window.orchestratorClient.on('disconnect', () => {
+                        updateConnectionStatus('disconnected', 'Disconnected');
+                        console.log('Orchestrator disconnected - UI updated');
+                    });
+
+                    window.orchestratorClient.on('connecting', () => {
+                        updateConnectionStatus('connecting', 'Connecting...');
+                        console.log('Orchestrator connecting - UI updated');
+                    });
+
+                    window.orchestratorClient.on('reconnecting', () => {
+                        updateConnectionStatus('connecting', 'Reconnecting...');
+                        console.log('Orchestrator reconnecting - UI updated');
+                    });
+
+                    window.orchestratorClient.on('error', (error) => {
+                        updateConnectionStatus('disconnected', 'Error');
+                        console.log('Orchestrator error - UI updated:', error);
+                    });
+
+                    // Auto-connect if configured
+                    if (config.autoConnect !== false) {
+                        window.orchestratorClient.connect();
+                    }
+
+                    console.log('OrchestratorClient initialized with stored config');
+                } catch (e) {
+                    console.warn('Failed to parse orchestrator config:', e);
+                }
+            }
+        });
+
+    </script>
+
+    <!-- ============================================
+         WEBSOCKET CONTRACT TESTS (TDD)
+         ============================================ -->
+    <!-- QUnit Testing Framework -->
+    <link rel="stylesheet" href="https://code.jquery.com/qunit/qunit-2.20.0.css">
+    <script src="https://code.jquery.com/qunit/qunit-2.20.0.js"></script>
+
+    <!-- Test Container -->
+    <div id="websocket-tests" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 10000; overflow: auto;">
+        <div style="padding: 20px;">
+            <h2>WebSocket Integration Tests</h2>
+            <button onclick="document.getElementById('websocket-tests').style.display='none'" style="position: absolute; top: 20px; right: 20px; padding: 10px; background: #ff4444; color: white; border: none; border-radius: 5px; cursor: pointer;">Close</button>
+            <div id="qunit"></div>
+            <div id="qunit-fixture"></div>
+        </div>
+    </div>
+
+    <!-- Test Runner Button -->
+    <button id="run-websocket-tests" onclick="runWebSocketTests()" style="position: fixed; bottom: 20px; left: 20px; padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; z-index: 9999; display: none;">
+        Run WebSocket Tests
+    </button>
+
+    <!-- Load Test Suite -->
+    <script src="websocket-tests.js"></script>
+
 </body>
 </html>
