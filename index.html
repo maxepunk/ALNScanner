@@ -1010,13 +1010,211 @@
             }
         }
     </style>
+
+    <!-- Connection Wizard Modal Styles -->
+    <style>
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 10000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: #2a2a2a;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+            color: #4CAF50;
+            text-align: center;
+        }
+
+        #discoverySection {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .primary-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .primary-btn:hover {
+            background-color: #45a049;
+        }
+
+        .secondary-btn {
+            background-color: #666;
+            color: white;
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .secondary-btn:hover {
+            background-color: #555;
+        }
+
+        .divider {
+            text-align: center;
+            margin: 20px 0;
+            color: #888;
+            font-size: 14px;
+        }
+
+        #discoveredServers {
+            margin-top: 15px;
+        }
+
+        .server-item {
+            background-color: #1e1e1e;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .server-item span {
+            color: #fff;
+        }
+
+        .server-item button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 5px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .server-item button:hover {
+            background-color: #45a049;
+        }
+
+        #discoveryStatus {
+            margin: 10px 0;
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #ccc;
+            font-size: 14px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            background-color: #1e1e1e;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: white;
+            font-size: 14px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+
+        #connectionStatus {
+            text-align: center;
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .button-group button {
+            flex: 1;
+        }
+    </style>
 </head>
 <body>
+    <!-- Connection Wizard Modal -->
+    <div id="connectionModal" class="modal">
+        <div class="modal-content">
+            <h2>🎮 Connect to Game Server</h2>
+
+            <!-- Discovery Section (PRIMARY) -->
+            <div id="discoverySection">
+                <button id="scanServersBtn" class="primary-btn" onclick="scanForServers()">
+                    🔍 Scan for Game Servers
+                </button>
+                <div id="discoveryStatus"></div>
+                <div id="discoveredServers"></div>
+            </div>
+
+            <div class="divider">─── OR Enter Manually ───</div>
+
+            <!-- Manual Configuration -->
+            <form id="connectionForm" onsubmit="handleConnectionSubmit(event)">
+                <div class="form-group">
+                    <label>Server Address:</label>
+                    <input type="text" id="serverUrl" placeholder="http://10.0.0.135:3000">
+                </div>
+
+                <div class="form-group">
+                    <label>Station Name:</label>
+                    <input type="text" id="stationName" placeholder="GM Station 1">
+                </div>
+
+                <div class="form-group">
+                    <label>GM Password:</label>
+                    <input type="password" id="gmPassword" placeholder="Enter password">
+                </div>
+
+                <div id="connectionStatusMsg"></div>
+
+                <div class="button-group">
+                    <button type="submit" class="primary-btn">Connect</button>
+                    <button type="button" onclick="workOffline()" class="secondary-btn">Work Without Server</button>
+                </div>
+            </form>
+        </div>
+    </div>
     <div class="container">
         <div class="header">
             <div class="header-nav" id="headerNav">
                 <!-- Connection Status Indicator -->
-                <a href="config.html" id="connectionStatus" class="connection-status disconnected" title="Click for network configuration">
+                <a href="#" onclick="showConnectionWizard(); return false;" id="connectionStatus" class="connection-status disconnected" title="Click to configure connection">
                     <span class="status-dot"></span>
                     <span class="status-text">Disconnected</span>
                 </a>
@@ -1100,6 +1298,25 @@
 
         <!-- Team Entry Screen -->
         <div id="teamEntryScreen" class="screen">
+            <!-- Offline Mode Toggle -->
+            <div style="position: absolute; top: 10px; right: 10px;">
+                <button id="offlineModeToggle" class="mode-toggle" onclick="toggleOfflineMode()" style="
+                    padding: 8px 16px;
+                    background: rgba(255, 255, 255, 0.2);
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    border-radius: 20px;
+                    color: white;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    transition: all 0.3s ease;
+                ">
+                    <span class="mode-icon">🌐</span>
+                    <span class="mode-text">Go Offline</span>
+                </button>
+            </div>
+
             <div class="team-display" id="teamDisplay">_</div>
             <div class="numpad">
                 <button onclick="App.appendNumber(1)">1</button>
@@ -1753,6 +1970,7 @@
             transactions: [],
             currentSession: [],
             scannedTokens: new Set(),
+            backendScores: new Map(),  // Store scores from orchestrator
             
             // Scoring configuration for Black Market mode
             SCORING_CONFIG: {
@@ -2028,6 +2246,38 @@
             },
             
             /**
+             * Update team score from backend broadcast
+             * @param {Object} scoreData - Score data from backend
+             */
+            updateTeamScoreFromBackend(scoreData) {
+                // Only update if we're connected to orchestrator
+                if (!window.orchestratorClient?.isConnected) {
+                    return;
+                }
+
+                // Store backend scores for display
+                if (!this.backendScores) {
+                    this.backendScores = new Map();
+                }
+
+                this.backendScores.set(scoreData.teamId, {
+                    currentScore: scoreData.currentScore,
+                    baseScore: scoreData.baseScore,
+                    bonusPoints: scoreData.bonusPoints,
+                    tokensScanned: scoreData.tokensScanned,
+                    completedGroups: scoreData.completedGroups,
+                    lastUpdate: scoreData.lastUpdate
+                });
+
+                // Trigger UI update if viewing scores
+                if (document.getElementById('scoreboardContainer')) {
+                    UIManager.renderScoreboard();
+                }
+
+                Debug.log(`Score updated from backend for team ${scoreData.teamId}: $${scoreData.currentScore}`);
+            },
+
+            /**
              * Calculate team score with group completion bonuses
              * @param {string} teamId - Team ID
              * @returns {Object} Score breakdown
@@ -2097,6 +2347,32 @@
              * @returns {Array} Sorted team scores
              */
             getTeamScores() {
+                // If connected and have backend scores, use those as source of truth
+                if (window.orchestratorClient?.isConnected && this.backendScores?.size > 0) {
+                    const scores = Array.from(this.backendScores.entries()).map(([teamId, score]) => ({
+                        teamId,
+                        score: score.currentScore,
+                        baseScore: score.baseScore,
+                        bonusScore: score.bonusPoints,
+                        tokenCount: score.tokensScanned,
+                        completedGroups: score.completedGroups,
+                        isFromBackend: true  // Flag to show this is authoritative
+                    }));
+
+                    // Sort by score
+                    scores.sort((a, b) => b.score - a.score);
+                    return scores;
+                }
+
+                // Fallback to local calculation when disconnected
+                return this.calculateLocalTeamScores();
+            },
+
+            /**
+             * Calculate team scores locally (fallback when disconnected)
+             * @returns {Array} Sorted team scores
+             */
+            calculateLocalTeamScores() {
                 const teamGroups = {};
                 
                 const blackMarketTransactions = this.transactions.filter(t => 
@@ -2514,7 +2790,7 @@
             renderScoreboard() {
                 const container = document.getElementById('scoreboardContainer');
                 const teamScores = DataManager.getTeamScores();
-                
+
                 if (teamScores.length === 0) {
                     container.innerHTML = `
                         <div class="empty-state">
@@ -2524,8 +2800,13 @@
                     `;
                     return;
                 }
-                
-                container.innerHTML = teamScores.map((team, index) => {
+
+                // Add score source indicator
+                const scoreSource = teamScores[0]?.isFromBackend ?
+                    '<div class="score-source" style="text-align: center; margin: 10px 0; padding: 10px; background: rgba(103,126,234,0.1); border-radius: 8px; font-size: 14px;">🔗 Live from Orchestrator</div>' :
+                    '<div class="score-source" style="text-align: center; margin: 10px 0; padding: 10px; background: rgba(255,152,0,0.1); border-radius: 8px; font-size: 14px;">📱 Local Calculation</div>';
+
+                container.innerHTML = scoreSource + teamScores.map((team, index) => {
                     const rank = index + 1;
                     const rankClass = rank <= 3 ? `rank-${rank}` : '';
                     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
@@ -2804,6 +3085,47 @@
              * @param {string} tokenId - Token ID
              * @param {boolean} isUnknown - Whether token is unknown
              */
+            /**
+             * Show notification for group completion (from backend event)
+             * @param {Object} data - Group completion data
+             */
+            showGroupCompletionNotification(data) {
+                // Create a temporary notification element
+                const notification = document.createElement('div');
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: linear-gradient(135deg, #667eea, #764ba2);
+                    color: white;
+                    padding: 15px 20px;
+                    border-radius: 12px;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                    z-index: 10000;
+                    animation: slideIn 0.3s ease-out;
+                    max-width: 350px;
+                `;
+
+                notification.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 24px;">🏆</span>
+                        <div>
+                            <div style="font-weight: bold; margin-bottom: 5px;">Group Completed!</div>
+                            <div style="font-size: 14px;">Team ${data.teamId} - ${data.groupId}</div>
+                            <div style="font-size: 14px;">Bonus: +$${data.bonus.toLocaleString()} (${data.multiplier}x)</div>
+                        </div>
+                    </div>
+                `;
+
+                document.body.appendChild(notification);
+
+                // Remove after 5 seconds
+                setTimeout(() => {
+                    notification.style.animation = 'fadeOut 0.3s ease-out forwards';
+                    setTimeout(() => notification.remove(), 300);
+                }, 5000);
+            },
+
             showTokenResult(token, tokenId, isUnknown) {
                 const statusEl = document.getElementById('resultStatus');
                 const rfidEl = document.getElementById('resultRfid');
@@ -2909,7 +3231,11 @@
                 // Reconnect orchestrator if URL changed
                 if (window.orchestratorClient && this.orchestratorUrl) {
                     window.orchestratorClient.config.url = this.orchestratorUrl;
-                    window.orchestratorClient.reconnect();
+                    // reconnect() method doesn't exist - disconnect then connect
+                    window.orchestratorClient.disconnect();
+                    setTimeout(() => {
+                        window.orchestratorClient.connect();
+                    }, 100);
                 }
             }
         };
@@ -3391,11 +3717,26 @@
         // ============================================
         // INITIALIZATION
         // ============================================
-        window.addEventListener('DOMContentLoaded', () => {
-            App.init().catch(error => {
+        window.addEventListener('DOMContentLoaded', async () => {
+            // 1. Initialize core app (always works offline)
+            try {
+                await App.init();
+            } catch (error) {
                 Debug.log(`Initialization error: ${error.message}`, true);
-                alert('Application failed to initialize. Check console for details.');
-            });
+                console.error('App initialization failed:', error);
+                // Don't block with alert - app can still work offline
+            }
+
+            // 2. Try orchestrator connection (non-blocking)
+            setTimeout(tryOrchestratorConnection, 100); // Small delay to let UI render
+
+            // 3. Initialize offline mode button state
+            const button = document.getElementById('offlineModeToggle');
+            const isOffline = localStorage.getItem('preferOfflineMode') === 'true';
+            if (button && isOffline) {
+                button.querySelector('.mode-text').textContent = 'Go Online';
+                button.querySelector('.mode-icon').textContent = '📴';
+            }
         });
     </script>
 
@@ -3472,50 +3813,11 @@
                 // Scanner can operate offline without authentication
             }
 
-            /**
-             * Authenticate with orchestrator
-             * Called when attempting to connect without token
-             */
-            async authenticateWithOrchestrator() {
-                // Only prompt if we're actually trying to connect
-                if (!this.config.url || this.config.url === 'offline') {
-                    console.log('OrchestratorClient: Offline mode, skipping authentication');
-                    return false;
-                }
-
-                const password = prompt('Enter game manager password to connect to orchestrator:');
-                if (!password) {
-                    console.log('OrchestratorClient: Authentication cancelled, continuing offline');
-                    return false;
-                }
-
-                try {
-                    const response = await fetch(`${this.config.url}/api/admin/auth`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ password })
-                    });
-
-                    if (response.ok) {
-                        const { token } = await response.json();
-                        this.token = token;
-                        localStorage.setItem('gmToken', token);
-                        console.log('OrchestratorClient: Authentication successful');
-                        return true;
-                    } else {
-                        console.error('OrchestratorClient: Invalid password');
-                        alert('Invalid password. Scanner will continue in offline mode.');
-                        return false;
-                    }
-                } catch (error) {
-                    console.error('OrchestratorClient: Authentication failed:', error);
-                    alert('Cannot connect to orchestrator. Scanner will continue in offline mode.');
-                    return false;
-                }
-            }
+            // authenticateWithOrchestrator() method removed - authentication now happens at page load
 
             /**
              * Connect to the orchestrator WebSocket server
+             * Note: Authentication must be complete BEFORE calling this method
              */
             async connect() {
                 if (this.socket && this.socket.connected) {
@@ -3523,28 +3825,43 @@
                     return;
                 }
 
-                // Check if we need authentication
-                if (!this.token && this.config.url && this.config.url !== 'offline') {
-                    console.log('OrchestratorClient: No token found, requesting authentication');
-                    const authenticated = await this.authenticateWithOrchestrator();
-                    if (!authenticated) {
-                        console.log('OrchestratorClient: Authentication failed, aborting connection');
-                        this.connectionStatus = 'disconnected';
-                        this.emit('status:changed', 'offline');
-                        return;
-                    }
+                // Assume token already exists - it's set before connect() is ever called
+                if (!this.token) {
+                    console.error('OrchestratorClient: Cannot connect without token - auth should happen before connect()');
+                    this.connectionStatus = 'disconnected';
+                    this.emit('status:changed', 'offline');
+                    return;
                 }
 
+                // Update status and create socket connection
                 this.connectionStatus = 'connecting';
                 this.emit('status:changed', 'connecting');
 
+                // Create the socket connection with auth already in place
+                this.createSocketConnection();
+            }
+
+            /**
+             * Create and configure the WebSocket connection
+             * Called AFTER authentication is complete
+             */
+            createSocketConnection() {
                 try {
+                    // Pass authentication in socket handshake to prevent "undefined device"
                     this.socket = io(this.config.url, {
                         transports: this.config.transports,
-                        reconnection: this.config.reconnection,
+                        // Only enable auto-reconnection if we have a valid token
+                        reconnection: this.token ? this.config.reconnection : false,
                         reconnectionDelay: this.config.reconnectionDelay,
                         reconnectionAttempts: this.config.reconnectionAttempts,
-                        timeout: this.config.connectionTimeout
+                        timeout: this.config.connectionTimeout,
+                        // NEW: Include auth in the socket handshake
+                        auth: {
+                            token: this.token,
+                            stationId: this.config.stationId,
+                            deviceType: 'gm',
+                            version: this.config.version
+                        }
                     });
 
                     this.setupSocketEventHandlers();
@@ -3589,9 +3906,24 @@
                     this.emit('disconnect', reason);
                     this.stopHeartbeat();
 
+                    // Clear backend scores to ensure fallback to local calculation
+                    if (window.DataManager && window.DataManager.backendScores) {
+                        window.DataManager.backendScores.clear();
+                        console.log('Backend scores cleared - falling back to local calculation');
+                    }
+
                     // Handle server-initiated disconnects
                     if (reason === 'io server disconnect') {
-                        this.socket.connect();
+                        // Don't use socket.connect() directly - it bypasses auth!
+                        // Use our connect() method which ensures proper authentication
+                        console.log('Server initiated disconnect - attempting reconnection with auth');
+                        setTimeout(() => {
+                            if (this.token) {
+                                this.connect();  // Use our method, not socket's
+                            } else {
+                                console.warn('Cannot reconnect - no authentication token');
+                            }
+                        }, 1000);
                     }
                 });
 
@@ -3636,6 +3968,30 @@
 
                 this.socket.on('video:status', (data) => {
                     this.emit('video:status', data);
+                });
+
+                // Score update events from backend
+                this.socket.on('score:updated', (data) => {
+                    this.emit('score:updated', data);
+                    // Update local score cache for the team
+                    if (window.DataManager) {
+                        window.DataManager.updateTeamScoreFromBackend(data.data);
+                    }
+                    console.log('Received score update from backend:', data.data);
+                });
+
+                this.socket.on('group:completed', (data) => {
+                    this.emit('group:completed', data);
+                    // Show notification about group completion
+                    if (window.UIManager) {
+                        window.UIManager.showGroupCompletionNotification(data.data);
+                    }
+                    console.log('Group completed:', data.data);
+                });
+
+                this.socket.on('team:created', (data) => {
+                    this.emit('team:created', data);
+                    console.log('New team created:', data.data);
                 });
 
                 this.socket.on('device:connected', (data) => {
@@ -4036,84 +4392,441 @@
         // Initialize orchestrator client if configured
         window.orchestratorClient = null;
 
-        // Auto-initialize if configuration exists
-        document.addEventListener('DOMContentLoaded', () => {
-            // Check for orchestrator configuration
+        // Note: Orchestrator initialization moved to main DOMContentLoaded handler at line 3522
+
+        // Non-blocking orchestrator connection function
+        async function tryOrchestratorConnection() {
             const orchestratorUrl = localStorage.getItem('orchestrator_url');
-            const stationId = localStorage.getItem('stationId');
+            if (!orchestratorUrl) {
+                console.log('No orchestrator URL configured - running in offline mode');
+                updateConnectionStatus('disconnected', 'Offline Mode');
+                return;
+            }
 
-            if (orchestratorUrl) {
-                try {
-                    const config = {
-                        url: orchestratorUrl,
-                        stationId: stationId || 'GM_STATION_UNKNOWN',
-                        autoConnect: true
-                    };
-                    window.orchestratorClient = new OrchestratorClient(config);
+            // Check if orchestrator is reachable FIRST
+            try {
+                const healthCheck = await fetch(`${orchestratorUrl}/api/state/status`, {
+                    method: 'GET',
+                    mode: 'cors',
+                    signal: AbortSignal.timeout(3000) // 3 second timeout
+                });
 
-                    // Load any persisted offline queue
-                    if (window.orchestratorClient.config.persistQueue) {
-                        window.orchestratorClient.loadQueueFromStorage();
+                if (!healthCheck.ok) {
+                    console.log('Orchestrator unreachable, continuing offline');
+                    updateConnectionStatus('disconnected', 'Offline Mode');
+                    scheduleReconnectionAttempt();
+                    return;
+                }
+            } catch (error) {
+                console.log('Network unavailable, continuing offline:', error);
+                updateConnectionStatus('disconnected', 'Offline Mode');
+                scheduleReconnectionAttempt();
+                return;
+            }
+
+            // Only NOW try authentication if needed
+            let token = localStorage.getItem('gmToken');
+            if (!token && localStorage.getItem('attemptOrchestratorAuth') !== 'false') {
+                // Show non-blocking auth modal instead of prompt
+                showAuthModal();
+            } else if (token) {
+                // Connect with existing token
+                connectWithToken(token);
+            }
+        }
+
+        // Background reconnection with exponential backoff
+        let reconnectionTimer = null;
+        let reconnectionDelay = 5000; // Start with 5 seconds
+
+        function scheduleReconnectionAttempt() {
+            if (reconnectionTimer) return; // Already scheduled
+
+            // Don't reconnect if user explicitly chose offline mode
+            if (localStorage.getItem('preferOfflineMode') === 'true') {
+                return;
+            }
+
+            reconnectionTimer = setTimeout(async () => {
+                reconnectionTimer = null;
+
+                console.log('Attempting background reconnection...');
+                await tryOrchestratorConnection();
+
+                // If still offline, schedule next attempt with backoff
+                if (!window.orchestratorClient?.isConnected) {
+                    reconnectionDelay = Math.min(reconnectionDelay * 2, 300000); // Max 5 minutes
+                    console.log(`Next reconnection attempt in ${reconnectionDelay/1000} seconds`);
+                    scheduleReconnectionAttempt();
+                } else {
+                    // Reset delay on successful connection
+                    reconnectionDelay = 5000;
+                }
+            }, reconnectionDelay);
+        }
+
+        // Discovery function integrated into main page (matches working config.html)
+        async function scanForServers() {
+            const statusDiv = document.getElementById('discoveryStatus');
+            const serversDiv = document.getElementById('discoveredServers');
+
+            statusDiv.textContent = '🔍 Scanning local network...';
+            serversDiv.innerHTML = '';
+
+            try {
+                // Detect current subnet from page URL
+                const currentHost = window.location.hostname;
+                let subnet = '192.168.1'; // Default fallback
+
+                // Try to detect subnet from current host
+                if (currentHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+                    const parts = currentHost.split('.');
+                    if (parts.length >= 3) {
+                        subnet = parts.slice(0, 3).join('.');
+                    }
+                }
+
+                const commonPorts = [3000, 8080];
+                const promises = [];
+                const foundServers = [];
+
+                // Scan current subnet with proper endpoint
+                for (let i = 1; i <= 254; i++) {
+                    for (const port of commonPorts) {
+                        const baseUrl = `http://${subnet}.${i}:${port}`;
+                        promises.push(
+                            fetch(`${baseUrl}/api/state/status`, {
+                                method: 'GET',
+                                mode: 'cors',
+                                signal: AbortSignal.timeout(500)
+                            })
+                            .then(response => {
+                                if (response.ok) {
+                                    return { url: baseUrl, ip: `${subnet}.${i}:${port}` };
+                                }
+                                return null;
+                            })
+                            .catch(() => null)
+                        );
                     }
 
-                    // Set up connection status indicator
-                    const updateConnectionStatus = (status, text) => {
-                        const indicator = document.getElementById('connectionStatus');
-                        const statusText = indicator.querySelector('.status-text');
-
-                        // Remove all status classes
-                        indicator.classList.remove('connected', 'connecting', 'disconnected');
-
-                        // Add new status class
-                        indicator.classList.add(status);
-                        statusText.textContent = text;
-                    };
-
-                    // Wire up connection events to UI
-                    // OrchestratorClient emits 'status:changed' with status value
-                    window.orchestratorClient.on('status:changed', (status) => {
-                        switch(status) {
-                            case 'connected':
-                                updateConnectionStatus('connected', 'Connected');
-                                console.log('Orchestrator connected - UI updated');
-                                break;
-                            case 'connecting':
-                                updateConnectionStatus('connecting', 'Connecting...');
-                                console.log('Orchestrator connecting - UI updated');
-                                break;
-                            case 'disconnected':
-                            case 'offline':
-                                updateConnectionStatus('disconnected', 'Disconnected');
-                                console.log('Orchestrator disconnected - UI updated');
-                                break;
-                            case 'error':
-                                updateConnectionStatus('disconnected', 'Error');
-                                console.log('Orchestrator error - UI updated');
-                                break;
-                        }
-                    });
-
-                    window.orchestratorClient.on('reconnecting', () => {
-                        updateConnectionStatus('connecting', 'Reconnecting...');
-                        console.log('Orchestrator reconnecting - UI updated');
-                    });
-
-                    window.orchestratorClient.on('connection:error', (error) => {
-                        updateConnectionStatus('disconnected', 'Error');
-                        console.log('Orchestrator connection error:', error);
-                    });
-
-                    // Auto-connect if configured
-                    if (config.autoConnect !== false) {
-                        window.orchestratorClient.connect();
+                    // Limit concurrent requests to avoid browser issues
+                    if (promises.length >= 20) {
+                        const results = await Promise.all(promises.splice(0, 20));
+                        foundServers.push(...results.filter(Boolean));
                     }
+                }
 
-                    console.log('OrchestratorClient initialized with stored config');
-                } catch (e) {
-                    console.warn('Failed to parse orchestrator config:', e);
+                // Also try localhost
+                promises.push(
+                    fetch('http://localhost:3000/api/state/status', {
+                        signal: AbortSignal.timeout(1000)
+                    })
+                    .then(response => response.ok ? { url: 'http://localhost:3000', ip: 'localhost:3000' } : null)
+                    .catch(() => null)
+                );
+
+                // Process remaining promises
+                const finalResults = await Promise.all(promises);
+                foundServers.push(...finalResults.filter(Boolean));
+
+                // Remove duplicates
+                const uniqueServers = Array.from(new Map(
+                    foundServers.map(server => [server.url, server])
+                ).values());
+
+                if (uniqueServers.length > 0) {
+                    displayDiscoveredServers(uniqueServers);
+                } else {
+                    statusDiv.textContent = '❌ No servers found - enter address manually';
+                }
+            } catch (error) {
+                statusDiv.textContent = '⚠️ Discovery failed - enter address manually';
+                console.error('Discovery error:', error);
+            }
+        }
+
+        // Display discovered servers
+        function displayDiscoveredServers(servers) {
+            const statusDiv = document.getElementById('discoveryStatus');
+            const serversDiv = document.getElementById('discoveredServers');
+
+            statusDiv.textContent = `✅ Found ${servers.length} game server(s)`;
+            serversDiv.innerHTML = '';
+
+            servers.forEach(server => {
+                const serverEl = document.createElement('div');
+                serverEl.className = 'server-item';
+                serverEl.innerHTML = `
+                    <span>🎮 Game Server at ${server.ip || server.url}</span>
+                    <button onclick="selectServer('${server.url}')">Select</button>
+                `;
+                serversDiv.appendChild(serverEl);
+            });
+        }
+
+        // Select discovered server
+        function selectServer(url) {
+            document.getElementById('serverUrl').value = url;
+            document.getElementById('discoveryStatus').textContent = '✅ Server selected';
+
+            // Generate station name if empty
+            if (!document.getElementById('stationName').value) {
+                const stationNum = localStorage.getItem('lastStationNum') || '1';
+                document.getElementById('stationName').value = `GM Station ${stationNum}`;
+            }
+        }
+
+        // Unified connection form handler
+        async function handleConnectionSubmit(event) {
+            event.preventDefault();
+
+            const serverUrl = document.getElementById('serverUrl').value;
+            const stationName = document.getElementById('stationName').value;
+            const password = document.getElementById('gmPassword').value;
+            const statusDiv = document.getElementById('connectionStatusMsg');
+
+            // Validate inputs
+            if (!serverUrl || !stationName || !password) {
+                statusDiv.textContent = '⚠️ Please fill in all fields';
+                statusDiv.style.color = '#ff9800';
+                return;
+            }
+
+            statusDiv.textContent = '⏳ Connecting...';
+            statusDiv.style.color = '#2196F3';
+
+            try {
+                // 1. Test server reachability (use same endpoint as discovery)
+                const healthCheck = await fetch(`${serverUrl}/api/state/status`, {
+                    method: 'GET',
+                    mode: 'cors',
+                    signal: AbortSignal.timeout(3000)
+                });
+
+                if (!healthCheck.ok) {
+                    throw new Error('Server not responding');
+                }
+
+                // 2. Authenticate
+                const authResponse = await fetch(`${serverUrl}/api/admin/auth`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+
+                if (!authResponse.ok) {
+                    statusDiv.textContent = '❌ Invalid password';
+                    statusDiv.style.color = '#f44336';
+                    return;
+                }
+
+                const { token } = await authResponse.json();
+
+                // 3. Save configuration
+                localStorage.setItem('orchestrator_url', serverUrl);
+                localStorage.setItem('stationId', stationName.replace(/\s+/g, '_'));
+                localStorage.setItem('stationName', stationName);
+                localStorage.setItem('gmToken', token);
+                localStorage.setItem('preferOfflineMode', 'false');
+
+                // Save station number for next time
+                const match = stationName.match(/\d+$/);
+                if (match) {
+                    const nextNum = parseInt(match[0]) + 1;
+                    localStorage.setItem('lastStationNum', nextNum.toString());
+                }
+
+                // 4. Connect with saved config
+                statusDiv.textContent = '✅ Connected! Syncing data...';
+                statusDiv.style.color = '#4CAF50';
+                await connectWithToken(token);
+
+                // 5. Close modal and update UI
+                setTimeout(() => {
+                    document.getElementById('connectionModal').style.display = 'none';
+                    updateConnectionStatus('connected', 'Connected to Server');
+                }, 1000);
+
+            } catch (error) {
+                statusDiv.textContent = `❌ Connection failed: ${error.message}`;
+                statusDiv.style.color = '#f44336';
+            }
+        }
+
+        // Work offline option
+        function workOffline() {
+            localStorage.setItem('preferOfflineMode', 'true');
+            document.getElementById('connectionModal').style.display = 'none';
+            updateConnectionStatus('disconnected', 'Working Offline');
+
+            // Update offline mode toggle button
+            const button = document.getElementById('offlineModeToggle');
+            if (button) {
+                button.querySelector('.mode-text').textContent = 'Go Online';
+                button.querySelector('.mode-icon').textContent = '📴';
+            }
+        }
+
+        // Show connection wizard
+        function showConnectionWizard() {
+            const modal = document.getElementById('connectionModal');
+            modal.style.display = 'flex';
+
+            // Auto-scan on open for better UX (but don't block)
+            setTimeout(scanForServers, 100);
+        }
+
+        // Helper to connect with token
+        async function connectWithToken(token) {
+            const orchestratorUrl = localStorage.getItem('orchestrator_url');
+            const stationId = localStorage.getItem('stationId') || `GM_STATION_${Date.now()}`;
+
+            // Save generated station ID if new
+            if (!localStorage.getItem('stationId')) {
+                localStorage.setItem('stationId', stationId);
+            }
+
+            const config = {
+                url: orchestratorUrl,
+                stationId: stationId,
+                autoConnect: false
+            };
+
+            window.orchestratorClient = new OrchestratorClient(config);
+            window.orchestratorClient.token = token;
+
+            // Load any persisted offline queue
+            if (window.orchestratorClient.config.persistQueue) {
+                window.orchestratorClient.loadQueueFromStorage();
+            }
+
+            // Set up connection status events
+            setupConnectionStatusListeners();
+
+            // Connect
+            console.log('Connecting to orchestrator with token');
+            window.orchestratorClient.connect();
+        }
+
+        // Setup connection status UI updates
+        function setupConnectionStatusListeners() {
+            if (!window.orchestratorClient) return;
+
+            window.orchestratorClient.on('status:changed', (status) => {
+                const statusMap = {
+                    'connected': { class: 'connected', text: 'Connected' },
+                    'connecting': { class: 'connecting', text: 'Connecting...' },
+                    'disconnected': { class: 'disconnected', text: 'Disconnected' },
+                    'offline': { class: 'disconnected', text: 'Offline Mode' },
+                    'error': { class: 'disconnected', text: 'Connection Error' }
+                };
+
+                const config = statusMap[status] || statusMap['disconnected'];
+                updateConnectionStatus(config.class, config.text);
+
+                // Reset reconnection delay on successful connection
+                if (status === 'connected') {
+                    reconnectionDelay = 5000;
+                }
+            });
+
+            window.orchestratorClient.on('reconnecting', () => {
+                updateConnectionStatus('connecting', 'Reconnecting...');
+            });
+
+            window.orchestratorClient.on('connection:error', (error) => {
+                console.log('Connection error:', error);
+                scheduleReconnectionAttempt();
+            });
+        }
+
+        // Enhanced connection status update
+        function updateConnectionStatus(statusClass, statusText) {
+            const indicator = document.getElementById('connectionStatus');
+            if (!indicator) return;
+
+            const textElement = indicator.querySelector('.status-text');
+
+            // Clear all status classes
+            indicator.classList.remove('connected', 'connecting', 'disconnected');
+            indicator.classList.add(statusClass);
+
+            // Update text
+            if (textElement) {
+                textElement.textContent = statusText;
+            }
+
+            // Show queue count if offline
+            if (statusClass === 'disconnected' && window.orchestratorClient) {
+                const queueSize = window.orchestratorClient.offlineQueue?.length || 0;
+                if (queueSize > 0) {
+                    textElement.textContent = `${statusText} (${queueSize} pending)`;
                 }
             }
-        });
+        }
+
+        // Show non-blocking authentication modal
+        async function showAuthModal() {
+            // Show the connection wizard modal instead of using prompt
+            showConnectionWizard();
+
+            // Pre-fill the server URL if we already have one
+            const existingUrl = localStorage.getItem('orchestrator_url');
+            if (existingUrl) {
+                document.getElementById('serverUrl').value = existingUrl;
+            }
+
+            // Pre-fill station name if we have one
+            const existingStation = localStorage.getItem('stationName');
+            if (existingStation) {
+                document.getElementById('stationName').value = existingStation;
+            }
+        }
+
+        // Toggle offline mode
+        function toggleOfflineMode() {
+            const button = document.getElementById('offlineModeToggle');
+            const isOffline = localStorage.getItem('preferOfflineMode') === 'true';
+
+            if (isOffline) {
+                // Go online
+                localStorage.setItem('preferOfflineMode', 'false');
+                button.querySelector('.mode-text').textContent = 'Go Offline';
+                button.querySelector('.mode-icon').textContent = '🌐';
+
+                // Clear any reconnection timer
+                if (reconnectionTimer) {
+                    clearTimeout(reconnectionTimer);
+                    reconnectionTimer = null;
+                }
+
+                // Try to connect
+                console.log('User requested online mode');
+                tryOrchestratorConnection();
+            } else {
+                // Go offline
+                localStorage.setItem('preferOfflineMode', 'true');
+                button.querySelector('.mode-text').textContent = 'Go Online';
+                button.querySelector('.mode-icon').textContent = '📴';
+
+                // Clear reconnection timer
+                if (reconnectionTimer) {
+                    clearTimeout(reconnectionTimer);
+                    reconnectionTimer = null;
+                }
+
+                // Disconnect if connected
+                if (window.orchestratorClient) {
+                    window.orchestratorClient.disconnect();
+                }
+
+                console.log('User requested offline mode');
+                updateConnectionStatus('disconnected', 'Offline Mode');
+            }
+        }
+
+        // Note: Offline mode button initialization moved to main DOMContentLoaded handler at line 3522
 
     </script>
 

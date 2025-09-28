@@ -219,17 +219,10 @@
     <script>
         // Initialize on page load
         window.addEventListener('DOMContentLoaded', () => {
-            // Load saved configuration
-            const savedConfig = localStorage.getItem('orchestratorConfig');
-            if (savedConfig) {
-                try {
-                    const config = JSON.parse(savedConfig);
-                    if (config.url) {
-                        document.getElementById('orchestratorUrl').value = config.url;
-                    }
-                } catch (e) {
-                    console.error('Failed to parse saved config:', e);
-                }
+            // Load saved configuration from the correct keys
+            const orchestratorUrl = localStorage.getItem('orchestrator_url');
+            if (orchestratorUrl) {
+                document.getElementById('orchestratorUrl').value = orchestratorUrl;
             }
 
             // Load station ID
@@ -361,13 +354,8 @@
                 return;
             }
 
-            // Save configuration in GM scanner format
-            const config = {
-                url: url,
-                stationId: stationId
-            };
-
-            localStorage.setItem('orchestratorConfig', JSON.stringify(config));
+            // Save configuration to the keys that index.html expects
+            localStorage.setItem('orchestrator_url', url);
             localStorage.setItem('stationId', stationId);
 
             showMessage('Configuration saved! ✅', 'success');
