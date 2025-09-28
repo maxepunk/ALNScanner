@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>GM Scanner - Network Configuration</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .config-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+
+        .status-box {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-connected {
+            background: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+
+        .status-disconnected {
+            background: #f44336;
+        }
+
+        .status-checking {
+            background: #FFC107;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        input[type="text"], input[type="url"] {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.4);
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .discovery-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .discovered-servers {
+            margin-top: 15px;
+        }
+
+        .server-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .server-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: white;
+            text-decoration: none;
+            opacity: 0.8;
+        }
+
+        .back-link:hover {
+            opacity: 1;
+        }
+
+        .message {
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 15px;
+            text-align: center;
+        }
+
+        .message.success {
+            background: rgba(76, 175, 80, 0.3);
+        }
+
+        .message.error {
+            background: rgba(244, 67, 54, 0.3);
+        }
+
+        .info-text {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="config-container">
+        <h1>🎯 GM Scanner Configuration</h1>
+
+        <div class="status-box">
+            <span id="statusIndicator" class="status-indicator status-disconnected"></span>
+            <span id="statusText">Not Connected</span>
+        </div>
+
+        <div class="form-group">
+            <label for="stationId">Station ID</label>
+            <input type="text" id="stationId"
+                   placeholder="GM_STATION_1"
+                   value="">
+            <p class="info-text">Unique identifier for this GM station</p>
+        </div>
+
+        <div class="form-group">
+            <label for="orchestratorUrl">Orchestrator URL</label>
+            <input type="url" id="orchestratorUrl"
+                   placeholder="http://10.0.0.135:3000"
+                   value="">
+            <p class="info-text">Enter the URL displayed on the orchestrator screen</p>
+        </div>
+
+        <button id="testBtn" onclick="testConnection()">Test Connection</button>
+        <button id="saveBtn" onclick="saveConfiguration()">Save Configuration</button>
+
+        <div id="message" class="message" style="display: none;"></div>
+
+        <div class="discovery-section">
+            <h3>🔍 Automatic Discovery</h3>
+            <button id="discoverBtn" onclick="discoverServers()">Scan for Orchestrators</button>
+            <div id="discoveredServers" class="discovered-servers"></div>
+        </div>
+
+        <a href="index.html" class="back-link">← Back to GM Scanner</a>
+    </div>
+
+    <script>
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            // Load saved configuration
+            const savedConfig = localStorage.getItem('orchestratorConfig');
+            if (savedConfig) {
+                try {
+                    const config = JSON.parse(savedConfig);
+                    if (config.url) {
+                        document.getElementById('orchestratorUrl').value = config.url;
+                    }
+                } catch (e) {
+                    console.error('Failed to parse saved config:', e);
+                }
+            }
+
+            // Load station ID
+            const stationId = localStorage.getItem('stationId');
+            if (stationId) {
+                document.getElementById('stationId').value = stationId;
+            }
+
+            // Initial status check
+            updateConnectionStatus();
+        });
+
+        function updateConnectionStatus() {
+            const indicator = document.getElementById('statusIndicator');
+            const text = document.getElementById('statusText');
+            const url = document.getElementById('orchestratorUrl').value;
+
+            if (!url) {
+                indicator.className = 'status-indicator status-disconnected';
+                text.textContent = 'Not Configured';
+                return;
+            }
+
+            // Check connection via WebSocket test
+            indicator.className = 'status-indicator status-checking';
+            text.textContent = 'Checking...';
+
+            testWebSocket(url).then(connected => {
+                if (connected) {
+                    indicator.className = 'status-indicator status-connected';
+                    text.textContent = 'Connected to Orchestrator';
+                } else {
+                    indicator.className = 'status-indicator status-disconnected';
+                    text.textContent = 'Not Connected';
+                }
+            });
+        }
+
+        async function testWebSocket(url) {
+            return new Promise((resolve) => {
+                try {
+                    // Extract base URL without protocol
+                    const urlObj = new URL(url);
+                    const wsUrl = `ws://${urlObj.host}/socket.io/?EIO=4&transport=websocket`;
+
+                    const ws = new WebSocket(wsUrl);
+                    const timeout = setTimeout(() => {
+                        ws.close();
+                        resolve(false);
+                    }, 3000);
+
+                    ws.onopen = () => {
+                        clearTimeout(timeout);
+                        ws.close();
+                        resolve(true);
+                    };
+
+                    ws.onerror = () => {
+                        clearTimeout(timeout);
+                        resolve(false);
+                    };
+                } catch (error) {
+                    resolve(false);
+                }
+            });
+        }
+
+        async function testConnection() {
+            const url = document.getElementById('orchestratorUrl').value;
+            const indicator = document.getElementById('statusIndicator');
+            const text = document.getElementById('statusText');
+            const testBtn = document.getElementById('testBtn');
+
+            if (!url) {
+                showMessage('Please enter an orchestrator URL', 'error');
+                return;
+            }
+
+            // Show checking status
+            indicator.className = 'status-indicator status-checking';
+            text.textContent = 'Testing connection...';
+            testBtn.disabled = true;
+
+            try {
+                // Test HTTP endpoint first
+                const response = await fetch(`${url}/api/state/status`, {
+                    method: 'GET',
+                    mode: 'cors',
+                    signal: AbortSignal.timeout(5000)
+                });
+
+                if (response.ok) {
+                    // Now test WebSocket
+                    const wsConnected = await testWebSocket(url);
+                    if (wsConnected) {
+                        showMessage('Connection successful! WebSocket ready ✅', 'success');
+                        indicator.className = 'status-indicator status-connected';
+                        text.textContent = 'Connected';
+                    } else {
+                        showMessage('HTTP works but WebSocket failed. Check firewall settings.', 'error');
+                        indicator.className = 'status-indicator status-disconnected';
+                        text.textContent = 'Partial Connection';
+                    }
+                } else {
+                    showMessage('Connection failed. Please check the URL and try again.', 'error');
+                    indicator.className = 'status-indicator status-disconnected';
+                    text.textContent = 'Not Connected';
+                }
+            } catch (error) {
+                showMessage('Connection failed: ' + error.message, 'error');
+                indicator.className = 'status-indicator status-disconnected';
+                text.textContent = 'Not Connected';
+            } finally {
+                testBtn.disabled = false;
+            }
+        }
+
+        function saveConfiguration() {
+            const url = document.getElementById('orchestratorUrl').value;
+            const stationId = document.getElementById('stationId').value;
+
+            if (!url) {
+                showMessage('Please enter an orchestrator URL', 'error');
+                return;
+            }
+
+            if (!stationId) {
+                showMessage('Please enter a Station ID', 'error');
+                return;
+            }
+
+            // Save configuration in GM scanner format
+            const config = {
+                url: url,
+                stationId: stationId
+            };
+
+            localStorage.setItem('orchestratorConfig', JSON.stringify(config));
+            localStorage.setItem('stationId', stationId);
+
+            showMessage('Configuration saved! ✅', 'success');
+
+            // Redirect back to scanner after 2 seconds
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 2000);
+        }
+
+        async function discoverServers() {
+            const discoverBtn = document.getElementById('discoverBtn');
+            const serversDiv = document.getElementById('discoveredServers');
+
+            discoverBtn.disabled = true;
+            discoverBtn.textContent = 'Scanning...';
+            serversDiv.innerHTML = '<p class="info-text">Looking for orchestrators on the network...</p>';
+
+            try {
+                // Detect current subnet from page URL
+                const currentHost = window.location.hostname;
+                let subnet = '192.168.1'; // Default fallback
+
+                // Try to detect subnet from current host
+                if (currentHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+                    const parts = currentHost.split('.');
+                    if (parts.length >= 3) {
+                        subnet = parts.slice(0, 3).join('.');
+                    }
+                }
+
+                const commonPorts = [3000, 8080];
+                const promises = [];
+
+                // Scan current subnet
+                for (let i = 1; i <= 254; i++) {
+                    for (const port of commonPorts) {
+                        const url = `http://${subnet}.${i}:${port}`;
+                        promises.push(
+                            fetch(`${url}/api/state/status`, {
+                                method: 'GET',
+                                mode: 'cors',
+                                signal: AbortSignal.timeout(500)
+                            })
+                            .then(response => response.ok ? url : null)
+                            .catch(() => null)
+                        );
+                    }
+
+                    // Limit concurrent requests
+                    if (promises.length >= 20) {
+                        await Promise.race(promises);
+                    }
+                }
+
+                // Also try localhost and current origin
+                promises.push(
+                    fetch('http://localhost:3000/api/state/status', {
+                        signal: AbortSignal.timeout(1000)
+                    })
+                    .then(response => response.ok ? 'http://localhost:3000' : null)
+                    .catch(() => null)
+                );
+
+                // Try current origin if served from orchestrator
+                if (window.location.pathname.includes('gm-scanner')) {
+                    promises.push(Promise.resolve(window.location.origin));
+                }
+
+                const results = await Promise.all(promises);
+                const foundServers = [...new Set(results.filter(url => url !== null))];
+
+                if (foundServers.length > 0) {
+                    serversDiv.innerHTML = '<p class="info-text">Found orchestrators:</p>';
+                    foundServers.forEach(url => {
+                        const serverItem = document.createElement('div');
+                        serverItem.className = 'server-item';
+                        serverItem.innerHTML = `
+                            <span>${url}</span>
+                            <button onclick="selectServer('${url}')">Use</button>
+                        `;
+                        serversDiv.appendChild(serverItem);
+                    });
+                } else {
+                    serversDiv.innerHTML = '<p class="info-text">No orchestrators found. Please enter URL manually.</p>';
+                }
+            } catch (error) {
+                serversDiv.innerHTML = '<p class="info-text">Discovery failed. Please enter URL manually.</p>';
+            } finally {
+                discoverBtn.disabled = false;
+                discoverBtn.textContent = 'Scan for Orchestrators';
+            }
+        }
+
+        function selectServer(url) {
+            document.getElementById('orchestratorUrl').value = url;
+            testConnection();
+        }
+
+        function showMessage(text, type) {
+            const message = document.getElementById('message');
+            message.textContent = text;
+            message.className = `message ${type}`;
+            message.style.display = 'block';
+
+            // Hide after 5 seconds
+            setTimeout(() => {
+                message.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

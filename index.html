@@ -44,17 +44,45 @@
            HEADER STYLES
            ============================================ */
         .header {
-            text-align: center;
             margin-bottom: 30px;
-            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
         }
-        
+
+        .header-content {
+            text-align: center;
+            width: 100%;
+        }
+
         .header-nav {
-            position: absolute;
-            top: 0;
-            right: 0;
             display: flex;
             gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+        }
+
+        @media (min-width: 769px) {
+            .header {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: flex-start;
+            }
+
+            .header-nav {
+                justify-content: flex-end;
+                width: auto;
+                order: 2;
+                flex-shrink: 0;
+            }
+
+            .header-content {
+                order: 1;
+                flex-grow: 1;
+            }
         }
         
         .nav-button {
@@ -102,6 +130,24 @@
             font-size: 14px;
             font-weight: 600;
             transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .connection-status:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        @media (max-width: 480px) {
+            .connection-status .status-text {
+                display: none;
+            }
+            .connection-status {
+                margin-right: 5px;
+                padding: 8px;
+            }
         }
 
         .status-dot {
@@ -970,10 +1016,10 @@
         <div class="header">
             <div class="header-nav" id="headerNav">
                 <!-- Connection Status Indicator -->
-                <div id="connectionStatus" class="connection-status disconnected" title="Orchestrator connection status">
+                <a href="config.html" id="connectionStatus" class="connection-status disconnected" title="Click for network configuration">
                     <span class="status-dot"></span>
                     <span class="status-text">Disconnected</span>
-                </div>
+                </a>
                 <button class="nav-button" onclick="App.showHistory()" title="View transaction history">
                     📋<span id="historyBadge" class="badge" style="display: none;">0</span>
                 </button>
@@ -984,9 +1030,11 @@
                     ⚙️
                 </button>
             </div>
-            <h1>Transaction Station</h1>
-            <div id="modeIndicator" class="mode-indicator mode-detective" onclick="App.toggleMode()" title="Click to switch mode">Detective Mode</div>
-            <div class="station-id">Station ID: <span id="stationIdDisplay">001</span></div>
+            <div class="header-content">
+                <h1>Transaction Station</h1>
+                <div id="modeIndicator" class="mode-indicator mode-detective" onclick="App.toggleMode()" title="Click to switch mode">Detective Mode</div>
+                <div class="station-id">Station ID: <span id="stationIdDisplay">001</span></div>
+            </div>
         </div>
 
         <!-- Loading Screen -->
@@ -1016,7 +1064,26 @@
                     <span id="modeText">Detective Mode</span>
                 </p>
             </div>
-            <button class="btn btn-primary" onclick="App.saveSettings()">Start Station</button>
+
+            <div class="settings-panel" style="margin-top: 20px;">
+                <h3>Network Configuration</h3>
+                <div class="settings-group">
+                    <label for="orchestratorUrl">Orchestrator URL</label>
+                    <input type="url" id="orchestratorUrl" placeholder="http://10.0.0.135:3000"
+                           value="" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                </div>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-secondary" onclick="App.testOrchestratorConnection()"
+                            style="margin-right: 10px;">Test Connection</button>
+                    <a href="config.html" class="btn btn-secondary"
+                       style="text-decoration: none; display: inline-block;">Network Discovery</a>
+                </div>
+                <div id="connectionTestResult" style="margin-top: 10px; display: none;">
+                    <span style="padding: 5px 10px; border-radius: 4px;"></span>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="App.saveSettings()">Save & Start Station</button>
             <div class="settings-panel" style="margin-top: 20px;">
                 <h3>Data Management</h3>
                 <button class="btn btn-secondary" onclick="DataManager.exportData('json')">Export JSON</button>
@@ -2791,21 +2858,32 @@
         const Settings = {
             stationId: '001',
             stationMode: 'detective',
-            
+            orchestratorUrl: '',
+
             /**
              * Load settings from localStorage
              */
             load() {
                 this.stationId = localStorage.getItem('stationId') || '001';
                 this.stationMode = localStorage.getItem('stationMode') || 'detective';
-                
+                this.orchestratorUrl = localStorage.getItem('orchestrator_url') || '';
+
                 document.getElementById('stationId').value = this.stationId;
                 document.getElementById('stationIdDisplay').textContent = this.stationId;
                 document.getElementById('modeToggle').checked = this.stationMode === 'blackmarket';
-                
+
+                const orchestratorUrlInput = document.getElementById('orchestratorUrl');
+                if (orchestratorUrlInput) {
+                    // Auto-detect URL if served from orchestrator
+                    if (!this.orchestratorUrl && window.location.pathname.includes('/gm-scanner/')) {
+                        this.orchestratorUrl = window.location.origin;
+                    }
+                    orchestratorUrlInput.value = this.orchestratorUrl;
+                }
+
                 UIManager.updateModeDisplay(this.stationMode);
             },
-            
+
             /**
              * Save settings to localStorage
              */
@@ -2814,13 +2892,25 @@
                 if (settingsScreen && settingsScreen.classList.contains('active')) {
                     this.stationId = document.getElementById('stationId').value || '001';
                     this.stationMode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
+
+                    const orchestratorUrlInput = document.getElementById('orchestratorUrl');
+                    if (orchestratorUrlInput) {
+                        this.orchestratorUrl = orchestratorUrlInput.value || '';
+                        localStorage.setItem('orchestrator_url', this.orchestratorUrl);
+                    }
                 }
-                
+
                 localStorage.setItem('stationId', this.stationId);
                 localStorage.setItem('stationMode', this.stationMode);
-                
+
                 document.getElementById('stationIdDisplay').textContent = this.stationId;
                 UIManager.updateModeDisplay(this.stationMode);
+
+                // Reconnect orchestrator if URL changed
+                if (window.orchestratorClient && this.orchestratorUrl) {
+                    window.orchestratorClient.config.url = this.orchestratorUrl;
+                    window.orchestratorClient.reconnect();
+                }
             }
         };
 
@@ -2902,6 +2992,52 @@
             updateModeFromToggle() {
                 Settings.stationMode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
                 UIManager.updateModeDisplay(Settings.stationMode);
+            },
+
+            async testOrchestratorConnection() {
+                const urlInput = document.getElementById('orchestratorUrl');
+                const resultDiv = document.getElementById('connectionTestResult');
+                const resultSpan = resultDiv.querySelector('span');
+
+                if (!urlInput.value) {
+                    resultDiv.style.display = 'block';
+                    resultSpan.style.backgroundColor = '#ffeb3b';
+                    resultSpan.style.color = '#333';
+                    resultSpan.textContent = '⚠️ Please enter an orchestrator URL';
+                    return;
+                }
+
+                resultDiv.style.display = 'block';
+                resultSpan.style.backgroundColor = '#2196F3';
+                resultSpan.style.color = 'white';
+                resultSpan.textContent = '⏳ Testing connection...';
+
+                try {
+                    const response = await fetch(`${urlInput.value}/api/state/status`, {
+                        method: 'GET',
+                        mode: 'cors',
+                        signal: AbortSignal.timeout(5000)
+                    });
+
+                    if (response.ok) {
+                        resultSpan.style.backgroundColor = '#4CAF50';
+                        resultSpan.textContent = '✅ Connection successful!';
+
+                        // Save the URL if connection successful
+                        localStorage.setItem('orchestrator_url', urlInput.value);
+                    } else {
+                        resultSpan.style.backgroundColor = '#f44336';
+                        resultSpan.textContent = '❌ Connection failed. Please check the URL.';
+                    }
+                } catch (error) {
+                    resultSpan.style.backgroundColor = '#f44336';
+                    resultSpan.textContent = '❌ Connection failed: ' + error.message;
+                }
+
+                // Hide result after 5 seconds
+                setTimeout(() => {
+                    resultDiv.style.display = 'none';
+                }, 5000);
             },
             
             // Team Entry
@@ -3027,12 +3163,25 @@
                 
                 DataManager.addTransaction(transaction);
                 DataManager.markTokenAsScanned(tokenId);
-                
+
+                // Submit transaction to orchestrator if connected
+                if (window.orchestratorClient && window.orchestratorClient.isConnected) {
+                    window.orchestratorClient.submitTransaction({
+                        tokenId: tokenId,
+                        teamId: this.currentTeamId,
+                        scannerId: Settings.stationId,
+                        timestamp: new Date().toISOString()
+                    });
+                    Debug.log('Transaction submitted to orchestrator');
+                } else {
+                    Debug.log('Orchestrator not connected - transaction stored locally only');
+                }
+
                 if (Settings.stationMode === 'blackmarket' && !isUnknown) {
                     const tokenScore = DataManager.calculateTokenValue(transaction);
                     Debug.log(`Token scored: $${tokenScore.toLocaleString()}`);
                 }
-                
+
                 UIManager.updateSessionStats();
                 UIManager.showTokenResult(token, tokenId, isUnknown);
                 
@@ -3263,8 +3412,23 @@
          */
         class OrchestratorClient {
             constructor(config = {}) {
+                // Auto-detect orchestrator URL if served from orchestrator
+                const detectOrchestratorUrl = () => {
+                    // If served from orchestrator, use same origin
+                    if (window.location.pathname.includes('/gm-scanner/')) {
+                        return window.location.origin;
+                    }
+                    // Check localStorage for saved URL
+                    const savedUrl = localStorage.getItem('orchestrator_url');
+                    if (savedUrl) {
+                        return savedUrl;
+                    }
+                    // Fallback to localhost for development
+                    return 'http://localhost:3000';
+                };
+
                 this.config = {
-                    url: config.url || 'http://localhost:3000',
+                    url: config.url || detectOrchestratorUrl(),
                     stationId: config.stationId || 'GM_STATION_UNKNOWN',
                     version: config.version || '1.0.0',
                     transports: ['websocket'],
@@ -3289,6 +3453,7 @@
                 this.eventHandlers = {};
                 this.heartbeatTimer = null;
                 this.lastHeartbeat = null;
+                this.token = null; // Authentication token
 
                 // Offline queue functionality
                 this.offlineQueue = [];
@@ -3299,15 +3464,75 @@
                 if (!this.config.stationId || this.config.stationId === 'GM_STATION_UNKNOWN') {
                     console.warn('OrchestratorClient: stationId not configured');
                 }
+
+                // Check for existing token in localStorage
+                this.token = localStorage.getItem('gmToken');
+
+                // Note: Authentication is only required when connecting to orchestrator
+                // Scanner can operate offline without authentication
+            }
+
+            /**
+             * Authenticate with orchestrator
+             * Called when attempting to connect without token
+             */
+            async authenticateWithOrchestrator() {
+                // Only prompt if we're actually trying to connect
+                if (!this.config.url || this.config.url === 'offline') {
+                    console.log('OrchestratorClient: Offline mode, skipping authentication');
+                    return false;
+                }
+
+                const password = prompt('Enter game manager password to connect to orchestrator:');
+                if (!password) {
+                    console.log('OrchestratorClient: Authentication cancelled, continuing offline');
+                    return false;
+                }
+
+                try {
+                    const response = await fetch(`${this.config.url}/api/admin/auth`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password })
+                    });
+
+                    if (response.ok) {
+                        const { token } = await response.json();
+                        this.token = token;
+                        localStorage.setItem('gmToken', token);
+                        console.log('OrchestratorClient: Authentication successful');
+                        return true;
+                    } else {
+                        console.error('OrchestratorClient: Invalid password');
+                        alert('Invalid password. Scanner will continue in offline mode.');
+                        return false;
+                    }
+                } catch (error) {
+                    console.error('OrchestratorClient: Authentication failed:', error);
+                    alert('Cannot connect to orchestrator. Scanner will continue in offline mode.');
+                    return false;
+                }
             }
 
             /**
              * Connect to the orchestrator WebSocket server
              */
-            connect() {
+            async connect() {
                 if (this.socket && this.socket.connected) {
                     console.warn('OrchestratorClient: Already connected');
                     return;
+                }
+
+                // Check if we need authentication
+                if (!this.token && this.config.url && this.config.url !== 'offline') {
+                    console.log('OrchestratorClient: No token found, requesting authentication');
+                    const authenticated = await this.authenticateWithOrchestrator();
+                    if (!authenticated) {
+                        console.log('OrchestratorClient: Authentication failed, aborting connection');
+                        this.connectionStatus = 'disconnected';
+                        this.emit('status:changed', 'offline');
+                        return;
+                    }
                 }
 
                 this.connectionStatus = 'connecting';
@@ -3449,7 +3674,8 @@
 
                 const identifyData = {
                     stationId: this.config.stationId,
-                    version: this.config.version
+                    version: this.config.version,
+                    token: this.token  // Include authentication token
                 };
 
                 // Validate identification data
@@ -3458,6 +3684,13 @@
                         code: 'INVALID_DATA',
                         message: 'Station ID is required for GM identification'
                     });
+                    return;
+                }
+
+                // Token is required for connection
+                if (!identifyData.token) {
+                    console.error('OrchestratorClient: No token available for identification');
+                    this.socket.disconnect();
                     return;
                 }
 
@@ -3806,10 +4039,16 @@
         // Auto-initialize if configuration exists
         document.addEventListener('DOMContentLoaded', () => {
             // Check for orchestrator configuration
-            const orchestratorConfig = localStorage.getItem('orchestratorConfig');
-            if (orchestratorConfig) {
+            const orchestratorUrl = localStorage.getItem('orchestrator_url');
+            const stationId = localStorage.getItem('stationId');
+
+            if (orchestratorUrl) {
                 try {
-                    const config = JSON.parse(orchestratorConfig);
+                    const config = {
+                        url: orchestratorUrl,
+                        stationId: stationId || 'GM_STATION_UNKNOWN',
+                        autoConnect: true
+                    };
                     window.orchestratorClient = new OrchestratorClient(config);
 
                     // Load any persisted offline queue
@@ -3831,19 +4070,27 @@
                     };
 
                     // Wire up connection events to UI
-                    window.orchestratorClient.on('connect', () => {
-                        updateConnectionStatus('connected', 'Connected');
-                        console.log('Orchestrator connected - UI updated');
-                    });
-
-                    window.orchestratorClient.on('disconnect', () => {
-                        updateConnectionStatus('disconnected', 'Disconnected');
-                        console.log('Orchestrator disconnected - UI updated');
-                    });
-
-                    window.orchestratorClient.on('connecting', () => {
-                        updateConnectionStatus('connecting', 'Connecting...');
-                        console.log('Orchestrator connecting - UI updated');
+                    // OrchestratorClient emits 'status:changed' with status value
+                    window.orchestratorClient.on('status:changed', (status) => {
+                        switch(status) {
+                            case 'connected':
+                                updateConnectionStatus('connected', 'Connected');
+                                console.log('Orchestrator connected - UI updated');
+                                break;
+                            case 'connecting':
+                                updateConnectionStatus('connecting', 'Connecting...');
+                                console.log('Orchestrator connecting - UI updated');
+                                break;
+                            case 'disconnected':
+                            case 'offline':
+                                updateConnectionStatus('disconnected', 'Disconnected');
+                                console.log('Orchestrator disconnected - UI updated');
+                                break;
+                            case 'error':
+                                updateConnectionStatus('disconnected', 'Error');
+                                console.log('Orchestrator error - UI updated');
+                                break;
+                        }
                     });
 
                     window.orchestratorClient.on('reconnecting', () => {
@@ -3851,9 +4098,9 @@
                         console.log('Orchestrator reconnecting - UI updated');
                     });
 
-                    window.orchestratorClient.on('error', (error) => {
+                    window.orchestratorClient.on('connection:error', (error) => {
                         updateConnectionStatus('disconnected', 'Error');
-                        console.log('Orchestrator error - UI updated:', error);
+                        console.log('Orchestrator connection error:', error);
                     });
 
                     // Auto-connect if configured
