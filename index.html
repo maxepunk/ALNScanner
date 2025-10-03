@@ -5780,16 +5780,31 @@
                     this.emit('gm:identified', payload);
                 });
 
-                this.socket.on('state:update', (eventData) => {
-                    const payload = eventData.data;
-                    this.emit('state:update', payload);
-                    this.updateDataManager(payload);
-                });
-
                 this.socket.on('transaction:new', (eventData) => {
                     const payload = eventData.data;
                     this.emit('transaction:new', payload);
                     this.updateDataManager({ newTransaction: payload });
+                });
+
+                // Transaction result from server (Decision #10: MUST check status and display errors)
+                this.socket.on('transaction:result', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('transaction:result', payload);
+
+                    // Decision #10: Check status and display errors to user
+                    if (payload.status === 'error') {
+                        if (window.UIManager) {
+                            window.UIManager.showError(payload.message || 'Transaction failed');
+                        }
+                        console.error('Transaction error:', payload.message, payload);
+                    } else if (payload.status === 'duplicate') {
+                        if (window.UIManager) {
+                            window.UIManager.showWarning(payload.message || 'Duplicate transaction');
+                        }
+                        console.warn('Duplicate transaction:', payload);
+                    } else if (payload.status === 'accepted') {
+                        console.log('Transaction accepted:', payload);
+                    }
                 });
 
                 this.socket.on('video:status', (eventData) => {
@@ -5800,7 +5815,7 @@
                 // Score update events from backend
                 this.socket.on('score:updated', (eventData) => {
                     const payload = eventData.data;
-                    this.emit('score:updated', eventData);
+                    this.emit('score:updated', payload);
                     // Update local score cache for the team
                     if (window.DataManager) {
                         window.DataManager.updateTeamScoreFromBackend(payload);
@@ -5808,38 +5823,14 @@
                     console.log('Received score update from backend:', payload);
                 });
 
-                this.socket.on('scores:reset', (eventData) => {
-                    const payload = eventData.data;
-                    this.emit('scores:reset', payload);
-
-                    // Clear backend scores cache
-                    if (window.DataManager && window.DataManager.backendScores) {
-                        window.DataManager.backendScores.clear();
-                        Debug.log('Backend scores cleared after reset');
-                    }
-
-                    // Update admin panel if active
-                    if (App.viewController && App.viewController.currentView === 'admin') {
-                        App.updateAdminPanel();
-                    }
-
-                    console.log('Scores reset by admin');
-                });
-
                 this.socket.on('group:completed', (eventData) => {
                     const payload = eventData.data;
-                    this.emit('group:completed', eventData);
+                    this.emit('group:completed', payload);
                     // Show notification about group completion
                     if (window.UIManager) {
                         window.UIManager.showGroupCompletionNotification(payload);
                     }
                     console.log('Group completed:', payload);
-                });
-
-                this.socket.on('team:created', (eventData) => {
-                    const payload = eventData.data;
-                    this.emit('team:created', eventData);
-                    console.log('New team created:', payload);
                 });
 
                 this.socket.on('device:connected', (eventData) => {
@@ -5862,83 +5853,52 @@
                     this.emit('sync:full', payload);
                 });
 
-                this.socket.on('state:sync', (eventData) => {
+                // Session state changes (replaces session:paused, session:resumed, session:ended per 08-functional-requirements.md:1051-1055)
+                this.socket.on('session:update', (eventData) => {
                     const payload = eventData.data;
-                    console.log('STATE:SYNC RECEIVED:', JSON.stringify(payload, null, 2));
+                    this.emit('session:update', payload);
 
-                    // Update admin panel displays with received state
-                    if (App.viewController?.adminInstances) {
-                        // Update video status display
-                        if (payload.currentVideo) {
-                            App.viewController.adminInstances.videoController.updateDisplay({
-                                current: payload.currentVideo.tokenId,
-                                queueLength: 0 // GameState doesn't track queue length
-                            });
-                        } else {
-                            App.viewController.adminInstances.videoController.updateDisplay({
-                                current: 'None',
-                                queueLength: 0
-                            });
-                        }
-
-                        // Update system status
-                        if (payload.systemStatus) {
-                            App.viewController.adminInstances.systemMonitor.updateOrchestratorStatus(
-                                payload.systemStatus.orchestratorOnline ? 'connected' : 'disconnected'
-                            );
-                            App.viewController.adminInstances.systemMonitor.updateVLCStatus(
-                                payload.systemStatus.vlcConnected ? 'ready' : 'disconnected'
-                            );
-                        }
+                    // Update session info if available
+                    if (payload.id) {
+                        this.sessionId = payload.id;
                     }
 
-                    console.log('Scores check:', {
-                        hasScores: !!payload.scores,
-                        isArray: Array.isArray(payload.scores),
-                        length: payload.scores?.length,
-                        hasDataManager: !!window.DataManager
-                    });
+                    // Log session state changes
+                    console.log(`Session ${payload.status}:`, payload);
 
-                    // Update scores in DataManager from backend state
-                    if (payload.scores && Array.isArray(payload.scores)) {
-                        if (window.DataManager) {
-                            if (!window.DataManager.backendScores) {
-                                window.DataManager.backendScores = new Map();
-                            }
-                            payload.scores.forEach(scoreData => {
-                                window.DataManager.backendScores.set(scoreData.teamId, scoreData);
-                            });
-                            Debug.log('Updated backend scores from state:sync', {
-                                teamCount: payload.scores.length
-                            });
-                        }
-                    }
-
-                    console.log('Transactions check:', {
-                        hasTransactions: !!payload.recentTransactions,
-                        isArray: Array.isArray(payload.recentTransactions),
-                        length: payload.recentTransactions?.length,
-                        hasDataManager: !!window.DataManager
-                    });
-
-                    // Update transactions in DataManager from backend state
-                    if (payload.recentTransactions && Array.isArray(payload.recentTransactions)) {
-                        if (window.DataManager) {
-                            payload.recentTransactions.forEach(tx => {
-                                window.DataManager.addTransaction(tx);
-                            });
-                            Debug.log('Updated transactions from state:sync', {
-                                transactionCount: payload.recentTransactions.length
-                            });
-                        }
-                    }
-
-                    // Trigger admin panel update if admin view is active
+                    // Update admin panel if active
                     if (App.viewController?.currentView === 'admin') {
                         App.updateAdminPanel();
                     }
+                });
 
-                    this.emit('state:sync', payload);
+                // GM command acknowledgment (admin panel feedback per 08-functional-requirements.md:1096)
+                this.socket.on('gm:command:ack', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('gm:command:ack', payload);
+
+                    // Display feedback to admin
+                    if (payload.success) {
+                        console.log(`Command '${payload.action}' succeeded:`, payload);
+                    } else {
+                        console.error(`Command '${payload.action}' failed:`, payload.message || 'Unknown error');
+                        if (window.UIManager) {
+                            window.UIManager.showError(`Command failed: ${payload.message || 'Unknown error'}`);
+                        }
+                    }
+                });
+
+                // Offline queue processed notification (after reconnection per asyncapi.yaml:OfflineQueueProcessed)
+                this.socket.on('offline:queue:processed', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('offline:queue:processed', payload);
+
+                    console.log(`Offline queue processed: ${payload.queueSize} transactions`, payload);
+
+                    // Show notification to user
+                    if (window.UIManager && payload.queueSize > 0) {
+                        window.UIManager.showInfo(`Processed ${payload.queueSize} queued transactions`);
+                    }
                 });
 
                 this.socket.on('error', (eventData) => {
