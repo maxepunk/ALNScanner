@@ -229,7 +229,7 @@
             color: white;
         }
         
-        .station-id {
+        .device-id {
             color: #666;
             font-size: 14px;
         }
@@ -1382,7 +1382,7 @@
             <div class="header-content">
                 <h1>Transaction Station</h1>
                 <div id="modeIndicator" class="mode-indicator mode-detective" onclick="App.toggleMode()" title="Click to switch mode">Detective Mode</div>
-                <div class="station-id">Station ID: <span id="stationIdDisplay">001</span></div>
+                <div class="device-id">Device ID: <span id="deviceIdDisplay">001</span></div>
             </div>
         </div>
 
@@ -1418,8 +1418,8 @@
             <div class="settings-panel">
                 <h3>Station Configuration</h3>
                 <div class="settings-group">
-                    <label for="stationId">Station ID</label>
-                    <input type="text" id="stationId" placeholder="001" maxlength="10">
+                    <label for="deviceId">Device ID</label>
+                    <input type="text" id="deviceId" placeholder="001" maxlength="10">
                 </div>
                 <div class="toggle-switch">
                     <label>Station Mode</label>
@@ -2669,7 +2669,7 @@
                 // Normalize transaction format (backend sends different structure)
                 const normalizedTx = {
                     timestamp: transaction.timestamp || new Date().toISOString(),
-                    stationId: transaction.scannerId || transaction.stationId || Settings.stationId,
+                    deviceId: transaction.deviceId || Settings.deviceId,
                     stationMode: transaction.stationMode || Settings.stationMode,
                     teamId: transaction.teamId || App.currentTeamId,
                     rfid: transaction.tokenId || transaction.rfid,
@@ -3221,13 +3221,13 @@
                     type = 'application/json';
                 } else {
                     // CSV format
-                    const headers = ['timestamp', 'stationId', 'stationMode', 'teamId', 'rfid', 'memoryType', 'group', 'valueRating'];
+                    const headers = ['timestamp', 'deviceId', 'stationMode', 'teamId', 'rfid', 'memoryType', 'group', 'valueRating'];
                     const rows = [headers.join(',')];
                     
                     this.transactions.forEach(t => {
                         const row = [
                             t.timestamp,
-                            t.stationId,
+                            t.deviceId,
                             t.stationMode,
                             t.teamId,
                             t.rfid,
@@ -3810,7 +3810,7 @@
         // Manages station configuration
         // ============================================
         const Settings = {
-            stationId: '001',
+            deviceId: '001',
             stationMode: 'detective',
 
             /**
@@ -3819,15 +3819,15 @@
             load() {
                 // Use ConnectionManager if available, fallback to localStorage
                 if (window.connectionManager) {
-                    this.stationId = window.connectionManager.stationId;
+                    this.deviceId = window.connectionManager.deviceId;
                     this.stationMode = window.connectionManager.stationMode;
                 } else {
-                    this.stationId = localStorage.getItem('stationId') || '001';
+                    this.deviceId = localStorage.getItem('deviceId') || '001';
                     this.stationMode = localStorage.getItem('stationMode') || 'detective';
                 }
 
-                document.getElementById('stationId').value = this.stationId;
-                document.getElementById('stationIdDisplay').textContent = this.stationId;
+                document.getElementById('deviceId').value = this.deviceId;
+                document.getElementById('deviceIdDisplay').textContent = this.deviceId;
                 document.getElementById('modeToggle').checked = this.stationMode === 'blackmarket';
 
                 UIManager.updateModeDisplay(this.stationMode);
@@ -3839,20 +3839,20 @@
             save() {
                 const settingsScreen = document.getElementById('settingsScreen');
                 if (settingsScreen && settingsScreen.classList.contains('active')) {
-                    this.stationId = document.getElementById('stationId').value || '001';
+                    this.deviceId = document.getElementById('deviceId').value || '001';
                     this.stationMode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
                 }
 
                 // Use ConnectionManager if available
                 if (window.connectionManager) {
-                    window.connectionManager.stationId = this.stationId;
+                    window.connectionManager.deviceId = this.deviceId;
                     window.connectionManager.stationMode = this.stationMode;
                 } else {
-                    localStorage.setItem('stationId', this.stationId);
+                    localStorage.setItem('deviceId', this.deviceId);
                     localStorage.setItem('stationMode', this.stationMode);
                 }
 
-                document.getElementById('stationIdDisplay').textContent = this.stationId;
+                document.getElementById('deviceIdDisplay').textContent = this.deviceId;
                 UIManager.updateModeDisplay(this.stationMode);
             }
         };
@@ -4482,7 +4482,7 @@
             recordTransaction(token, tokenId, isUnknown) {
                 const transaction = {
                     timestamp: new Date().toISOString(),
-                    stationId: Settings.stationId,
+                    deviceId: Settings.deviceId,
                     stationMode: Settings.stationMode,
                     teamId: this.currentTeamId,
                     rfid: tokenId,
@@ -4507,7 +4507,7 @@
                     const txId = window.queueManager.queueTransaction({
                         tokenId: tokenId,
                         teamId: this.currentTeamId,
-                        scannerId: Settings.stationId,
+                        deviceId: Settings.deviceId,
                         stationMode: Settings.stationMode,  // CRITICAL: Include mode to prevent Detective scoring
                         timestamp: transaction.timestamp  // Use same timestamp
                     });
@@ -4890,7 +4890,7 @@
                 this.STORAGE_KEYS = {
                     URL: 'orchestratorUrl',
                     TOKEN: 'gmToken',
-                    STATION_ID: 'stationId',
+                    STATION_ID: 'deviceId',
                     STATION_NAME: 'stationName',
                     STATION_MODE: 'stationMode',
                     ATTEMPT_AUTH: 'attemptOrchestratorAuth',
@@ -4937,11 +4937,11 @@
                 }
             }
 
-            get stationId() {
+            get deviceId() {
                 return localStorage.getItem(this.STORAGE_KEYS.STATION_ID) || `GM_STATION_${Date.now()}`;
             }
 
-            set stationId(value) {
+            set deviceId(value) {
                 localStorage.setItem(this.STORAGE_KEYS.STATION_ID, value);
             }
 
@@ -5037,7 +5037,7 @@
 
                     this.client = new OrchestratorClient({
                         url: this.url,
-                        stationId: this.stationId,
+                        deviceId: this.deviceId,
                         autoConnect: false
                     });
 
@@ -5256,7 +5256,7 @@
                     // Save URL and station info
                     this.url = url;
                     this.stationName = stationName;
-                    this.stationId = stationName.replace(/\s+/g, '_');
+                    this.deviceId = stationName.replace(/\s+/g, '_');
 
                     // Authenticate if password provided
                     if (password) {
@@ -5587,7 +5587,7 @@
 
                 this.config = {
                     url: config.url || detectOrchestratorUrl(),
-                    stationId: config.stationId || 'GM_STATION_UNKNOWN',
+                    deviceId: config.deviceId || 'GM_STATION_UNKNOWN',
                     version: config.version || '1.0.0',
                     transports: ['websocket'],
                     reconnection: config.reconnection !== false,
@@ -5615,8 +5615,8 @@
                 this.stateRequestCooldown = 0;
 
                 // Validate required config
-                if (!this.config.stationId || this.config.stationId === 'GM_STATION_UNKNOWN') {
-                    console.warn('OrchestratorClient: stationId not configured');
+                if (!this.config.deviceId || this.config.deviceId === 'GM_STATION_UNKNOWN') {
+                    console.warn('OrchestratorClient: deviceId not configured');
                 }
 
                 // Check for existing token in localStorage
@@ -5671,7 +5671,7 @@
                         // NEW: Include auth in the socket handshake
                         auth: {
                             token: this.token,
-                            stationId: this.config.stationId,
+                            deviceId: this.config.deviceId,
                             deviceType: 'gm',
                             version: this.config.version
                         }
@@ -5974,7 +5974,7 @@
                 this.heartbeatTimer = setInterval(() => {
                     if (this.socket && this.socket.connected) {
                         this.socket.emit('heartbeat', {
-                            stationId: this.config.stationId
+                            deviceId: this.config.deviceId
                         });
 
                         // Check for heartbeat timeout
@@ -6311,7 +6311,7 @@
                 // Configure through ConnectionManager
                 window.connectionManager.url = serverUrl;
                 window.connectionManager.token = token;
-                window.connectionManager.stationId = stationName.replace(/\s+/g, '_');
+                window.connectionManager.deviceId = stationName.replace(/\s+/g, '_');
                 window.connectionManager.stationName = stationName;
 
                 // Handle station number
@@ -6330,7 +6330,7 @@
                 window.connectionManager.token = token;
                 window.connectionManager.url = serverUrl;
                 window.connectionManager.stationName = stationName;
-                window.connectionManager.stationId = stationName.replace(/\s+/g, '_');
+                window.connectionManager.deviceId = stationName.replace(/\s+/g, '_');
 
                 const connected = await window.connectionManager.connect();
 
