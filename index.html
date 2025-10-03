@@ -5774,39 +5774,43 @@
                 });
 
                 // Server event handlers
-                this.socket.on('gm:identified', (data) => {
-                    this.sessionId = data.sessionId;
-                    this.emit('gm:identified', data);
+                this.socket.on('gm:identified', (eventData) => {
+                    const payload = eventData.data;
+                    this.sessionId = payload.sessionId;
+                    this.emit('gm:identified', payload);
                 });
 
-                this.socket.on('state:update', (data) => {
-                    this.emit('state:update', data);
-                    this.updateDataManager(data);
+                this.socket.on('state:update', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('state:update', payload);
+                    this.updateDataManager(payload);
                 });
 
                 this.socket.on('transaction:new', (eventData) => {
-                    // Backend sends { event: 'transaction:new', data: {...}, timestamp: ... }
-                    const transaction = eventData.data || eventData;
-                    this.emit('transaction:new', transaction);
-                    this.updateDataManager({ newTransaction: transaction });
+                    const payload = eventData.data;
+                    this.emit('transaction:new', payload);
+                    this.updateDataManager({ newTransaction: payload });
                 });
 
-                this.socket.on('video:status', (data) => {
-                    this.emit('video:status', data);
+                this.socket.on('video:status', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('video:status', payload);
                 });
 
                 // Score update events from backend
-                this.socket.on('score:updated', (data) => {
-                    this.emit('score:updated', data);
+                this.socket.on('score:updated', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('score:updated', eventData);
                     // Update local score cache for the team
                     if (window.DataManager) {
-                        window.DataManager.updateTeamScoreFromBackend(data.data);
+                        window.DataManager.updateTeamScoreFromBackend(payload);
                     }
-                    console.log('Received score update from backend:', data.data);
+                    console.log('Received score update from backend:', payload);
                 });
 
-                this.socket.on('scores:reset', (data) => {
-                    this.emit('scores:reset', data);
+                this.socket.on('scores:reset', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('scores:reset', payload);
 
                     // Clear backend scores cache
                     if (window.DataManager && window.DataManager.backendScores) {
@@ -5822,46 +5826,52 @@
                     console.log('Scores reset by admin');
                 });
 
-                this.socket.on('group:completed', (data) => {
-                    this.emit('group:completed', data);
+                this.socket.on('group:completed', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('group:completed', eventData);
                     // Show notification about group completion
                     if (window.UIManager) {
-                        window.UIManager.showGroupCompletionNotification(data.data);
+                        window.UIManager.showGroupCompletionNotification(payload);
                     }
-                    console.log('Group completed:', data.data);
+                    console.log('Group completed:', payload);
                 });
 
-                this.socket.on('team:created', (data) => {
-                    this.emit('team:created', data);
-                    console.log('New team created:', data.data);
+                this.socket.on('team:created', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('team:created', eventData);
+                    console.log('New team created:', payload);
                 });
 
-                this.socket.on('device:connected', (data) => {
-                    this.connectedDevices.push(data);
-                    this.emit('device:connected', data);
+                this.socket.on('device:connected', (eventData) => {
+                    const payload = eventData.data;
+                    this.connectedDevices.push(payload);
+                    this.emit('device:connected', payload);
                 });
 
-                this.socket.on('device:disconnected', (data) => {
-                    this.connectedDevices = this.connectedDevices.filter(d => d.deviceId !== data.deviceId);
-                    this.emit('device:disconnected', data);
+                this.socket.on('device:disconnected', (eventData) => {
+                    const payload = eventData.data;
+                    this.connectedDevices = this.connectedDevices.filter(d => d.deviceId !== payload.deviceId);
+                    this.emit('device:disconnected', payload);
                 });
 
-                this.socket.on('sync:full', (data) => {
-                    if (data.devices) {
-                        this.connectedDevices = data.devices;
+                this.socket.on('sync:full', (eventData) => {
+                    const payload = eventData.data;
+                    if (payload.devices) {
+                        this.connectedDevices = payload.devices;
                     }
-                    this.emit('sync:full', data);
+                    this.emit('sync:full', payload);
                 });
 
-                this.socket.on('state:sync', (state) => {
-                    console.log('STATE:SYNC RECEIVED:', JSON.stringify(state, null, 2));
+                this.socket.on('state:sync', (eventData) => {
+                    const payload = eventData.data;
+                    console.log('STATE:SYNC RECEIVED:', JSON.stringify(payload, null, 2));
 
                     // Update admin panel displays with received state
                     if (App.viewController?.adminInstances) {
                         // Update video status display
-                        if (state.currentVideo) {
+                        if (payload.currentVideo) {
                             App.viewController.adminInstances.videoController.updateDisplay({
-                                current: state.currentVideo.tokenId,
+                                current: payload.currentVideo.tokenId,
                                 queueLength: 0 // GameState doesn't track queue length
                             });
                         } else {
@@ -5872,53 +5882,53 @@
                         }
 
                         // Update system status
-                        if (state.systemStatus) {
+                        if (payload.systemStatus) {
                             App.viewController.adminInstances.systemMonitor.updateOrchestratorStatus(
-                                state.systemStatus.orchestratorOnline ? 'connected' : 'disconnected'
+                                payload.systemStatus.orchestratorOnline ? 'connected' : 'disconnected'
                             );
                             App.viewController.adminInstances.systemMonitor.updateVLCStatus(
-                                state.systemStatus.vlcConnected ? 'ready' : 'disconnected'
+                                payload.systemStatus.vlcConnected ? 'ready' : 'disconnected'
                             );
                         }
                     }
 
                     console.log('Scores check:', {
-                        hasScores: !!state.scores,
-                        isArray: Array.isArray(state.scores),
-                        length: state.scores?.length,
+                        hasScores: !!payload.scores,
+                        isArray: Array.isArray(payload.scores),
+                        length: payload.scores?.length,
                         hasDataManager: !!window.DataManager
                     });
 
                     // Update scores in DataManager from backend state
-                    if (state.scores && Array.isArray(state.scores)) {
+                    if (payload.scores && Array.isArray(payload.scores)) {
                         if (window.DataManager) {
                             if (!window.DataManager.backendScores) {
                                 window.DataManager.backendScores = new Map();
                             }
-                            state.scores.forEach(scoreData => {
+                            payload.scores.forEach(scoreData => {
                                 window.DataManager.backendScores.set(scoreData.teamId, scoreData);
                             });
                             Debug.log('Updated backend scores from state:sync', {
-                                teamCount: state.scores.length
+                                teamCount: payload.scores.length
                             });
                         }
                     }
 
                     console.log('Transactions check:', {
-                        hasTransactions: !!state.recentTransactions,
-                        isArray: Array.isArray(state.recentTransactions),
-                        length: state.recentTransactions?.length,
+                        hasTransactions: !!payload.recentTransactions,
+                        isArray: Array.isArray(payload.recentTransactions),
+                        length: payload.recentTransactions?.length,
                         hasDataManager: !!window.DataManager
                     });
 
                     // Update transactions in DataManager from backend state
-                    if (state.recentTransactions && Array.isArray(state.recentTransactions)) {
+                    if (payload.recentTransactions && Array.isArray(payload.recentTransactions)) {
                         if (window.DataManager) {
-                            state.recentTransactions.forEach(tx => {
+                            payload.recentTransactions.forEach(tx => {
                                 window.DataManager.addTransaction(tx);
                             });
                             Debug.log('Updated transactions from state:sync', {
-                                transactionCount: state.recentTransactions.length
+                                transactionCount: payload.recentTransactions.length
                             });
                         }
                     }
@@ -5928,17 +5938,19 @@
                         App.updateAdminPanel();
                     }
 
-                    this.emit('state:sync', state);
+                    this.emit('state:sync', payload);
                 });
 
-                this.socket.on('error', (error) => {
-                    this.emit('error', error);
-                    console.error('OrchestratorClient: Server error:', error);
+                this.socket.on('error', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('error', payload);
+                    console.error('OrchestratorClient: Server error:', payload);
                 });
 
-                this.socket.on('heartbeat:ack', (data) => {
+                this.socket.on('heartbeat:ack', (eventData) => {
+                    const payload = eventData.data;
                     this.lastHeartbeat = Date.now();
-                    this.emit('heartbeat:ack', data);
+                    this.emit('heartbeat:ack', payload);
                 });
             }
 
