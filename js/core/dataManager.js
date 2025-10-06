@@ -758,24 +758,13 @@ if (typeof module !== 'undefined' && module.exports) {
 
 // Create singleton instance for browser usage (backward compatibility)
 if (typeof window !== 'undefined') {
-    // Dependencies will be injected from global scope when available
-    const createDataManagerInstance = () => {
-        return new DataManager({
-            tokenManager: window.TokenManager,
-            settings: window.Settings,
-            debug: window.Debug,
-            uiManager: window.UIManager,
-            app: window.App
-        });
-    };
-
-    // Create instance when DOM is ready (ensures dependencies are loaded)
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            window.DataManager = createDataManagerInstance();
-        });
-    } else {
-        // DOM already loaded
-        window.DataManager = createDataManagerInstance();
-    }
+    // Create instance immediately - all scripts load before DOMContentLoaded fires
+    // This fixes race condition where App.init() (also in DOMContentLoaded) might run first
+    window.DataManager = new DataManager({
+        tokenManager: window.TokenManager,
+        settings: window.Settings,
+        debug: window.Debug,
+        uiManager: window.UIManager,
+        app: window.App
+    });
 }

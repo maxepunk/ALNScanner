@@ -218,7 +218,7 @@
                 if (!this.url) return false;
 
                 try {
-                    const response = await fetch(`${this.url}/api/state/status`, {
+                    const response = await fetch(`${this.url}/health`, {
                         method: 'GET',
                         mode: 'cors',
                         signal: AbortSignal.timeout(3000)
