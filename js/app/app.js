@@ -12,50 +12,34 @@
             async init() {
                 Debug.log('App initializing...');
 
-                // Initialize UI
-                UIManager.init();
+                // Initialize UI (Phase 1D)
+                InitializationSteps.initializeUIManager(UIManager);
 
-                // CRITICAL: Initialize SessionModeManager BEFORE viewController
-                // viewController.init() checks sessionModeManager to show/hide admin tabs
-                window.sessionModeManager = new SessionModeManager();
-                Debug.log('SessionModeManager initialized');
+                // CRITICAL: Initialize SessionModeManager BEFORE viewController (Phase 1E)
+                InitializationSteps.createSessionModeManager(SessionModeManager, window);
 
-                // Initialize view controller (handles tab visibility based on mode)
-                this.viewController.init();
+                // Initialize view controller (Phase 1F)
+                InitializationSteps.initializeViewController(this.viewController);
 
-                // Load settings
-                Settings.load();
+                // Load settings (Phase 1G)
+                InitializationSteps.loadSettings(Settings);
 
-                // Load transaction history
-                DataManager.loadTransactions();
-                DataManager.loadScannedTokens();
-                UIManager.updateHistoryBadge();
+                // Load transaction history (Phase 1H)
+                InitializationSteps.loadDataManager(DataManager, UIManager);
 
-                // Check NFC support
-                this.nfcSupported = await NFCHandler.init();
-                Debug.log(`NFC support: ${this.nfcSupported}`);
+                // Check NFC support (Phase 1I)
+                this.nfcSupported = await InitializationSteps.detectNFCSupport(NFCHandler);
 
-                // Load token database (extracted function - Phase 1A refactoring)
+                // Load token database (Phase 1A)
                 await InitializationSteps.loadTokenDatabase(TokenManager, UIManager);
 
-                // Apply URL parameter mode override (extracted function - Phase 1B refactoring)
+                // Apply URL parameter mode override (Phase 1B)
                 InitializationSteps.applyURLModeOverride(window.location.search, Settings);
 
-                // Register service worker for PWA functionality
-                if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.register('./sw.js')
-                        .then(registration => {
-                            Debug.log('Service Worker registered successfully');
-                            console.log('Service Worker registration successful:', registration.scope);
-                        })
-                        .catch(error => {
-                            Debug.log('Service Worker registration failed');
-                            console.error('Service Worker registration failed:', error);
-                            UIManager.showError('Service Worker registration failed. Offline features may not work.');
-                        });
-                }
+                // Register service worker for PWA functionality (Phase 1J)
+                await InitializationSteps.registerServiceWorker(navigator, UIManager);
 
-                // Connection restoration logic (extracted functions - Phase 1C refactoring)
+                // Connection restoration logic (Phase 1C)
                 const screenDecision = InitializationSteps.determineInitialScreen(window.sessionModeManager);
                 InitializationSteps.applyInitialScreenDecision(
                     screenDecision,

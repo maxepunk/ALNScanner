@@ -5,7 +5,98 @@
  * Phase 1A: Token Database Loading
  * Phase 1B: URL Parameter Mode Override
  * Phase 1C: Connection Restoration Logic
+ * Phase 1D-1I: Module Initialization Functions
  */
+
+/**
+ * Initialize UIManager
+ * Simple wrapper for UIManager.init()
+ *
+ * @param {Object} uiManager - UIManager instance
+ */
+function initializeUIManager(uiManager) {
+    uiManager.init();
+}
+
+/**
+ * Create SessionModeManager and attach to window
+ * CRITICAL: Must be called before viewController.init()
+ *
+ * @param {Function} SessionModeManagerClass - SessionModeManager constructor
+ * @param {Object} windowObj - Window object
+ */
+function createSessionModeManager(SessionModeManagerClass, windowObj) {
+    windowObj.sessionModeManager = new SessionModeManagerClass();
+    Debug.log('SessionModeManager initialized');
+}
+
+/**
+ * Initialize view controller
+ * Depends on window.sessionModeManager existing
+ *
+ * @param {Object} viewController - ViewController instance
+ */
+function initializeViewController(viewController) {
+    viewController.init();
+}
+
+/**
+ * Load settings from localStorage
+ *
+ * @param {Object} settings - Settings object
+ */
+function loadSettings(settings) {
+    settings.load();
+}
+
+/**
+ * Load DataManager transaction history and update UI
+ *
+ * @param {Object} dataManager - DataManager instance
+ * @param {Object} uiManager - UIManager instance
+ */
+function loadDataManager(dataManager, uiManager) {
+    dataManager.loadTransactions();
+    dataManager.loadScannedTokens();
+    uiManager.updateHistoryBadge();
+}
+
+/**
+ * Detect NFC support
+ *
+ * @param {Object} nfcHandler - NFCHandler instance
+ * @returns {Promise<boolean>} True if NFC is supported
+ */
+async function detectNFCSupport(nfcHandler) {
+    const supported = await nfcHandler.init();
+    Debug.log(`NFC support: ${supported}`);
+    return supported;
+}
+
+/**
+ * Register service worker for PWA functionality
+ *
+ * @param {Object} navigatorObj - Navigator object
+ * @param {Object} uiManager - UIManager instance
+ * @returns {Promise<boolean>} True if registration succeeded
+ */
+async function registerServiceWorker(navigatorObj, uiManager) {
+    if (!('serviceWorker' in navigatorObj)) {
+        return false;
+    }
+
+    try {
+        const registration = await navigatorObj.serviceWorker.register('./sw.js');
+        Debug.log('Service Worker registered successfully');
+        console.log('Service Worker registration successful:', registration.scope);
+        return true;
+    } catch (error) {
+        Debug.log('Service Worker registration failed');
+        console.error('Service Worker registration failed:', error);
+        uiManager.showError('Service Worker registration failed. Offline features may not work.');
+        return false;
+    }
+}
 
 /**
  * Load token database from TokenManager
@@ -105,6 +196,13 @@ function applyInitialScreenDecision(decision, sessionModeManager, uiManager, sho
 // Export for Node.js testing
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+        initializeUIManager,
+        createSessionModeManager,
+        initializeViewController,
+        loadSettings,
+        loadDataManager,
+        detectNFCSupport,
+        registerServiceWorker,
         loadTokenDatabase,
         applyURLModeOverride,
         determineInitialScreen,
@@ -115,6 +213,13 @@ if (typeof module !== 'undefined' && module.exports) {
 // Export for browser
 if (typeof window !== 'undefined') {
     window.InitializationSteps = {
+        initializeUIManager,
+        createSessionModeManager,
+        initializeViewController,
+        loadSettings,
+        loadDataManager,
+        detectNFCSupport,
+        registerServiceWorker,
         loadTokenDatabase,
         applyURLModeOverride,
         determineInitialScreen,
