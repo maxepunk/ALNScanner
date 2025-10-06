@@ -535,7 +535,7 @@
                     for (const port of commonPorts) {
                         const baseUrl = `http://${subnet}.${i}:${port}`;
                         promises.push(
-                            fetch(`${baseUrl}/api/state/status`, {
+                            fetch(`${baseUrl}/health`, {
                                 method: 'GET',
                                 mode: 'cors',
                                 signal: AbortSignal.timeout(500)
@@ -559,7 +559,7 @@
 
                 // Also try localhost
                 promises.push(
-                    fetch('http://localhost:3000/api/state/status', {
+                    fetch('http://localhost:3000/health', {
                         signal: AbortSignal.timeout(1000)
                     })
                     .then(response => response.ok ? { url: 'http://localhost:3000', ip: 'localhost:3000' } : null)
