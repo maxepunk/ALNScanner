@@ -15,6 +15,11 @@
                 // Initialize UI
                 UIManager.init();
 
+                // CRITICAL: Initialize SessionModeManager BEFORE viewController
+                // viewController.init() checks sessionModeManager to show/hide admin tabs
+                window.sessionModeManager = new SessionModeManager();
+                Debug.log('SessionModeManager initialized');
+
                 // Initialize view controller (handles tab visibility based on mode)
                 this.viewController.init();
 
@@ -58,10 +63,6 @@
                         });
                 }
 
-                // CRITICAL: Initialize SessionModeManager
-                window.sessionModeManager = new SessionModeManager();
-                Debug.log('SessionModeManager initialized');
-
                 // Check if we have a previously selected mode that wasn't completed
                 const savedMode = window.sessionModeManager.restoreMode();
                 if (savedMode) {
@@ -72,6 +73,8 @@
                         Debug.warn('Networked mode restored but connection lost - showing wizard');
                         // Clear mode and show wizard to reconnect
                         window.sessionModeManager.clearMode();
+                        // CRITICAL: Hide loading screen before showing wizard
+                        UIManager.showScreen('gameModeScreen');
                         showConnectionWizard();
                     } else {
                         // Connection ready - continue where we left off
@@ -222,32 +225,20 @@
                 },
 
                 async fetchCurrentSession() {
+                    // Session comes from sync:full WebSocket event, not HTTP fetch
+                    // Simply update display with cached session from last sync:full
                     if (!this.adminInstances?.sessionManager) return;
 
-                    try {
-                        const response = await fetch('/api/session', {
-                            headers: {
-                                'Authorization': `Bearer ${window.connectionManager?.token}`
-                            }
-                        });
-
-                        if (response.ok) {
-                            const session = await response.json();
-                            this.adminInstances.sessionManager.currentSession = session;
-                            this.adminInstances.sessionManager.updateDisplay(session);
-                            Debug.log('Current session loaded', { sessionId: session.id, status: session.status });
-                        } else if (response.status === 404) {
-                            // No active session - clear display
-                            this.adminInstances.sessionManager.currentSession = null;
-                            this.adminInstances.sessionManager.updateDisplay(null);
-                            Debug.log('No active session');
-                        } else {
-                            console.error('Failed to fetch session:', response.status);
-                            UIManager.showError(`Failed to fetch session: ${response.status}`);
-                        }
-                    } catch (error) {
-                        console.error('Failed to fetch current session:', error);
-                        UIManager.showError('Failed to fetch current session. Check connection.');
+                    // Session is already updated via sync:full listener (line 233-242)
+                    // Just refresh the display
+                    if (this.adminInstances.sessionManager.currentSession) {
+                        this.adminInstances.sessionManager.updateDisplay(
+                            this.adminInstances.sessionManager.currentSession
+                        );
+                        Debug.log('Session display refreshed');
+                    } else {
+                        this.adminInstances.sessionManager.updateDisplay(null);
+                        Debug.log('No active session');
                     }
                 },
 
@@ -275,8 +266,23 @@
                     // Set up WebSocket event listeners for admin updates
                     const client = window.connectionManager.client;
 
+                    // sync:full provides initial session state on connection
+                    client.on('sync:full', (data) => {
+                        if (this.adminInstances?.sessionManager && data.session) {
+                            this.adminInstances.sessionManager.currentSession = data.session;
+                            this.adminInstances.sessionManager.updateDisplay(data.session);
+                            Debug.log('Session loaded from sync:full', { sessionId: data.session?.id });
+                        } else if (this.adminInstances?.sessionManager) {
+                            // No session - clear display
+                            this.adminInstances.sessionManager.currentSession = null;
+                            this.adminInstances.sessionManager.updateDisplay(null);
+                            Debug.log('No active session (sync:full)');
+                        }
+                    });
+
                     client.on('session:update', (data) => {
                         if (this.adminInstances?.sessionManager) {
+                            this.adminInstances.sessionManager.currentSession = data;
                             this.adminInstances.sessionManager.updateDisplay(data);
                         }
                     });
@@ -566,7 +572,8 @@
                     
                     await NFCHandler.startScan(
                         (result) => this.processNFCRead(result),
-                        (error) => {
+                        (err) => {
+                            Debug.log(`NFC read error: ${err?.message || err}`, true);
                             status.textContent = 'Read error. Try again.';
                             button.disabled = false;
                             button.textContent = 'Start Scanning';
@@ -592,20 +599,38 @@
             processNFCRead(result) {
                 Debug.log(`Processing token: "${result.id}" (from ${result.source})`);
                 Debug.log(`Token ID length: ${result.id.length} characters`);
-                
+
+                // VALIDATION: Ensure team is selected before processing
+                if (!this.currentTeamId || this.currentTeamId.trim() === '') {
+                    Debug.log('ERROR: No team selected - cannot process token', true);
+                    UIManager.showError('Please select a team before scanning tokens');
+
+                    // Reset scan button if it exists
+                    const button = document.getElementById('scanButton');
+                    if (button) {
+                        button.disabled = false;
+                        button.textContent = 'Start Scanning';
+                    }
+                    return;
+                }
+
                 // Trim any whitespace
                 const cleanId = result.id.trim();
                 Debug.log(`Cleaned ID: "${cleanId}" (length: ${cleanId.length})`);
-                
-                // Check for duplicate
-                if (DataManager.isTokenScanned(cleanId)) {
-                    Debug.log(`Duplicate token detected: ${cleanId}`, true);
-                    this.showDuplicateError(cleanId);
+
+                // Look up token first to get normalized ID (findToken handles case variations)
+                const tokenData = TokenManager.findToken(cleanId);
+
+                // Use matched ID for duplicate check (handles case variations)
+                const tokenId = tokenData ? tokenData.matchedId : cleanId;
+
+                // Check for duplicate using normalized ID
+                if (DataManager.isTokenScanned(tokenId)) {
+                    Debug.log(`Duplicate token detected: ${tokenId}`, true);
+                    this.showDuplicateError(tokenId);
                     return;
                 }
-                
-                const tokenData = TokenManager.findToken(cleanId);
-                
+
                 if (!tokenData) {
                     this.recordTransaction(null, cleanId, true);
                 } else {
