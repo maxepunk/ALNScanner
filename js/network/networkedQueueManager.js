@@ -57,7 +57,12 @@
                     });
                 } else {
                     // Connected - send immediately
-                    this.connection.socket.emit('transaction:submit', transaction);
+                    // Wrap per AsyncAPI contract: {event, data, timestamp}
+                    this.connection.socket.emit('transaction:submit', {
+                        event: 'transaction:submit',
+                        data: transaction,
+                        timestamp: new Date().toISOString()
+                    });
 
                     // Listen for result to confirm processing
                     this.connection.socket.once('transaction:result', (result) => {
@@ -82,7 +87,12 @@
 
                 // Send all queued transactions
                 for (const transaction of this.tempQueue) {
-                    this.connection.socket.emit('transaction:submit', transaction);
+                    // Wrap per AsyncAPI contract: {event, data, timestamp}
+                    this.connection.socket.emit('transaction:submit', {
+                        event: 'transaction:submit',
+                        data: transaction,
+                        timestamp: new Date().toISOString()
+                    });
                 }
 
                 Debug.log('Queue sync complete - sent all transactions', {

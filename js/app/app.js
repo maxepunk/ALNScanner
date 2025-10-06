@@ -664,7 +664,7 @@
                         tokenId: tokenId,
                         teamId: this.currentTeamId,
                         deviceId: Settings.deviceId,
-                        stationMode: Settings.stationMode,  // CRITICAL: Include mode to prevent Detective scoring
+                        mode: Settings.stationMode,  // AsyncAPI contract field (was 'stationMode')
                         timestamp: transaction.timestamp  // Use same timestamp
                     });
                     Debug.log(`Transaction queued for orchestrator: ${txId}`);

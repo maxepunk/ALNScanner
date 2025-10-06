@@ -2,44 +2,57 @@
  * Data Manager Module
  * Manages transactions, scoring, and persistence
  * Extracted from monolith per Phase 4.2.1
+ * Refactored to class-based architecture per Phase 5.3.1
  */
 
-const DataManager = {
-    transactions: [],
-    currentSession: [],
-    scannedTokens: new Set(),
-    backendScores: new Map(),  // Store scores from orchestrator
+class DataManager extends EventTarget {
+    constructor({ tokenManager, settings, debug, uiManager, app } = {}) {
+        super();
 
-    // Scoring configuration for Black Market mode
-    SCORING_CONFIG: {
-        BASE_VALUES: {
-            1: 100,
-            2: 500,
-            3: 1000,
-            4: 5000,
-            5: 10000
-        },
-        TYPE_MULTIPLIERS: {
-            'Technical': 5,
-            'Personal': 1,
-            'Business': 3,
-            'Classified': 3,
-            'Corporate': 3,
-            'Medical': 2,
-            'Military': 4,
-            'Research': 3,
-            'Legal': 2,
-            'Educational': 1,
-            'Intelligence': 4,
-            'Communications': 2,
-            'Entertainment': 1,
-            'Scientific': 3,
-            'Diplomatic': 4,
-            'Social': 1,
-            'Test': 2,
-            'UNKNOWN': 0
-        }
-    },
+        // Inject dependencies for testability
+        this.tokenManager = tokenManager;
+        this.settings = settings;
+        this.debug = debug;
+        this.uiManager = uiManager;
+        this.app = app;
+
+        // Initialize state
+        this.transactions = [];
+        this.currentSession = [];
+        this.scannedTokens = new Set();
+        this.backendScores = new Map();  // Store scores from orchestrator
+
+        // Scoring configuration for Black Market mode
+        this.SCORING_CONFIG = {
+            BASE_VALUES: {
+                1: 100,
+                2: 500,
+                3: 1000,
+                4: 5000,
+                5: 10000
+            },
+            TYPE_MULTIPLIERS: {
+                'Technical': 5,
+                'Personal': 1,
+                'Business': 3,
+                'Classified': 3,
+                'Corporate': 3,
+                'Medical': 2,
+                'Military': 4,
+                'Research': 3,
+                'Legal': 2,
+                'Educational': 1,
+                'Intelligence': 4,
+                'Communications': 2,
+                'Entertainment': 1,
+                'Scientific': 3,
+                'Diplomatic': 4,
+                'Social': 1,
+                'Test': 2,
+                'UNKNOWN': 0
+            }
+        };
+    }
 
     /**
      * Load transactions from localStorage
@@ -49,13 +62,13 @@ const DataManager = {
             const stored = localStorage.getItem('transactions');
             if (stored) {
                 this.transactions = JSON.parse(stored);
-                Debug.log(`Loaded ${this.transactions.length} transactions`);
+                this.debug?.log(`Loaded ${this.transactions.length} transactions`);
             }
         } catch (e) {
-            Debug.log('Error loading transactions', true);
+            this.debug?.log('Error loading transactions', true);
             this.transactions = [];
         }
-    },
+    }
 
     /**
      * Load scanned tokens registry from localStorage
@@ -65,13 +78,13 @@ const DataManager = {
             const stored = localStorage.getItem('scannedTokens');
             if (stored) {
                 this.scannedTokens = new Set(JSON.parse(stored));
-                Debug.log(`Loaded ${this.scannedTokens.size} scanned tokens`);
+                this.debug?.log(`Loaded ${this.scannedTokens.size} scanned tokens`);
             }
         } catch (e) {
-            Debug.log('Error loading scanned tokens', true);
+            this.debug?.log('Error loading scanned tokens', true);
             this.scannedTokens = new Set();
         }
-    },
+    }
 
     /**
      * Save transactions to localStorage
@@ -80,9 +93,9 @@ const DataManager = {
         try {
             localStorage.setItem('transactions', JSON.stringify(this.transactions));
         } catch (e) {
-            Debug.log('Error saving transactions', true);
+            this.debug?.log('Error saving transactions', true);
         }
-    },
+    }
 
     /**
      * Save scanned tokens registry to localStorage
@@ -91,9 +104,9 @@ const DataManager = {
         try {
             localStorage.setItem('scannedTokens', JSON.stringify([...this.scannedTokens]));
         } catch (e) {
-            Debug.log('Error saving scanned tokens', true);
+            this.debug?.log('Error saving scanned tokens', true);
         }
-    },
+    }
 
     /**
      * Check if token has been scanned globally
@@ -102,7 +115,7 @@ const DataManager = {
      */
     isTokenScanned(tokenId) {
         return this.scannedTokens.has(tokenId);
-    },
+    }
 
     /**
      * Mark token as scanned globally
@@ -111,7 +124,7 @@ const DataManager = {
     markTokenAsScanned(tokenId) {
         this.scannedTokens.add(tokenId);
         this.saveScannedTokens();
-    },
+    }
 
     /**
      * Add transaction and update session
@@ -121,8 +134,8 @@ const DataManager = {
         // If backend transaction, look up token data
         let tokenData = null;
         if (transaction.tokenId && !transaction.memoryType) {
-            tokenData = TokenManager.findToken(transaction.tokenId);
-            Debug.log('Looking up token data for backend transaction', {
+            tokenData = this.tokenManager?.findToken(transaction.tokenId);
+            this.debug?.log('Looking up token data for backend transaction', {
                 tokenId: transaction.tokenId,
                 found: !!tokenData,
                 memoryType: tokenData?.SF_MemoryType,
@@ -133,9 +146,9 @@ const DataManager = {
         // Normalize transaction format (backend sends different structure)
         const normalizedTx = {
             timestamp: transaction.timestamp || new Date().toISOString(),
-            deviceId: transaction.deviceId || Settings.deviceId,
-            stationMode: transaction.stationMode || Settings.stationMode,
-            teamId: transaction.teamId || App.currentTeamId,
+            deviceId: transaction.deviceId || this.settings?.deviceId,
+            stationMode: transaction.stationMode || this.settings?.stationMode,
+            teamId: transaction.teamId || this.app?.currentTeamId,
             rfid: transaction.tokenId || transaction.rfid,
             tokenId: transaction.tokenId || transaction.rfid,
             memoryType: transaction.memoryType || (tokenData?.SF_MemoryType) || 'UNKNOWN',
@@ -159,24 +172,24 @@ const DataManager = {
             this.transactions.push(normalizedTx);
             this.currentSession.push(normalizedTx);
             this.saveTransactions();
-            UIManager.updateHistoryBadge();
-            Debug.log('Added transaction to DataManager', {
+            this.uiManager?.updateHistoryBadge();
+            this.debug?.log('Added transaction to DataManager', {
                 tokenId: normalizedTx.tokenId,
                 memoryType: normalizedTx.memoryType,
                 group: normalizedTx.group,
                 teamId: normalizedTx.teamId
             });
         } else {
-            Debug.log('Skipping duplicate transaction', normalizedTx.tokenId);
+            this.debug?.log('Skipping duplicate transaction', normalizedTx.tokenId);
         }
-    },
+    }
 
     /**
      * Clear current session
      */
     clearSession() {
         this.currentSession = [];
-    },
+    }
 
     /**
      * Update game state from orchestrator
@@ -186,12 +199,12 @@ const DataManager = {
             // Update any relevant local state
             if (state.sessionId && this.currentSessionId !== state.sessionId) {
                 this.currentSessionId = state.sessionId;
-                Debug.log(`Session updated: ${state.sessionId}`);
+                this.debug?.log(`Session updated: ${state.sessionId}`);
             }
 
             if (state.gameMode && state.gameMode !== this.gameMode) {
                 this.gameMode = state.gameMode;
-                Debug.log(`Game mode updated: ${state.gameMode}`);
+                this.debug?.log(`Game mode updated: ${state.gameMode}`);
             }
 
             // If state includes new transactions, add them
@@ -211,17 +224,17 @@ const DataManager = {
                             memoryType: transaction.memoryType || 'Unknown',
                             group: transaction.group || 'Unknown',
                             rating: transaction.rating || 1,
-                            stationMode: Settings.stationMode || 'detective'
+                            stationMode: this.settings?.stationMode || 'detective'
                         };
                         this.transactions.push(localTransaction);
                     }
                 });
                 this.saveTransactions();
-                UIManager.updateHistoryBadge();
-                UIManager.updateSessionStats();
+                this.uiManager?.updateHistoryBadge();
+                this.uiManager?.updateSessionStats();
             }
         }
-    },
+    }
 
     /**
      * Get current session statistics
@@ -234,7 +247,7 @@ const DataManager = {
 
         // Calculate score with bonuses for Black Market mode
         let totalScore = 0;
-        if (Settings.stationMode === 'blackmarket' && this.currentSession.length > 0) {
+        if (this.settings?.stationMode === 'blackmarket' && this.currentSession.length > 0) {
             const teamId = this.currentSession[0].teamId;
             const scoreData = this.calculateTeamScoreWithBonuses(teamId);
             totalScore = scoreData.totalScore;
@@ -245,7 +258,7 @@ const DataManager = {
         }
 
         return { count, totalValue, totalScore };
-    },
+    }
 
     /**
      * Calculate base value of a token
@@ -259,7 +272,7 @@ const DataManager = {
         const multiplier = this.SCORING_CONFIG.TYPE_MULTIPLIERS[transaction.memoryType] || 1;
 
         return baseValue * multiplier;
-    },
+    }
 
     /**
      * Get global statistics
@@ -285,7 +298,7 @@ const DataManager = {
         const avgValue = known.length > 0 ? (totalValue / known.length).toFixed(1) : 0;
 
         return { total, teams, totalValue, avgValue, blackMarketScore, detectiveValue };
-    },
+    }
 
     /**
      * Parse group info from group name string
@@ -297,23 +310,26 @@ const DataManager = {
             return { name: 'Unknown', multiplier: 1 };
         }
 
+        // Trim input first to handle leading/trailing whitespace
+        const trimmed = groupName.trim();
+
         // Match pattern: "Group Name (xN)"
-        const match = groupName.match(/^(.+?)\s*\(x(\d+)\)$/);
+        const match = trimmed.match(/^(.+?)\s*\(x(\d+)\)$/i);
 
         if (match) {
             const name = match[1].trim();
             const multiplier = parseInt(match[2]) || 1;
 
             if (multiplier < 1) {
-                Debug.log(`Invalid multiplier ${multiplier} for "${name}", using 1`, true);
+                this.debug?.log(`Invalid multiplier ${multiplier} for "${name}", using 1`, true);
                 return { name, multiplier: 1 };
             }
 
             return { name, multiplier };
         }
 
-        return { name: groupName.trim(), multiplier: 1 };
-    },
+        return { name: trimmed, multiplier: 1 };
+    }
 
     /**
      * Normalize group name for consistent matching
@@ -327,8 +343,8 @@ const DataManager = {
             .trim()
             .toLowerCase()
             .replace(/\s+/g, ' ')
-            .replace(/['']/g, "'");
-    },
+            .replace(/['\u2018\u2019]/g, "'");  // Normalize curly apostrophes to straight
+    }
 
     /**
      * Update team score from backend broadcast
@@ -356,16 +372,16 @@ const DataManager = {
 
         // Trigger UI update if viewing scanner scoreboard
         if (document.getElementById('scoreboardContainer')) {
-            UIManager.renderScoreboard();
+            this.uiManager?.renderScoreboard();
         }
 
         // Also update admin panel if it's active
-        if (App.viewController && App.viewController.currentView === 'admin') {
-            App.updateAdminPanel();
+        if (this.app?.viewController && this.app.viewController.currentView === 'admin') {
+            this.app.updateAdminPanel();
         }
 
-        Debug.log(`Score updated from backend for team ${scoreData.teamId}: $${scoreData.currentScore}`);
-    },
+        this.debug?.log(`Score updated from backend for team ${scoreData.teamId}: $${scoreData.currentScore}`);
+    }
 
     /**
      * Calculate team score with group completion bonuses
@@ -421,7 +437,7 @@ const DataManager = {
             }
         });
 
-        Debug.log(`Team ${teamId}: Base=$${baseScore}, Bonus=$${bonusScore}`);
+        this.debug?.log(`Team ${teamId}: Base=$${baseScore}, Bonus=$${bonusScore}`);
 
         return {
             baseScore,
@@ -430,7 +446,7 @@ const DataManager = {
             completedGroups: completedGroups.length,
             groupBreakdown
         };
-    },
+    }
 
     /**
      * Get all team scores for scoreboard
@@ -456,7 +472,7 @@ const DataManager = {
 
         // Fallback to local calculation when disconnected
         return this.calculateLocalTeamScores();
-    },
+    }
 
     /**
      * Calculate team scores locally (fallback when disconnected)
@@ -493,7 +509,7 @@ const DataManager = {
 
         teamScores.sort((a, b) => b.score - a.score);
         return teamScores;
-    },
+    }
 
     /**
      * Get sorted team transactions
@@ -518,7 +534,7 @@ const DataManager = {
         });
 
         return transactions;
-    },
+    }
 
     /**
      * Get completed groups for a team
@@ -526,7 +542,7 @@ const DataManager = {
      * @returns {Array} Completed groups
      */
     getTeamCompletedGroups(teamId) {
-        const groupInventory = TokenManager.getGroupInventory();
+        const groupInventory = this.tokenManager?.getGroupInventory() || {};
 
         const teamTokens = new Set(
             this.transactions
@@ -562,7 +578,7 @@ const DataManager = {
         });
 
         return completedGroups;
-    },
+    }
 
     /**
      * Get enhanced team transactions with grouping
@@ -571,7 +587,7 @@ const DataManager = {
      */
     getEnhancedTeamTransactions(teamId) {
         const transactions = this.getTeamTransactions(teamId);
-        const groupInventory = TokenManager.getGroupInventory();
+        const groupInventory = this.tokenManager?.getGroupInventory() || {};
         const completedGroups = this.getTeamCompletedGroups(teamId);
         const completedGroupNames = new Set(completedGroups.map(g => g.normalizedName));
 
@@ -665,7 +681,7 @@ const DataManager = {
             hasUngroupedTokens: ungroupedTokens.length > 0,
             hasUnknownTokens: unknownTokens.length > 0
         };
-    },
+    }
 
     /**
      * Export data in specified format
@@ -716,7 +732,7 @@ const DataManager = {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-    },
+    }
 
     /**
      * Clear all data with confirmation
@@ -728,19 +744,38 @@ const DataManager = {
             this.scannedTokens.clear();
             localStorage.removeItem('transactions');
             localStorage.removeItem('scannedTokens');
-            UIManager.updateHistoryBadge();
+            this.uiManager?.updateHistoryBadge();
             alert('All data cleared');
             location.reload();
         }
     }
-};
-
-// Expose DataManager globally for cross-script access
-if (typeof window !== 'undefined') {
-    window.DataManager = DataManager;
 }
 
-// Export for Node.js testing (if needed)
+// Export class for Node.js testing
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = DataManager;
+}
+
+// Create singleton instance for browser usage (backward compatibility)
+if (typeof window !== 'undefined') {
+    // Dependencies will be injected from global scope when available
+    const createDataManagerInstance = () => {
+        return new DataManager({
+            tokenManager: window.TokenManager,
+            settings: window.Settings,
+            debug: window.Debug,
+            uiManager: window.UIManager,
+            app: window.App
+        });
+    };
+
+    // Create instance when DOM is ready (ensures dependencies are loaded)
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            window.DataManager = createDataManagerInstance();
+        });
+    } else {
+        // DOM already loaded
+        window.DataManager = createDataManagerInstance();
+    }
 }
