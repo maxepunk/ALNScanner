@@ -222,50 +222,13 @@
                         sessionManager: new AdminModule.SessionManager(window.connectionManager.client),
                         videoController: new AdminModule.VideoController(window.connectionManager.client),
                         systemMonitor: new AdminModule.SystemMonitor(),
-                        adminOps: new AdminModule.AdminOperations(window.connectionManager.client)
+                        adminOps: new AdminModule.AdminOperations(window.connectionManager.client),
+                        monitoring: new AdminModule.MonitoringDisplay(window.connectionManager.client)
                     };
 
-                    // Set up WebSocket event listeners for admin updates
-                    const client = window.connectionManager.client;
-
-                    // sync:full provides initial session state on connection
-                    client.on('sync:full', (data) => {
-                        if (this.adminInstances?.sessionManager && data.session) {
-                            this.adminInstances.sessionManager.currentSession = data.session;
-                            this.adminInstances.sessionManager.updateDisplay(data.session);
-                            Debug.log('Session loaded from sync:full', { sessionId: data.session?.id });
-                        } else if (this.adminInstances?.sessionManager) {
-                            // No session - clear display
-                            this.adminInstances.sessionManager.currentSession = null;
-                            this.adminInstances.sessionManager.updateDisplay(null);
-                            Debug.log('No active session (sync:full)');
-                        }
-                    });
-
-                    client.on('session:update', (data) => {
-                        if (this.adminInstances?.sessionManager) {
-                            this.adminInstances.sessionManager.currentSession = data;
-                            this.adminInstances.sessionManager.updateDisplay(data);
-                        }
-                    });
-
-                    client.on('video:status', (data) => {
-                        if (this.adminInstances?.videoController) {
-                            this.adminInstances.videoController.updateDisplay(data);
-                        }
-                    });
-
-                    client.on('device:connected', (data) => {
-                        if (this.adminInstances?.systemMonitor) {
-                            this.adminInstances.systemMonitor.updateDeviceList(data.devices || []);
-                        }
-                    });
-
-                    client.on('device:disconnected', (data) => {
-                        if (this.adminInstances?.systemMonitor) {
-                            this.adminInstances.systemMonitor.updateDeviceList(data.devices || []);
-                        }
-                    });
+                    // Note: MonitoringDisplay automatically registers event listeners
+                    // for all monitoring display updates (session, video, system, scores, transactions)
+                    // No need to manually register event listeners here
 
                     console.log('Admin modules initialized with shared WebSocket connection');
                 }
@@ -390,63 +353,49 @@
 
             // Update admin panel displays
             updateAdminPanel() {
-                // Update score board
+                // In networked mode, delegate to MonitoringDisplay
+                if (this.viewController?.adminInstances?.monitoring) {
+                    this.viewController.adminInstances.monitoring.refreshAllDisplays();
+                    return;
+                }
+
+                // Fallback for standalone mode (no WebSocket connection)
+                // Calculate scores from local transactions
                 const scoreBoard = document.getElementById('admin-score-board');
                 if (scoreBoard) {
-                    // Check if we have backend scores (networked mode with orchestrator)
-                    if (DataManager.backendScores && DataManager.backendScores.size > 0) {
-                        // Use authoritative backend scores
-                        let html = '<table class="score-table"><tr><th>Team</th><th>Tokens</th><th>Score</th></tr>';
-                        DataManager.backendScores.forEach((scoreData, teamId) => {
-                            html += `<tr>
-                                <td>${teamId}</td>
-                                <td>${scoreData.tokensScanned || 0}</td>
-                                <td>${(scoreData.currentScore || 0).toLocaleString()}</td>
-                            </tr>`;
-                        });
-                        html += '</table>';
-                        scoreBoard.innerHTML = html;
-                    } else {
-                        // Fallback: Calculate from transactions (standalone mode)
-                        const teams = {};
-                        DataManager.transactions.forEach(tx => {
-                            if (!teams[tx.teamId]) {
-                                teams[tx.teamId] = {
-                                    score: 0,
-                                    count: 0
-                                };
-                            }
-                            teams[tx.teamId].count++;
-                            // Use each transaction's stationMode, not the current setting
-                            if (tx.stationMode === 'blackmarket') {
-                                const score = DataManager.calculateTokenValue(tx);
-                                teams[tx.teamId].score += score;
-                            }
-                        });
+                    const teams = {};
+                    DataManager.transactions.forEach(tx => {
+                        if (!teams[tx.teamId]) {
+                            teams[tx.teamId] = {
+                                score: 0,
+                                count: 0
+                            };
+                        }
+                        teams[tx.teamId].count++;
+                        // Use each transaction's stationMode, not the current setting
+                        if (tx.stationMode === 'blackmarket') {
+                            const score = DataManager.calculateTokenValue(tx);
+                            teams[tx.teamId].score += score;
+                        }
+                    });
 
-                        // Display scores
-                        let html = '<table class="score-table"><tr><th>Team</th><th>Tokens</th><th>Score</th></tr>';
-                        Object.keys(teams).forEach(teamId => {
-                            html += `<tr>
-                                <td>${teamId}</td>
-                                <td>${teams[teamId].count}</td>
-                                <td>${teams[teamId].score.toLocaleString()}</td>
-                            </tr>`;
-                        });
-                        html += '</table>';
-                        scoreBoard.innerHTML = html;
-                    }
+                    // Display scores
+                    let html = '<table class="score-table"><tr><th>Team</th><th>Tokens</th><th>Score</th></tr>';
+                    Object.keys(teams).forEach(teamId => {
+                        html += `<tr>
+                            <td>${teamId}</td>
+                            <td>${teams[teamId].count}</td>
+                            <td>${teams[teamId].score.toLocaleString()}</td>
+                        </tr>`;
+                    });
+                    html += '</table>';
+                    scoreBoard.innerHTML = html;
                 }
 
                 // Update transaction log
                 const transactionLog = document.getElementById('admin-transaction-log');
-                if (transactionLog) {
+                if (transactionLog && DataManager.transactions) {
                     const recentTransactions = DataManager.transactions.slice(-10).reverse();
-                    Debug.log('Displaying transactions in admin panel', recentTransactions.map(tx => ({
-                        tokenId: tx.tokenId,
-                        memoryType: tx.memoryType,
-                        group: tx.group
-                    })));
                     let html = '<div class="transaction-list">';
                     recentTransactions.forEach(tx => {
                         html += `<div class="transaction-item">
@@ -630,9 +579,9 @@
                     teamId: this.currentTeamId,
                     rfid: tokenId,
                     tokenId: tokenId,  // Add tokenId for consistency with backend
-                    memoryType: isUnknown ? 'UNKNOWN' : token.SF_MemoryType,
-                    group: isUnknown ? `Unknown: ${tokenId}` : token.SF_Group,
-                    valueRating: isUnknown ? 0 : token.SF_ValueRating,
+                    memoryType: isUnknown ? 'UNKNOWN' : (token?.SF_MemoryType || 'UNKNOWN'),
+                    group: isUnknown ? `Unknown: ${tokenId}` : (token?.SF_Group || ''),
+                    valueRating: isUnknown ? 0 : (token?.SF_ValueRating || 0),
                     isUnknown: isUnknown
                 };
 

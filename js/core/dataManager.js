@@ -5,7 +5,11 @@
  * Refactored to class-based architecture per Phase 5.3.1
  */
 
-class DataManager extends EventTarget {
+// IIFE to avoid polluting global scope with class
+(function() {
+  'use strict';
+
+  class DataManager extends EventTarget {
     constructor({ tokenManager, settings, debug, uiManager, app } = {}) {
         super();
 
@@ -751,20 +755,21 @@ class DataManager extends EventTarget {
     }
 }
 
-// Export class for Node.js testing
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = DataManager;
-}
+  // Create singleton instance for browser (dependencies resolved lazily via optional chaining)
+  const instance = new DataManager({
+    tokenManager: typeof window !== 'undefined' ? window.TokenManager : null,
+    settings: typeof window !== 'undefined' ? window.Settings : null,
+    debug: typeof window !== 'undefined' ? window.Debug : null,
+    uiManager: typeof window !== 'undefined' ? window.UIManager : null,
+    app: typeof window !== 'undefined' ? window.App : null
+  });
 
-// Create singleton instance for browser usage (backward compatibility)
-if (typeof window !== 'undefined') {
-    // Create instance immediately - all scripts load before DOMContentLoaded fires
-    // This fixes race condition where App.init() (also in DOMContentLoaded) might run first
-    window.DataManager = new DataManager({
-        tokenManager: window.TokenManager,
-        settings: window.Settings,
-        debug: window.Debug,
-        uiManager: window.UIManager,
-        app: window.App
-    });
-}
+  // Export for different environments
+  if (typeof window !== 'undefined' && typeof module === 'undefined') {
+    // Browser: export singleton instance
+    window.DataManager = instance;
+  } else if (typeof module !== 'undefined' && module.exports) {
+    // Node.js tests: export class for instantiation with mocks
+    module.exports = DataManager;
+  }
+})();

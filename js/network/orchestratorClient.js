@@ -289,10 +289,7 @@
                     // Log session state changes
                     console.log(`Session ${payload.status}:`, payload);
 
-                    // Update admin panel if active
-                    if (App.viewController?.currentView === 'admin') {
-                        App.updateAdminPanel();
-                    }
+                    // Note: MonitoringDisplay automatically updates displays via event listeners
                 });
 
                 // GM command acknowledgment (admin panel feedback per 08-functional-requirements.md:1096)
@@ -367,8 +364,13 @@
             addToRateLimitQueue(fn) {
                 this.rateLimitQueue.push(fn);
 
-                if (this.rateLimitQueue.length === 1) {
-                    this.processRateLimitQueue();
+                // Start processing queue if not already processing
+                if (this.rateLimitQueue.length === 1 && !this.rateLimitTimer) {
+                    // Schedule first processing with delay (proper rate limiting)
+                    this.rateLimitTimer = setTimeout(() => {
+                        this.rateLimitTimer = null;
+                        this.processRateLimitQueue();
+                    }, 100);
                 }
             }
 
