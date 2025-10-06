@@ -1811,6 +1811,7 @@
 
     <!-- Phase 4.5: App Modules -->
     <script src="js/app/sessionModeManager.js"></script>
+    <script src="js/app/initializationSteps.js"></script>
     <script src="js/app/app.js"></script>
 
     <script>
@@ -1913,8 +1914,15 @@
             statusDiv.style.color = '#2196F3';
 
             try {
-                // 1. Test server reachability (use same endpoint as discovery)
-                const healthCheck = await fetch(`${serverUrl}/api/state/status`, {
+                // Normalize URL - add http:// if no protocol specified
+                let normalizedUrl = serverUrl.trim();
+                if (!normalizedUrl.match(/^https?:\/\//i)) {
+                    normalizedUrl = `http://${normalizedUrl}`;
+                    statusDiv.textContent = `🔧 Using ${normalizedUrl}`;
+                }
+
+                // 1. Test server reachability (use orchestrator health endpoint)
+                const healthCheck = await fetch(`${normalizedUrl}/health`, {
                     method: 'GET',
                     mode: 'cors',
                     signal: AbortSignal.timeout(3000)
@@ -1925,7 +1933,7 @@
                 }
 
                 // 2. Authenticate
-                const authResponse = await fetch(`${serverUrl}/api/admin/auth`, {
+                const authResponse = await fetch(`${normalizedUrl}/api/admin/auth`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ password })
@@ -1945,7 +1953,7 @@
                 }
 
                 // Configure through ConnectionManager
-                window.connectionManager.url = serverUrl;
+                window.connectionManager.url = normalizedUrl;
                 window.connectionManager.token = token;
                 window.connectionManager.deviceId = stationName.replace(/\s+/g, '_');
                 window.connectionManager.stationName = stationName;
@@ -1964,7 +1972,7 @@
 
                 // Save the token and connect
                 window.connectionManager.token = token;
-                window.connectionManager.url = serverUrl;
+                window.connectionManager.url = normalizedUrl;
                 window.connectionManager.stationName = stationName;
                 window.connectionManager.deviceId = stationName.replace(/\s+/g, '_');
 
@@ -1973,6 +1981,18 @@
                 if (connected) {
                     statusDiv.textContent = '✅ Connected! Syncing data...';
                     statusDiv.style.color = '#4CAF50';
+
+                    // Initialize SessionModeManager in networked mode (if not already done)
+                    if (!window.sessionModeManager) {
+                        window.sessionModeManager = new SessionModeManager();
+                        window.sessionModeManager.mode = 'networked';
+                        window.sessionModeManager.locked = true;
+                        localStorage.setItem('gameSessionMode', 'networked');
+
+                        // Show viewSelector (admin panel tabs) - normally done by initNetworkedMode
+                        // but we skip calling that to avoid showing connection wizard again
+                        document.getElementById('viewSelector').style.display = 'flex';
+                    }
 
                     // 5. Close modal and transition to team entry screen
                     setTimeout(() => {

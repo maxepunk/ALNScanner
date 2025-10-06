@@ -35,19 +35,11 @@
                 this.nfcSupported = await NFCHandler.init();
                 Debug.log(`NFC support: ${this.nfcSupported}`);
 
-                // Load token database
-                const dbLoaded = await TokenManager.loadDatabase();
-                if (!dbLoaded) {
-                    Debug.log('Using demo data - external database not found');
-                }
+                // Load token database (extracted function - Phase 1A refactoring)
+                await InitializationSteps.loadTokenDatabase(TokenManager, UIManager);
 
-                // Check URL parameters
-                const urlParams = new URLSearchParams(window.location.search);
-                const modeParam = urlParams.get('mode');
-                if (modeParam === 'blackmarket' || modeParam === 'black-market') {
-                    Settings.stationMode = 'blackmarket';
-                    Settings.save();
-                }
+                // Apply URL parameter mode override (extracted function - Phase 1B refactoring)
+                InitializationSteps.applyURLModeOverride(window.location.search, Settings);
 
                 // Register service worker for PWA functionality
                 if ('serviceWorker' in navigator) {
@@ -63,28 +55,14 @@
                         });
                 }
 
-                // Check if we have a previously selected mode that wasn't completed
-                const savedMode = window.sessionModeManager.restoreMode();
-                if (savedMode) {
-                    Debug.log(`Restored previous session mode: ${savedMode}`);
-
-                    // Verify connection is still active for networked mode
-                    if (!window.sessionModeManager.isConnectionReady()) {
-                        Debug.warn('Networked mode restored but connection lost - showing wizard');
-                        // Clear mode and show wizard to reconnect
-                        window.sessionModeManager.clearMode();
-                        // CRITICAL: Hide loading screen before showing wizard
-                        UIManager.showScreen('gameModeScreen');
-                        showConnectionWizard();
-                    } else {
-                        // Connection ready - continue where we left off
-                        UIManager.showScreen('teamEntry');
-                    }
-                } else {
-                    // Show game mode selection as first screen
-                    Debug.log('No previous mode - showing game mode selection');
-                    UIManager.showScreen('gameModeScreen');
-                }
+                // Connection restoration logic (extracted functions - Phase 1C refactoring)
+                const screenDecision = InitializationSteps.determineInitialScreen(window.sessionModeManager);
+                InitializationSteps.applyInitialScreenDecision(
+                    screenDecision,
+                    window.sessionModeManager,
+                    UIManager,
+                    showConnectionWizard
+                );
             },
             
             // Settings Management
