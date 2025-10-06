@@ -40,7 +40,12 @@
 
             set url(value) {
                 if (value) {
-                    localStorage.setItem(this.STORAGE_KEYS.URL, value);
+                    // Normalize URL: add http:// if no protocol specified
+                    let normalizedUrl = value.trim();
+                    if (!/^https?:\/\//i.test(normalizedUrl)) {
+                        normalizedUrl = 'http://' + normalizedUrl;
+                    }
+                    localStorage.setItem(this.STORAGE_KEYS.URL, normalizedUrl);
                 } else {
                     localStorage.removeItem(this.STORAGE_KEYS.URL);
                 }
