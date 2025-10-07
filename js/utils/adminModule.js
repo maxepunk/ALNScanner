@@ -13,6 +13,12 @@ const AdminModule = {
         constructor(connection) {
             this.connection = connection; // OrchestratorClient instance with socket
             this.currentSession = null;
+
+            // BUG FIX (Phase 2.3): Listen to session:update broadcasts for state
+            // Broadcasts are single source of truth (event-driven architecture)
+            this.connection.on('session:update', (session) => {
+                this.currentSession = session;
+            });
         }
 
         async createSession(name, teams = ['001', '002', '003']) {
@@ -25,8 +31,8 @@ const AdminModule = {
                 this.connection.socket.once('gm:command:ack', (response) => {
                     clearTimeout(timeout);
                     if (response.data.success) {
-                        this.currentSession = response.data.session;
-                        this.updateDisplay(response.data.session);
+                        // State updates from broadcasts (see constructor listener)
+                        // Just resolve command success
                         resolve(response.data.session);
                     } else {
                         reject(new Error(response.data.message || 'Failed to create session'));
@@ -54,8 +60,7 @@ const AdminModule = {
                 this.connection.socket.once('gm:command:ack', (response) => {
                     clearTimeout(timeout);
                     if (response.data.success) {
-                        this.currentSession = response.data.session;
-                        this.updateDisplay(response.data.session);
+                        // State updates from broadcasts (see constructor listener)
                         resolve(response.data.session);
                     } else {
                         reject(new Error(response.data.message || 'Failed to pause session'));
@@ -82,8 +87,7 @@ const AdminModule = {
                 this.connection.socket.once('gm:command:ack', (response) => {
                     clearTimeout(timeout);
                     if (response.data.success) {
-                        this.currentSession = response.data.session;
-                        this.updateDisplay(response.data.session);
+                        // State updates from broadcasts (see constructor listener)
                         resolve(response.data.session);
                     } else {
                         reject(new Error(response.data.message || 'Failed to resume session'));
@@ -110,8 +114,7 @@ const AdminModule = {
                 this.connection.socket.once('gm:command:ack', (response) => {
                     clearTimeout(timeout);
                     if (response.data.success) {
-                        this.currentSession = null;
-                        this.updateDisplay(null);
+                        // State updates from broadcasts (see constructor listener)
                         resolve(response.data);
                     } else {
                         reject(new Error(response.data.message || 'Failed to end session'));
@@ -129,20 +132,10 @@ const AdminModule = {
             });
         }
 
-        updateDisplay(session) {
-            const idElement = document.getElementById('admin-session-id');
-            const statusElement = document.getElementById('admin-session-status');
-
-            if (idElement && statusElement) {
-                if (session) {
-                    idElement.textContent = session.id || '-';
-                    statusElement.textContent = session.status || '-';
-                } else {
-                    idElement.textContent = '-';
-                    statusElement.textContent = 'No Session';
-                }
-            }
-        }
+        // BUG FIX (Phase 2.3): updateDisplay() removed - separation of concerns
+        // SessionManager maintains state (currentSession from broadcasts)
+        // MonitoringDisplay updates DOM (from session:update events)
+        // This follows event-driven architecture with clear responsibilities
     },
 
     // Video Control
@@ -457,7 +450,14 @@ const AdminModule = {
          * Called on construction to wire events → display updates
          */
         setupEventListeners() {
-            this.connection.on('transaction:new', (data) => this.updateTransactionDisplay(data));
+            // CRITICAL: transaction:new payload is { transaction: {...} }, not flat
+            // BUG FIX (Phase 2.3): Unwrap transaction from payload
+            // BUG FIX (Phase 5): Add null safety for malformed event data
+            this.connection.on('transaction:new', (payload) => {
+                if (payload && payload.transaction) {
+                    this.updateTransactionDisplay(payload.transaction);
+                }
+            });
             this.connection.on('score:updated', (data) => this.updateScoreDisplay(data));
             this.connection.on('session:update', (data) => this.updateSessionDisplay(data));
             this.connection.on('video:status', (data) => this.updateVideoDisplay(data));
