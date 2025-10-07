@@ -295,6 +295,153 @@
                 }
             },
 
+            async adminResetAndCreateNew() {
+                // Step 0: Confirm with user
+                const confirmReset = confirm(
+                    'Reset system and start new session?\n\n' +
+                    'This will:\n' +
+                    '• Archive the current completed session\n' +
+                    '• Clear all current data\n' +
+                    '• Prepare system for a new game\n\n' +
+                    'Continue?'
+                );
+
+                if (!confirmReset) return;
+
+                // Step 1: Get new session name
+                const name = prompt('Enter new session name:');
+                if (!name || name.trim() === '') {
+                    alert('Session name is required');
+                    return;
+                }
+
+                // Step 2: Verify admin instances available
+                if (!App.viewController.adminInstances?.sessionManager) {
+                    alert('Admin functions not available. Please ensure you are connected to the orchestrator.');
+                    return;
+                }
+
+                try {
+                    // Step 3: Send system:reset command
+                    Debug.log('Sending system:reset command...');
+
+                    await new Promise((resolve, reject) => {
+                        const timeout = setTimeout(() => {
+                            reject(new Error('System reset timeout (5s)'));
+                        }, 5000);
+
+                        const socket = App.viewController.adminInstances.sessionManager.connection.socket;
+
+                        socket.once('gm:command:ack', (response) => {
+                            clearTimeout(timeout);
+
+                            if (response.data && response.data.success) {
+                                Debug.log('System reset successful');
+                                resolve();
+                            } else {
+                                const errorMsg = response.data?.message || 'Reset failed';
+                                reject(new Error(errorMsg));
+                            }
+                        });
+
+                        socket.emit('gm:command', {
+                            event: 'gm:command',
+                            data: {
+                                action: 'system:reset',
+                                payload: {}
+                            },
+                            timestamp: new Date().toISOString()
+                        });
+                    });
+
+                    Debug.log('System reset complete, creating new session...');
+
+                    // Step 4: Create new session
+                    await App.viewController.adminInstances.sessionManager.createSession(name.trim());
+
+                    Debug.log(`New session created: ${name}`);
+
+                    // Step 5: Show success feedback
+                    if (UIManager.showToast) {
+                        UIManager.showToast(`Session "${name}" started successfully`, 'success', 5000);
+                    } else {
+                        alert(`Session "${name}" created successfully!`);
+                    }
+
+                } catch (error) {
+                    console.error('Failed to reset and create session:', error);
+
+                    const errorMsg = `Failed to reset and create session: ${error.message}`;
+
+                    if (UIManager.showError) {
+                        UIManager.showError(errorMsg);
+                    } else {
+                        alert(errorMsg);
+                    }
+                }
+            },
+
+            async adminViewSessionDetails() {
+                const session = App.viewController.adminInstances?.sessionManager?.currentSession;
+
+                if (!session) {
+                    alert('No session data available');
+                    return;
+                }
+
+                // Format session details
+                const startTime = session.startTime ? new Date(session.startTime).toLocaleString() : 'Unknown';
+                const endTime = session.endTime ? new Date(session.endTime).toLocaleString() : 'Ongoing';
+                const duration = session.getDuration ? this.formatSessionDuration(session.getDuration()) : 'Unknown';
+
+                const details = `
+═══════════════════════════════════
+SESSION DETAILS
+═══════════════════════════════════
+
+Name: ${session.name || 'Unnamed Session'}
+ID: ${session.id}
+Status: ${session.status.toUpperCase()}
+
+TIMING
+──────────────────────────────────
+Started: ${startTime}
+${session.endTime ? 'Ended: ' + endTime : 'Status: In Progress'}
+Duration: ${duration}
+
+STATISTICS
+──────────────────────────────────
+Total Scans: ${session.metadata?.totalScans || 0}
+Unique Tokens: ${session.metadata?.uniqueTokensScanned?.length || 0}
+Teams: ${session.scores?.length || 0}
+GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 0}
+
+═══════════════════════════════════
+                `.trim();
+
+                alert(details);
+            },
+
+            /**
+             * Helper: Format duration for session details
+             */
+            formatSessionDuration(ms) {
+                if (!ms || ms < 0) return 'Unknown';
+
+                const seconds = Math.floor(ms / 1000);
+                const minutes = Math.floor(seconds / 60);
+                const hours = Math.floor(minutes / 60);
+                const days = Math.floor(hours / 24);
+
+                const parts = [];
+                if (days > 0) parts.push(`${days}d`);
+                if (hours % 24 > 0) parts.push(`${hours % 24}h`);
+                if (minutes % 60 > 0) parts.push(`${minutes % 60}m`);
+                if (seconds % 60 > 0 && parts.length < 2) parts.push(`${seconds % 60}s`);
+
+                return parts.length > 0 ? parts.join(' ') : '0s';
+            },
+
             async adminPlayVideo() {
                 if (!App.viewController.adminInstances?.videoController) {
                     alert('Video controls not available.');

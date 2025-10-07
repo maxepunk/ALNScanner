@@ -537,20 +537,143 @@ const AdminModule = {
         }
 
         /**
-         * Update session display
-         * FR 4.1.1: Session Monitoring
-         * Shows current session info
+         * Update session display with rich status UI
+         * Shows different UI for each session state: null, active, paused, completed
          */
         updateSessionDisplay(session) {
-            const sessionIdElem = document.getElementById('admin-session-id');
-            const sessionStatusElem = document.getElementById('admin-session-status');
-
-            if (sessionIdElem) {
-                sessionIdElem.textContent = session?.id || '-';
+            const container = document.getElementById('session-status-container');
+            if (!container) {
+                console.warn('session-status-container not found in DOM');
+                return;
             }
 
-            if (sessionStatusElem) {
-                sessionStatusElem.textContent = session?.status || 'No Session';
+            // STATE: No session
+            if (!session) {
+                container.innerHTML = `
+                    <div class="session-status empty" style="text-align: center; padding: 20px; background: #f9f9f9; border-radius: 8px;">
+                        <p style="color: #666; margin-bottom: 15px; font-size: 14px;">No Active Session</p>
+                        <p style="color: #999; margin-bottom: 15px; font-size: 12px;">Create a new session to begin tracking gameplay</p>
+                        <button class="btn btn-primary" onclick="App.adminCreateSession()" style="padding: 10px 20px;">
+                            Create New Session
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            // STATE: Completed session
+            if (session.status === 'completed') {
+                const endTime = session.endTime ? new Date(session.endTime).toLocaleString() : 'Unknown';
+                const duration = session.getDuration ? this.formatDuration(session.getDuration()) : 'Unknown';
+
+                container.innerHTML = `
+                    <div class="session-status completed" style="background: #fff3e0; padding: 15px; border-radius: 8px; border: 2px solid #ff9800;">
+                        <h4 style="margin: 0 0 10px 0; color: #e65100; display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 20px;">⚠️</span>
+                            <span>Previous Session Completed</span>
+                        </h4>
+                        <div style="margin-bottom: 12px;">
+                            <p style="margin: 5px 0; font-weight: bold; color: #333;">${this.escapeHtml(session.name || 'Unnamed Session')}</p>
+                            <p style="margin: 3px 0; color: #666; font-size: 13px;">Ended: ${this.escapeHtml(endTime)}</p>
+                            <p style="margin: 3px 0; color: #666; font-size: 13px;">Duration: ${this.escapeHtml(duration)}</p>
+                            <p style="margin: 3px 0; color: #666; font-size: 13px;">Total Scans: ${session.metadata?.totalScans || 0}</p>
+                        </div>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button class="btn btn-primary" onclick="App.adminResetAndCreateNew()" style="flex: 1; min-width: 150px;">
+                                Reset & Start New Session
+                            </button>
+                            <button class="btn" onclick="App.adminViewSessionDetails()" style="flex: 0;">
+                                View Details
+                            </button>
+                        </div>
+                        <p style="margin: 12px 0 0 0; padding-top: 12px; border-top: 1px solid #ffb74d; color: #e65100; font-size: 12px;">
+                            💡 Start a new session to continue gameplay
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
+            // STATE: Paused session
+            if (session.status === 'paused') {
+                const startTime = session.startTime ? new Date(session.startTime).toLocaleString() : 'Unknown';
+
+                container.innerHTML = `
+                    <div class="session-status paused" style="background: #e3f2fd; padding: 15px; border-radius: 8px; border: 2px solid #2196f3;">
+                        <h4 style="margin: 0 0 10px 0; color: #1565c0; display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 20px;">⏸️</span>
+                            <span>Session Paused</span>
+                        </h4>
+                        <div style="margin-bottom: 12px;">
+                            <p style="margin: 5px 0; font-weight: bold; color: #333;">${this.escapeHtml(session.name || 'Session')}</p>
+                            <p style="margin: 3px 0; color: #666; font-size: 13px;">Started: ${this.escapeHtml(startTime)}</p>
+                            <p style="margin: 3px 0; color: #666; font-size: 13px;">Scans: ${session.metadata?.totalScans || 0}</p>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-primary" onclick="App.adminResumeSession()" style="flex: 1;">
+                                Resume Session
+                            </button>
+                            <button class="btn btn-danger" onclick="App.adminEndSession()">
+                                End Session
+                            </button>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            // STATE: Active session (default)
+            const startTime = session.startTime ? new Date(session.startTime).toLocaleString() : 'Unknown';
+            const totalScans = session.metadata?.totalScans || 0;
+
+            container.innerHTML = `
+                <div class="session-status active" style="background: #e8f5e9; padding: 15px; border-radius: 8px; border: 2px solid #4caf50;">
+                    <h4 style="margin: 0 0 10px 0; color: #2e7d32; display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 20px;">✅</span>
+                        <span>${this.escapeHtml(session.name || 'Active Session')}</span>
+                    </h4>
+                    <div style="margin-bottom: 12px;">
+                        <p style="margin: 3px 0; color: #666; font-size: 13px;">Started: ${this.escapeHtml(startTime)}</p>
+                        <p style="margin: 3px 0; color: #666; font-size: 13px;">Total Scans: ${totalScans}</p>
+                        <p style="margin: 3px 0; color: #666; font-size: 13px;">Status: <span style="color: #2e7d32; font-weight: bold;">Active</span></p>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn" onclick="App.adminPauseSession()">
+                            Pause
+                        </button>
+                        <button class="btn btn-danger" onclick="App.adminEndSession()">
+                            End Session
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+         * Helper: Escape HTML to prevent XSS
+         */
+        escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        /**
+         * Helper: Format duration in ms to human readable
+         */
+        formatDuration(ms) {
+            if (!ms || ms < 0) return 'Unknown';
+            const seconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+
+            if (hours > 0) {
+                return `${hours}h ${minutes % 60}m`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${seconds % 60}s`;
+            } else {
+                return `${seconds}s`;
             }
         }
 

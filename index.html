@@ -1713,15 +1713,9 @@
             <!-- Session Management Section -->
             <section class="admin-section">
                 <h3>Session Management</h3>
-                <div id="session-info" class="info-row">
-                    <span>Session ID: <span id="admin-session-id">-</span></span>
-                    <span>Status: <span id="admin-session-status">-</span></span>
-                </div>
-                <div class="session-controls">
-                    <button class="btn btn-primary" onclick="App.adminCreateSession()">New Session</button>
-                    <button class="btn" onclick="App.adminPauseSession()">Pause</button>
-                    <button class="btn" onclick="App.adminResumeSession()">Resume</button>
-                    <button class="btn btn-danger" onclick="App.adminEndSession()">End</button>
+                <!-- Dynamic status container updated by MonitoringDisplay.updateSessionDisplay() -->
+                <div id="session-status-container">
+                    <!-- Content rendered by updateSessionDisplay() based on session state -->
                 </div>
             </section>
 
