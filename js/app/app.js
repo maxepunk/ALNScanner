@@ -187,21 +187,17 @@
                 },
 
                 async fetchCurrentSession() {
-                    // Session comes from sync:full WebSocket event, not HTTP fetch
-                    // Simply update display with cached session from last sync:full
+                    // BUG FIX (Phase 2.3): Session state and display now handled by broadcasts
+                    // SessionManager.currentSession updated from session:update broadcasts (event-driven)
+                    // MonitoringDisplay updates DOM from session:update broadcasts
+                    // No need to manually refresh display - broadcasts handle everything
+                    // This follows event-driven architecture with clear separation of concerns
+
                     if (!this.adminInstances?.sessionManager) return;
 
-                    // Session is already updated via sync:full listener (line 233-242)
-                    // Just refresh the display
-                    if (this.adminInstances.sessionManager.currentSession) {
-                        this.adminInstances.sessionManager.updateDisplay(
-                            this.adminInstances.sessionManager.currentSession
-                        );
-                        Debug.log('Session display refreshed');
-                    } else {
-                        this.adminInstances.sessionManager.updateDisplay(null);
-                        Debug.log('No active session');
-                    }
+                    Debug.log(this.adminInstances.sessionManager.currentSession
+                        ? 'Session active: ' + JSON.stringify(this.adminInstances.sessionManager.currentSession)
+                        : 'No active session');
                 },
 
                 initAdminModules() {
