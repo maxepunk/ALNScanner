@@ -162,7 +162,7 @@ const AdminModule = {
             return this._sendVideoCommand('video:skip');
         }
 
-        async addToQueue(tokenId, filename) {
+        async addToQueue(videoFile) {
             return new Promise((resolve, reject) => {
                 const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
 
@@ -179,7 +179,7 @@ const AdminModule = {
                     event: 'gm:command',
                     data: {
                         action: 'video:queue:add',
-                        payload: { tokenId, filename }
+                        payload: { videoFile }
                     },
                     timestamp: new Date().toISOString()
                 });
@@ -466,6 +466,9 @@ const AdminModule = {
             this.connection.on('device:connected', () => this.updateSystemDisplay());
             this.connection.on('device:disconnected', () => this.updateSystemDisplay());
             this.connection.on('sync:full', (data) => this.updateAllDisplays(data));
+
+            // Load available videos for manual queue dropdown
+            this.loadAvailableVideos();
         }
 
         /**
@@ -778,7 +781,7 @@ const AdminModule = {
         async loadAvailableVideos() {
             try {
                 // Use orchestrator URL if available, fallback to localhost
-                const baseUrl = this.connection?.orchestratorUrl || 'http://localhost:3000';
+                const baseUrl = this.connection?.config?.url || 'http://localhost:3000';
                 const response = await fetch(`${baseUrl}/api/tokens`);
                 const data = await response.json();
 

@@ -1754,7 +1754,10 @@
                 <div class="manual-queue-section" style="margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px;">
                     <h4 style="margin-bottom: 10px;">Manual Queue Control</h4>
                     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                        <input type="text" id="manual-video-input" placeholder="jaw001.mp4" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <input type="text" id="manual-video-input" placeholder="jaw001.mp4" list="available-videos" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <datalist id="available-videos">
+                            <!-- Populated by loadAvailableVideos() -->
+                        </datalist>
                         <button class="btn" onclick="App.adminAddVideoToQueue()">Add to Queue</button>
                     </div>
                     <button class="btn btn-secondary" onclick="App.adminClearQueue()" style="width: 100%;">Clear Entire Queue</button>

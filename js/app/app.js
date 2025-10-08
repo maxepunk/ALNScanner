@@ -505,8 +505,8 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                     return;
                 }
                 try {
-                    await App.viewController.adminInstances.videoController.addToQueue(null, filename);
-                    UIManager.showSuccess(`Added ${filename} to queue`);
+                    await App.viewController.adminInstances.videoController.addToQueue(filename);
+                    UIManager.showToast(`Added ${filename} to queue`, 'success');
                     document.getElementById('manual-video-input').value = '';
                 } catch (error) {
                     console.error('Failed to add video to queue:', error);
@@ -524,7 +524,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                 }
                 try {
                     await App.viewController.adminInstances.videoController.clearQueue();
-                    UIManager.showSuccess('Queue cleared');
+                    UIManager.showToast('Queue cleared', 'success');
                 } catch (error) {
                     console.error('Failed to clear queue:', error);
                     UIManager.showError(`Failed to clear queue: ${error.message}`);
