@@ -462,6 +462,7 @@ const AdminModule = {
             this.connection.on('session:update', (data) => this.updateSessionDisplay(data));
             this.connection.on('video:status', (data) => this.updateVideoDisplay(data));
             this.connection.on('video:progress', (data) => this.updateVideoProgress(data));
+            this.connection.on('video:queue:update', (data) => this.updateQueueDisplay(data));
             this.connection.on('device:connected', () => this.updateSystemDisplay());
             this.connection.on('device:disconnected', () => this.updateSystemDisplay());
             this.connection.on('sync:full', (data) => this.updateAllDisplays(data));
@@ -706,21 +707,69 @@ const AdminModule = {
 
         /**
          * Update video progress (called every 1s during playback)
-         * Shows live progress updates
+         * Shows live progress updates with visual progress bar
          */
         updateVideoProgress(progressData) {
             if (!progressData) return;
 
             const currentVideoElem = document.getElementById('admin-current-video');
-            if (!currentVideoElem) return;
+            const progressContainer = document.getElementById('video-progress-container');
+            const progressFill = document.getElementById('video-progress-fill');
+            const progressTime = document.getElementById('video-progress-time');
 
-            // Update with progress percentage
-            if (progressData.tokenId && progressData.progress !== undefined) {
+            // Update text display
+            if (currentVideoElem && progressData.tokenId && progressData.progress !== undefined) {
                 const progress = Math.round(progressData.progress);
                 const position = Math.round(progressData.position);
                 const duration = Math.round(progressData.duration);
                 currentVideoElem.textContent = `${progressData.tokenId} (${progress}% - ${position}s/${duration}s)`;
+
+                // Show and update progress bar
+                if (progressContainer) {
+                    progressContainer.style.display = 'block';
+                }
+                if (progressFill) {
+                    progressFill.style.width = `${progress}%`;
+                }
+                if (progressTime) {
+                    progressTime.textContent = `${position}s / ${duration}s`;
+                }
+            } else {
+                // Hide progress bar when not playing
+                if (progressContainer) {
+                    progressContainer.style.display = 'none';
+                }
             }
+        }
+
+        /**
+         * Update queue display (shows pending videos)
+         */
+        updateQueueDisplay(queueData) {
+            if (!queueData) return;
+
+            const container = document.getElementById('video-queue-container');
+            const list = document.getElementById('video-queue-list');
+            const count = document.getElementById('queue-count');
+
+            if (!container || !list || !count) return;
+
+            // Hide if queue is empty
+            if (!queueData.items || queueData.items.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            // Show queue and populate list
+            container.style.display = 'block';
+            count.textContent = queueData.items.length;
+            list.innerHTML = queueData.items.map((item, idx) => `
+                <div class="queue-item" style="padding: 8px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between;">
+                    <span style="color: #666; min-width: 30px;">${idx + 1}.</span>
+                    <span style="flex: 1; font-weight: 500;">${item.tokenId}</span>
+                    <span style="color: #888; font-size: 12px;">(${item.duration}s)</span>
+                </div>
+            `).join('');
         }
 
         /**

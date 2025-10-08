@@ -1726,11 +1726,38 @@
                     <span>Current: <span id="admin-current-video">None</span></span>
                     <span>Queue: <span id="admin-queue-length">0</span></span>
                 </div>
+
+                <!-- Video Progress Bar -->
+                <div id="video-progress-container" style="margin: 15px 0; display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="video-progress-fill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-time" id="video-progress-time" style="text-align: center; margin-top: 5px; font-size: 12px; color: #666;">0s / 0s</div>
+                </div>
+
                 <div class="video-controls">
                     <button class="btn" onclick="App.adminPlayVideo()">Play</button>
                     <button class="btn" onclick="App.adminPauseVideo()">Pause</button>
                     <button class="btn" onclick="App.adminStopVideo()">Stop</button>
                     <button class="btn" onclick="App.adminSkipVideo()">Skip</button>
+                </div>
+
+                <!-- Queue Display -->
+                <div id="video-queue-container" style="margin-top: 20px; display: none;">
+                    <h4 style="margin-bottom: 10px;">Pending Videos (<span id="queue-count">0</span>)</h4>
+                    <div id="video-queue-list" class="queue-list" style="max-height: 200px; overflow-y: auto;">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Manual Queue Management -->
+                <div class="manual-queue-section" style="margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px;">
+                    <h4 style="margin-bottom: 10px;">Manual Queue Control</h4>
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <input type="text" id="manual-video-input" placeholder="jaw001.mp4" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <button class="btn" onclick="App.adminAddVideoToQueue()">Add to Queue</button>
+                    </div>
+                    <button class="btn btn-secondary" onclick="App.adminClearQueue()" style="width: 100%;">Clear Entire Queue</button>
                 </div>
             </section>
 

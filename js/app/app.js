@@ -494,6 +494,43 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                 }
             },
 
+            async adminAddVideoToQueue() {
+                if (!App.viewController.adminInstances?.videoController) {
+                    alert('Video controls not available.');
+                    return;
+                }
+                const filename = document.getElementById('manual-video-input')?.value;
+                if (!filename) {
+                    alert('Enter a video filename (e.g., jaw001.mp4)');
+                    return;
+                }
+                try {
+                    await App.viewController.adminInstances.videoController.addToQueue(null, filename);
+                    UIManager.showSuccess(`Added ${filename} to queue`);
+                    document.getElementById('manual-video-input').value = '';
+                } catch (error) {
+                    console.error('Failed to add video to queue:', error);
+                    UIManager.showError(`Failed to add video: ${error.message}`);
+                }
+            },
+
+            async adminClearQueue() {
+                if (!App.viewController.adminInstances?.videoController) {
+                    alert('Video controls not available.');
+                    return;
+                }
+                if (!confirm('Clear entire video queue?')) {
+                    return;
+                }
+                try {
+                    await App.viewController.adminInstances.videoController.clearQueue();
+                    UIManager.showSuccess('Queue cleared');
+                } catch (error) {
+                    console.error('Failed to clear queue:', error);
+                    UIManager.showError(`Failed to clear queue: ${error.message}`);
+                }
+            },
+
             // Update admin panel displays
             updateAdminPanel() {
                 // In networked mode, delegate to MonitoringDisplay

@@ -241,6 +241,12 @@
                     this.emit('video:progress', payload);
                 });
 
+                // Video queue updates (when queue changes)
+                this.socket.on('video:queue:update', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('video:queue:update', payload);
+                });
+
                 // Score update events from backend
                 this.socket.on('score:updated', (eventData) => {
                     const payload = eventData.data;
