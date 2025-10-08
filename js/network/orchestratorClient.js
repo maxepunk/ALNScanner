@@ -235,6 +235,12 @@
                     this.emit('video:status', payload);
                 });
 
+                // Video progress updates (emitted every 1s during playback)
+                this.socket.on('video:progress', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('video:progress', payload);
+                });
+
                 // Score update events from backend
                 this.socket.on('score:updated', (eventData) => {
                     const payload = eventData.data;

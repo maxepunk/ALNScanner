@@ -461,6 +461,7 @@ const AdminModule = {
             this.connection.on('score:updated', (data) => this.updateScoreDisplay(data));
             this.connection.on('session:update', (data) => this.updateSessionDisplay(data));
             this.connection.on('video:status', (data) => this.updateVideoDisplay(data));
+            this.connection.on('video:progress', (data) => this.updateVideoProgress(data));
             this.connection.on('device:connected', () => this.updateSystemDisplay());
             this.connection.on('device:disconnected', () => this.updateSystemDisplay());
             this.connection.on('sync:full', (data) => this.updateAllDisplays(data));
@@ -689,11 +690,36 @@ const AdminModule = {
             const queueLengthElem = document.getElementById('admin-queue-length');
 
             if (currentVideoElem) {
-                currentVideoElem.textContent = videoStatus.tokenId || 'None';
+                // Show video name with progress if playing
+                if (videoStatus.status === 'playing' && videoStatus.tokenId) {
+                    const progress = videoStatus.progress || 0;
+                    currentVideoElem.textContent = `${videoStatus.tokenId} (${progress}%)`;
+                } else {
+                    currentVideoElem.textContent = videoStatus.tokenId || 'None (idle loop)';
+                }
             }
 
             if (queueLengthElem) {
                 queueLengthElem.textContent = String(videoStatus.queueLength || 0);
+            }
+        }
+
+        /**
+         * Update video progress (called every 1s during playback)
+         * Shows live progress updates
+         */
+        updateVideoProgress(progressData) {
+            if (!progressData) return;
+
+            const currentVideoElem = document.getElementById('admin-current-video');
+            if (!currentVideoElem) return;
+
+            // Update with progress percentage
+            if (progressData.tokenId && progressData.progress !== undefined) {
+                const progress = Math.round(progressData.progress);
+                const position = Math.round(progressData.position);
+                const duration = Math.round(progressData.duration);
+                currentVideoElem.textContent = `${progressData.tokenId} (${progress}% - ${position}s/${duration}s)`;
             }
         }
 
