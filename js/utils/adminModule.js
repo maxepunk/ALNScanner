@@ -773,6 +773,33 @@ const AdminModule = {
         }
 
         /**
+         * Load available videos from server and populate dropdown
+         */
+        async loadAvailableVideos() {
+            try {
+                // Use orchestrator URL if available, fallback to localhost
+                const baseUrl = this.connection?.orchestratorUrl || 'http://localhost:3000';
+                const response = await fetch(`${baseUrl}/api/tokens`);
+                const data = await response.json();
+
+                const datalist = document.getElementById('available-videos');
+                if (!datalist) return;
+
+                const videoOptions = Object.entries(data.tokens)
+                    .filter(([id, token]) => token.video) // Only tokens with video
+                    .map(([id, token]) => {
+                        return `<option value="${token.video}">${id} - ${token.video}</option>`;
+                    })
+                    .join('');
+
+                datalist.innerHTML = videoOptions;
+                console.log('Loaded video options:', Object.keys(data.tokens).filter(id => data.tokens[id].video).length);
+            } catch (error) {
+                console.error('Failed to load available videos:', error);
+            }
+        }
+
+        /**
          * Update system display
          * FR 4.1.3: System Monitoring
          * Shows orchestrator/VLC status and device list
@@ -887,6 +914,9 @@ const AdminModule = {
 
             // Refresh system display
             this.updateSystemDisplay();
+
+            // Populate video dropdown
+            this.loadAvailableVideos();
         }
     }
 };
