@@ -72,7 +72,7 @@ const TokenManager = {
             "cafe1234": {
                 "SF_RFID": "cafe1234",
                 "SF_ValueRating": 5,
-                "SF_MemoryType": "Classified",
+                "SF_MemoryType": "Business",
                 "SF_Group": "Government Files (x3)"
             },
             "babe2468": {
@@ -84,7 +84,7 @@ const TokenManager = {
             "feed5678": {
                 "SF_RFID": "feed5678",
                 "SF_ValueRating": 4,
-                "SF_MemoryType": "Corporate",
+                "SF_MemoryType": "Business",
                 "SF_Group": "Government Files (x3)"
             },
 
@@ -92,7 +92,7 @@ const TokenManager = {
             "test1234": {
                 "SF_RFID": "test1234",
                 "SF_ValueRating": 5,
-                "SF_MemoryType": "Test",
+                "SF_MemoryType": "Technical",
                 "SF_Group": "government files (x3)"  // lowercase variation
             }
         };

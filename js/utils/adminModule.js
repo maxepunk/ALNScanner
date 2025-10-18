@@ -566,16 +566,16 @@ const AdminModule = {
                 return;
             }
 
-            // STATE: Completed session
-            if (session.status === 'completed') {
+            // STATE: Ended session (per AsyncAPI contract: status enum [active, paused, ended])
+            if (session.status === 'ended') {
                 const endTime = session.endTime ? new Date(session.endTime).toLocaleString() : 'Unknown';
                 const duration = session.getDuration ? this.formatDuration(session.getDuration()) : 'Unknown';
 
                 container.innerHTML = `
-                    <div class="session-status completed" style="background: #fff3e0; padding: 15px; border-radius: 8px; border: 2px solid #ff9800;">
+                    <div class="session-status ended" style="background: #fff3e0; padding: 15px; border-radius: 8px; border: 2px solid #ff9800;">
                         <h4 style="margin: 0 0 10px 0; color: #e65100; display: flex; align-items: center; gap: 8px;">
                             <span style="font-size: 20px;">⚠️</span>
-                            <span>Previous Session Completed</span>
+                            <span>Previous Session Ended</span>
                         </h4>
                         <div style="margin-bottom: 12px;">
                             <p style="margin: 5px 0; font-weight: bold; color: #333;">${this.escapeHtml(session.name || 'Unnamed Session')}</p>

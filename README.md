@@ -180,11 +180,9 @@ Groups with multiple tokens offer completion bonuses:
 
 ### Memory Type Multipliers
 Default multipliers for Black Market mode:
-- **Technical**: 5x
 - **Personal**: 1x
 - **Business**: 3x
-- **Military**: 4x
-- **Intelligence**: 4x
+- **Technical**: 5x
 - **Unknown**: 0x (no value)
 
 ## 🏗 Architecture

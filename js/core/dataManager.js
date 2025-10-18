@@ -36,23 +36,9 @@
                 5: 10000
             },
             TYPE_MULTIPLIERS: {
-                'Technical': 5,
                 'Personal': 1,
                 'Business': 3,
-                'Classified': 3,
-                'Corporate': 3,
-                'Medical': 2,
-                'Military': 4,
-                'Research': 3,
-                'Legal': 2,
-                'Educational': 1,
-                'Intelligence': 4,
-                'Communications': 2,
-                'Entertainment': 1,
-                'Scientific': 3,
-                'Diplomatic': 4,
-                'Social': 1,
-                'Test': 2,
+                'Technical': 5,
                 'UNKNOWN': 0
             }
         };
