@@ -182,7 +182,7 @@ function determineInitialScreen(sessionModeManager) {
 function applyInitialScreenDecision(decision, sessionModeManager, uiManager, showWizardFn) {
     if (decision.action === 'clearModeAndShowWizard') {
         // Connection was restored but is now lost
-        Debug.warn('Networked mode restored but connection lost - showing wizard');
+        Debug.log('Networked mode restored but connection lost - showing wizard');
         sessionModeManager.clearMode();
         uiManager.showScreen(decision.screen);
         showWizardFn();

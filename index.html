@@ -2006,17 +2006,20 @@
                     statusDiv.textContent = '✅ Connected! Syncing data...';
                     statusDiv.style.color = '#4CAF50';
 
-                    // Initialize SessionModeManager in networked mode (if not already done)
+                    // Ensure SessionModeManager exists and is set to networked mode
+                    // This handles both first connection and reconnection scenarios
                     if (!window.sessionModeManager) {
                         window.sessionModeManager = new SessionModeManager();
-                        window.sessionModeManager.mode = 'networked';
-                        window.sessionModeManager.locked = true;
-                        localStorage.setItem('gameSessionMode', 'networked');
-
-                        // Show viewSelector (admin panel tabs) - normally done by initNetworkedMode
-                        // but we skip calling that to avoid showing connection wizard again
-                        document.getElementById('viewSelector').style.display = 'flex';
                     }
+
+                    // Always set networked mode and show tabs (handles reconnection)
+                    window.sessionModeManager.mode = 'networked';
+                    window.sessionModeManager.locked = true;
+                    localStorage.setItem('gameSessionMode', 'networked');
+
+                    // Show viewSelector (admin panel tabs) - normally done by initNetworkedMode
+                    // but we skip calling that to avoid showing connection wizard again
+                    document.getElementById('viewSelector').style.display = 'flex';
 
                     // 5. Close modal and transition to team entry screen
                     setTimeout(() => {

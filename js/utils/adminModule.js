@@ -19,6 +19,13 @@ const AdminModule = {
             this.connection.on('session:update', (session) => {
                 this.currentSession = session;
             });
+
+            // Also update from sync:full for initial state on connection
+            this.connection.on('sync:full', (data) => {
+                if (data.session) {
+                    this.currentSession = data.session;
+                }
+            });
         }
 
         async createSession(name, teams = ['001', '002', '003']) {
@@ -269,7 +276,8 @@ const AdminModule = {
         updateVLCStatus(status) {
             const element = document.getElementById('vlc-status');
             if (element) {
-                element.className = status === 'ready' ? 'status-dot connected' : 'status-dot disconnected';
+                // Per AsyncAPI contract: status is 'connected', 'disconnected', or 'error'
+                element.className = status === 'connected' ? 'status-dot connected' : 'status-dot disconnected';
                 element.title = status;
             }
         }
@@ -463,8 +471,33 @@ const AdminModule = {
             this.connection.on('video:status', (data) => this.updateVideoDisplay(data));
             this.connection.on('video:progress', (data) => this.updateVideoProgress(data));
             this.connection.on('video:queue:update', (data) => this.updateQueueDisplay(data));
-            this.connection.on('device:connected', () => this.updateSystemDisplay());
-            this.connection.on('device:disconnected', () => this.updateSystemDisplay());
+            this.connection.on('device:connected', (deviceData) => {
+                // Initialize devices array if needed
+                if (!this.devices) this.devices = [];
+
+                // Prevent duplicates (idempotent - important since connecting client receives this too)
+                const existingIndex = this.devices.findIndex(d => d.deviceId === deviceData.deviceId);
+                if (existingIndex === -1) {
+                    this.devices.push(deviceData);
+                    this.updateDeviceList(this.devices);
+                    Debug.log('Device added to list: ' + deviceData.deviceId);
+                }
+
+                this.updateSystemDisplay();
+            });
+            this.connection.on('device:disconnected', (disconnectData) => {
+                // Remove from local device cache
+                if (this.devices) {
+                    const beforeCount = this.devices.length;
+                    this.devices = this.devices.filter(d => d.deviceId !== disconnectData.deviceId);
+                    if (this.devices.length < beforeCount) {
+                        this.updateDeviceList(this.devices);
+                        Debug.log('Device removed from list: ' + disconnectData.deviceId);
+                    }
+                }
+
+                this.updateSystemDisplay();
+            });
             this.connection.on('sync:full', (data) => this.updateAllDisplays(data));
 
             // Load available videos for manual queue dropdown
@@ -503,6 +536,35 @@ const AdminModule = {
             if (items.length > 10) {
                 for (let i = 10; i < items.length; i++) {
                     items[i].remove();
+                }
+            }
+        }
+
+        /**
+         * Update device list display
+         * FR 4.1.6: Device Monitoring
+         * Shows connected devices with type indicators
+         */
+        updateDeviceList(devices) {
+            if (!Array.isArray(devices)) return;
+
+            const countElement = document.getElementById('device-count');
+            const listElement = document.getElementById('device-list');
+
+            if (countElement) {
+                countElement.textContent = String(devices.length);
+            }
+
+            if (listElement) {
+                if (devices.length === 0) {
+                    listElement.innerHTML = '<p style="color: #999; font-size: 12px; margin: 10px 0;">No devices connected</p>';
+                } else {
+                    listElement.innerHTML = devices.map(device => `
+                        <div class="device-item">
+                            <span>${device.deviceId || 'Unknown'}</span>
+                            <span class="device-type">${device.type || '-'}</span>
+                        </div>
+                    `).join('');
                 }
             }
         }
@@ -808,7 +870,9 @@ const AdminModule = {
          * Shows orchestrator/VLC status and device list
          */
         updateSystemDisplay() {
-            // Update orchestrator status based on connection state
+            // RESPONSIBILITY: Update orchestrator connection status only
+            // Device updates handled by updateAllDisplays() via sync:full → updateDeviceList()
+
             const orchestratorElem = document.getElementById('orchestrator-status');
             if (orchestratorElem) {
                 const status = this.connection.isConnected ? 'connected' : 'disconnected';
@@ -818,27 +882,7 @@ const AdminModule = {
                 orchestratorElem.title = status;
             }
 
-            // Update device count and list
-            const devices = this.connection.connectedDevices || [];
-            const deviceCountElem = document.getElementById('device-count');
-            const deviceListElem = document.getElementById('device-list');
-
-            if (deviceCountElem) {
-                deviceCountElem.textContent = String(devices.length);
-            }
-
-            if (deviceListElem) {
-                if (devices.length === 0) {
-                    deviceListElem.innerHTML = '';
-                } else {
-                    deviceListElem.innerHTML = devices.map(device => `
-                        <div class="device-item">
-                            <span>${device.deviceId || 'Unknown'}</span>
-                            <span class="device-type">${device.type || '-'}</span>
-                        </div>
-                    `).join('');
-                }
-            }
+            // Device list removed - handled by sync:full → updateAllDisplays() → updateDeviceList()
         }
 
         /**
@@ -887,7 +931,26 @@ const AdminModule = {
                 }
             }
 
-            // Update system display
+            // Update system status (VLC and devices from sync:full data)
+            // Pattern: Direct DOM manipulation (matches all other updates)
+            if (syncData.systemStatus) {
+                // Update VLC status directly (matches pattern of other updates)
+                const vlcElement = document.getElementById('vlc-status');
+                if (vlcElement) {
+                    const vlcStatus = syncData.systemStatus.vlc; // 'connected' | 'disconnected' | 'error'
+                    vlcElement.className = vlcStatus === 'connected'
+                        ? 'status-dot connected'
+                        : 'status-dot disconnected';
+                    vlcElement.title = vlcStatus;
+                }
+            }
+
+            // Update devices from sync:full data
+            if (syncData.devices && Array.isArray(syncData.devices)) {
+                this.updateDeviceList(syncData.devices);
+            }
+
+            // Update system display (orchestrator connection status)
             this.updateSystemDisplay();
         }
 

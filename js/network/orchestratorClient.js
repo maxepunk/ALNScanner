@@ -206,7 +206,8 @@
                 this.socket.on('transaction:new', (eventData) => {
                     const payload = eventData.data;
                     this.emit('transaction:new', payload);
-                    this.updateDataManager({ newTransaction: payload });
+                    // Unwrap nested transaction for DataManager (payload = { transaction: {...} })
+                    this.updateDataManager({ newTransaction: payload.transaction });
                 });
 
                 // Transaction result from server (Decision #10: MUST check status and display errors)

@@ -28,18 +28,35 @@ const NFCHandler = {
 
         try {
             this.reader = new NDEFReader();
-            await this.reader.scan();
-            this.isScanning = true;
 
+            // CRITICAL: Attach event listeners BEFORE calling scan()
+            // Otherwise events may fire before listeners are registered
             this.reader.addEventListener("reading", ({ message, serialNumber }) => {
-                const result = this.extractTokenId(message, serialNumber);
-                onRead(result);
+                try {
+                    console.log('!!! NFC READING EVENT FIRED !!!');
+                    console.log('Message:', message);
+                    console.log('Serial:', serialNumber);
+                    console.log('onRead callback type:', typeof onRead);
+
+                    const result = this.extractTokenId(message, serialNumber);
+                    console.log('extractTokenId returned:', result);
+
+                    onRead(result);
+                    console.log('onRead callback executed successfully');
+                } catch (error) {
+                    console.error('!!! EXCEPTION IN READING EVENT LISTENER !!!', error);
+                    Debug.log(`Exception in NFC reading handler: ${error.message}`, true);
+                }
             });
 
             this.reader.addEventListener("readingerror", (event) => {
                 Debug.log(`NFC Read Error: ${event}`, true);
                 if (onError) onError(event);
             });
+
+            // NOW start scanning - listeners are ready to catch events
+            await this.reader.scan();
+            this.isScanning = true;
 
         } catch (error) {
             Debug.log(`Error starting NFC: ${error.message}`, true);

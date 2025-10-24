@@ -3,7 +3,7 @@
  * Enables PWA functionality and offline support for standalone mode
  */
 
-const CACHE_NAME = 'aln-gm-scanner-v1';
+const CACHE_NAME = 'aln-gm-scanner-v2-debug';
 const urlsToCache = [
   './',
   './index.html',
