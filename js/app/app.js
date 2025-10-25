@@ -60,14 +60,14 @@
             },
             
             toggleMode() {
-                Settings.stationMode = Settings.stationMode === 'detective' ? 'blackmarket' : 'detective';
+                Settings.mode = Settings.mode === 'detective' ? 'blackmarket' : 'detective';
 
                 // Use ConnectionManager if available
                 if (window.connectionManager) {
-                    window.connectionManager.stationMode = Settings.stationMode;
+                    window.connectionManager.mode = Settings.mode;
                 }
 
-                UIManager.updateModeDisplay(Settings.stationMode);
+                UIManager.updateModeDisplay(Settings.mode);
                 
                 const scanScreen = document.getElementById('scanScreen');
                 if (scanScreen && scanScreen.classList.contains('active')) {
@@ -83,8 +83,8 @@
             },
             
             updateModeFromToggle() {
-                Settings.stationMode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
-                UIManager.updateModeDisplay(Settings.stationMode);
+                Settings.mode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
+                UIManager.updateModeDisplay(Settings.mode);
             },
 
             // testOrchestratorConnection removed - use connection wizard instead
@@ -552,8 +552,8 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                             };
                         }
                         teams[tx.teamId].count++;
-                        // Use each transaction's stationMode, not the current setting
-                        if (tx.stationMode === 'blackmarket') {
+                        // Use each transaction's mode, not the current setting
+                        if (tx.mode === 'blackmarket') {
                             const score = DataManager.calculateTokenValue(tx);
                             teams[tx.teamId].score += score;
                         }
@@ -755,7 +755,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                 const transaction = {
                     timestamp: new Date().toISOString(),
                     deviceId: Settings.deviceId,
-                    stationMode: Settings.stationMode,
+                    mode: Settings.mode,
                     teamId: this.currentTeamId,
                     rfid: tokenId,
                     tokenId: tokenId,  // Add tokenId for consistency with backend
@@ -780,7 +780,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                         tokenId: tokenId,
                         teamId: this.currentTeamId,
                         deviceId: Settings.deviceId,
-                        mode: Settings.stationMode,  // AsyncAPI contract field (was 'stationMode')
+                        mode: Settings.mode,  // AsyncAPI contract field (was 'mode')
                         timestamp: transaction.timestamp  // Use same timestamp
                     });
                     Debug.log(`Transaction queued for orchestrator: ${txId}`);
@@ -800,7 +800,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                     }
                 }
 
-                if (Settings.stationMode === 'blackmarket' && !isUnknown) {
+                if (Settings.mode === 'blackmarket' && !isUnknown) {
                     const tokenScore = DataManager.calculateTokenValue(transaction);
                     Debug.log(`Token scored: $${tokenScore.toLocaleString()}`);
                 }
@@ -858,7 +858,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
             
             // Scoreboard
             showScoreboard() {
-                if (Settings.stationMode !== 'blackmarket') {
+                if (Settings.mode !== 'blackmarket') {
                     Debug.log('Scoreboard only available in Black Market mode');
                     return;
                 }
@@ -882,7 +882,94 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
             closeTeamDetails() {
                 UIManager.showScreen('scoreboard');
             },
-            
+
+            // ========== GM Intervention (Networked Mode Only) ==========
+
+            async adjustTeamScore() {
+                const teamId = this.currentInterventionTeamId;
+                if (!teamId) {
+                    alert('No team selected. Please open team details first.');
+                    return;
+                }
+
+                const deltaInput = document.getElementById('scoreAdjustmentInput');
+                const reasonInput = document.getElementById('scoreAdjustmentReason');
+
+                const delta = parseInt(deltaInput.value);
+                if (isNaN(delta) || delta === 0) {
+                    alert('Please enter a valid positive or negative number.');
+                    return;
+                }
+
+                const reason = reasonInput.value.trim() || 'Manual GM adjustment';
+
+                if (!App.viewController?.adminInstances?.adminOps) {
+                    alert('Admin functions not available. Ensure you are in networked mode.');
+                    return;
+                }
+
+                try {
+                    await App.viewController.adminInstances.adminOps.adjustScore(teamId, delta, reason);
+                    Debug.log(`Score adjusted: Team ${teamId} ${delta > 0 ? '+' : ''}${delta} (${reason})`);
+
+                    // Clear inputs
+                    deltaInput.value = '';
+                    reasonInput.value = '';
+
+                    // Team details screen will auto-refresh via updateTeamScoreFromBackend()
+                    // when score:updated event is received (centralized in dataManager.js)
+
+                    UIManager.showToast(`Score adjusted: ${delta > 0 ? '+' : ''}${delta} points`, 'success');
+                } catch (error) {
+                    console.error('Failed to adjust score:', error);
+                    UIManager.showError(`Failed to adjust score: ${error.message}`);
+                }
+            },
+
+            async deleteTeamTransaction(transactionId) {
+                if (!confirm('Delete this transaction? This cannot be undone.')) return;
+
+                if (!App.viewController?.adminInstances?.adminOps) {
+                    alert('Admin functions not available. Ensure you are in networked mode.');
+                    return;
+                }
+
+                try {
+                    await App.viewController.adminInstances.adminOps.deleteTransaction(transactionId);
+                    Debug.log(`Transaction deleted: ${transactionId}`);
+
+                    // Immediately remove from local DataManager to update UI
+                    const index = DataManager.transactions.findIndex(tx => tx.id === transactionId);
+                    if (index !== -1) {
+                        const deletedTx = DataManager.transactions[index];
+
+                        // Remove from transactions array
+                        DataManager.transactions.splice(index, 1);
+                        DataManager.saveTransactions();
+
+                        // CRITICAL: Also remove from scannedTokens Set to allow re-scanning
+                        if (deletedTx.tokenId || deletedTx.rfid) {
+                            const tokenId = deletedTx.tokenId || deletedTx.rfid;
+                            DataManager.scannedTokens.delete(tokenId);
+                            DataManager.saveScannedTokens();
+                            Debug.log(`Removed ${tokenId} from scannedTokens - can be rescanned`);
+                        }
+                    }
+
+                    // Refresh team details immediately with updated local data
+                    const teamId = this.currentInterventionTeamId;
+                    if (teamId) {
+                        const transactions = DataManager.getTeamTransactions(teamId);
+                        UIManager.renderTeamDetails(teamId, transactions);
+                    }
+
+                    UIManager.showToast('Transaction deleted', 'success');
+                } catch (error) {
+                    console.error('Failed to delete transaction:', error);
+                    UIManager.showError(`Failed to delete transaction: ${error.message}`);
+                }
+            },
+
             // Testing Functions
             testTokenMatch() {
                 const testId = prompt('Enter a token ID to test:');
@@ -939,7 +1026,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                 console.log('=== Testing Group Completion Detection ===\n');
                 
                 const realTeams = [...new Set(DataManager.transactions
-                    .filter(t => t.stationMode === 'blackmarket')
+                    .filter(t => t.mode === 'blackmarket')
                     .map(t => t.teamId))];
                 
                 if (realTeams.length > 0) {

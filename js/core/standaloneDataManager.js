@@ -49,7 +49,7 @@ class StandaloneDataManager {
         const team = this.sessionData.teams[teamId];
 
         // Only update score for blackmarket mode
-        if (transaction.stationMode === 'blackmarket' && transaction.points) {
+        if (transaction.mode === 'blackmarket' && transaction.points) {
             team.baseScore += transaction.points;
             team.score = team.baseScore + team.bonusPoints;
         }
@@ -58,7 +58,7 @@ class StandaloneDataManager {
         team.lastScanTime = transaction.timestamp;
 
         // Check for group completion (only for blackmarket mode)
-        if (transaction.stationMode === 'blackmarket' && transaction.tokenGroup) {
+        if (transaction.mode === 'blackmarket' && transaction.tokenGroup) {
             this.checkGroupCompletion(teamId, transaction.tokenGroup);
         }
 
@@ -90,7 +90,7 @@ class StandaloneDataManager {
 
         // Get all transactions for this team in blackmarket mode
         const teamTransactions = this.sessionData.transactions.filter(tx =>
-            tx.teamId === teamId && tx.stationMode === 'blackmarket'
+            tx.teamId === teamId && tx.mode === 'blackmarket'
         );
 
         // Get unique groups from team's transactions

@@ -135,9 +135,10 @@
 
         // Normalize transaction format (backend sends different structure)
         const normalizedTx = {
+            id: transaction.id,  // Backend transaction ID (needed for deletion)
             timestamp: transaction.timestamp || new Date().toISOString(),
             deviceId: transaction.deviceId || this.settings?.deviceId,
-            stationMode: transaction.stationMode || this.settings?.stationMode,
+            mode: transaction.mode || this.settings?.mode,
             teamId: transaction.teamId || this.app?.currentTeamId,
             rfid: transaction.tokenId || transaction.rfid,
             tokenId: transaction.tokenId || transaction.rfid,
@@ -214,7 +215,7 @@
                             memoryType: transaction.memoryType || 'Unknown',
                             group: transaction.group || 'Unknown',
                             rating: transaction.rating || 1,
-                            stationMode: this.settings?.stationMode || 'detective'
+                            mode: this.settings?.mode || 'detective'
                         };
                         this.transactions.push(localTransaction);
                     }
@@ -237,7 +238,7 @@
 
         // Calculate score with bonuses for Black Market mode
         let totalScore = 0;
-        if (this.settings?.stationMode === 'blackmarket' && this.currentSession.length > 0) {
+        if (this.settings?.mode === 'blackmarket' && this.currentSession.length > 0) {
             const teamId = this.currentSession[0].teamId;
             const scoreData = this.calculateTeamScoreWithBonuses(teamId);
             totalScore = scoreData.totalScore;
@@ -273,8 +274,8 @@
         const teams = [...new Set(this.transactions.map(t => t.teamId))].length;
         const known = this.transactions.filter(t => !t.isUnknown);
 
-        const blackMarketTransactions = known.filter(t => t.stationMode === 'blackmarket');
-        const detectiveTransactions = known.filter(t => t.stationMode === 'detective');
+        const blackMarketTransactions = known.filter(t => t.mode === 'blackmarket');
+        const detectiveTransactions = known.filter(t => t.mode === 'detective');
 
         const blackMarketScore = blackMarketTransactions.reduce((sum, t) => {
             return sum + this.calculateTokenValue(t);
@@ -357,6 +358,7 @@
             bonusPoints: scoreData.bonusPoints,
             tokensScanned: scoreData.tokensScanned,
             completedGroups: scoreData.completedGroups,
+            adminAdjustments: scoreData.adminAdjustments || [],
             lastUpdate: scoreData.lastUpdate
         });
 
@@ -370,6 +372,16 @@
             this.app.updateAdminPanel();
         }
 
+        // Refresh team details screen if currently viewing this team
+        // (matches pattern from transaction:deleted in orchestratorClient.js:284)
+        const teamDetailsScreen = document.getElementById('teamDetailsScreen');
+        if (teamDetailsScreen?.classList.contains('active') &&
+            window.App?.currentInterventionTeamId === scoreData.teamId) {
+            const transactions = this.getTeamTransactions(scoreData.teamId);
+            window.UIManager?.renderTeamDetails(scoreData.teamId, transactions);
+            this.debug?.log(`Team details refreshed for team ${scoreData.teamId} after score update`);
+        }
+
         this.debug?.log(`Score updated from backend for team ${scoreData.teamId}: $${scoreData.currentScore}`);
     }
 
@@ -381,7 +393,7 @@
     calculateTeamScoreWithBonuses(teamId) {
         const transactions = this.transactions.filter(t =>
             t.teamId === teamId &&
-            t.stationMode === 'blackmarket' &&
+            t.mode === 'blackmarket' &&
             !t.isUnknown
         );
 
@@ -472,7 +484,7 @@
         const teamGroups = {};
 
         const blackMarketTransactions = this.transactions.filter(t =>
-            t.stationMode === 'blackmarket'
+            t.mode === 'blackmarket'
         );
 
         blackMarketTransactions.forEach(t => {
@@ -509,7 +521,7 @@
     getTeamTransactions(teamId) {
         const transactions = this.transactions.filter(t =>
             t.teamId === teamId &&
-            t.stationMode === 'blackmarket'
+            t.mode === 'blackmarket'
         );
 
         // Sort by group, value, then timestamp
@@ -538,7 +550,7 @@
             this.transactions
                 .filter(t =>
                     t.teamId === teamId &&
-                    t.stationMode === 'blackmarket' &&
+                    t.mode === 'blackmarket' &&
                     !t.isUnknown
                 )
                 .map(t => t.rfid)
@@ -691,14 +703,14 @@
             type = 'application/json';
         } else {
             // CSV format
-            const headers = ['timestamp', 'deviceId', 'stationMode', 'teamId', 'rfid', 'memoryType', 'group', 'valueRating'];
+            const headers = ['timestamp', 'deviceId', 'mode', 'teamId', 'rfid', 'memoryType', 'group', 'valueRating'];
             const rows = [headers.join(',')];
 
             this.transactions.forEach(t => {
                 const row = [
                     t.timestamp,
                     t.deviceId,
-                    t.stationMode,
+                    t.mode,
                     t.teamId,
                     t.rfid,
                     `"${t.memoryType}"`,

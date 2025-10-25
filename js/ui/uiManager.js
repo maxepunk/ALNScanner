@@ -155,7 +155,7 @@ const UIManager = {
         const scoreboardButton = document.getElementById('scoreboardButton');
         if (scoreboardButton) {
             scoreboardButton.style.display =
-                Settings.stationMode === 'blackmarket' ? 'block' : 'none';
+                Settings.mode === 'blackmarket' ? 'block' : 'none';
         }
     },
 
@@ -178,7 +178,7 @@ const UIManager = {
         const valueElement = document.getElementById('teamTotalValue');
         const labelElement = document.getElementById('teamValueLabel');
 
-        if (Settings.stationMode === 'blackmarket') {
+        if (Settings.mode === 'blackmarket') {
             valueElement.textContent = `$${stats.totalScore.toLocaleString()}`;
             if (labelElement) labelElement.textContent = 'Score';
         } else {
@@ -262,6 +262,9 @@ const UIManager = {
         const enhancedData = DataManager.getEnhancedTeamTransactions(teamId);
         const scoreData = DataManager.calculateTeamScoreWithBonuses(teamId);
 
+        // Check if networked mode for intervention controls
+        const isNetworked = window.sessionModeManager?.isNetworked();
+
         // Update header
         document.getElementById('teamDetailsTitle').textContent = `Team ${teamId}`;
         document.getElementById('teamDetailsSummary').textContent =
@@ -290,7 +293,7 @@ const UIManager = {
 
                 // Add tokens in this group
                 group.tokens.forEach(token => {
-                    html += this.renderTokenCard(token, true);
+                    html += this.renderTokenCard(token, true, false, isNetworked);
                 });
 
                 html += '</div>';
@@ -317,7 +320,7 @@ const UIManager = {
 
                 // Add tokens in this group
                 group.tokens.forEach(token => {
-                    html += this.renderTokenCard(token, false);
+                    html += this.renderTokenCard(token, false, false, isNetworked);
                 });
 
                 html += '</div>';
@@ -329,7 +332,7 @@ const UIManager = {
             html += '<div class="section-divider">📦 Individual Tokens</div>';
 
             enhancedData.ungroupedTokens.forEach(token => {
-                html += this.renderTokenCard(token, false);
+                html += this.renderTokenCard(token, false, false, isNetworked);
             });
         }
 
@@ -338,7 +341,7 @@ const UIManager = {
             html += '<div class="section-divider">❓ Unknown Tokens</div>';
 
             enhancedData.unknownTokens.forEach(token => {
-                html += this.renderTokenCard(token, false, true);
+                html += this.renderTokenCard(token, false, true, isNetworked);
             });
         }
 
@@ -355,23 +358,85 @@ const UIManager = {
         // Update container
         document.getElementById('teamDetailsContainer').innerHTML = html;
 
-        // Update score breakdown with ACTUAL values
+        // Check if backend has authoritative score (networked mode)
+        const backendScore = DataManager.backendScores?.get(teamId);
+
+        // Use backend scores if available (authoritative in networked mode)
+        let displayBaseScore = scoreData.baseScore;
+        let displayBonusScore = scoreData.bonusScore;
+        let displayTotalScore = scoreData.totalScore;
+
+        if (isNetworked && backendScore) {
+            displayBaseScore = backendScore.baseScore;
+            displayBonusScore = backendScore.bonusPoints;
+            displayTotalScore = backendScore.currentScore;
+        }
+
+        // Update score breakdown with authoritative values
         document.getElementById('teamBaseScore').textContent =
-            `$${scoreData.baseScore.toLocaleString()}`;
+            `$${displayBaseScore.toLocaleString()}`;
         document.getElementById('teamBonusScore').textContent =
-            `$${scoreData.bonusScore.toLocaleString()}`;
+            `$${displayBonusScore.toLocaleString()}`;
         document.getElementById('teamTotalScore').textContent =
-            `$${scoreData.totalScore.toLocaleString()}`;
+            `$${displayTotalScore.toLocaleString()}`;
+
+        // Display admin adjustments if present
+        const adjustmentsSection = document.getElementById('teamAdminAdjustmentsSection');
+        if (adjustmentsSection && isNetworked && backendScore?.adminAdjustments?.length > 0) {
+            const adjustments = backendScore.adminAdjustments;
+            const totalAdjustment = adjustments.reduce((sum, adj) => sum + adj.delta, 0);
+
+            let html = `
+                <div class="transaction-detail" style="margin: 8px 0; padding: 12px; background: rgba(255, 193, 7, 0.1); border-left: 4px solid #ffc107; border-radius: 4px;">
+                    <label style="color: #856404; font-weight: bold;">⚠️ Admin Adjustments:</label>
+                    <span class="value" style="color: ${totalAdjustment >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">
+                        ${totalAdjustment >= 0 ? '+' : ''}$${Math.abs(totalAdjustment).toLocaleString()}
+                    </span>
+                </div>
+                <div style="margin-left: 20px; font-size: 12px; color: #666;">
+            `;
+
+            adjustments.forEach(adj => {
+                const date = new Date(adj.timestamp).toLocaleString();
+                html += `
+                    <div style="margin: 4px 0; padding: 6px; background: #f8f9fa; border-radius: 3px;">
+                        <span style="color: ${adj.delta >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">
+                            ${adj.delta >= 0 ? '+' : ''}$${Math.abs(adj.delta).toLocaleString()}
+                        </span>
+                        - ${adj.reason || 'No reason provided'}
+                        <br><span style="font-size: 10px; color: #999;">${date} by ${adj.gmStation}</span>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            adjustmentsSection.innerHTML = html;
+            adjustmentsSection.style.display = 'block';
+        } else if (adjustmentsSection) {
+            adjustmentsSection.style.display = 'none';
+        }
+
+        // Show/hide intervention controls based on mode
+        const interventionControls = document.getElementById('teamInterventionControls');
+        if (interventionControls) {
+            interventionControls.style.display = isNetworked ? 'block' : 'none';
+        }
+
+        // Store team ID for intervention handlers
+        if (window.App) {
+            window.App.currentInterventionTeamId = teamId;
+        }
     },
 
     /**
      * Render individual token card
-     * @param {Object} token - Token data
+     * @param {Object} token - Token data (transaction object)
      * @param {boolean} hasBonus - Whether token has group bonus
      * @param {boolean} isUnknown - Whether token is unknown
+     * @param {boolean} showDelete - Show delete button (networked mode only)
      * @returns {string} HTML string
      */
-    renderTokenCard(token, hasBonus = false, isUnknown = false) {
+    renderTokenCard(token, hasBonus = false, isUnknown = false, showDelete = false) {
         const tokenValue = DataManager.calculateTokenValue(token);
         const cardClass = isUnknown ? 'unknown' : (hasBonus ? 'bonus-applied' : '');
 
@@ -398,12 +463,21 @@ const UIManager = {
             calculationText = 'Unknown token - No value';
         }
 
+        // Delete button (networked mode only)
+        const deleteButton = showDelete && token.id ? `
+            <button class="btn" onclick="App.deleteTeamTransaction('${token.id}')"
+                    style="background: #dc3545; color: white; padding: 4px 8px; font-size: 12px; margin-left: 8px;">
+                🗑️ Delete
+            </button>
+        ` : '';
+
         return `
             <div class="token-detail-card ${cardClass}">
                 <div class="token-detail-header">
                     <span>${token.group}</span>
-                    <span class="token-detail-value">
-                        $${(hasBonus ? tokenValue * DataManager.parseGroupInfo(token.group).multiplier : tokenValue).toLocaleString()}
+                    <span class="token-detail-value" style="display: flex; align-items: center;">
+                        <span style="margin-right: 8px;">$${(hasBonus ? tokenValue * DataManager.parseGroupInfo(token.group).multiplier : tokenValue).toLocaleString()}</span>
+                        ${deleteButton}
                     </span>
                 </div>
                 <div class="token-detail-grid">
@@ -459,14 +533,14 @@ const UIManager = {
             const isUnknown = t.isUnknown || t.memoryType === 'UNKNOWN';
 
             let valueDisplay;
-            if (t.stationMode === 'blackmarket') {
+            if (t.mode === 'blackmarket') {
                 valueDisplay = `$${DataManager.calculateTokenValue(t).toLocaleString()}`;
             } else {
                 valueDisplay = isUnknown ? 'N/A' : '⭐'.repeat(t.valueRating || 0);
             }
 
             return `
-                <div class="transaction-card ${t.stationMode} ${isUnknown ? 'unknown' : ''}">
+                <div class="transaction-card ${t.mode} ${isUnknown ? 'unknown' : ''}">
                     <div class="transaction-header">
                         <span>Team ${t.teamId}</span>
                         <span class="transaction-time">${dateStr} ${timeStr}</span>
@@ -475,7 +549,7 @@ const UIManager = {
                         <div class="detail">RFID: <span>${t.rfid}</span></div>
                         <div class="detail">Value: <span>${valueDisplay}</span></div>
                         <div class="detail">Type: <span>${t.memoryType}</span></div>
-                        <div class="detail">Mode: <span>${t.stationMode === 'blackmarket' ? 'Black Market' : 'Detective'}</span></div>
+                        <div class="detail">Mode: <span>${t.mode === 'blackmarket' ? 'Black Market' : 'Detective'}</span></div>
                         <div class="detail" style="grid-column: 1 / -1;">Group: <span>${t.group}</span></div>
                     </div>
                 </div>
@@ -497,7 +571,7 @@ const UIManager = {
                 t.memoryType.toLowerCase().includes(search) ||
                 t.group.toLowerCase().includes(search);
 
-            const matchesMode = !mode || t.stationMode === mode;
+            const matchesMode = !mode || t.mode === mode;
 
             return matchesSearch && matchesMode;
         });
@@ -572,7 +646,7 @@ const UIManager = {
             typeEl.style.color = '#FF5722';
             groupEl.textContent = `Raw ID: ${tokenId}`;
 
-            if (Settings.stationMode === 'blackmarket') {
+            if (Settings.mode === 'blackmarket') {
                 valueEl.textContent = '$0';
             } else {
                 valueEl.textContent = 'No Value';
@@ -585,7 +659,7 @@ const UIManager = {
             typeEl.style.color = '#333';
             groupEl.textContent = token.SF_Group;
 
-            if (Settings.stationMode === 'blackmarket') {
+            if (Settings.mode === 'blackmarket') {
                 const tokenScore = DataManager.calculateTokenValue({
                     valueRating: token.SF_ValueRating,
                     memoryType: token.SF_MemoryType,

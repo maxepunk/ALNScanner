@@ -80,6 +80,14 @@ npx http-server -S -C cert.pem -K key.pem
 
 ## Architecture
 
+### Frontend Overview
+The application is a **monolithic single-file PWA** (`index.html`) with modular JavaScript extracted into separate files:
+- **No Build Process**: Pure HTML/JS/CSS without transpilation or bundling
+- **Inline CSS**: All styles embedded in `<style>` tags (lines 7-1373 in index.html)
+- **Module Loading**: Sequential `<script>` tags load modules in dependency order (lines 1817-1839)
+- **Global Scope**: Modules expose objects to `window` for cross-module communication
+- **Event-Driven**: Uses EventEmitter pattern and WebSocket events for state updates
+
 ### File Structure
 ```
 ALNScanner/
@@ -180,7 +188,7 @@ ALNScanner/
 When operating with orchestrator backend:
 
 1. **Authentication**: HTTP POST to `/api/admin/auth` with password
-2. **WebSocket Connection**: Connect with JWT token
+2. **WebSocket Connection**: Connect with JWT token in handshake.auth
 3. **Admin Panel**: Three-tab interface (Scanner / Admin / Debug)
    - Scanner view: Standard NFC scanning
    - Admin view: Session management, video controls, system monitoring
@@ -191,17 +199,76 @@ When operating with orchestrator backend:
    - Backend confirms → Update local state
    - If offline: Queue locally, retry on reconnect
 
+### WebSocket Communication Patterns
+
+**Authentication Flow:**
+```javascript
+// 1. HTTP Authentication (initial)
+POST /api/admin/auth { password }
+→ { token: "JWT...", expiresIn: 86400 }
+
+// 2. WebSocket Handshake (with token)
+io.connect(url, {
+  auth: {
+    token: "JWT...",
+    deviceId: "GM_Station_1",
+    deviceType: "gm",
+    version: "1.0.0"
+  }
+})
+
+// 3. Auto-Sync on Connect
+← sync:full { session, scores, recentTransactions, videoStatus, devices }
+```
+
+**Client-to-Server Events:**
+- `gm:scan`: Submit token scan transaction
+  ```javascript
+  emit('gm:scan', { tokenId, teamId, deviceId, timestamp })
+  ← wait for gm:scan:ack { success, transaction }
+  ```
+- `gm:command`: Admin control actions (session, video, system)
+  ```javascript
+  emit('gm:command', { action: 'session:create', payload: { name, teams } })
+  ← wait for gm:command:ack { success, data }
+  ```
+- `request:state`: Request full state snapshot (rate-limited)
+
+**Server-to-Client Events (Broadcasts):**
+- `sync:full`: Complete state snapshot (on connect/reconnect)
+- `session:update`: Session lifecycle changes (create/pause/resume/end)
+- `transaction:new`: New transaction processed (all stations notified)
+- `video:status`: Video playback state changes (current, queue, progress)
+- `device:connected` / `device:disconnected`: Device tracking
+- `game:state`: Full game state broadcast (session + scores + transactions)
+
+**OrchestratorClient Event Handling** (`js/network/orchestratorClient.js`):
+- Line 131-146: Connection lifecycle (connect/disconnect/reconnect)
+- Line 206-219: Auto-sync on reconnect (NetworkedQueueManager.syncQueue())
+- Line 254-418: Event handler registration and routing
+- Custom event emitter pattern: `on(event, handler)`, `emit(event, data)`
+
+**NetworkedQueueManager** (`js/network/networkedQueueManager.js`):
+- Queues transactions when offline (localStorage persistence)
+- Automatic retry on reconnect with exponential backoff
+- Deduplication to prevent double-submission
+- Rate limiting to prevent server overload
+
 ### Admin Module Components
 **Only available in networked mode** (`js/utils/adminModule.js`):
 
 - **SessionManager**: Create/pause/resume/end sessions, view details
   - Event-driven updates via `session:update` broadcasts
   - Rich session status display with team counts and transaction stats
+  - Uses WebSocket `gm:command` events (NOT HTTP) per AsyncAPI contract
+  - Promise-based API with timeout handling (5s default)
+  - Maintains `currentSession` state from broadcasts (single source of truth)
 - **VideoController**: Play/pause/stop/skip videos, manage queue
-  - Auto-populated video dropdown from server's video directory
+  - Auto-populated video dropdown from server's video directory (via `/api/videos`)
   - Queue visibility with progress tracking
   - Manual video control (play/pause/stop/skip)
   - Video:progress event handling for real-time updates
+  - Supports queue reordering and manual file addition
 - **SystemMonitor**: Health checks, system status
   - Backend health monitoring
   - VLC connection status
@@ -210,7 +277,8 @@ When operating with orchestrator backend:
   - Dangerous operations with confirmation dialogs
 - **MonitoringDisplay**: Event-driven UI updates (listens to WebSocket broadcasts)
   - Receives `game:state`, `session:update`, `transaction:new` events
-  - Null-safe event handling for malformed broadcasts
+  - Null-safe event handling for malformed broadcasts (Phase 5 Bug #1 fix)
+  - Updates DOM elements based on state changes without triggering commands
 
 ### Token Database Schema
 ```json
@@ -229,6 +297,156 @@ When operating with orchestrator backend:
 - `Business` - 3x multiplier
 - `Technical` - 5x multiplier
 - `UNKNOWN` - 0x multiplier (fallback for invalid types)
+
+## Frontend Component Architecture
+
+### UI Screens and Navigation
+The app uses a **single-page navigation system** with screen visibility toggling (`js/ui/uiManager.js`):
+
+**Screen Flow:**
+```
+Loading → Game Mode Selection → [Networked: Connection Wizard] → Team Entry → Scan → Result
+                               ↘ [Standalone: Team Entry] ↗
+```
+
+**Available Screens:**
+- **loadingScreen**: Initial app load, token database loading
+- **gameModeScreen**: Choose networked vs standalone mode (lines 1508-1551 in index.html)
+- **settingsScreen**: Device ID, mode toggle, data management (lines 1471-1505)
+- **teamEntryScreen**: Numeric keypad for team ID input (lines 1553-1570)
+- **scanScreen**: NFC scanning interface with stats (lines 1572-1595)
+- **resultScreen**: Transaction result display (lines 1597-1623)
+- **historyScreen**: Transaction log with filters (lines 1625-1662)
+- **scoreboardScreen**: Black Market rankings (lines 1664-1676, networked only)
+- **teamDetailsScreen**: Detailed team token breakdown (lines 1678-1706)
+
+**View Tabs (Networked Mode Only):**
+- **scanner-view**: Default scanning interface (lines 1459-1708)
+- **admin-view**: Admin panel for orchestrator control (lines 1711-1804)
+- **debug-view**: Real-time debug console (lines 1806-1809)
+
+### UI Manager API (`js/ui/uiManager.js`)
+**Core Methods:**
+- `init()`: Initialize screen elements and error display container
+- `showScreen(screenName)`: Toggle screen visibility with back navigation tracking
+- `updateModeDisplay(mode)`: Update detective/blackmarket visual indicators
+- `updateTeamDisplay(teamId)`: Update numeric team ID display
+- `updateSessionStats()`: Refresh token count and score displays
+- `updateHistoryBadge()`: Update transaction count badge in navigation
+- `showError(message, duration)`: Display user-facing error notification (Phase 4.3)
+- `showToast(message, type, duration)`: Display toast notifications (info/success/warning/error)
+
+**Screen Management:**
+- Tracks `previousScreen` for back button navigation
+- Excludes overlay screens (history, scoreboard, teamDetails) from back stack
+- Uses CSS class `.active` to show/hide screens
+
+**Error Display System (Phase 4.3):**
+- Fixed position error container (top-right corner)
+- Auto-dismissing messages with slide-in/out animations
+- Toast types: `info` (blue), `success` (green), `warning` (orange), `error` (red)
+- Default durations: 5s for errors, 3s for toasts
+
+### Connection Wizard Modal
+**Modal UI Flow** (lines 1377-1417 in index.html):
+1. **Discovery Section**: UDP broadcast scan for orchestrators
+   - `scanForServers()`: Initiates discovery via ConnectionManager
+   - `displayDiscoveredServers(servers)`: Renders found servers
+   - `selectServer(url)`: Auto-fills form with discovered URL
+2. **Manual Configuration**: Fallback form entry
+   - Server Address: HTTP/HTTPS URL with auto-normalization
+   - Station Name: Auto-increments (GM Station 1, 2, 3...)
+   - GM Password: Admin authentication credential
+3. **Connection Process**:
+   - Health check: `GET /health` (3s timeout)
+   - Authentication: `POST /api/admin/auth`
+   - ConnectionManager stores JWT token
+   - WebSocket connection established
+   - Modal dismissed, transition to team entry
+
+**Functions:**
+- `showConnectionWizard()`: Display modal, auto-trigger scan
+- `handleConnectionSubmit(event)`: Validate and establish connection
+- `cancelNetworkedMode()`: Return to game mode selection
+
+### CSS Architecture
+**Design System** (lines 7-1373 in index.html):
+- **Base Styles** (11-41): Reset, gradient background, container layout
+- **Header** (46-151): Navigation buttons, connection status indicator, mode badge
+- **Connection Status** (122-200): Colored dots (connected/connecting/disconnected)
+- **Mode Indicator** (205-235): Detective (green) vs Black Market (orange) pills
+- **Screen Management** (239-246): `.screen` visibility toggle via `.active` class
+- **Status Messages** (251-273): Error/success/warning colored alerts
+- **View Tabs** (278-312): Three-tab navigation for networked mode
+- **Admin Sections** (317-424): Session/video/system control panels
+- **Numpad** (429-460): 3x3 grid for team ID entry
+- **Transaction Cards** (667-728): History list items with hover effects
+- **Scoreboard** (803-875): Ranked entries with medal gradients (gold/silver/bronze)
+- **Group Sections** (963-1037): Completion badges and progress bars
+- **Debug Panel** (1102-1143): Fixed-position terminal-style console
+- **Error Display** (1168-1216): Toast notification system (Phase 4.3)
+- **Modal Styles** (1221-1373): Connection wizard overlay
+
+### Event Flow and State Management
+
+**Data Flow Pattern:**
+```
+User Action → App.js → DataManager → UIManager → DOM Update
+           ↘ NetworkedQueueManager → WebSocket → Backend
+```
+
+**WebSocket Event Flow (Networked Mode):**
+```
+Backend Broadcast → OrchestratorClient.eventHandlers → AdminModule listeners → MonitoringDisplay → DOM
+```
+
+**Key Event Listeners:**
+- `DOMContentLoaded`: App initialization (line 1849)
+- NFC `reading` event: Token scan processing (nfcHandler.js)
+- WebSocket events: `sync:full`, `session:update`, `transaction:new`, `video:status`
+- Connection events: `status:changed`, `connection:error`, `reconnected`
+
+**State Synchronization:**
+1. **Local State** (DataManager):
+   - transactions array (localStorage)
+   - scannedTokens Set (deduplication)
+   - teamScores Map (computed)
+   - groupCompletions Map (bonus tracking)
+2. **Backend State** (Networked):
+   - backendScores Map (authoritative from sync:full)
+   - currentSession (from SessionManager broadcasts)
+   - videoQueue (from video:status events)
+   - connectedDevices (from device:connected/disconnected)
+
+**State Reconciliation:**
+- On reconnect: `sync:full` event overwrites local state
+- Transaction conflicts: Backend timestamp wins
+- Score conflicts: Backend score takes precedence (stored in backendScores Map)
+- Offline transactions: Queued in NetworkedQueueManager, submitted on reconnect
+
+### NFC Integration (`js/utils/nfcHandler.js`)
+**Web NFC API Wrapper:**
+- `init()`: Feature detection (Chrome 89+, HTTPS required)
+- `startScan()`: Begin NFC reader session
+- `stopScan()`: Abort reader session
+- `handleScan(ndef)`: Parse NDEF records, extract RFID
+- Fallback: Manual entry dialog if NFC unavailable
+
+**NFC Data Flow:**
+1. User taps "Start Scanning" button
+2. `navigator.nfc.scan()` initiates reader
+3. `reading` event fires with NDEF data
+4. RFID extracted from NDEF record
+5. TokenManager.findToken() fuzzy matches ID
+6. DataManager.processTransaction() scores token
+7. UIManager.showScreen('result') displays outcome
+
+### Service Worker (`sw.js`)
+**PWA Offline Support:**
+- Cache-first strategy for static assets
+- Network-first for API calls
+- Fallback to cached token database
+- Enables install-to-home-screen prompt
 
 ## Important Notes
 
@@ -340,8 +558,95 @@ console.log(window.connectionManager?.isConnected);
 - **Defensive Token Access**: All token property access uses optional chaining (`token?.SF_ValueRating`)
 - **Event Handling**: Null checks before accessing WebSocket event payloads
 
+### Frontend-Specific Debugging
+
+**UI Not Updating:**
+```javascript
+// Check if screen is active
+document.querySelector('.screen.active')?.id
+
+// Force screen transition
+UIManager.showScreen('teamEntry')
+
+// Verify data manager initialized
+console.log(DataManager?.transactions?.length)
+
+// Check mode lock
+window.sessionModeManager?.locked
+window.sessionModeManager?.mode
+```
+
+**WebSocket Issues:**
+```javascript
+// Check connection status
+window.connectionManager?.isConnected
+window.connectionManager?.client?.socket?.connected
+
+// View pending queue
+window.queueManager?.queue
+
+// Check event handlers
+window.connectionManager?.client?.eventHandlers
+
+// Monitor raw events
+window.connectionManager?.client?.socket.onAny((event, data) => {
+  console.log('WS Event:', event, data);
+});
+```
+
+**Admin Panel Not Loading:**
+```javascript
+// Verify networked mode
+window.sessionModeManager?.isNetworked()
+
+// Check admin modules initialized
+App.viewController?.sessionManager
+App.viewController?.videoController
+
+// View current session
+App.viewController?.sessionManager?.currentSession
+```
+
+**NFC Scanning Issues:**
+```javascript
+// Check NFC support
+'NDEFReader' in window
+
+// Verify HTTPS (required for NFC)
+window.location.protocol === 'https:'
+
+// Test manual entry fallback
+App.manualEntry()
+```
+
+**LocalStorage Debugging:**
+```javascript
+// View stored transactions
+JSON.parse(localStorage.getItem('transactions') || '[]')
+
+// Check game mode
+localStorage.getItem('gameSessionMode')
+
+// View all settings
+Object.keys(localStorage).filter(k => k.startsWith('aln_'))
+```
+
+**CSS/Layout Issues:**
+- View selector tabs only show in networked mode (check `#viewSelector` display)
+- Connection status dot color indicates state (green=connected, orange=connecting, red=disconnected)
+- Screen overlays (history, scoreboard) don't update `previousScreen` for back navigation
+- Modal backdrop (`#connectionModal`) uses flexbox centering (check `.modal` display property)
+
 ### Testing Without Backend
 1. Open `index.html` in browser
 2. Select "Standalone Mode"
 3. Use "Manual Entry" button to simulate scans
 4. Open Debug panel (🐛 button) for logs
+
+### Testing Networked Mode Without Orchestrator
+```javascript
+// Simulate connection failure gracefully
+window.sessionModeManager = new SessionModeManager();
+window.sessionModeManager.setMode('standalone');
+UIManager.showScreen('teamEntry');
+```

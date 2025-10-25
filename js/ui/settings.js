@@ -6,7 +6,7 @@
 
 const Settings = {
     deviceId: '001',
-    stationMode: 'detective',
+    mode: 'detective',
 
     /**
      * Load settings from localStorage
@@ -15,17 +15,17 @@ const Settings = {
         // Use ConnectionManager if available, fallback to localStorage
         if (window.connectionManager) {
             this.deviceId = window.connectionManager.deviceId;
-            this.stationMode = window.connectionManager.stationMode;
+            this.mode = window.connectionManager.mode;
         } else {
             this.deviceId = localStorage.getItem('deviceId') || '001';
-            this.stationMode = localStorage.getItem('stationMode') || 'detective';
+            this.mode = localStorage.getItem('mode') || 'detective';
         }
 
         document.getElementById('deviceId').value = this.deviceId;
         document.getElementById('deviceIdDisplay').textContent = this.deviceId;
-        document.getElementById('modeToggle').checked = this.stationMode === 'blackmarket';
+        document.getElementById('modeToggle').checked = this.mode === 'blackmarket';
 
-        UIManager.updateModeDisplay(this.stationMode);
+        UIManager.updateModeDisplay(this.mode);
     },
 
     /**
@@ -35,20 +35,20 @@ const Settings = {
         const settingsScreen = document.getElementById('settingsScreen');
         if (settingsScreen && settingsScreen.classList.contains('active')) {
             this.deviceId = document.getElementById('deviceId').value || '001';
-            this.stationMode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
+            this.mode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
         }
 
         // Use ConnectionManager if available
         if (window.connectionManager) {
             window.connectionManager.deviceId = this.deviceId;
-            window.connectionManager.stationMode = this.stationMode;
+            window.connectionManager.mode = this.mode;
         } else {
             localStorage.setItem('deviceId', this.deviceId);
-            localStorage.setItem('stationMode', this.stationMode);
+            localStorage.setItem('mode', this.mode);
         }
 
         document.getElementById('deviceIdDisplay').textContent = this.deviceId;
-        UIManager.updateModeDisplay(this.stationMode);
+        UIManager.updateModeDisplay(this.mode);
     }
 };
 

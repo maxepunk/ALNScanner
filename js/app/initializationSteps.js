@@ -125,7 +125,7 @@ async function loadTokenDatabase(tokenManager, uiManager) {
  * Checks for ?mode=blackmarket or ?mode=black-market and sets station mode
  *
  * @param {string} locationSearch - window.location.search (query string)
- * @param {Object} settings - Settings object with stationMode and save()
+ * @param {Object} settings - Settings object with mode and save()
  * @returns {boolean} True if mode was applied, false otherwise
  */
 function applyURLModeOverride(locationSearch, settings) {
@@ -133,7 +133,7 @@ function applyURLModeOverride(locationSearch, settings) {
     const modeParam = urlParams.get('mode');
 
     if (modeParam === 'blackmarket' || modeParam === 'black-market') {
-        settings.stationMode = 'blackmarket';
+        settings.mode = 'blackmarket';
         settings.save();
         Debug.log('Station mode set to blackmarket via URL parameter');
         return true;

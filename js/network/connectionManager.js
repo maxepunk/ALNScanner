@@ -79,11 +79,11 @@
                 localStorage.setItem(this.STORAGE_KEYS.STATION_NAME, value);
             }
 
-            get stationMode() {
+            get mode() {
                 return localStorage.getItem(this.STORAGE_KEYS.STATION_MODE) || 'detective';
             }
 
-            set stationMode(value) {
+            set mode(value) {
                 localStorage.setItem(this.STORAGE_KEYS.STATION_MODE, value);
             }
 

@@ -259,6 +259,36 @@
                     console.log('Received score update from backend:', payload);
                 });
 
+                // Transaction deleted event - sync deletion across all scanners
+                this.socket.on('transaction:deleted', (eventData) => {
+                    const payload = eventData.data;
+                    this.emit('transaction:deleted', payload);
+
+                    // Remove from local DataManager to keep all scanners in sync
+                    if (window.DataManager) {
+                        const index = window.DataManager.transactions.findIndex(tx => tx.id === payload.transactionId);
+                        if (index !== -1) {
+                            window.DataManager.transactions.splice(index, 1);
+                            window.DataManager.saveTransactions();
+                            console.log('Removed transaction from local state:', payload.transactionId);
+                        }
+
+                        // Also remove from scannedTokens to allow re-scanning
+                        if (payload.tokenId) {
+                            window.DataManager.scannedTokens.delete(payload.tokenId);
+                            window.DataManager.saveScannedTokens();
+                            console.log('Removed from scannedTokens:', payload.tokenId);
+                        }
+
+                        // Refresh UI if user is viewing affected team's details
+                        if (window.App?.currentInterventionTeamId === payload.teamId) {
+                            const transactions = window.DataManager.getTeamTransactions(payload.teamId);
+                            window.UIManager?.renderTeamDetails(payload.teamId, transactions);
+                        }
+                    }
+                    console.log('Transaction deleted by another scanner:', payload);
+                });
+
                 this.socket.on('group:completed', (eventData) => {
                     const payload = eventData.data;
                     this.emit('group:completed', payload);
