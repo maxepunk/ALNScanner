@@ -87,6 +87,14 @@
                 localStorage.setItem(this.STORAGE_KEYS.STATION_MODE, value);
             }
 
+            get stationMode() {
+                return localStorage.getItem(this.STORAGE_KEYS.STATION_MODE) || 'detective';
+            }
+
+            set stationMode(value) {
+                localStorage.setItem(this.STORAGE_KEYS.STATION_MODE, value);
+            }
+
 
             // ========== Token Management ==========
 
