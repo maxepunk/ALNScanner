@@ -12,7 +12,8 @@
                         return savedUrl;
                     }
                     // Fallback to localhost for development
-                    return 'http://localhost:3000';
+                    // HTTPS required for Web NFC API support
+                    return 'https://localhost:3000';
                 };
 
                 this.config = {
@@ -56,11 +57,12 @@
             /**
              * Connect to the orchestrator WebSocket server
              * Note: Authentication must be complete BEFORE calling this method
+             * Returns a Promise that resolves when the WebSocket connection is established
              */
             async connect() {
                 if (this.socket && this.socket.connected) {
                     console.warn('OrchestratorClient: Already connected');
-                    return;
+                    return Promise.resolve();
                 }
 
                 // Assume token already exists - it's set before connect() is ever called
@@ -68,7 +70,7 @@
                     console.error('OrchestratorClient: Cannot connect without token - auth should happen before connect()');
                     this.connectionStatus = 'disconnected';
                     this.emit('status:changed', 'offline');
-                    return;
+                    return Promise.reject(new Error('No authentication token'));
                 }
 
                 // Update status and create socket connection
@@ -77,6 +79,30 @@
 
                 // Create the socket connection with auth already in place
                 this.createSocketConnection();
+
+                // Return Promise that resolves when socket connects
+                return new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        this.socket?.off('connect', onConnect);
+                        this.socket?.off('connect_error', onError);
+                        reject(new Error('Connection timeout after 10 seconds'));
+                    }, 10000);
+
+                    const onConnect = () => {
+                        clearTimeout(timeout);
+                        this.socket.off('connect_error', onError);
+                        resolve();
+                    };
+
+                    const onError = (error) => {
+                        clearTimeout(timeout);
+                        this.socket.off('connect', onConnect);
+                        reject(error);
+                    };
+
+                    this.socket.once('connect', onConnect);
+                    this.socket.once('connect_error', onError);
+                });
             }
 
             /**
@@ -598,14 +624,18 @@
                     }
                 }
 
-                const commonPorts = [3000, 8080];
+                // Try HTTPS first (required for Web NFC), then HTTP redirect port
+                const portsToScan = [
+                    { port: 3000, protocol: 'https' },  // HTTPS orchestrator
+                    { port: 8000, protocol: 'http' }    // HTTP redirect server
+                ];
                 const promises = [];
                 const foundServers = [];
 
                 // Scan current subnet with proper endpoint
                 for (let i = 1; i <= 254; i++) {
-                    for (const port of commonPorts) {
-                        const baseUrl = `http://${subnet}.${i}:${port}`;
+                    for (const config of portsToScan) {
+                        const baseUrl = `${config.protocol}://${subnet}.${i}:${config.port}`;
                         promises.push(
                             fetch(`${baseUrl}/health`, {
                                 method: 'GET',
@@ -614,7 +644,7 @@
                             })
                             .then(response => {
                                 if (response.ok) {
-                                    return { url: baseUrl, ip: `${subnet}.${i}:${port}` };
+                                    return { url: baseUrl, ip: `${subnet}.${i}:${config.port}` };
                                 }
                                 return null;
                             })
@@ -629,12 +659,12 @@
                     }
                 }
 
-                // Also try localhost
+                // Also try localhost (HTTPS for Web NFC support)
                 promises.push(
-                    fetch('http://localhost:3000/health', {
+                    fetch('https://localhost:3000/health', {
                         signal: AbortSignal.timeout(1000)
                     })
-                    .then(response => response.ok ? { url: 'http://localhost:3000', ip: 'localhost:3000' } : null)
+                    .then(response => response.ok ? { url: 'https://localhost:3000', ip: 'localhost:3000' } : null)
                     .catch(() => null)
                 );
 

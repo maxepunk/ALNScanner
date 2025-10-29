@@ -40,10 +40,11 @@
 
             set url(value) {
                 if (value) {
-                    // Normalize URL: add http:// if no protocol specified
+                    // Normalize URL: add https:// if no protocol specified
+                    // HTTPS required for Web NFC API support
                     let normalizedUrl = value.trim();
                     if (!/^https?:\/\//i.test(normalizedUrl)) {
-                        normalizedUrl = 'http://' + normalizedUrl;
+                        normalizedUrl = 'https://' + normalizedUrl;
                     }
                     localStorage.setItem(this.STORAGE_KEYS.URL, normalizedUrl);
                 } else {
