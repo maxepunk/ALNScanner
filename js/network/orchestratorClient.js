@@ -316,6 +316,22 @@
                     if (payload.devices) {
                         this.connectedDevices = payload.devices;
                     }
+
+                    // If sync:full includes a session, initialize DataManager with that session ID
+                    // This handles initial connection and reconnection scenarios
+                    if (payload.session && payload.session.id && window.DataManager) {
+                        const isNewSession = payload.session.id !== this.sessionId;
+
+                        // Update tracked session ID
+                        this.sessionId = payload.session.id;
+
+                        // If this is a new session, reset duplicate detection
+                        if (isNewSession && payload.session.status === 'active') {
+                            window.DataManager.resetForNewSession(payload.session.id);
+                            console.log(`Sync received with new session (${payload.session.id}) - reset duplicate detection`);
+                        }
+                    }
+
                     this.emit('sync:full', payload);
                 });
 
@@ -324,9 +340,20 @@
                     const payload = eventData.data;
                     this.emit('session:update', payload);
 
+                    // Detect new session and reset duplicate detection
+                    const isNewSession = payload.id && payload.id !== this.sessionId;
+                    const isSessionStarting = payload.status === 'active' && isNewSession;
+
                     // Update session info if available
                     if (payload.id) {
                         this.sessionId = payload.id;
+                    }
+
+                    // CRITICAL FIX: Reset scannedTokens Set when new session starts
+                    // This prevents duplicate detection from carrying over from previous session
+                    if (isSessionStarting && window.DataManager) {
+                        window.DataManager.resetForNewSession(payload.id);
+                        console.log(`New session detected (${payload.id}) - reset duplicate detection`);
                     }
 
                     // Log session state changes

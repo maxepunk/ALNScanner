@@ -1460,7 +1460,7 @@
         <div id="scanner-view" class="view-content">
 
         <!-- Loading Screen -->
-        <div id="loadingScreen" class="screen active">
+        <div id="loadingScreen" class="screen">
             <div class="status-message">
                 <div class="scan-icon">⏳</div>
                 <p>Loading token database...</p>
@@ -1885,8 +1885,8 @@
     <!-- ============================================
          ORCHESTRATOR WEBSOCKET INTEGRATION
          ============================================ -->
-    <!-- Socket.io v4 Client Library -->
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <!-- Socket.io v4 Client Library (served locally for offline support) -->
+    <script src="/socket.io-client/socket.io.min.js"></script>
 
     <script>
         /**

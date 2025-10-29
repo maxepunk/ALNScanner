@@ -193,6 +193,20 @@ function applyInitialScreenDecision(decision, sessionModeManager, uiManager, sho
     }
 }
 
+/**
+ * Show loading screen with paint delay
+ * Ensures loading screen is visible before JavaScript continues executing
+ *
+ * @param {Object} uiManager - UIManager instance
+ * @returns {Promise<void>}
+ */
+async function showLoadingScreen(uiManager) {
+    uiManager.showScreen('loading');
+    // Ensure browser paints the loading screen before continuing
+    await new Promise(resolve => setTimeout(resolve, 100));
+    Debug.log('Loading screen displayed');
+}
+
 // Export for Node.js testing
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -206,7 +220,8 @@ if (typeof module !== 'undefined' && module.exports) {
         loadTokenDatabase,
         applyURLModeOverride,
         determineInitialScreen,
-        applyInitialScreenDecision
+        applyInitialScreenDecision,
+        showLoadingScreen
     };
 }
 
@@ -223,6 +238,7 @@ if (typeof window !== 'undefined') {
         loadTokenDatabase,
         applyURLModeOverride,
         determineInitialScreen,
-        applyInitialScreenDecision
+        applyInitialScreenDecision,
+        showLoadingScreen
     };
 }

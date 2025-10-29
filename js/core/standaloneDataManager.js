@@ -26,14 +26,29 @@ class StandaloneDataManager {
     addTransaction(transaction) {
         // Add to permanent local storage, not temporary queue
         this.sessionData.transactions.push(transaction);
-        this.saveLocalSession();
 
-        // Update local scores
+        // Update local scores (calculates team scores from transaction)
         this.updateLocalScores(transaction);
+
+        // Save to localStorage AFTER scoring calculations complete
+        // This ensures the calculated scores are persisted along with transaction data
+        this.saveLocalSession();
     }
 
     updateLocalScores(transaction) {
         const teamId = transaction.teamId;
+
+        // DIAGNOSTIC: Log transaction being processed
+        console.log('[StandaloneDataManager] updateLocalScores() called', {
+            tokenId: transaction.tokenId,
+            teamId: transaction.teamId,
+            mode: transaction.mode,
+            points: transaction.points,
+            tokenGroup: transaction.tokenGroup,
+            valueRating: transaction.valueRating,
+            memoryType: transaction.memoryType
+        });
+
         if (!this.sessionData.teams[teamId]) {
             this.sessionData.teams[teamId] = {
                 teamId: teamId,
@@ -44,23 +59,68 @@ class StandaloneDataManager {
                 completedGroups: [],
                 lastScanTime: null
             };
+            console.log('[StandaloneDataManager] Created new team:', teamId);
         }
 
         const team = this.sessionData.teams[teamId];
 
+        // DIAGNOSTIC: Log team state BEFORE scoring
+        console.log('[StandaloneDataManager] Team state BEFORE scoring:', {
+            teamId,
+            baseScore: team.baseScore,
+            bonusPoints: team.bonusPoints,
+            score: team.score,
+            tokensScanned: team.tokensScanned
+        });
+
         // Only update score for blackmarket mode
         if (transaction.mode === 'blackmarket' && transaction.points) {
+            console.log(`[StandaloneDataManager] Adding ${transaction.points} points to team ${teamId}`);
             team.baseScore += transaction.points;
             team.score = team.baseScore + team.bonusPoints;
+        } else {
+            console.log('[StandaloneDataManager] Score NOT updated. Reason:', {
+                mode: transaction.mode,
+                isBlackmarket: transaction.mode === 'blackmarket',
+                points: transaction.points,
+                hasPoints: !!transaction.points
+            });
         }
 
         team.tokensScanned++;
         team.lastScanTime = transaction.timestamp;
 
+        // DIAGNOSTIC: Log team state AFTER base scoring, BEFORE group check
+        console.log('[StandaloneDataManager] Team state AFTER base scoring:', {
+            teamId,
+            baseScore: team.baseScore,
+            bonusPoints: team.bonusPoints,
+            score: team.score,
+            tokensScanned: team.tokensScanned
+        });
+
         // Check for group completion (only for blackmarket mode)
         if (transaction.mode === 'blackmarket' && transaction.tokenGroup) {
+            console.log(`[StandaloneDataManager] Checking group completion for: ${transaction.tokenGroup}`);
             this.checkGroupCompletion(teamId, transaction.tokenGroup);
+        } else {
+            console.log('[StandaloneDataManager] Group completion check SKIPPED. Reason:', {
+                mode: transaction.mode,
+                isBlackmarket: transaction.mode === 'blackmarket',
+                tokenGroup: transaction.tokenGroup,
+                hasTokenGroup: !!transaction.tokenGroup
+            });
         }
+
+        // DIAGNOSTIC: Log FINAL team state
+        console.log('[StandaloneDataManager] Team state FINAL:', {
+            teamId,
+            baseScore: team.baseScore,
+            bonusPoints: team.bonusPoints,
+            score: team.score,
+            tokensScanned: team.tokensScanned,
+            completedGroups: team.completedGroups
+        });
 
         // Trigger UI update
         if (window.UIManager) {

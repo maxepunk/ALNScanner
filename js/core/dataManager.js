@@ -25,6 +25,7 @@
         this.currentSession = [];
         this.scannedTokens = new Set();
         this.backendScores = new Map();  // Store scores from orchestrator
+        this.currentSessionId = null;  // Track current session for duplicate detection scope
 
         // Scoring configuration for Black Market mode
         this.SCORING_CONFIG = {
@@ -62,13 +63,20 @@
 
     /**
      * Load scanned tokens registry from localStorage
+     * Validates against current session ID to prevent stale duplicate detection
      */
     loadScannedTokens() {
         try {
             const stored = localStorage.getItem('scannedTokens');
+            const storedSessionId = localStorage.getItem('currentSessionId');
+
+            // Load current session ID if available (networked mode)
+            // In standalone mode, this will be null and scannedTokens will be session-local
+            this.currentSessionId = storedSessionId;
+
             if (stored) {
                 this.scannedTokens = new Set(JSON.parse(stored));
-                this.debug?.log(`Loaded ${this.scannedTokens.size} scanned tokens`);
+                this.debug?.log(`Loaded ${this.scannedTokens.size} scanned tokens for session ${storedSessionId || 'local'}`);
             }
         } catch (e) {
             this.debug?.log('Error loading scanned tokens', true);
@@ -176,10 +184,34 @@
     }
 
     /**
+     * Reset state for new game session
+     * Clears session-scoped state (scannedTokens, currentSession) while preserving history
+     * Called when new session starts or when clearing session
+     */
+    resetForNewSession(sessionId = null) {
+        this.currentSession = [];
+        this.scannedTokens.clear();
+        this.currentSessionId = sessionId;
+
+        // Clear localStorage duplicate registry
+        localStorage.removeItem('scannedTokens');
+
+        // If sessionId provided, save it for validation on reload
+        if (sessionId) {
+            localStorage.setItem('currentSessionId', sessionId);
+        } else {
+            localStorage.removeItem('currentSessionId');
+        }
+
+        this.debug?.log(`Reset for new session: ${sessionId || 'local'}`);
+    }
+
+    /**
      * Clear current session
+     * Calls resetForNewSession to ensure duplicate detection is cleared
      */
     clearSession() {
-        this.currentSession = [];
+        this.resetForNewSession();
     }
 
     /**
@@ -742,10 +774,9 @@
     clearData() {
         if (confirm('Clear all transaction data? This cannot be undone.')) {
             this.transactions = [];
-            this.currentSession = [];
-            this.scannedTokens.clear();
+            this.resetForNewSession();  // Use resetForNewSession for consistency
             localStorage.removeItem('transactions');
-            localStorage.removeItem('scannedTokens');
+            localStorage.removeItem('currentSessionId');
             this.uiManager?.updateHistoryBadge();
             alert('All data cleared');
             location.reload();

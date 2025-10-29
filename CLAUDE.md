@@ -448,6 +448,53 @@ Backend Broadcast → OrchestratorClient.eventHandlers → AdminModule listeners
 - Fallback to cached token database
 - Enables install-to-home-screen prompt
 
+## UI/UX Documentation
+
+**Comprehensive UI documentation is available in the `/docs` folder and root-level markdown files:**
+
+### Quick Reference
+- **DOCUMENTATION_INDEX.md**: Master index of all UI documentation with quick navigation
+- **UI_MAP_SUMMARY.md**: One-page quick reference of screens, navigation, and common tasks (282 lines)
+  - Use this for: Finding specific information quickly, refreshing memory on features
+  - Contains: Screen inventory, navigation patterns, mode-specific features, file locations
+
+### Detailed Technical Reference
+- **UI_STRUCTURE_MAP.md**: Comprehensive technical reference with line numbers and code snippets (526 lines)
+  - Use this for: Understanding implementation details, debugging issues, making changes
+  - Contains: Complete screen inventory, visibility management, startup sequence, transitions, CSS reference
+  - Includes: UIManager.showScreen() implementation, back navigation logic, screen prerequisites
+
+### Visual Architecture
+- **SCREEN_FLOW_DIAGRAMS.md**: 10 detailed ASCII diagrams showing state flows and architecture (800+ lines)
+  - Use this for: Understanding overall architecture, explaining to others, planning changes
+  - Contains: Complete transition graph, dependency tree, SessionModeManager FSM, initialization tree
+  - Includes: Connection wizard flow, view switching architecture, error display system
+
+### Networked Mode Guide
+- **docs/NETWORKED_MODE_QUICK_REFERENCE.md**: Step-by-step user flow for networked mode (238 lines)
+  - Use this for: Understanding user experience, testing workflows, troubleshooting connection issues
+  - Contains: Mode selection, connection wizard, admin panel usage, real-time sync behavior
+
+### When to Use UI Documentation
+**For Frontend Changes:**
+1. Adding a new screen? → Read UI_STRUCTURE_MAP.md Section 1 + SCREEN_FLOW_DIAGRAMS.md Section 4
+2. Changing navigation? → Read UI_MAP_SUMMARY.md navigation patterns + SCREEN_FLOW_DIAGRAMS.md Section 1
+3. Debugging screen visibility? → Read UI_STRUCTURE_MAP.md Section 2 + check initialization logic
+4. Understanding mode selection? → Read SCREEN_FLOW_DIAGRAMS.md Section 3 (SessionModeManager FSM)
+5. Modifying connection flow? → Read SCREEN_FLOW_DIAGRAMS.md Section 7 + NETWORKED_MODE_QUICK_REFERENCE.md
+
+**For UX Improvements:**
+- Start with SCREEN_FLOW_DIAGRAMS.md Section 1 (complete transition graph) to understand current flow
+- Reference UI_MAP_SUMMARY.md for navigation patterns and user journey
+- Check NETWORKED_MODE_QUICK_REFERENCE.md for user-facing workflows
+- Review error display system in SCREEN_FLOW_DIAGRAMS.md Section 9
+
+**Key Architectural Concepts:**
+- **Screens vs Views**: Screens are UI elements within a view; views are top-level sections (Scanner/Admin/Debug)
+- **Modal Overlays**: Connection wizard is a modal, not a screen (fixed position, separate from screen system)
+- **Overlay Screens**: History, scoreboard, and team details are overlays (don't update back stack)
+- **Mode Locking**: Once networked/standalone selected, mode cannot change until page reload
+
 ## Important Notes
 
 - **NO BUILD PROCESS**: Pure HTML/JS/CSS in single file (`index.html` contains all inline code)
@@ -491,6 +538,47 @@ The app is served directly from the main branch:
 ```
 https://[username].github.io/ALNScanner/
 ```
+
+### GitHub Actions Workflow
+**Automated Deployment via GitHub Actions:**
+
+The repository includes a GitHub Actions workflow (`.github/workflows/sync.yml`) for automated token synchronization and deployment.
+
+**Workflow: "Sync & Deploy GM Scanner"**
+- **Trigger**: Manual dispatch via GitHub UI (Actions tab → "Run workflow" button)
+- **Purpose**: Sync token submodule and deploy to GitHub Pages from GitHub's servers
+- **Use case**: Update production site without local development environment
+
+**Workflow Steps:**
+1. Checkout repository with submodules (`actions/checkout@v4`)
+2. Setup Python 3.x environment
+3. Run `python3 sync.py --deploy`
+4. Push changes (handled by sync.py script)
+
+**How to Use:**
+```
+1. Navigate to repository on GitHub.com
+2. Click "Actions" tab in top navigation
+3. Select "Sync & Deploy GM Scanner" workflow
+4. Click "Run workflow" button (green button on right)
+5. Confirm by clicking "Run workflow" in dropdown
+6. Wait 1-2 minutes for workflow to complete
+7. Check GitHub Pages URL for updated deployment
+```
+
+**When to Use GitHub Actions:**
+- Deploying from a machine without Python/git configured
+- Quick emergency updates from any device with web access
+- Automated deployment as part of CI/CD pipeline
+- Token updates when local sync.py can't run
+
+**Differences from Local Deployment:**
+- **Local**: `python3 sync.py --deploy` runs on your machine
+- **GitHub Actions**: Runs on GitHub's Ubuntu servers
+- **Both**: Produce identical results (sync tokens → push → deploy)
+- **Benefit**: No need for local development environment
+
+**Note**: The GM Scanner workflow does NOT require QR code generation (unlike Player Scanner), making it lightweight and dependency-free.
 
 ## Relationship to Backend Orchestrator
 

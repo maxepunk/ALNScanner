@@ -3,12 +3,12 @@
  * Enables PWA functionality and offline support for standalone mode
  */
 
-const CACHE_NAME = 'aln-gm-scanner-v2-debug';
+const CACHE_NAME = 'aln-gm-scanner-v3-local-socketio';
 const urlsToCache = [
   './',
   './index.html',
   './data/tokens.json',
-  'https://cdn.socket.io/4.5.4/socket.io.min.js'
+  '/socket.io-client/socket.io.min.js'
 ];
 
 // Install event - cache resources

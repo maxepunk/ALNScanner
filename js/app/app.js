@@ -12,8 +12,11 @@
             async init() {
                 Debug.log('App initializing...');
 
-                // Initialize UI (Phase 1D)
+                // Initialize UI (Phase 1D) - MUST be before showLoadingScreen
                 InitializationSteps.initializeUIManager(UIManager);
+
+                // Show loading screen after UIManager initialized (Phase 0)
+                await InitializationSteps.showLoadingScreen(UIManager);
 
                 // CRITICAL: Initialize SessionModeManager BEFORE viewController (Phase 1E)
                 InitializationSteps.createSessionModeManager(SessionModeManager, window);
@@ -105,7 +108,8 @@
             confirmTeamId() {
                 if (this.currentTeamId.length > 0) {
                     document.getElementById('currentTeam').textContent = this.currentTeamId;
-                    DataManager.clearSession();
+                    // Note: Do NOT clear DataManager session here - scannedTokens must persist
+                    // across team switches for cross-team duplicate detection
                     UIManager.updateSessionStats();
                     UIManager.showScreen('scan');
                 }
@@ -761,9 +765,26 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                     tokenId: tokenId,  // Add tokenId for consistency with backend
                     memoryType: isUnknown ? 'UNKNOWN' : (token?.SF_MemoryType || 'UNKNOWN'),
                     group: isUnknown ? `Unknown: ${tokenId}` : (token?.SF_Group || ''),
+                    tokenGroup: isUnknown ? '' : (token?.SF_Group || ''),  // For StandaloneDataManager group completion
                     valueRating: isUnknown ? 0 : (token?.SF_ValueRating || 0),
                     isUnknown: isUnknown
                 };
+
+                // Calculate points for blackmarket mode (needed by StandaloneDataManager)
+                if (Settings.mode === 'blackmarket' && !isUnknown) {
+                    transaction.points = DataManager.calculateTokenValue(transaction);
+                    // DIAGNOSTIC: Log calculated points
+                    console.log('[app.js] Transaction points calculated:', {
+                        tokenId: transaction.tokenId,
+                        valueRating: transaction.valueRating,
+                        memoryType: transaction.memoryType,
+                        calculatedPoints: transaction.points,
+                        tokenGroup: transaction.tokenGroup
+                    });
+                } else {
+                    transaction.points = 0;
+                    console.log('[app.js] Transaction points set to 0 (detective mode or unknown token)');
+                }
 
                 // Submit transaction based on session mode
                 if (window.sessionModeManager && window.sessionModeManager.isNetworked()) {
@@ -838,7 +859,8 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
             
             finishTeam() {
                 this.currentTeamId = '';
-                DataManager.clearSession();
+                // Note: Do NOT clear DataManager session here - scannedTokens must persist
+                // across team switches for cross-team duplicate detection
                 UIManager.updateTeamDisplay('');
                 UIManager.showScreen('teamEntry');
             },

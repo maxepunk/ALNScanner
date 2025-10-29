@@ -197,6 +197,14 @@ const TokenManager = {
     },
 
     /**
+     * Get all tokens from database
+     * @returns {Array} Array of all token objects
+     */
+    getAllTokens() {
+        return Object.values(this.database);
+    },
+
+    /**
      * Find token in database with fuzzy matching
      * @param {string} id - Token ID to find
      * @returns {Object|null} Token data and matched ID
