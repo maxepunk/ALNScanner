@@ -223,7 +223,7 @@
                         console.error('Transaction error:', payload.message, payload);
                     } else if (payload.status === 'duplicate') {
                         if (window.UIManager) {
-                            window.UIManager.showWarning(payload.message || 'Duplicate transaction');
+                            window.UIManager.showToast(payload.message || 'Duplicate transaction', 'warning', 3000);
                         }
                         console.warn('Duplicate transaction:', payload);
                     } else if (payload.status === 'accepted') {
