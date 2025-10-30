@@ -6,6 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ALNScanner is the **Game Master (GM) Scanner** for the "About Last Night" immersive crime thriller game. It's a Progressive Web App that GMs use to track team transactions via NFC token scanning during live gameplay. This is NOT the player-facing app.
 
+## Recent Changes
+
+### October 2025: Field Standardization
+- Removed `ConnectionManager.stationMode` alias property
+- Use `ConnectionManager.mode` exclusively
+- localStorage key name unchanged (`'stationMode'`)
+
 ## Key Differences from Player Scanner
 
 - **This app (ALNScanner)**: GM tool with NFC scanning, team management, leaderboards, admin controls
@@ -620,7 +627,9 @@ window.orchestratorClient  // WebSocket client
 ### Common Debug Tasks
 ```javascript
 // Check current mode
-console.log(Settings.stationMode);  // 'detective' or 'blackmarket'
+console.log(Settings.mode);  // 'detective' or 'blackmarket'
+
+// NOTE: Settings.stationMode removed (October 2025) - use Settings.mode
 
 // View all transactions
 console.table(DataManager.transactions);
