@@ -11,7 +11,6 @@ ALNScanner is the **Game Master (GM) Scanner** for the "About Last Night" immers
 ### October 2025: Field Standardization
 - Removed `ConnectionManager.stationMode` alias property
 - Use `ConnectionManager.mode` exclusively
-- localStorage key name unchanged (`'stationMode'`)
 
 ## Key Differences from Player Scanner
 
@@ -628,8 +627,6 @@ window.orchestratorClient  // WebSocket client
 ```javascript
 // Check current mode
 console.log(Settings.mode);  // 'detective' or 'blackmarket'
-
-// NOTE: Settings.stationMode removed (October 2025) - use Settings.mode
 
 // View all transactions
 console.table(DataManager.transactions);

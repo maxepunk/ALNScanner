@@ -13,7 +13,7 @@
                     TOKEN: 'gmToken',
                     STATION_ID: 'deviceId',
                     STATION_NAME: 'stationName',
-                    STATION_MODE: 'stationMode',
+                    STATION_MODE: 'mode',
                     ATTEMPT_AUTH: 'attemptOrchestratorAuth',
                     LAST_STATION_NUM: 'lastStationNum',
                     OFFLINE_QUEUE: 'orchestratorOfflineQueue'
@@ -85,14 +85,6 @@
             }
 
             set mode(value) {
-                localStorage.setItem(this.STORAGE_KEYS.STATION_MODE, value);
-            }
-
-            get stationMode() {
-                return localStorage.getItem(this.STORAGE_KEYS.STATION_MODE) || 'detective';
-            }
-
-            set stationMode(value) {
                 localStorage.setItem(this.STORAGE_KEYS.STATION_MODE, value);
             }
 
