@@ -548,6 +548,9 @@ const AdminModule = {
         updateDeviceList(devices) {
             if (!Array.isArray(devices)) return;
 
+            // Store devices array for device:connected/disconnected handlers
+            this.devices = devices;
+
             const countElement = document.getElementById('device-count');
             const listElement = document.getElementById('device-list');
 

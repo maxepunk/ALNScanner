@@ -589,6 +589,10 @@
                 this.sessionId = null;
                 this.connectedDevices = [];
 
+                // CRITICAL: Clear token to prevent auto-reconnection
+                // The disconnect handler (line 192) checks this.token before reconnecting
+                this.token = null;
+
                 // Clear rate limit queue if too large
                 if (this.rateLimitQueue.length > 50) {
                     this.rateLimitQueue = this.rateLimitQueue.slice(-50);
