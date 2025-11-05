@@ -76,6 +76,7 @@
 
             /**
              * Sync queued transactions when connection restored
+             * PHASE 2 (P0.2): Wait for batch:ack before clearing queue
              */
             async syncQueue() {
                 if (this.syncing || this.tempQueue.length === 0 || !this.connection || !this.connection.socket?.connected) {
@@ -85,25 +86,105 @@
                 this.syncing = true;
                 Debug.log('Starting queue sync', { queueSize: this.tempQueue.length });
 
-                // Send all queued transactions
-                for (const transaction of this.tempQueue) {
-                    // Wrap per AsyncAPI contract: {event, data, timestamp}
-                    this.connection.socket.emit('transaction:submit', {
-                        event: 'transaction:submit',
-                        data: transaction,
-                        timestamp: new Date().toISOString()
+                // PHASE 2 (P0.2): Generate batchId for idempotency
+                const batchId = this.generateBatchId();
+                const batch = [...this.tempQueue]; // Copy for sending
+
+                try {
+                    // PHASE 2 (P0.2): Send batch via HTTP POST (not WebSocket)
+                    const response = await fetch(`${this.connection.config.url}/api/scan/batch`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            batchId: batchId,
+                            transactions: batch
+                        })
                     });
+
+                    if (!response.ok) {
+                        throw new Error(`Batch upload failed: ${response.status} ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    Debug.log('Batch uploaded successfully', {
+                        batchId,
+                        processedCount: result.processedCount,
+                        totalCount: result.totalCount
+                    });
+
+                    // PHASE 2 (P0.2): Wait for batch:ack WebSocket event before clearing
+                    await this.waitForBatchAck(batchId, 60000);
+
+                    Debug.log('Batch acknowledged by server - clearing queue', { batchId });
+
+                    // PHASE 2 (P0.2): Only clear queue AFTER server confirms receipt
+                    this.tempQueue = [];
+                    this.saveQueue();
+
+                } catch (error) {
+                    Debug.error('Queue sync failed - keeping queue for retry', {
+                        batchId,
+                        error: error.message,
+                        queueSize: this.tempQueue.length
+                    });
+                    // PHASE 2 (P0.2): Queue preserved for retry on failure
+                } finally {
+                    this.syncing = false;
                 }
+            }
 
-                Debug.log('Queue sync complete - sent all transactions', {
-                    count: this.tempQueue.length
+            /**
+             * PHASE 2 (P0.2): Generate unique batch ID for idempotency
+             */
+            generateBatchId() {
+                // Use timestamp + random for uniqueness
+                const timestamp = Date.now();
+                const random = Math.random().toString(36).substring(2, 15);
+                const deviceId = this.connection?.config?.deviceId || 'unknown';
+                return `${deviceId}-${timestamp}-${random}`;
+            }
+
+            /**
+             * PHASE 2 (P0.2): Wait for batch:ack WebSocket event
+             * Returns Promise that resolves when ACK received, rejects on timeout
+             */
+            waitForBatchAck(batchId, timeout = 60000) {
+                return new Promise((resolve, reject) => {
+                    const timer = setTimeout(() => {
+                        // Remove listener on timeout
+                        if (this.connection?.socket) {
+                            this.connection.socket.off('batch:ack', handler);
+                        }
+                        reject(new Error(`Batch ACK timeout after ${timeout}ms: ${batchId}`));
+                    }, timeout);
+
+                    const handler = (eventData) => {
+                        // Extract payload from wrapped event (AsyncAPI envelope)
+                        const payload = eventData.data || eventData;
+
+                        if (payload.batchId === batchId) {
+                            clearTimeout(timer);
+                            // Remove this specific listener
+                            if (this.connection?.socket) {
+                                this.connection.socket.off('batch:ack', handler);
+                            }
+                            Debug.log('Received batch:ack from server', {
+                                batchId: payload.batchId,
+                                count: payload.count
+                            });
+                            resolve(payload);
+                        }
+                        // If batchId doesn't match, keep listening (might be from another device)
+                    };
+
+                    // Register listener for batch:ack
+                    if (this.connection?.socket) {
+                        this.connection.socket.on('batch:ack', handler);
+                    } else {
+                        clearTimeout(timer);
+                        reject(new Error('No socket connection available'));
+                    }
                 });
-
-                // Clear queue after sending (backend handles duplicates)
-                this.tempQueue = [];
-                this.saveQueue();
-
-                this.syncing = false;
             }
 
             /**
