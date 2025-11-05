@@ -2112,5 +2112,18 @@
         </div>
     </div>
 
+    <!-- ============================================
+         PHASE 2.4 (P1.4): CLEANUP ON PAGE UNLOAD
+         ============================================ -->
+    <script>
+        // Clean disconnect on page unload (mirrors P0.4 backend cleanup)
+        window.addEventListener('beforeunload', () => {
+            if (window.connectionManager?.orchestratorClient?.socket) {
+                console.log('Page unloading - disconnecting socket');
+                window.connectionManager.orchestratorClient.disconnect();
+            }
+        });
+    </script>
+
 </body>
 </html>

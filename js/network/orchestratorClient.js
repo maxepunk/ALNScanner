@@ -111,6 +111,24 @@
              */
             createSocketConnection() {
                 try {
+                    // PHASE 2.4 (P1.4): ALWAYS cleanup old socket first
+                    // Prevents ghost connections and listener accumulation
+                    if (this.socket) {
+                        console.log('OrchestratorClient: Cleaning up old socket before creating new connection');
+
+                        // Remove all listeners (defensive check for test compatibility)
+                        if (typeof this.socket.removeAllListeners === 'function') {
+                            this.socket.removeAllListeners();
+                        }
+
+                        // Disconnect and force transport close
+                        if (typeof this.socket.disconnect === 'function') {
+                            this.socket.disconnect(true);
+                        }
+
+                        this.socket = null;
+                    }
+
                     // Pass authentication in socket handshake to prevent "undefined device"
                     this.socket = io(this.config.url, {
                         transports: this.config.transports,
@@ -153,6 +171,12 @@
              */
             setupSocketEventHandlers() {
                 if (!this.socket) return;
+
+                // PHASE 2.4 (P1.4): Remove all existing handlers first
+                // Prevents listener accumulation on reconnection
+                if (typeof this.socket.removeAllListeners === 'function') {
+                    this.socket.removeAllListeners();
+                }
 
                 this.socket.on('connect', () => {
                     this.isConnected = true;
@@ -581,6 +605,22 @@
                 if (this.saveTimer) {
                     clearTimeout(this.saveTimer);
                     this.saveTimer = null;
+                }
+
+                // PHASE 2.4 (P1.4): Clean socket (mirrors P0.4 backend cleanup)
+                // Prevents ghost connections and memory leaks
+                if (this.socket) {
+                    // Remove all listeners (defensive check for test compatibility)
+                    if (typeof this.socket.removeAllListeners === 'function') {
+                        this.socket.removeAllListeners();
+                    }
+
+                    // Disconnect and force transport close
+                    if (typeof this.socket.disconnect === 'function') {
+                        this.socket.disconnect(true);
+                    }
+
+                    this.socket = null;
                 }
 
                 // Clear state
