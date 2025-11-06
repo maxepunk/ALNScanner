@@ -35,6 +35,7 @@
                 this.connectedDevices = [];
                 this.eventHandlers = {};
                 this.token = null; // Authentication token
+                this.hasEverConnected = false; // P2.2.2: Track if we've connected at least once (for reconnection banner)
 
                 // Rate limiting functionality
                 this.rateLimitQueue = [];
@@ -380,6 +381,49 @@
                             window.DataManager.resetForNewSession(payload.session.id);
                             console.log(`Sync received with new session (${payload.session.id}) - reset duplicate detection`);
                         }
+                    }
+
+                    // BUG #5 FIX: Restore scanned tokens from backend for immediate duplicate detection
+                    // CRITICAL: Merge with local tokens to prevent race condition during concurrent scans
+                    if (window.DataManager) {
+                        // Validate deviceScannedTokens is an array
+                        if (Array.isArray(payload.deviceScannedTokens)) {
+                            // Get existing local tokens (may include recent scans not yet synced)
+                            const existingTokens = window.DataManager.scannedTokens || new Set();
+
+                            // Merge server tokens with local tokens (union)
+                            const serverTokens = new Set(payload.deviceScannedTokens);
+                            window.DataManager.scannedTokens = new Set([
+                                ...existingTokens,
+                                ...serverTokens
+                            ]);
+
+                            window.DataManager.saveScannedTokens();
+
+                            console.log(`Merged scanned tokens: ${existingTokens.size} local + ${serverTokens.size} server = ${window.DataManager.scannedTokens.size} total`);
+                        } else if (payload.deviceScannedTokens !== undefined) {
+                            // Log warning if field exists but is invalid
+                            console.warn('deviceScannedTokens is not an array:', typeof payload.deviceScannedTokens);
+                        }
+                    }
+
+                    // P2.2.2: Show reconnection banner with restored scan count
+                    // BUG #2 FIX: Check hasEverConnected first, then show appropriate toast
+                    if (this.hasEverConnected) {
+                        // This is a reconnection - always show feedback
+                        const restoredCount = payload.session?.transactions?.length || 0;
+                        if (restoredCount > 0 && window.UIManager) {
+                            window.UIManager.showToast(
+                                `Reconnected! ${restoredCount} scan${restoredCount === 1 ? '' : 's'} restored`,
+                                'success',
+                                5000
+                            );
+                        } else if (window.UIManager) {
+                            window.UIManager.showToast('Reconnected to orchestrator', 'success', 3000);
+                        }
+                    } else {
+                        // First connection - mark that we've connected at least once
+                        this.hasEverConnected = true;
                     }
 
                     this.emit('sync:full', payload);

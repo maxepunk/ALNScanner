@@ -6,6 +6,26 @@
     <title>Memory Transaction Station</title>
     <style>
         /* ============================================
+           ROOT VARIABLES
+           ============================================ */
+        :root {
+            /* Color palette */
+            --color-primary: #4CAF50;
+            --color-secondary: #2196F3;
+            --color-warning: #ffc107;
+            --color-error: #ff6b6b;
+            --color-background: #f5f5f5;
+
+            /* Duplicate marker styles (P2.2.4) */
+            --duplicate-bg: #fff3cd;
+            --duplicate-border: var(--color-warning);
+            --duplicate-badge-bg: var(--color-error);
+            --duplicate-opacity: 0.7;
+            --duplicate-opacity-card: 0.65;
+            --duplicate-opacity-detail: 0.8;
+        }
+
+        /* ============================================
            BASE STYLES
            ============================================ */
         * {
@@ -196,6 +216,55 @@
             100% {
                 transform: scale(1);
                 opacity: 1;
+            }
+        }
+
+        /* ============================================
+           QUEUE STATUS INDICATOR (P2.2.3)
+           ============================================ */
+        .queue-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 165, 0, 0.95);
+            color: white;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            display: none;  /* Hidden when 0 */
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .queue-indicator.visible {
+            display: flex;
+        }
+
+        .queue-indicator:hover {
+            background: rgba(255, 165, 0, 1);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+        }
+
+        .queue-indicator .queue-icon {
+            font-size: 18px;
+        }
+
+        .queue-indicator .queue-count {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        @media (max-width: 480px) {
+            .queue-indicator {
+                bottom: 10px;
+                right: 10px;
+                padding: 8px 12px;
+                font-size: 12px;
             }
         }
 
@@ -698,7 +767,40 @@
             background: #fafafa;
             opacity: 0.9;
         }
-        
+
+        /* P2.2.4: Duplicate markers - Consolidated with CSS variables */
+        .transaction-card.duplicate {
+            opacity: var(--duplicate-opacity);
+            background: var(--duplicate-bg);
+            border-left-color: var(--duplicate-border);
+        }
+
+        .duplicate-badge {
+            background: var(--duplicate-badge-bg);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        .duplicate-badge-small {
+            background: var(--duplicate-badge-bg);
+            color: white;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
+        .transaction-item.duplicate {
+            opacity: var(--duplicate-opacity-card);
+            background: var(--duplicate-bg);
+        }
+
         .transaction-header {
             display: flex;
             justify-content: space-between;
@@ -900,7 +1002,18 @@
             border-left-color: #4CAF50;
             background: #F1F8E9;
         }
-        
+
+        /* P2.2.4: Duplicate token cards */
+        .token-detail-card.duplicate {
+            border-left-color: var(--duplicate-border);
+            background: var(--duplicate-bg);
+            opacity: var(--duplicate-opacity-detail);
+        }
+
+        .token-detail-card.duplicate .token-detail-value {
+            color: var(--duplicate-badge-bg);
+        }
+
         .token-detail-header {
             display: flex;
             justify-content: space-between;
@@ -2124,6 +2237,54 @@
             }
         });
     </script>
+
+    <!-- P2.2.3: Queue Status Indicator Update Logic (Event-Driven) -->
+    <script>
+        /**
+         * Update the queue status indicator with current queue count
+         * P2.2.3: Event-driven updates (no polling)
+         */
+        function updateQueueIndicator() {
+            const indicator = document.getElementById('queueStatusIndicator');
+            const countSpan = document.getElementById('queueCount');
+
+            if (!indicator || !countSpan) return;
+
+            // Get queue count from NetworkedQueueManager
+            const queueStatus = window.queueManager?.getStatus();
+            const queueCount = queueStatus ? queueStatus.queuedCount : 0;
+
+            // Update count display
+            countSpan.textContent = queueCount;
+
+            // Show/hide indicator based on queue count
+            if (queueCount > 0) {
+                indicator.classList.add('visible');
+            } else {
+                indicator.classList.remove('visible');
+            }
+        }
+
+        // Event-driven updates: Listen to queue changes
+        window.addEventListener('DOMContentLoaded', () => {
+            updateQueueIndicator(); // Initial update
+
+            // Register event listener for queue changes (no polling)
+            if (window.queueManager) {
+                window.queueManager.addEventListener('queue:changed', (event) => {
+                    console.log('Queue changed:', event.detail);
+                    updateQueueIndicator();
+                });
+            }
+        });
+    </script>
+
+    <!-- P2.2.3: Queue Status Indicator -->
+    <div id="queueStatusIndicator" class="queue-indicator" title="Offline scans queued for upload">
+        <span class="queue-icon">📤</span>
+        <span class="queue-count" id="queueCount">0</span>
+        <span>queued</span>
+    </div>
 
 </body>
 </html>
