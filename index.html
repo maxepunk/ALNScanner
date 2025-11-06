@@ -2147,6 +2147,13 @@
                     // but we skip calling that to avoid showing connection wizard again
                     document.getElementById('viewSelector').style.display = 'flex';
 
+                    // CRITICAL FIX: Reload settings to update deviceId display
+                    // After successful connection, Settings needs to reflect the actual deviceId
+                    // that was saved to connectionManager (not the default '001')
+                    if (window.Settings) {
+                        window.Settings.load();
+                    }
+
                     // 5. Close modal and transition to team entry screen
                     setTimeout(() => {
                         document.getElementById('connectionModal').style.display = 'none';

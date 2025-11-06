@@ -472,6 +472,9 @@ const AdminModule = {
             this.connection.on('video:progress', (data) => this.updateVideoProgress(data));
             this.connection.on('video:queue:update', (data) => this.updateQueueDisplay(data));
             this.connection.on('device:connected', (deviceData) => {
+                // NOTE: Event is already unwrapped by OrchestratorClient (orchestratorClient.js:354)
+                // deviceData = {deviceId, type, name, ipAddress, connectionTime}
+
                 // Initialize devices array if needed
                 if (!this.devices) this.devices = [];
 
@@ -479,9 +482,15 @@ const AdminModule = {
                 const existingIndex = this.devices.findIndex(d => d.deviceId === deviceData.deviceId);
                 if (existingIndex === -1) {
                     this.devices.push(deviceData);
-                    this.updateDeviceList(this.devices);
                     Debug.log('Device added to list: ' + deviceData.deviceId);
+                } else {
+                    Debug.log('Device already in list (duplicate): ' + deviceData.deviceId);
                 }
+
+                // CRITICAL FIX: Always update device list UI, even for duplicates
+                // This ensures the DOM is updated when user is already on Admin panel
+                // when the device:connected event fires (e.g., during session creation)
+                this.updateDeviceList(this.devices);
 
                 this.updateSystemDisplay();
             });
@@ -984,6 +993,12 @@ const AdminModule = {
                         recent.forEach(tx => this.updateTransactionDisplay(tx));
                     }
                 }
+            }
+
+            // CRITICAL FIX: Refresh device list from cached devices array
+            // When switching to admin view, device list needs to be re-rendered
+            if (this.devices && this.devices.length > 0) {
+                this.updateDeviceList(this.devices);
             }
 
             // Refresh system display
