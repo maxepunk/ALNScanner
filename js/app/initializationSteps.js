@@ -96,10 +96,23 @@ async function registerServiceWorker(navigatorObj, uiManager) {
         console.log('Service Worker registration successful:', registration.scope);
         return true;
     } catch (error) {
-        Debug.log('Service Worker registration failed');
-        console.error('Service Worker registration failed:', error);
-        uiManager.showError('Service Worker registration failed. Offline features may not work.');
-        return false;
+        // Check if this is an SSL certificate error (expected with self-signed certs)
+        const isSSLError = error.name === 'SecurityError' &&
+                          error.message.includes('SSL certificate error');
+
+        if (isSSLError) {
+            // SSL errors are expected when using self-signed certificates
+            // Service Worker provides offline PWA functionality, not critical for networked mode
+            Debug.log('Service Worker registration skipped due to SSL certificate (self-signed cert)');
+            console.warn('Service Worker not available due to self-signed certificate. Offline features disabled.');
+            return false;
+        } else {
+            // Other errors should still be reported
+            Debug.log('Service Worker registration failed');
+            console.error('Service Worker registration failed:', error);
+            uiManager.showError('Service Worker registration failed. Offline features may not work.');
+            return false;
+        }
     }
 }
 
