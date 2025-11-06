@@ -438,7 +438,11 @@ const UIManager = {
      */
     renderTokenCard(token, hasBonus = false, isUnknown = false, showDelete = false) {
         const tokenValue = DataManager.calculateTokenValue(token);
-        const cardClass = isUnknown ? 'unknown' : (hasBonus ? 'bonus-applied' : '');
+
+        // P2.2.4: Add duplicate marker
+        const isDuplicate = token.status === 'duplicate';
+        let cardClass = isUnknown ? 'unknown' : (hasBonus ? 'bonus-applied' : '');
+        if (isDuplicate) cardClass += ' duplicate';
 
         let calculationText = '';
         if (!isUnknown && !token.isUnknown) {
@@ -498,7 +502,7 @@ const UIManager = {
                     <div class="token-detail-item">
                         <span class="token-detail-label">Status</span>
                         <span class="token-detail-info">
-                            ${hasBonus ? '✅ Bonus Applied' : isUnknown ? '❓ Unknown' : '⏳ No Bonus'}
+                            ${isDuplicate ? '⚠️ Duplicate' : hasBonus ? '✅ Bonus Applied' : isUnknown ? '❓ Unknown' : '⏳ No Bonus'}
                         </span>
                     </div>
                     <div class="token-calculation">
@@ -539,11 +543,15 @@ const UIManager = {
                 valueDisplay = isUnknown ? 'N/A' : '⭐'.repeat(t.valueRating || 0);
             }
 
+            // P2.2.4: Add duplicate marker
+            const isDuplicate = t.status === 'duplicate';
+            const duplicateBadge = isDuplicate ? '<span class="duplicate-badge">DUPLICATE</span>' : '';
+
             return `
-                <div class="transaction-card ${t.mode} ${isUnknown ? 'unknown' : ''}">
+                <div class="transaction-card ${t.mode} ${isUnknown ? 'unknown' : ''} ${isDuplicate ? 'duplicate' : ''}">
                     <div class="transaction-header">
                         <span>Team ${t.teamId}</span>
-                        <span class="transaction-time">${dateStr} ${timeStr}</span>
+                        <span class="transaction-time">${dateStr} ${timeStr}${duplicateBadge}</span>
                     </div>
                     <div class="transaction-details">
                         <div class="detail">RFID: <span>${t.rfid}</span></div>

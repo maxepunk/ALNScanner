@@ -582,10 +582,15 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                     const recentTransactions = DataManager.transactions.slice(-10).reverse();
                     let html = '<div class="transaction-list">';
                     recentTransactions.forEach(tx => {
-                        html += `<div class="transaction-item">
+                        // P2.2.4: Add duplicate marker
+                        const isDuplicate = tx.status === 'duplicate';
+                        const duplicateClass = isDuplicate ? ' duplicate' : '';
+                        const duplicateBadge = isDuplicate ? ' <span class="duplicate-badge-small">DUP</span>' : '';
+
+                        html += `<div class="transaction-item${duplicateClass}">
                             <span class="tx-time">${new Date(tx.timestamp).toLocaleTimeString()}</span>
                             <span class="tx-team">${tx.teamId}</span>
-                            <span class="tx-token">${tx.tokenId || tx.rfid}</span>
+                            <span class="tx-token">${tx.tokenId || tx.rfid}${duplicateBadge}</span>
                             <span class="tx-type">${tx.memoryType || 'UNKNOWN'}</span>
                         </div>`;
                     });

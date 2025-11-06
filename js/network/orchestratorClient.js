@@ -35,6 +35,7 @@
                 this.connectedDevices = [];
                 this.eventHandlers = {};
                 this.token = null; // Authentication token
+                this.hasEverConnected = false; // P2.2.2: Track if we've connected at least once (for reconnection banner)
 
                 // Rate limiting functionality
                 this.rateLimitQueue = [];
@@ -380,6 +381,24 @@
                             window.DataManager.resetForNewSession(payload.session.id);
                             console.log(`Sync received with new session (${payload.session.id}) - reset duplicate detection`);
                         }
+                    }
+
+                    // P2.2.2: Show reconnection banner with restored scan count
+                    // Only show if this is a reconnection (not initial connection) and has transactions
+                    if (this.hasEverConnected && payload.session && payload.session.transactions) {
+                        const restoredCount = payload.session.transactions.length;
+                        if (restoredCount > 0 && window.UIManager) {
+                            window.UIManager.showToast(
+                                `Reconnected! ${restoredCount} scan${restoredCount === 1 ? '' : 's'} restored`,
+                                'success',
+                                5000
+                            );
+                        } else if (window.UIManager) {
+                            window.UIManager.showToast('Reconnected to orchestrator', 'success', 3000);
+                        }
+                    } else {
+                        // Mark that we've connected at least once
+                        this.hasEverConnected = true;
                     }
 
                     this.emit('sync:full', payload);
