@@ -156,7 +156,9 @@
             // Use valueRating if explicitly provided (even if 0), otherwise use token data
             valueRating: transaction.valueRating !== undefined ? transaction.valueRating :
                          (tokenData?.SF_ValueRating !== undefined ? tokenData.SF_ValueRating : 0),
-            isUnknown: transaction.isUnknown !== undefined ? transaction.isUnknown : !tokenData
+            isUnknown: transaction.isUnknown !== undefined ? transaction.isUnknown : !tokenData,
+            // BUG #3 FIX: Preserve status field for duplicate markers (P2.2.4)
+            status: transaction.status || 'accepted'
             // Note: 'synced' flag removed - NetworkedQueueManager handles sync status
         };
 

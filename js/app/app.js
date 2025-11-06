@@ -806,6 +806,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                         tokenId: tokenId,
                         teamId: this.currentTeamId,
                         deviceId: Settings.deviceId,
+                        deviceType: 'gm',  // BUG #1 FIX: Required by backend validators
                         mode: Settings.mode,  // AsyncAPI contract field (was 'mode')
                         timestamp: transaction.timestamp  // Use same timestamp
                     });
