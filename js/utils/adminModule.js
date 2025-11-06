@@ -519,11 +519,16 @@ const AdminModule = {
             const txTime = transaction.timestamp ? new Date(transaction.timestamp).toLocaleTimeString() : '-';
             const memoryType = transaction.memoryType || 'UNKNOWN';
 
+            // P2.2.4: Add duplicate marker (matches app.js:586-588)
+            const isDuplicate = transaction.status === 'duplicate';
+            const duplicateClass = isDuplicate ? ' duplicate' : '';
+            const duplicateBadge = isDuplicate ? ' <span class="duplicate-badge-small">DUP</span>' : '';
+
             const txHtml = `
-                <div class="transaction-item">
+                <div class="transaction-item${duplicateClass}">
                     <span class="tx-time">${txTime}</span>
                     <span class="tx-team">${transaction.teamId || '-'}</span>
-                    <span class="tx-token">${transaction.tokenId || '-'}</span>
+                    <span class="tx-token">${transaction.tokenId || '-'}${duplicateBadge}</span>
                     <span class="tx-type">${memoryType}</span>
                 </div>
             `;
