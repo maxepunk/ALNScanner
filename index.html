@@ -6,6 +6,26 @@
     <title>Memory Transaction Station</title>
     <style>
         /* ============================================
+           ROOT VARIABLES
+           ============================================ */
+        :root {
+            /* Color palette */
+            --color-primary: #4CAF50;
+            --color-secondary: #2196F3;
+            --color-warning: #ffc107;
+            --color-error: #ff6b6b;
+            --color-background: #f5f5f5;
+
+            /* Duplicate marker styles (P2.2.4) */
+            --duplicate-bg: #fff3cd;
+            --duplicate-border: var(--color-warning);
+            --duplicate-badge-bg: var(--color-error);
+            --duplicate-opacity: 0.7;
+            --duplicate-opacity-card: 0.65;
+            --duplicate-opacity-detail: 0.8;
+        }
+
+        /* ============================================
            BASE STYLES
            ============================================ */
         * {
@@ -748,15 +768,15 @@
             opacity: 0.9;
         }
 
-        /* P2.2.4: Duplicate markers */
+        /* P2.2.4: Duplicate markers - Consolidated with CSS variables */
         .transaction-card.duplicate {
-            opacity: 0.7;
-            background: #fff3cd;
-            border-left-color: #ffc107;
+            opacity: var(--duplicate-opacity);
+            background: var(--duplicate-bg);
+            border-left-color: var(--duplicate-border);
         }
 
         .duplicate-badge {
-            background: #ff6b6b;
+            background: var(--duplicate-badge-bg);
             color: white;
             padding: 2px 8px;
             border-radius: 4px;
@@ -767,7 +787,7 @@
         }
 
         .duplicate-badge-small {
-            background: #ff6b6b;
+            background: var(--duplicate-badge-bg);
             color: white;
             padding: 1px 5px;
             border-radius: 3px;
@@ -777,8 +797,8 @@
         }
 
         .transaction-item.duplicate {
-            opacity: 0.65;
-            background: #fff3cd;
+            opacity: var(--duplicate-opacity-card);
+            background: var(--duplicate-bg);
         }
 
         .transaction-header {
@@ -985,13 +1005,13 @@
 
         /* P2.2.4: Duplicate token cards */
         .token-detail-card.duplicate {
-            border-left-color: #ffc107;
-            background: #fff3cd;
-            opacity: 0.8;
+            border-left-color: var(--duplicate-border);
+            background: var(--duplicate-bg);
+            opacity: var(--duplicate-opacity-detail);
         }
 
         .token-detail-card.duplicate .token-detail-value {
-            color: #ff6b6b;
+            color: var(--duplicate-badge-bg);
         }
 
         .token-detail-header {
