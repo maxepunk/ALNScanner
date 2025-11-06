@@ -4,7 +4,7 @@
                 this.locked = false; // Once set, cannot change during session
             }
 
-            setMode(mode) {
+            async setMode(mode) {
                 if (this.locked) {
                     throw new Error('Cannot change session mode after game start');
                 }
@@ -19,7 +19,11 @@
 
                 // Trigger appropriate initialization
                 if (mode === 'networked') {
-                    this.initNetworkedMode();
+                    const success = await this.initNetworkedMode();
+                    // If no valid token, show connection wizard
+                    if (!success && typeof showConnectionWizard === 'function') {
+                        showConnectionWizard();
+                    }
                 } else {
                     this.initStandaloneMode();
                 }
@@ -44,8 +48,10 @@
                     console.log('Standalone data cleared - orchestrator will be source of truth');
                 }
 
-                // Initialize ConnectionManager
-                window.connectionManager = new ConnectionManager();
+                // Initialize ConnectionManager (or use existing one from determineInitialScreen)
+                if (!window.connectionManager) {
+                    window.connectionManager = new ConnectionManager();
+                }
                 window.connectionManager.migrateLocalStorage();
 
                 // NetworkedQueueManager will be created after authentication succeeds
@@ -61,20 +67,14 @@
                     }
 
                     // Attempt connection
-                    try {
-                        await window.connectionManager.connect();
-                        console.log('Auto-connect successful');
-                        // Connection successful - proceed to team entry
-                        // connect() success is handled by connection event handlers
-                    } catch (error) {
-                        console.error('Auto-connect failed:', error);
-                        // Connection failed after retries - show wizard
-                        showConnectionWizard();
-                    }
+                    await window.connectionManager.connect();
+                    console.log('Auto-connect successful');
+                    // Connection successful - return success
+                    return true;
                 } else {
-                    // No valid token - show connection wizard
-                    console.log('No valid token found - showing connection wizard');
-                    showConnectionWizard();
+                    // No valid token - caller should show connection wizard
+                    console.log('No valid token - initialization incomplete');
+                    return false;
                 }
             }
 
@@ -96,20 +96,12 @@
             }
 
             // Check if we have a saved mode from previous incomplete session
-            // Initializes the restored mode (networked mode auto-connects if token valid)
-            async restoreMode() {
+            // Does NOT initialize - just returns the mode
+            restoreMode() {
                 const savedMode = localStorage.getItem('gameSessionMode');
                 if (savedMode && (savedMode === 'networked' || savedMode === 'standalone')) {
                     this.mode = savedMode;
                     // Don't lock it yet - allow user to change on fresh start
-
-                    // Initialize the restored mode (async for networked auto-connect)
-                    if (savedMode === 'networked') {
-                        await this.initNetworkedMode();
-                    } else if (savedMode === 'standalone') {
-                        this.initStandaloneMode();
-                    }
-
                     return savedMode;
                 }
                 return null;

@@ -44,7 +44,7 @@
 
                 // Connection restoration logic (Phase 1C)
                 const screenDecision = InitializationSteps.determineInitialScreen(window.sessionModeManager);
-                InitializationSteps.applyInitialScreenDecision(
+                await InitializationSteps.applyInitialScreenDecision(
                     screenDecision,
                     window.sessionModeManager,
                     UIManager,
@@ -116,7 +116,7 @@
             },
 
             // Game mode selection
-            selectGameMode(mode) {
+            async selectGameMode(mode) {
                 if (!window.sessionModeManager) {
                     console.error('SessionModeManager not initialized');
                     UIManager.showError('System error: SessionModeManager not initialized. Please reload the page.');
@@ -124,7 +124,7 @@
                 }
 
                 try {
-                    window.sessionModeManager.setMode(mode);
+                    await window.sessionModeManager.setMode(mode);
                     console.log(`Game mode selected: ${mode}`);
                 } catch (error) {
                     console.error('Failed to set game mode:', error);

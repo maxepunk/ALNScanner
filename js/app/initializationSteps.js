@@ -149,48 +149,85 @@ function applyURLModeOverride(locationSearch, settings) {
 
 /**
  * Determine initial screen based on connection restoration logic
- * Async function - restoreMode() now auto-connects for networked mode
+ * Pure function - no side effects, only decision logic
  *
  * @param {Object} sessionModeManager - SessionModeManager instance
- * @returns {Promise<Object>} Decision object with {screen, action}
+ * @returns {Object} Decision object with {screen, action, savedMode}
  */
-async function determineInitialScreen(sessionModeManager) {
-    const savedMode = await sessionModeManager.restoreMode();
+function determineInitialScreen(sessionModeManager) {
+    const savedMode = sessionModeManager.restoreMode();
 
     // Case 1: No saved mode (first-time user)
     if (!savedMode) {
-        return { screen: 'gameModeScreen', action: null };
+        return { screen: 'gameModeScreen', action: null, savedMode: null };
     }
 
-    // Case 2: Has saved mode - check if connection still valid
-    if (!sessionModeManager.isConnectionReady()) {
-        // Connection lost - need to clear mode and show wizard
-        return {
-            screen: 'gameModeScreen',
-            action: 'clearModeAndShowWizard'
-        };
+    // Case 2: Standalone mode - initialize and go to team entry
+    if (savedMode === 'standalone') {
+        return { screen: 'teamEntry', action: 'initStandalone', savedMode };
     }
 
-    // Case 3: Saved mode + connection ready - proceed to team entry
-    return { screen: 'teamEntry', action: null };
+    // Case 3: Networked mode - check if we have valid token for auto-connect
+    if (savedMode === 'networked') {
+        // Create temporary ConnectionManager to check token
+        const tempConnMgr = new ConnectionManager();
+
+        if (tempConnMgr.isTokenValid()) {
+            // Valid token - try auto-connect
+            return { screen: 'loading', action: 'autoConnect', savedMode };
+        } else {
+            // No valid token - need to show wizard
+            return { screen: 'gameModeScreen', action: 'clearModeAndShowWizard', savedMode };
+        }
+    }
+
+    // Fallback
+    return { screen: 'gameModeScreen', action: null, savedMode: null };
 }
 
 /**
  * Apply initial screen decision (executes side effects)
- * Handles UI changes, mode clearing, and wizard display
+ * Handles UI changes, mode clearing, wizard display, and auto-connect
  *
  * @param {Object} decision - Decision from determineInitialScreen()
  * @param {Object} sessionModeManager - SessionModeManager instance
  * @param {Object} uiManager - UIManager instance
  * @param {Function} showWizardFn - showConnectionWizard function
  */
-function applyInitialScreenDecision(decision, sessionModeManager, uiManager, showWizardFn) {
+async function applyInitialScreenDecision(decision, sessionModeManager, uiManager, showWizardFn) {
+    Debug.log(`Applying screen decision: screen=${decision.screen}, action=${decision.action}`);
+
     if (decision.action === 'clearModeAndShowWizard') {
-        // Connection was restored but is now lost
-        Debug.warn('Networked mode restored but connection lost - showing wizard');
+        // Networked mode restored but no valid token - clear and show wizard
+        Debug.warn('Networked mode restored but no valid token - showing wizard');
         sessionModeManager.clearMode();
         uiManager.showScreen(decision.screen);
         showWizardFn();
+
+    } else if (decision.action === 'initStandalone') {
+        // Standalone mode - initialize and show team entry
+        Debug.log('Initializing standalone mode');
+        sessionModeManager.initStandaloneMode();
+        uiManager.showScreen(decision.screen);
+
+    } else if (decision.action === 'autoConnect') {
+        // Networked mode with valid token - attempt auto-connect
+        Debug.log('Valid token found - attempting auto-connect');
+        uiManager.showScreen(decision.screen); // Show loading screen
+
+        try {
+            // Initialize networked mode without showing wizard
+            await sessionModeManager.initNetworkedMode();
+            Debug.log('Auto-connect successful - showing team entry');
+            uiManager.showScreen('teamEntry');
+        } catch (error) {
+            Debug.log('Auto-connect failed - showing wizard');
+            console.error('Auto-connect error:', error);
+            sessionModeManager.clearMode();
+            uiManager.showScreen('gameModeScreen');
+            showWizardFn();
+        }
+
     } else {
         // Simple screen change, no special action needed
         Debug.log(`Showing initial screen: ${decision.screen}`);
