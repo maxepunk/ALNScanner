@@ -383,10 +383,19 @@
                         }
                     }
 
+                    // BUG #5 FIX: Restore scanned tokens from backend for immediate duplicate detection
+                    // This handles case where localStorage cleared but session continues (e.g., orchestrator restart)
+                    if (payload.deviceScannedTokens && window.DataManager) {
+                        window.DataManager.scannedTokens = new Set(payload.deviceScannedTokens);
+                        window.DataManager.saveScannedTokens();
+                        console.log(`Restored ${payload.deviceScannedTokens.length} scanned tokens from backend`);
+                    }
+
                     // P2.2.2: Show reconnection banner with restored scan count
-                    // Only show if this is a reconnection (not initial connection) and has transactions
-                    if (this.hasEverConnected && payload.session && payload.session.transactions) {
-                        const restoredCount = payload.session.transactions.length;
+                    // BUG #2 FIX: Check hasEverConnected first, then show appropriate toast
+                    if (this.hasEverConnected) {
+                        // This is a reconnection - always show feedback
+                        const restoredCount = payload.session?.transactions?.length || 0;
                         if (restoredCount > 0 && window.UIManager) {
                             window.UIManager.showToast(
                                 `Reconnected! ${restoredCount} scan${restoredCount === 1 ? '' : 's'} restored`,
@@ -397,7 +406,7 @@
                             window.UIManager.showToast('Reconnected to orchestrator', 'success', 3000);
                         }
                     } else {
-                        // Mark that we've connected at least once
+                        // First connection - mark that we've connected at least once
                         this.hasEverConnected = true;
                     }
 
