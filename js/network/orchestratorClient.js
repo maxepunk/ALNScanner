@@ -384,11 +384,27 @@
                     }
 
                     // BUG #5 FIX: Restore scanned tokens from backend for immediate duplicate detection
-                    // This handles case where localStorage cleared but session continues (e.g., orchestrator restart)
-                    if (payload.deviceScannedTokens && window.DataManager) {
-                        window.DataManager.scannedTokens = new Set(payload.deviceScannedTokens);
-                        window.DataManager.saveScannedTokens();
-                        console.log(`Restored ${payload.deviceScannedTokens.length} scanned tokens from backend`);
+                    // CRITICAL: Merge with local tokens to prevent race condition during concurrent scans
+                    if (window.DataManager) {
+                        // Validate deviceScannedTokens is an array
+                        if (Array.isArray(payload.deviceScannedTokens)) {
+                            // Get existing local tokens (may include recent scans not yet synced)
+                            const existingTokens = window.DataManager.scannedTokens || new Set();
+
+                            // Merge server tokens with local tokens (union)
+                            const serverTokens = new Set(payload.deviceScannedTokens);
+                            window.DataManager.scannedTokens = new Set([
+                                ...existingTokens,
+                                ...serverTokens
+                            ]);
+
+                            window.DataManager.saveScannedTokens();
+
+                            console.log(`Merged scanned tokens: ${existingTokens.size} local + ${serverTokens.size} server = ${window.DataManager.scannedTokens.size} total`);
+                        } else if (payload.deviceScannedTokens !== undefined) {
+                            // Log warning if field exists but is invalid
+                            console.warn('deviceScannedTokens is not an array:', typeof payload.deviceScannedTokens);
+                        }
                     }
 
                     // P2.2.2: Show reconnection banner with restored scan count
