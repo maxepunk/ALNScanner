@@ -125,8 +125,21 @@
     }
 
     /**
-     * Add transaction and update session
-     * @param {Object} transaction - Transaction data
+     * Add a transaction to the local store
+     *
+     * @param {Object} transaction - Transaction object
+     * @param {string} transaction.rfid - RFID tag value
+     * @param {string} transaction.tokenId - Token identifier
+     * @param {string} transaction.teamId - Team identifier
+     * @param {string} transaction.memoryType - Memory type (Personal/Business/Technical)
+     * @param {number} transaction.valueRating - Star rating (1-5)
+     * @param {string} [transaction.status='accepted'] - Transaction status
+     *   Valid values:
+     *     - 'accepted' - Transaction processed successfully
+     *     - 'duplicate' - Duplicate token scan attempt
+     *     - 'error' - Transaction processing failed
+     *     - 'pending' - Queued for processing
+     * @param {boolean} [transaction.isUnknown=false] - Whether token is unknown
      */
     addTransaction(transaction) {
         // If backend transaction, look up token data
@@ -157,7 +170,7 @@
             valueRating: transaction.valueRating !== undefined ? transaction.valueRating :
                          (tokenData?.SF_ValueRating !== undefined ? tokenData.SF_ValueRating : 0),
             isUnknown: transaction.isUnknown !== undefined ? transaction.isUnknown : !tokenData,
-            // BUG #3 FIX: Preserve status field for duplicate markers (P2.2.4)
+            // Status field with documented valid values (see JSDoc above)
             status: transaction.status || 'accepted'
             // Note: 'synced' flag removed - NetworkedQueueManager handles sync status
         };
