@@ -2218,11 +2218,11 @@
         });
     </script>
 
-    <!-- P2.2.3: Queue Status Indicator Update Logic -->
+    <!-- P2.2.3: Queue Status Indicator Update Logic (Event-Driven) -->
     <script>
         /**
          * Update the queue status indicator with current queue count
-         * P2.2.3: Always-visible queue status indicator
+         * P2.2.3: Event-driven updates (no polling)
          */
         function updateQueueIndicator() {
             const indicator = document.getElementById('queueStatusIndicator');
@@ -2245,11 +2245,18 @@
             }
         }
 
-        // Update queue indicator periodically
-        setInterval(updateQueueIndicator, 1000);  // Every second
+        // Event-driven updates: Listen to queue changes
+        window.addEventListener('DOMContentLoaded', () => {
+            updateQueueIndicator(); // Initial update
 
-        // Also update on DOMContentLoaded
-        window.addEventListener('DOMContentLoaded', updateQueueIndicator);
+            // Register event listener for queue changes (no polling)
+            if (window.queueManager) {
+                window.queueManager.addEventListener('queue:changed', (event) => {
+                    console.log('Queue changed:', event.detail);
+                    updateQueueIndicator();
+                });
+            }
+        });
     </script>
 
     <!-- P2.2.3: Queue Status Indicator -->

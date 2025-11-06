@@ -1,5 +1,13 @@
-        class NetworkedQueueManager {
+        /**
+         * NetworkedQueueManager - Handles offline transaction queueing
+         * Extends EventTarget for event-driven queue status updates
+         *
+         * Events:
+         * - 'queue:changed' - Fired when queue count changes (detail contains status)
+         */
+        class NetworkedQueueManager extends EventTarget {
             constructor(connection) {
+                super();  // Initialize EventTarget
                 this.connection = connection;
                 this.tempQueue = [];
                 this.syncing = false;
@@ -56,6 +64,11 @@
                         tokenId: transaction.tokenId,
                         queueSize: this.tempQueue.length
                     });
+
+                    // Emit event for UI updates (event-driven, no polling needed)
+                    const event = new Event('queue:changed');
+                    event.detail = this.getStatus();
+                    this.dispatchEvent(event);
                 } else {
                     // Connected - send immediately
                     // Wrap per AsyncAPI contract: {event, data, timestamp}
@@ -132,6 +145,11 @@
                     // This prevents infinite retry loops for permanently invalid transactions
                     this.tempQueue = [];
                     this.saveQueue();
+
+                    // Emit event to update UI
+                    const event = new Event('queue:changed');
+                    event.detail = this.getStatus();
+                    this.dispatchEvent(event);
 
                 } catch (error) {
                     Debug.error('Queue sync failed - keeping queue for retry', {
