@@ -62,12 +62,22 @@
     }
 
     /**
+     * Get mode-specific storage key for scanned tokens
+     * Prevents data leak between standalone and networked modes
+     */
+    getScannedTokensKey() {
+        const mode = window.sessionModeManager?.mode || 'standalone';
+        return mode === 'networked' ? 'networked_scannedTokens' : 'standalone_scannedTokens';
+    }
+
+    /**
      * Load scanned tokens registry from localStorage
-     * Validates against current session ID to prevent stale duplicate detection
+     * Uses mode-specific key to prevent data leak between modes
      */
     loadScannedTokens() {
         try {
-            const stored = localStorage.getItem('scannedTokens');
+            const key = this.getScannedTokensKey();
+            const stored = localStorage.getItem(key);
             const storedSessionId = localStorage.getItem('currentSessionId');
 
             // Load current session ID if available (networked mode)
@@ -76,7 +86,7 @@
 
             if (stored) {
                 this.scannedTokens = new Set(JSON.parse(stored));
-                this.debug?.log(`Loaded ${this.scannedTokens.size} scanned tokens for session ${storedSessionId || 'local'}`);
+                this.debug?.log(`Loaded ${this.scannedTokens.size} scanned tokens from ${key} for session ${storedSessionId || 'local'}`);
             }
         } catch (e) {
             this.debug?.log('Error loading scanned tokens', true);
@@ -97,10 +107,12 @@
 
     /**
      * Save scanned tokens registry to localStorage
+     * Uses mode-specific key to prevent data leak between modes
      */
     saveScannedTokens() {
         try {
-            localStorage.setItem('scannedTokens', JSON.stringify([...this.scannedTokens]));
+            const key = this.getScannedTokensKey();
+            localStorage.setItem(key, JSON.stringify([...this.scannedTokens]));
         } catch (e) {
             this.debug?.log('Error saving scanned tokens', true);
         }
@@ -208,8 +220,10 @@
         this.scannedTokens.clear();
         this.currentSessionId = sessionId;
 
-        // Clear localStorage duplicate registry
-        localStorage.removeItem('scannedTokens');
+        // Clear all scanned tokens keys (both old and mode-specific)
+        localStorage.removeItem('scannedTokens'); // Legacy key
+        localStorage.removeItem('standalone_scannedTokens');
+        localStorage.removeItem('networked_scannedTokens');
 
         // If sessionId provided, save it for validation on reload
         if (sessionId) {

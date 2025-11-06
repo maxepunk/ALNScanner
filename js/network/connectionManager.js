@@ -99,9 +99,9 @@
                     // Decode JWT payload
                     const payload = JSON.parse(atob(token.split('.')[1]));
 
-                    // Check expiry (with 5 minute buffer)
+                    // Check expiry (with 1 minute buffer to prevent mid-session expiry)
                     const now = Math.floor(Date.now() / 1000);
-                    const buffer = 300; // 5 minutes
+                    const buffer = 60; // 1 minute
 
                     if (!payload.exp || payload.exp < (now + buffer)) {
                         console.log('Token expired or expiring soon');

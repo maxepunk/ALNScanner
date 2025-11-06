@@ -86,7 +86,12 @@ async function registerServiceWorker(navigatorObj, uiManager) {
     }
 
     try {
-        const registration = await navigatorObj.serviceWorker.register('./sw.js');
+        // Use dynamic base path to support orchestrator subdirectory serving
+        // If served from https://IP:3000/gm-scanner/, this resolves to /gm-scanner/sw.js
+        // If served locally, resolves to /sw.js or ./sw.js
+        const swPath = new URL('sw.js', window.location.href).pathname;
+
+        const registration = await navigatorObj.serviceWorker.register(swPath);
         Debug.log('Service Worker registered successfully');
         console.log('Service Worker registration successful:', registration.scope);
         return true;
@@ -144,13 +149,13 @@ function applyURLModeOverride(locationSearch, settings) {
 
 /**
  * Determine initial screen based on connection restoration logic
- * Pure function - no side effects, only decision logic
+ * Async function - restoreMode() now auto-connects for networked mode
  *
  * @param {Object} sessionModeManager - SessionModeManager instance
- * @returns {Object} Decision object with {screen, action}
+ * @returns {Promise<Object>} Decision object with {screen, action}
  */
-function determineInitialScreen(sessionModeManager) {
-    const savedMode = sessionModeManager.restoreMode();
+async function determineInitialScreen(sessionModeManager) {
+    const savedMode = await sessionModeManager.restoreMode();
 
     // Case 1: No saved mode (first-time user)
     if (!savedMode) {
