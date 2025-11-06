@@ -122,22 +122,46 @@
                             const result = await this.replayTransaction(transaction);
                             results.push({ success: true, transaction, result });
                         } catch (error) {
-                            Debug.error(`Transaction replay failed`, {
+                            // Categorize error type for future retry logic
+                            let errorType = 'unknown';
+                            if (error.message.includes('timeout')) {
+                                errorType = 'timeout';
+                            } else if (error.message.includes('validation') || error.message.includes('invalid')) {
+                                errorType = 'validation';
+                            } else if (error.message.includes('network') || error.message.includes('connection')) {
+                                errorType = 'network';
+                            }
+
+                            Debug.error(`Transaction replay failed (${errorType})`, {
                                 tokenId: transaction.tokenId,
-                                error: error.message
+                                error: error.message,
+                                errorType: errorType
                             });
-                            results.push({ success: false, transaction, error: error.message });
+
+                            results.push({
+                                success: false,
+                                transaction,
+                                error: error.message,
+                                errorType: errorType  // Enables future retry logic per error type
+                            });
                         }
                     }
 
-                    // Summary
+                    // Summary with error type breakdown
                     const successCount = results.filter(r => r.success).length;
                     const failCount = results.filter(r => !r.success).length;
+                    const errorTypes = results
+                        .filter(r => !r.success)
+                        .reduce((acc, r) => {
+                            acc[r.errorType] = (acc[r.errorType] || 0) + 1;
+                            return acc;
+                        }, {});
 
                     Debug.log('Queue sync complete', {
                         total: batch.length,
                         success: successCount,
-                        failed: failCount
+                        failed: failCount,
+                        errorBreakdown: errorTypes  // e.g., { timeout: 2, validation: 1 }
                     });
 
                     // Clear queue after ALL transactions processed (even if some failed)
