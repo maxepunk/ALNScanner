@@ -171,4 +171,36 @@ For issues with:
 
 ---
 
+## Testing PR Changes
+
+When reviewing PRs with code changes, run the appropriate test suite:
+
+### Quick Verification (2-3 minutes)
+```bash
+npm test  # Unit tests only
+```
+
+### Thorough Verification (10-15 minutes)
+```bash
+npm test                          # Unit + integration tests
+npm run dev:full                  # Start orchestrator
+npx playwright test               # E2E tests (separate terminal)
+```
+
+### Manual Verification for UX Changes
+1. Open scanner: `https://[IP]:3000/gm-scanner/`
+2. Select networked mode → authenticate
+3. Test changed features (reference PR description)
+4. Check browser console for errors
+5. Use devtools memory profiler for listener leaks
+
+### Test Files Organization
+- `tests/unit/` - Fast, isolated unit tests
+- `tests/integration/` - Service integration tests
+- `tests/e2e/` - Full browser automation (Playwright)
+
+**Note:** E2E tests require orchestrator running on `https://localhost:3000`
+
+---
+
 *This maintenance guide is for game administrators managing the GM Scanner system.*
