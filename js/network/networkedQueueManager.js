@@ -3,6 +3,7 @@
                 this.connection = connection;
                 this.tempQueue = [];
                 this.syncing = false;
+                this.activeHandlers = new Map();  // FIX: Track active replay handlers for cleanup
 
                 // Load any persisted queue
                 this.loadQueue();
@@ -146,11 +147,25 @@
             /**
              * BUG #4 FIX: Replay a single transaction via WebSocket
              * Returns Promise that resolves with result or rejects on error/timeout
+             *
+             * BUG #3 FIX: Track active handlers in Map for proper cleanup
              */
             replayTransaction(transaction) {
                 return new Promise((resolve, reject) => {
-                    const timeout = setTimeout(() => {
+                    const handlerKey = `${transaction.tokenId}-${transaction.teamId}`;
+
+                    // Helper to cleanup handler and timeout
+                    const cleanup = (timeout, handler) => {
+                        clearTimeout(timeout);
                         this.connection.socket.off('transaction:result', handler);
+                        this.activeHandlers.delete(handlerKey);
+                    };
+
+                    const timeout = setTimeout(() => {
+                        const handler = this.activeHandlers.get(handlerKey);
+                        if (handler) {
+                            cleanup(timeout, handler);
+                        }
                         reject(new Error(`Transaction replay timeout after 30s: ${transaction.tokenId}`));
                     }, 30000);
 
@@ -162,8 +177,7 @@
                         // (tokenId + teamId should be unique enough for matching)
                         if (payload.tokenId === transaction.tokenId &&
                             payload.teamId === transaction.teamId) {
-                            clearTimeout(timeout);
-                            this.connection.socket.off('transaction:result', handler);
+                            cleanup(timeout, handler);
 
                             if (payload.status === 'error') {
                                 reject(new Error(payload.message || 'Transaction failed'));
@@ -173,6 +187,9 @@
                         }
                         // If doesn't match, keep listening (might be from another concurrent scan)
                     };
+
+                    // Track handler for cleanup (BUG #3 FIX)
+                    this.activeHandlers.set(handlerKey, handler);
 
                     // Register listener for transaction:result
                     this.connection.socket.on('transaction:result', handler);
