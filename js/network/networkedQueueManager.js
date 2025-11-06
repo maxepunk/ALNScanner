@@ -76,7 +76,10 @@
 
             /**
              * Sync queued transactions when connection restored
-             * PHASE 2 (P0.2): Wait for batch:ack before clearing queue
+             * BUG #4 FIX: Replay via WebSocket for proper scoring/game mechanics
+             * - GM offline scans MUST use transaction:submit (not batch endpoint)
+             * - Batch endpoint has NO SCORING OR GAME MECHANICS (player-only)
+             * - Replay ensures duplicate detection, scoring, bonuses all work correctly
              */
             async syncQueue() {
                 if (this.syncing || this.tempQueue.length === 0 || !this.connection || !this.connection.socket?.connected) {
@@ -84,53 +87,108 @@
                 }
 
                 this.syncing = true;
-                Debug.log('Starting queue sync', { queueSize: this.tempQueue.length });
+                Debug.log('Starting queue sync via WebSocket replay', { queueSize: this.tempQueue.length });
 
-                // PHASE 2 (P0.2): Generate batchId for idempotency
-                const batchId = this.generateBatchId();
                 const batch = [...this.tempQueue]; // Copy for sending
+                const results = [];
 
                 try {
-                    // PHASE 2 (P0.2): Send batch via HTTP POST (not WebSocket)
-                    const response = await fetch(`${this.connection.config.url}/api/scan/batch`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            batchId: batchId,
-                            transactions: batch
-                        })
-                    });
+                    // BUG #4 FIX: Replay each transaction via WebSocket (transaction:submit)
+                    // This ensures proper scoring, duplicate detection, and game mechanics
+                    for (let i = 0; i < batch.length; i++) {
+                        const transaction = batch[i];
 
-                    if (!response.ok) {
-                        throw new Error(`Batch upload failed: ${response.status} ${response.statusText}`);
+                        Debug.log(`Replaying transaction ${i + 1}/${batch.length}`, {
+                            tokenId: transaction.tokenId,
+                            teamId: transaction.teamId
+                        });
+
+                        try {
+                            // Replay via WebSocket (same path as live scans)
+                            const result = await this.replayTransaction(transaction);
+                            results.push({ success: true, transaction, result });
+                        } catch (error) {
+                            Debug.error(`Transaction replay failed`, {
+                                tokenId: transaction.tokenId,
+                                error: error.message
+                            });
+                            results.push({ success: false, transaction, error: error.message });
+                        }
                     }
 
-                    const result = await response.json();
-                    Debug.log('Batch uploaded successfully', {
-                        batchId,
-                        processedCount: result.processedCount,
-                        totalCount: result.totalCount
+                    // Summary
+                    const successCount = results.filter(r => r.success).length;
+                    const failCount = results.filter(r => !r.success).length;
+
+                    Debug.log('Queue sync complete', {
+                        total: batch.length,
+                        success: successCount,
+                        failed: failCount
                     });
 
-                    // PHASE 2 (P0.2): Wait for batch:ack WebSocket event before clearing
-                    await this.waitForBatchAck(batchId, 60000);
-
-                    Debug.log('Batch acknowledged by server - clearing queue', { batchId });
-
-                    // PHASE 2 (P0.2): Only clear queue AFTER server confirms receipt
+                    // Clear queue after ALL transactions processed (even if some failed)
+                    // Failed transactions are lost but logged - operator can manually re-scan
+                    // This prevents infinite retry loops for permanently invalid transactions
                     this.tempQueue = [];
                     this.saveQueue();
 
                 } catch (error) {
                     Debug.error('Queue sync failed - keeping queue for retry', {
-                        batchId,
                         error: error.message,
                         queueSize: this.tempQueue.length
                     });
-                    // PHASE 2 (P0.2): Queue preserved for retry on failure
+                    // Queue preserved for retry on failure
                 } finally {
                     this.syncing = false;
                 }
+            }
+
+            /**
+             * BUG #4 FIX: Replay a single transaction via WebSocket
+             * Returns Promise that resolves with result or rejects on error/timeout
+             */
+            replayTransaction(transaction) {
+                return new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        this.connection.socket.off('transaction:result', handler);
+                        reject(new Error(`Transaction replay timeout after 30s: ${transaction.tokenId}`));
+                    }, 30000);
+
+                    const handler = (eventData) => {
+                        // Extract payload from wrapped event (AsyncAPI envelope)
+                        const payload = eventData.data || eventData;
+
+                        // Check if this result matches our transaction
+                        // (tokenId + teamId should be unique enough for matching)
+                        if (payload.tokenId === transaction.tokenId &&
+                            payload.teamId === transaction.teamId) {
+                            clearTimeout(timeout);
+                            this.connection.socket.off('transaction:result', handler);
+
+                            if (payload.status === 'error') {
+                                reject(new Error(payload.message || 'Transaction failed'));
+                            } else {
+                                resolve(payload);
+                            }
+                        }
+                        // If doesn't match, keep listening (might be from another concurrent scan)
+                    };
+
+                    // Register listener for transaction:result
+                    this.connection.socket.on('transaction:result', handler);
+
+                    // Send transaction via WebSocket (AsyncAPI envelope)
+                    this.connection.socket.emit('transaction:submit', {
+                        event: 'transaction:submit',
+                        data: transaction,
+                        timestamp: new Date().toISOString()
+                    });
+
+                    Debug.log('Transaction submitted for replay', {
+                        tokenId: transaction.tokenId,
+                        teamId: transaction.teamId
+                    });
+                });
             }
 
             /**
