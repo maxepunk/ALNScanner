@@ -808,6 +808,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                         deviceId: Settings.deviceId,
                         deviceType: 'gm',  // BUG #1 FIX: Required by backend validators
                         mode: Settings.mode,  // AsyncAPI contract field (was 'mode')
+                        summary: token?.summary || null,  // Include summary for persistence (backend AsyncAPI contract)
                         timestamp: transaction.timestamp  // Use same timestamp
                     });
                     Debug.log(`Transaction queued for orchestrator: ${txId}`);
