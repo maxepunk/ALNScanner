@@ -631,6 +631,13 @@
             padding: 8px 0;
             border-bottom: 1px solid #e0e0e0;
         }
+
+        .summary-text {
+            font-style: italic;
+            color: #666;
+            max-width: 70%;
+            text-align: right;
+        }
         
         .transaction-detail:last-child {
             border-bottom: none;
@@ -1732,6 +1739,10 @@
                 <div class="transaction-detail">
                     <label>Value Rating:</label>
                     <span class="value" id="resultValue">-</span>
+                </div>
+                <div class="transaction-detail" id="resultSummaryContainer" style="display: none;">
+                    <label>Summary:</label>
+                    <span class="value summary-text" id="resultSummary">-</span>
                 </div>
             </div>
             <button class="btn btn-primary" onclick="App.continueScan()">Scan Another Token</button>

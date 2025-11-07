@@ -642,6 +642,8 @@ const UIManager = {
         const typeEl = document.getElementById('resultType');
         const groupEl = document.getElementById('resultGroup');
         const valueEl = document.getElementById('resultValue');
+        const summaryContainer = document.getElementById('resultSummaryContainer');
+        const summaryEl = document.getElementById('resultSummary');
 
         if (isUnknown) {
             statusEl.className = 'status-message error';
@@ -659,6 +661,9 @@ const UIManager = {
             } else {
                 valueEl.textContent = 'No Value';
             }
+
+            // Hide summary for unknown tokens
+            summaryContainer.style.display = 'none';
         } else {
             statusEl.className = 'status-message success';
             statusEl.innerHTML = '<h2>Transaction Complete!</h2>';
@@ -676,6 +681,14 @@ const UIManager = {
                 valueEl.textContent = `$${tokenScore.toLocaleString()}`;
             } else {
                 valueEl.textContent = '⭐'.repeat(token.SF_ValueRating || 0);
+            }
+
+            // Show summary in detective mode if available
+            if (Settings.mode === 'detective' && token.summary) {
+                summaryContainer.style.display = 'flex';
+                summaryEl.textContent = token.summary;
+            } else {
+                summaryContainer.style.display = 'none';
             }
         }
 
