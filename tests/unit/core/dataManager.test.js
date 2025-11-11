@@ -422,3 +422,302 @@ describe('DataManager - Batch 1: Core Structure', () => {
     });
   });
 });
+
+describe('DataManager - Batch 2: Scoring & Group Completion', () => {
+  let DataManager;
+  let dataManager;
+  let mockTokenManager;
+  let mockSettings;
+  let mockDebug;
+
+  beforeEach(async () => {
+    localStorage.clear();
+
+    const module = await import('../../../src/core/dataManager.js');
+    DataManager = module.DataManager;
+
+    mockTokenManager = {
+      findToken: jest.fn(),
+      getGroupInventory: jest.fn(),
+    };
+
+    mockSettings = {
+      deviceId: 'test-device',
+      mode: 'blackmarket',  // Black Market mode for scoring tests
+    };
+
+    mockDebug = {
+      log: jest.fn(),
+    };
+
+    dataManager = new DataManager({
+      tokenManager: mockTokenManager,
+      settings: mockSettings,
+      debug: mockDebug,
+    });
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  describe('calculateTeamScoreWithBonuses', () => {
+    it('should calculate score with no bonuses for ungrouped tokens', () => {
+      // Setup: Team with 2 tokens, no groups completed
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Personal', valueRating: 5, isUnknown: false, group: 'No Group' },
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Technical', valueRating: 3, isUnknown: false, group: 'No Group' },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({});
+
+      const result = dataManager.calculateTeamScoreWithBonuses('001');
+
+      // 5-star Personal (1x) = 10000 × 1 = 10000
+      // 3-star Technical (5x) = 1000 × 5 = 5000
+      // Total = 15000
+      expect(result.baseScore).toBe(15000);
+      expect(result.bonusScore).toBe(0);
+      expect(result.totalScore).toBe(15000);
+      expect(result.completedGroups).toBe(0);
+    });
+
+    it('should apply group completion bonus when team has all tokens', () => {
+      // Setup: Team completes "Server Logs (x5)" group with 2 tokens
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Technical', valueRating: 5, isUnknown: false, group: 'Server Logs (x5)', rfid: 'token1' },
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Technical', valueRating: 4, isUnknown: false, group: 'Server Logs (x5)', rfid: 'token2' },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({
+        'server logs': {
+          displayName: 'Server Logs',
+          multiplier: 5,
+          tokens: new Set(['token1', 'token2']),
+        },
+      });
+
+      const result = dataManager.calculateTeamScoreWithBonuses('001');
+
+      // Base: (5-star Technical 5x = 50000) + (4-star Technical 5x = 25000) = 75000
+      // Bonus: Each token gets (multiplier - 1) × base = 4 × base
+      // Token1 bonus: 50000 × 4 = 200000
+      // Token2 bonus: 25000 × 4 = 100000
+      // Total bonus: 300000
+      expect(result.baseScore).toBe(75000);
+      expect(result.bonusScore).toBe(300000);
+      expect(result.totalScore).toBe(375000);
+      expect(result.completedGroups).toBe(1);
+    });
+
+    it('should not apply bonus for incomplete groups', () => {
+      // Setup: Team has 1 of 2 tokens in group
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Technical', valueRating: 5, isUnknown: false, group: 'Server Logs (x5)', rfid: 'token1' },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({
+        'server logs': {
+          displayName: 'Server Logs',
+          multiplier: 5,
+          tokens: new Set(['token1', 'token2']),  // Needs both
+        },
+      });
+
+      const result = dataManager.calculateTeamScoreWithBonuses('001');
+
+      expect(result.baseScore).toBe(50000);
+      expect(result.bonusScore).toBe(0);  // No bonus - incomplete
+      expect(result.completedGroups).toBe(0);
+    });
+
+    it('should ignore unknown tokens in calculations', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', valueRating: 5, isUnknown: true, group: 'Test' },
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Personal', valueRating: 3, isUnknown: false, group: 'No Group' },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({});
+
+      const result = dataManager.calculateTeamScoreWithBonuses('001');
+
+      expect(result.baseScore).toBe(1000); // Only 3-star Personal
+    });
+
+    it('should filter by team ID', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Personal', valueRating: 5, isUnknown: false },
+        { teamId: '002', mode: 'blackmarket', memoryType: 'Personal', valueRating: 5, isUnknown: false },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({});
+
+      const result = dataManager.calculateTeamScoreWithBonuses('001');
+
+      expect(result.baseScore).toBe(10000); // Only team 001's token
+    });
+
+    it('should include groupBreakdown for completed groups', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Technical', valueRating: 5, isUnknown: false, group: 'Server Logs (x5)', rfid: 'token1' },
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Technical', valueRating: 4, isUnknown: false, group: 'Server Logs (x5)', rfid: 'token2' },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({
+        'server logs': {
+          displayName: 'Server Logs',
+          multiplier: 5,
+          tokens: new Set(['token1', 'token2']),
+        },
+      });
+
+      const result = dataManager.calculateTeamScoreWithBonuses('001');
+
+      expect(result.groupBreakdown['Server Logs']).toBeDefined();
+      expect(result.groupBreakdown['Server Logs'].tokens).toBe(2);
+      expect(result.groupBreakdown['Server Logs'].multiplier).toBe(5);
+      expect(result.groupBreakdown['Server Logs'].baseValue).toBe(75000);
+      expect(result.groupBreakdown['Server Logs'].bonusValue).toBe(300000);
+    });
+  });
+
+  describe('getTeamCompletedGroups', () => {
+    it('should return empty array when no groups completed', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', isUnknown: false, rfid: 'token1' },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({
+        'server logs': {
+          displayName: 'Server Logs',
+          multiplier: 5,
+          tokens: new Set(['token1', 'token2']),  // Needs 2, have 1
+        },
+      });
+
+      const result = dataManager.getTeamCompletedGroups('001');
+
+      expect(result).toEqual([]);
+    });
+
+    it('should return completed groups', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', isUnknown: false, rfid: 'token1' },
+        { teamId: '001', mode: 'blackmarket', isUnknown: false, rfid: 'token2' },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({
+        'server logs': {
+          displayName: 'Server Logs',
+          multiplier: 5,
+          tokens: new Set(['token1', 'token2']),
+        },
+      });
+
+      const result = dataManager.getTeamCompletedGroups('001');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('Server Logs');
+      expect(result[0].multiplier).toBe(5);
+      expect(result[0].tokenCount).toBe(2);
+    });
+
+    it('should skip single-token groups', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', isUnknown: false, rfid: 'token1' },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({
+        'solo': {
+          displayName: 'Solo',
+          multiplier: 5,
+          tokens: new Set(['token1']),  // Only 1 token
+        },
+      });
+
+      const result = dataManager.getTeamCompletedGroups('001');
+
+      expect(result).toEqual([]);  // Skipped
+    });
+
+    it('should skip groups with multiplier <= 1', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', isUnknown: false, rfid: 'token1' },
+        { teamId: '001', mode: 'blackmarket', isUnknown: false, rfid: 'token2' },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({
+        'no bonus': {
+          displayName: 'No Bonus',
+          multiplier: 1,  // No bonus multiplier
+          tokens: new Set(['token1', 'token2']),
+        },
+      });
+
+      const result = dataManager.getTeamCompletedGroups('001');
+
+      expect(result).toEqual([]);  // Skipped
+    });
+  });
+
+  describe('getGlobalStats', () => {
+    it('should calculate global statistics', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Personal', valueRating: 5, isUnknown: false },
+        { teamId: '002', mode: 'detective', valueRating: 3, isUnknown: false },
+        { teamId: '001', mode: 'blackmarket', valueRating: 0, isUnknown: true },
+      ];
+
+      const result = dataManager.getGlobalStats();
+
+      expect(result.total).toBe(3);
+      expect(result.teams).toBe(2);
+    });
+
+    it('should calculate black market vs detective scores', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Personal', valueRating: 5, isUnknown: false },
+        { teamId: '002', mode: 'detective', valueRating: 3, isUnknown: false },
+      ];
+
+      const result = dataManager.getGlobalStats();
+
+      expect(result.blackMarketScore).toBe(10000);  // 5-star Personal 1x
+      expect(result.detectiveValue).toBe(3);  // Just star rating
+    });
+  });
+
+  describe('getTeamTransactions', () => {
+    it('should filter by team ID and blackmarket mode', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', tokenId: 'token1' },
+        { teamId: '002', mode: 'blackmarket', tokenId: 'token2' },
+        { teamId: '001', mode: 'detective', tokenId: 'token3' },
+      ];
+
+      const result = dataManager.getTeamTransactions('001');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tokenId).toBe('token1');
+    });
+
+    it('should sort by group, then value, then timestamp', () => {
+      const now = new Date().toISOString();
+      const later = new Date(Date.now() + 1000).toISOString();
+
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', group: 'Group B', valueRating: 3, timestamp: later },
+        { teamId: '001', mode: 'blackmarket', group: 'Group A', valueRating: 5, timestamp: now },
+        { teamId: '001', mode: 'blackmarket', group: 'Group A', valueRating: 3, timestamp: now },
+      ];
+
+      const result = dataManager.getTeamTransactions('001');
+
+      expect(result[0].group).toBe('Group A');
+      expect(result[0].valueRating).toBe(5);  // Higher value first
+      expect(result[1].group).toBe('Group A');
+      expect(result[1].valueRating).toBe(3);
+      expect(result[2].group).toBe('Group B');
+    });
+  });
+});

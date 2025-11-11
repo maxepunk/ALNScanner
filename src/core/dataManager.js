@@ -341,10 +341,164 @@ export class DataManager extends EventTarget {
     }
   }
 
-  // Placeholder methods for Batch 2 & 3 - will implement in next batches
+  /**
+   * Get global statistics
+   * @returns {Object} Global stats
+   */
+  getGlobalStats() {
+    const total = this.transactions.length;
+    const teams = [...new Set(this.transactions.map(t => t.teamId))].length;
+    const known = this.transactions.filter(t => !t.isUnknown);
+
+    const blackMarketTransactions = known.filter(t => t.mode === 'blackmarket');
+    const detectiveTransactions = known.filter(t => t.mode === 'detective');
+
+    const blackMarketScore = blackMarketTransactions.reduce((sum, t) => {
+      return sum + this.calculateTokenValue(t);
+    }, 0);
+
+    const detectiveValue = detectiveTransactions.reduce((sum, t) => {
+      return sum + (t.valueRating || 0);
+    }, 0);
+
+    const totalValue = detectiveValue + Math.floor(blackMarketScore / 1000);
+    const avgValue = known.length > 0 ? (totalValue / known.length).toFixed(1) : 0;
+
+    return { total, teams, totalValue, avgValue, blackMarketScore, detectiveValue };
+  }
+
+  /**
+   * Calculate team score with group completion bonuses
+   * @param {string} teamId - Team ID
+   * @returns {Object} Score breakdown
+   */
   calculateTeamScoreWithBonuses(teamId) {
-    // TODO: Implement in Batch 2
-    return { totalScore: 0, baseScore: 0, bonusScore: 0, completedGroups: 0, groupBreakdown: {} };
+    const transactions = this.transactions.filter(t =>
+      t.teamId === teamId &&
+      t.mode === 'blackmarket' &&
+      !t.isUnknown
+    );
+
+    const completedGroups = this.getTeamCompletedGroups(teamId);
+    const completedGroupNames = new Set(
+      completedGroups.map(g => g.normalizedName)
+    );
+
+    let baseScore = 0;
+    let bonusScore = 0;
+    const groupBreakdown = {};
+
+    // Initialize breakdown for completed groups
+    completedGroups.forEach(group => {
+      groupBreakdown[group.name] = {
+        tokens: 0,
+        baseValue: 0,
+        bonusValue: 0,
+        multiplier: group.multiplier
+      };
+    });
+
+    // Calculate scores for each transaction
+    transactions.forEach(t => {
+      const tokenBaseValue = this.calculateTokenValue(t);
+      baseScore += tokenBaseValue;
+
+      // Check if this token's group is completed
+      const groupInfo = this.parseGroupInfo(t.group);
+      const normalizedGroupName = this.normalizeGroupName(groupInfo.name);
+
+      if (completedGroupNames.has(normalizedGroupName)) {
+        // Apply bonus (multiplier - 1) × base value
+        const bonusAmount = tokenBaseValue * (groupInfo.multiplier - 1);
+        bonusScore += bonusAmount;
+
+        // Track in breakdown
+        if (groupBreakdown[groupInfo.name]) {
+          groupBreakdown[groupInfo.name].tokens++;
+          groupBreakdown[groupInfo.name].baseValue += tokenBaseValue;
+          groupBreakdown[groupInfo.name].bonusValue += bonusAmount;
+        }
+      }
+    });
+
+    this.debug?.log(`Team ${teamId}: Base=$${baseScore}, Bonus=$${bonusScore}`);
+
+    return {
+      baseScore,
+      bonusScore,
+      totalScore: baseScore + bonusScore,
+      completedGroups: completedGroups.length,
+      groupBreakdown
+    };
+  }
+
+  /**
+   * Get completed groups for a team
+   * @param {string} teamId - Team ID
+   * @returns {Array} Completed groups
+   */
+  getTeamCompletedGroups(teamId) {
+    const groupInventory = this.tokenManager?.getGroupInventory() || {};
+
+    const teamTokens = new Set(
+      this.transactions
+        .filter(t =>
+          t.teamId === teamId &&
+          t.mode === 'blackmarket' &&
+          !t.isUnknown
+        )
+        .map(t => t.rfid)
+    );
+
+    const completedGroups = [];
+
+    Object.entries(groupInventory).forEach(([normalizedName, groupData]) => {
+      // Skip single-token groups and no-bonus groups
+      if (groupData.tokens.size <= 1 || groupData.multiplier <= 1) {
+        return;
+      }
+
+      // Check if team has ALL tokens in this group
+      const groupTokenArray = [...groupData.tokens];
+      const hasAllTokens = groupTokenArray.every(tokenId => teamTokens.has(tokenId));
+
+      if (hasAllTokens) {
+        completedGroups.push({
+          name: groupData.displayName,
+          normalizedName: normalizedName,
+          multiplier: groupData.multiplier,
+          tokenCount: groupData.tokens.size,
+          tokens: groupTokenArray
+        });
+      }
+    });
+
+    return completedGroups;
+  }
+
+  /**
+   * Get sorted team transactions
+   * @param {string} teamId - Team ID
+   * @returns {Array} Sorted transactions
+   */
+  getTeamTransactions(teamId) {
+    const transactions = this.transactions.filter(t =>
+      t.teamId === teamId &&
+      t.mode === 'blackmarket'
+    );
+
+    // Sort by group, value, then timestamp
+    transactions.sort((a, b) => {
+      const groupCompare = a.group.localeCompare(b.group);
+      if (groupCompare !== 0) return groupCompare;
+
+      const valueCompare = (b.valueRating || 0) - (a.valueRating || 0);
+      if (valueCompare !== 0) return valueCompare;
+
+      return new Date(a.timestamp) - new Date(b.timestamp);
+    });
+
+    return transactions;
   }
 }
 
