@@ -5,10 +5,16 @@ export default defineConfig({
   root: './', // Project root is current directory
   publicDir: 'data', // Static assets (tokens data)
 
+  // Base path configuration
+  // Development: standalone server on port 8443
+  // Production (via backend): served at /gm-scanner/
+  base: process.env.VITE_BASE_PATH || '/',
+
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: true,
+    emptyOutDir: true,
 
     rollupOptions: {
       input: {
@@ -18,10 +24,23 @@ export default defineConfig({
   },
 
   server: {
+    // Use different port from backend (3000/8000)
     port: 8443,
     https: true, // Required for NFC API
     open: true,
-    host: '0.0.0.0' // Allow network access
+    host: '0.0.0.0', // Allow network access
+
+    // CORS for backend integration during development
+    cors: true,
+
+    // Proxy API requests to backend during development (optional)
+    proxy: {
+      '/api': {
+        target: 'https://localhost:3000',
+        secure: false, // Accept self-signed cert
+        changeOrigin: true
+      }
+    }
   },
 
   plugins: [
