@@ -2006,43 +2006,40 @@
                 }
 
                 const commonPorts = [3000, 8080];
-                const protocols = ['https', 'http']; // Try HTTPS first (GM scanner prefers HTTPS for NFC)
+                // Use same protocol as current page to avoid mixed content blocking
+                const protocol = window.location.protocol.replace(':', ''); // 'https' or 'http'
                 const promises = [];
 
-                // Scan detected subnet (254 IPs × 2 ports × 2 protocols = 1016 requests max)
+                // Scan detected subnet (254 IPs × 2 ports = 508 requests max)
                 // Limited to 20 concurrent to avoid overwhelming network
-                for (const protocol of protocols) {
-                    for (let i = 1; i <= 254; i++) {
-                        for (const port of commonPorts) {
-                            const url = `${protocol}://${subnet}.${i}:${port}`;
-                            promises.push(
-                                fetch(`${url}/health`, {
-                                    method: 'GET',
-                                    mode: 'cors',
-                                    signal: AbortSignal.timeout(500)
-                                })
-                                .then(response => response.ok ? url : null)
-                                .catch(() => null)
-                            );
-                        }
+                for (let i = 1; i <= 254; i++) {
+                    for (const port of commonPorts) {
+                        const url = `${protocol}://${subnet}.${i}:${port}`;
+                        promises.push(
+                            fetch(`${url}/health`, {
+                                method: 'GET',
+                                mode: 'cors',
+                                signal: AbortSignal.timeout(500)
+                            })
+                            .then(response => response.ok ? url : null)
+                            .catch(() => null)
+                        );
+                    }
 
-                        // Limit concurrent requests to avoid overwhelming the network
-                        if (promises.length >= 20) {
-                            await Promise.race(promises);
-                        }
+                    // Limit concurrent requests to avoid overwhelming the network
+                    if (promises.length >= 20) {
+                        await Promise.race(promises);
                     }
                 }
 
-                // Also try localhost (both protocols)
-                for (const protocol of protocols) {
-                    promises.push(
-                        fetch(`${protocol}://localhost:3000/health`, {
-                            signal: AbortSignal.timeout(1000)
-                        })
-                        .then(response => response.ok ? `${protocol}://localhost:3000` : null)
-                        .catch(() => null)
-                    );
-                }
+                // Also try localhost
+                promises.push(
+                    fetch(`${protocol}://localhost:3000/health`, {
+                        signal: AbortSignal.timeout(1000)
+                    })
+                    .then(response => response.ok ? `${protocol}://localhost:3000` : null)
+                    .catch(() => null)
+                );
 
                 // Try current origin if served from orchestrator
                 if (window.location.pathname.startsWith('/gm-scanner/')) {
