@@ -339,6 +339,20 @@ describe('OrchestratorClient - Dumb Pipe', () => {
 
       jest.useRealTimers();
     });
+
+    it('should handle disconnect when socket exists but not connected', async () => {
+      const connectPromise = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateConnect();
+      await connectPromise;
+
+      // Simulate unexpected disconnection (socket exists but not connected)
+      mockSocket.connected = false;
+      client.isConnected = false;
+
+      await client.disconnect();
+
+      expect(client.socket).toBeNull();
+    });
   });
 
   describe('destroy', () => {
@@ -356,6 +370,36 @@ describe('OrchestratorClient - Dumb Pipe', () => {
 
     it('should not throw if never connected', () => {
       expect(() => client.destroy()).not.toThrow();
+    });
+
+    it('should cleanup connection timeout if destroyed during connection', async () => {
+      jest.useFakeTimers();
+
+      const connectPromise = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+
+      // Destroy while connection in progress
+      client.destroy();
+
+      // Connection timeout should be cleared
+      expect(client.connectionTimeout).toBeNull();
+      expect(client.socket).toBeNull();
+
+      jest.useRealTimers();
+    });
+
+    it('should handle destroy when socket disconnected but exists', async () => {
+      const connectPromise = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateConnect();
+      await connectPromise;
+
+      // Simulate socket disconnected but not cleaned up yet
+      mockSocket.connected = false;
+
+      client.destroy();
+
+      expect(mockSocket.removeAllListeners).toHaveBeenCalled();
+      expect(client.socket).toBeNull();
+      expect(client.isConnected).toBe(false);
     });
   });
 

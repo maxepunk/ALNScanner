@@ -45,6 +45,11 @@ class NetworkedSession extends EventTarget {
       }));
     } catch (error) {
       this.state = 'error';
+
+      // CRITICAL: Cleanup on initialization failure
+      // Prevents event listener leaks and zombie services
+      await this.destroy();
+
       this.dispatchEvent(new CustomEvent('session:error', {
         detail: { error }
       }));

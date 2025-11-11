@@ -149,7 +149,8 @@ describe('Service Wiring Integration', () => {
 
       // ConnectionManager's validation should have caught it
       expect(errorHandler).toHaveBeenCalled();
-      expect(session.state).toBe('error');
+      // State is 'disconnected' after cleanup (destroy() resets state)
+      expect(session.state).toBe('disconnected');
     });
 
     it('should use real ConnectionManager for health checks', async () => {
@@ -212,7 +213,8 @@ describe('Service Wiring Integration', () => {
       expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({
         detail: { error: expect.any(Error) }
       }));
-      expect(session.state).toBe('error');
+      // State is 'disconnected' after cleanup (destroy() resets state)
+      expect(session.state).toBe('disconnected');
     });
 
     it('should emit auth:required on token expiry during initialization', async () => {

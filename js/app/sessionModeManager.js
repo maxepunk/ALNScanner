@@ -31,6 +31,29 @@
 
             async initNetworkedMode() {
                 console.log('Initializing networked mode...');
+
+                // Guard against re-initialization
+                if (window.networkedSession) {
+                    console.warn('NetworkedSession already exists, skipping re-initialization');
+
+                    // If already connected, return success
+                    if (window.networkedSession.state === 'connected') {
+                        console.log('NetworkedSession already connected');
+                        return true;
+                    }
+
+                    // If in error state, cleanup and recreate
+                    if (window.networkedSession.state === 'error') {
+                        console.log('Cleaning up failed session before retry');
+                        await window.networkedSession.destroy();
+                        window.networkedSession = null;
+                        // Fall through to create new session
+                    } else {
+                        // Currently connecting, return success (let it finish)
+                        return true;
+                    }
+                }
+
                 // Show view selector tabs for networked mode
                 document.getElementById('viewSelector').style.display = 'flex';
 
@@ -173,10 +196,34 @@
                 return null;
             }
 
-            clearMode() {
+            async clearMode() {
+                // Cleanup networked session if exists
+                if (this.mode === 'networked') {
+                    await this.cleanupNetworkedSession();
+                }
+
                 this.mode = null;
                 this.locked = false;
                 localStorage.removeItem('gameSessionMode');
+            }
+
+            /**
+             * Cleanup networked session
+             * Called when switching modes or on error
+             */
+            async cleanupNetworkedSession() {
+                if (window.networkedSession) {
+                    console.log('Cleaning up networked session...');
+
+                    try {
+                        await window.networkedSession.destroy();
+                    } catch (error) {
+                        console.error('Error cleaning up networked session:', error);
+                    }
+
+                    window.networkedSession = null;
+                    console.log('Networked session cleanup complete');
+                }
             }
 
             /**

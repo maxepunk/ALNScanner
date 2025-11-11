@@ -66,22 +66,12 @@ class OrchestratorClient extends EventTarget {
     this._setupSocketHandlers();
 
     return new Promise((resolve, reject) => {
-      this.connectionTimeout = setTimeout(() => {
-        // Guard against socket being null (e.g., if destroy() called during connection)
-        if (this.socket) {
-          this.socket.off('connect', onConnect);
-          this.socket.off('connect_error', onError);
-        }
-        this.connectionTimeout = null;
-        reject(new Error('Connection timeout'));
-      }, 10000);
-
       const onConnect = () => {
         if (this.connectionTimeout) {
           clearTimeout(this.connectionTimeout);
           this.connectionTimeout = null;
         }
-        this.socket.off('connect_error', onError);
+        // No need to manually remove 'once' listeners - they auto-remove after firing
         this.isConnected = true;
         this.dispatchEvent(new CustomEvent('socket:connected'));
         resolve();
@@ -92,10 +82,21 @@ class OrchestratorClient extends EventTarget {
           clearTimeout(this.connectionTimeout);
           this.connectionTimeout = null;
         }
-        this.socket.off('connect', onConnect);
+        // No need to manually remove 'once' listeners - they auto-remove after firing
         this.dispatchEvent(new CustomEvent('socket:error', { detail: { error } }));
         reject(error);
       };
+
+      // Setup timeout handler
+      this.connectionTimeout = setTimeout(() => {
+        // Guard against socket being null (e.g., if destroy() called during connection)
+        if (this.socket) {
+          this.socket.off('connect', onConnect);
+          this.socket.off('connect_error', onError);
+        }
+        this.connectionTimeout = null;
+        reject(new Error('Connection timeout'));
+      }, 10000);
 
       this.socket.once('connect', onConnect);
       this.socket.once('connect_error', onError);

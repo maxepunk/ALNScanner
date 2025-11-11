@@ -155,7 +155,50 @@ describe('NetworkedSession - Service Orchestration', () => {
       expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({
         detail: { error: expect.any(Error) }
       }));
-      expect(session.state).toBe('error');
+      // State is 'disconnected' after cleanup (destroy() resets state)
+      expect(session.state).toBe('disconnected');
+    });
+
+    it('should cleanup event listeners if initialization fails', async () => {
+      // Mock connection failure
+      const mockClient = {
+        connect: jest.fn().mockRejectedValue(new Error('Connection refused')),
+        disconnect: jest.fn().mockResolvedValue(),
+        destroy: jest.fn(),
+        addEventListener: jest.fn()
+      };
+
+      const mockConnectionManager = {
+        connect: jest.fn().mockRejectedValue(new Error('Connection refused')),
+        disconnect: jest.fn().mockResolvedValue(),
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        state: 'disconnected'
+      };
+
+      mockServices.OrchestratorClient.mockImplementation(() => mockClient);
+      mockServices.ConnectionManager.mockImplementation(() => mockConnectionManager);
+
+      session = new NetworkedSession(mockConfig);
+
+      try {
+        await session.initialize();
+        fail('Should have thrown');
+      } catch (error) {
+        expect(error.message).toBe('Connection refused');
+      }
+
+      // Verify cleanup happened
+      expect(session.state).toBe('disconnected'); // destroy() resets state
+      expect(session.services).toBeNull();        // services cleared
+
+      // Attempting re-initialization should succeed (no leak)
+      mockConnectionManager.connect.mockResolvedValue();
+      mockClient.connect.mockResolvedValue();
+
+      await session.initialize(); // Should not throw "already initialized"
+
+      expect(session.state).toBe('connected');
     });
 
     it('should throw if already initialized', async () => {

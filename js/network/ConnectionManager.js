@@ -59,7 +59,8 @@ class ConnectionManager extends EventTarget {
       const buffer = 60; // 1 minute
 
       return (expiry - buffer) > now;
-    } catch (error) {
+    } catch {
+      // Token parsing failed - consider invalid
       return false;
     }
   }
@@ -81,7 +82,8 @@ class ConnectionManager extends EventTarget {
 
       clearTimeout(timeout);
       return response.ok;
-    } catch (error) {
+    } catch {
+      // Health check failed - orchestrator unreachable
       return false;
     }
   }

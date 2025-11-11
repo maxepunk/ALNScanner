@@ -218,12 +218,14 @@
                     // Get admin modules from NetworkedSession's AdminController
                     const adminController = window.networkedSession.getService('adminController');
 
+                    // Initialize admin modules if not already initialized
+                    // This is safe to call multiple times (AdminController has guard)
                     if (!adminController.initialized) {
-                        console.error('AdminController not initialized');
-                        return;
+                        console.log('Initializing admin modules...');
+                        adminController.initialize();
                     }
 
-                    // Reference admin modules (already created by AdminController)
+                    // Reference admin modules (created by AdminController)
                     this.adminInstances = {
                         sessionManager: adminController.getModule('sessionManager'),
                         videoController: adminController.getModule('videoController'),
