@@ -111,10 +111,25 @@ jest.mock('../../src/app/sessionModeManager.js', () => ({
 
 const { App } = require('../../src/app/app.js');
 
+// Import mocked dependencies to inject
+const Debug = require('../../src/utils/debug.js').default;
+const UIManager = require('../../src/ui/uiManager.js').default;
+const Settings = require('../../src/ui/settings.js').default;
+const TokenManager = require('../../src/core/tokenManager.js').default;
+const DataManager = require('../../src/core/dataManager.js').default;
+const NFCHandler = require('../../src/utils/nfcHandler.js').default;
+const CONFIG = require('../../src/utils/config.js').default;
+const InitializationSteps = require('../../src/app/initializationSteps.js').default;
+const SessionModeManager = require('../../src/app/sessionModeManager.js').default;
+
 describe('App', () => {
   let app;
+  let mockSessionModeManager;
 
   beforeEach(() => {
+    // Ensure real timers are restored before each test
+    jest.useRealTimers();
+
     // Clear all mocks
     jest.clearAllMocks();
 
@@ -144,20 +159,35 @@ describe('App', () => {
       <input id="scoreAdjustmentReason" />
     `;
 
-    // Mock window.sessionModeManager
+    // Create mock sessionModeManager instance for injection
+    mockSessionModeManager = {
+      isNetworked: jest.fn(() => false),
+      isStandalone: jest.fn(() => false),
+      setMode: jest.fn()
+    };
+
+    // Mock window for HTML onclick handlers (temporary until Phase 6)
+    // Use Object.defineProperty to make window mockable in tests
+    delete global.window;
     global.window = {
-      sessionModeManager: {
-        isNetworked: jest.fn(() => false),
-        isStandalone: jest.fn(() => false),
-        setMode: jest.fn()
-      },
       addEventListener: jest.fn(),
       location: { search: '' },
       showConnectionWizard: jest.fn()
     };
 
-    // Create new App instance
-    app = new App();
+    // Create new App instance with dependency injection
+    app = new App({
+      debug: Debug,
+      uiManager: UIManager,
+      settings: Settings,
+      tokenManager: TokenManager,
+      dataManager: DataManager,
+      nfcHandler: NFCHandler,
+      config: CONFIG,
+      initializationSteps: InitializationSteps,
+      sessionModeManager: mockSessionModeManager,
+      showConnectionWizard: global.window.showConnectionWizard
+    });
   });
 
   describe('Constructor', () => {
@@ -198,10 +228,15 @@ describe('App', () => {
     });
 
     it('should wire networked session event listeners', async () => {
+      // Spy on window.addEventListener to verify event wiring
+      const addEventListenerSpy = jest.spyOn(global.window, 'addEventListener');
+
       await app.init();
 
-      expect(global.window.addEventListener).toHaveBeenCalledWith('session:ready', expect.any(Function));
-      expect(global.window.addEventListener).toHaveBeenCalledWith('auth:required', expect.any(Function));
+      expect(addEventListenerSpy).toHaveBeenCalledWith('session:ready', expect.any(Function));
+      expect(addEventListenerSpy).toHaveBeenCalledWith('auth:required', expect.any(Function));
+
+      addEventListenerSpy.mockRestore();
     });
 
     it('should detect NFC support', async () => {
@@ -327,18 +362,18 @@ describe('App', () => {
     it('should select networked mode', async () => {
       await app.selectGameMode('networked');
 
-      expect(window.sessionModeManager.setMode).toHaveBeenCalledWith('networked');
+      expect(mockSessionModeManager.setMode).toHaveBeenCalledWith('networked');
     });
 
     it('should select standalone mode', async () => {
       await app.selectGameMode('standalone');
 
-      expect(window.sessionModeManager.setMode).toHaveBeenCalledWith('standalone');
+      expect(mockSessionModeManager.setMode).toHaveBeenCalledWith('standalone');
     });
 
     it('should handle missing sessionModeManager', async () => {
       const UIManager = require('../../src/ui/uiManager.js').default;
-      global.window.sessionModeManager = null;
+      global.mockSessionModeManager = null;
 
       await app.selectGameMode('networked');
 
@@ -347,7 +382,9 @@ describe('App', () => {
 
     it('should handle setMode errors', async () => {
       const UIManager = require('../../src/ui/uiManager.js').default;
-      window.sessionModeManager.setMode.mockRejectedValue(new Error('Connection failed'));
+      mockSessionModeManager.setMode.mockImplementation(() => {
+        throw new Error('Connection failed');
+      });
 
       await app.selectGameMode('networked');
 
@@ -357,7 +394,7 @@ describe('App', () => {
 
   describe('View Controller', () => {
     it('should initialize view selector in networked mode', () => {
-      window.sessionModeManager.isNetworked.mockReturnValue(true);
+      mockSessionModeManager.isNetworked.mockReturnValue(true);
 
       app.viewController.init();
 
@@ -365,7 +402,7 @@ describe('App', () => {
     });
 
     it('should not show view selector in standalone mode', () => {
-      window.sessionModeManager.isNetworked.mockReturnValue(false);
+      mockSessionModeManager.isNetworked.mockReturnValue(false);
 
       app.viewController.init();
 
@@ -410,10 +447,22 @@ describe('App', () => {
     it('should simulate scan when NFC not supported', async () => {
       jest.useFakeTimers();
       app.nfcSupported = false;
+      app.currentTeamId = '123'; // Required for processNFCRead
+
+      const status = document.getElementById('scanStatus');
 
       app.startScan();
 
-      expect(setTimeout).toHaveBeenCalled();
+      // Verify demo mode message is shown
+      expect(status.textContent).toBe('Demo Mode: Simulating scan...');
+
+      // Advance timers to trigger the simulated scan
+      jest.advanceTimersByTime(1000); // CONFIG.SCAN_SIMULATION_DELAY
+
+      // Verify NFCHandler.simulateScan was called
+      const NFCHandler = require('../../src/utils/nfcHandler.js').default;
+      expect(NFCHandler.simulateScan).toHaveBeenCalled();
+
       jest.useRealTimers();
     });
 
@@ -450,18 +499,20 @@ describe('App', () => {
 
     it('should process unknown token', () => {
       const TokenManager = require('../../src/core/tokenManager.js').default;
-      const DataManager = require('../../src/core/dataManager.js').default;
       TokenManager.findToken.mockReturnValue(null);
       app.currentTeamId = '123';
 
+      // Ensure isTokenScanned returns false for this token
+      app.dataManager.isTokenScanned.mockReturnValue(false);
+
       app.processNFCRead({ id: 'unknown', source: 'nfc', raw: 'unknown' });
 
-      expect(DataManager.markTokenAsScanned).toHaveBeenCalledWith('unknown');
+      // Assert on injected dataManager, not global mock
+      expect(app.dataManager.markTokenAsScanned).toHaveBeenCalledWith('unknown');
     });
 
     it('should process known token', () => {
       const TokenManager = require('../../src/core/tokenManager.js').default;
-      const DataManager = require('../../src/core/dataManager.js').default;
       const UIManager = require('../../src/ui/uiManager.js').default;
 
       TokenManager.findToken.mockReturnValue({
@@ -470,9 +521,13 @@ describe('App', () => {
       });
       app.currentTeamId = '123';
 
+      // Ensure isTokenScanned returns false for this token
+      app.dataManager.isTokenScanned.mockReturnValue(false);
+
       app.processNFCRead({ id: 'test123', source: 'nfc', raw: 'test123' });
 
-      expect(DataManager.markTokenAsScanned).toHaveBeenCalledWith('test123');
+      // Assert on injected dataManager, not global mock
+      expect(app.dataManager.markTokenAsScanned).toHaveBeenCalledWith('test123');
       expect(UIManager.showTokenResult).toHaveBeenCalled();
     });
   });
@@ -480,7 +535,7 @@ describe('App', () => {
   describe('Transaction Recording', () => {
     it('should record transaction in standalone mode', () => {
       const DataManager = require('../../src/core/dataManager.js').default;
-      window.sessionModeManager.isStandalone.mockReturnValue(true);
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
       app.currentTeamId = '123';
 
       const token = { SF_MemoryType: 'Technical', SF_ValueRating: 5, SF_Group: 'Test' };
@@ -491,8 +546,8 @@ describe('App', () => {
     });
 
     it('should queue transaction in networked mode', () => {
-      window.sessionModeManager.isNetworked.mockReturnValue(true);
-      global.window.networkedSession = {
+      mockSessionModeManager.isNetworked.mockReturnValue(true);
+      app.networkedSession = {
         getService: jest.fn(() => ({
           queueTransaction: jest.fn(() => 'tx-123')
         }))
@@ -502,7 +557,7 @@ describe('App', () => {
       const token = { SF_MemoryType: 'Technical', SF_ValueRating: 5 };
       app.recordTransaction(token, 'test123', false);
 
-      expect(global.window.networkedSession.getService).toHaveBeenCalledWith('queueManager');
+      expect(app.networkedSession.getService).toHaveBeenCalledWith('queueManager');
     });
 
     it('should calculate points for blackmarket mode', () => {

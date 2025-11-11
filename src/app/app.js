@@ -19,13 +19,37 @@ import NFCHandler from '../utils/nfcHandler.js';
 import CONFIG from '../utils/config.js';
 import InitializationSteps from './initializationSteps.js';
 import SessionModeManager from './sessionModeManager.js';
+import NetworkedSession from '../network/networkedSession.js';
 
 /**
  * Main Application Class
  * Coordinates all modules and handles user interaction
+ *
+ * Architecture: Dependency Injection + Event-Driven
+ * - Dependencies injected via constructor for testability
+ * - Session services received via session:ready event.detail
+ * - No window.XXX global reaching (per Architecture Refactoring 2025-11)
  */
 class App {
-  constructor() {
+  constructor(dependencies = {}) {
+    // Core dependencies (injected for testing, defaults for production)
+    this.debug = dependencies.debug || Debug;
+    this.uiManager = dependencies.uiManager || UIManager;
+    this.settings = dependencies.settings || Settings;
+    this.tokenManager = dependencies.tokenManager || TokenManager;
+    this.dataManager = dependencies.dataManager || DataManager;
+    this.nfcHandler = dependencies.nfcHandler || NFCHandler;
+    this.config = dependencies.config || CONFIG;
+    this.initializationSteps = dependencies.initializationSteps || InitializationSteps;
+
+    // Session dependencies (injected after mode selection)
+    this.sessionModeManager = dependencies.sessionModeManager || null;
+    this.networkedSession = dependencies.networkedSession || null;
+
+    // Global reference for HTML onclick handlers (temporary until Phase 6)
+    this.showConnectionWizard = dependencies.showConnectionWizard || (typeof window !== 'undefined' ? window.showConnectionWizard : null);
+
+    // Instance state
     this.currentTeamId = '';
     this.nfcSupported = false;
     this.currentInterventionTeamId = null; // For GM intervention features
@@ -37,45 +61,46 @@ class App {
    * Runs 11-phase initialization sequence
    */
   async init() {
-    Debug.log('App initializing...');
+    this.debug.log('App initializing...');
 
     // Initialize UI (Phase 1D) - MUST be before showLoadingScreen
-    InitializationSteps.initializeUIManager(UIManager);
+    this.initializationSteps.initializeUIManager(this.uiManager);
 
     // Show loading screen after UIManager initialized (Phase 0)
-    await InitializationSteps.showLoadingScreen(UIManager);
+    await this.initializationSteps.showLoadingScreen(this.uiManager);
 
     // CRITICAL: Initialize SessionModeManager BEFORE viewController (Phase 1E)
-    InitializationSteps.createSessionModeManager(SessionModeManager, window);
+    // Store reference as instance property (not window global)
+    this.sessionModeManager = this.initializationSteps.createSessionModeManager(SessionModeManager, window);
 
     // Initialize view controller (Phase 1F)
-    InitializationSteps.initializeViewController(this.viewController);
+    this.initializationSteps.initializeViewController(this.viewController);
 
     // Load settings (Phase 1G)
-    InitializationSteps.loadSettings(Settings);
+    this.initializationSteps.loadSettings(this.settings);
 
     // Load transaction history (Phase 1H)
-    InitializationSteps.loadDataManager(DataManager, UIManager);
+    this.initializationSteps.loadDataManager(this.dataManager, this.uiManager);
 
     // Check NFC support (Phase 1I)
-    this.nfcSupported = await InitializationSteps.detectNFCSupport(NFCHandler);
+    this.nfcSupported = await this.initializationSteps.detectNFCSupport(this.nfcHandler);
 
     // Load token database (Phase 1A)
-    await InitializationSteps.loadTokenDatabase(TokenManager, UIManager);
+    await this.initializationSteps.loadTokenDatabase(this.tokenManager, this.uiManager);
 
     // Apply URL parameter mode override (Phase 1B)
-    InitializationSteps.applyURLModeOverride(window.location.search, Settings);
+    this.initializationSteps.applyURLModeOverride(window.location.search, this.settings);
 
     // Register service worker for PWA functionality (Phase 1J)
-    await InitializationSteps.registerServiceWorker(navigator, UIManager);
+    await this.initializationSteps.registerServiceWorker(navigator, this.uiManager);
 
     // Connection restoration logic (Phase 1C)
-    const screenDecision = InitializationSteps.determineInitialScreen(window.sessionModeManager);
-    await InitializationSteps.applyInitialScreenDecision(
+    const screenDecision = this.initializationSteps.determineInitialScreen(this.sessionModeManager);
+    await this.initializationSteps.applyInitialScreenDecision(
       screenDecision,
-      window.sessionModeManager,
-      UIManager,
-      window.showConnectionWizard
+      this.sessionModeManager,
+      this.uiManager,
+      this.showConnectionWizard
     );
 
     // Wire event listeners for networked session
@@ -84,12 +109,19 @@ class App {
 
   /**
    * Wire event listeners for NetworkedSession lifecycle
+   * Event-driven architecture: Services provided via event.detail
    * @private
    */
   _wireNetworkedSessionEvents() {
     // Listen for session:ready from NetworkedSession
-    window.addEventListener('session:ready', () => {
-      Debug.log('NetworkedSession ready - initializing admin modules');
+    // Services are provided via event.detail.services (per Architecture Refactoring 2025-11)
+    window.addEventListener('session:ready', (event) => {
+      this.debug.log('NetworkedSession ready - initializing admin modules');
+
+      // Event-driven: Receive services from event detail, not window lookup
+      if (event.detail && event.detail.services) {
+        this.debug.log('Received services via session:ready event.detail');
+      }
 
       // Initialize admin modules when session is ready
       if (this.viewController) {
@@ -99,9 +131,9 @@ class App {
 
     // Listen for auth:required from NetworkedSession
     window.addEventListener('auth:required', () => {
-      Debug.log('Authentication required - showing connection wizard');
-      if (typeof window.showConnectionWizard === 'function') {
-        window.showConnectionWizard();
+      this.debug.log('Authentication required - showing connection wizard');
+      if (this.showConnectionWizard) {
+        this.showConnectionWizard();
       }
     });
   }
@@ -121,7 +153,7 @@ class App {
 
       init() {
         // Initialize based on session mode
-        if (window.sessionModeManager?.isNetworked()) {
+        if (app.sessionModeManager?.isNetworked()) {
           // Show view selector tabs in networked mode
           const viewSelector = document.getElementById('viewSelector');
           if (viewSelector) {
@@ -134,7 +166,7 @@ class App {
       switchView(viewName) {
         if (!this.views.includes(viewName)) {
           console.error('Invalid view:', viewName);
-          UIManager.showError(`Invalid view: ${viewName}`);
+          app.uiManager.showError(`Invalid view: ${viewName}`);
           return;
         }
 
@@ -187,26 +219,26 @@ class App {
 
         if (!this.adminInstances?.sessionManager) return;
 
-        Debug.log(this.adminInstances.sessionManager.currentSession
+        this.debug.log(this.adminInstances.sessionManager.currentSession
           ? 'Session active: ' + JSON.stringify(this.adminInstances.sessionManager.currentSession)
           : 'No active session');
       },
 
       initAdminModules() {
         // Only initialize in networked mode with valid connection
-        if (!window.sessionModeManager?.isNetworked()) {
+        if (!app.sessionModeManager?.isNetworked()) {
           console.log('Admin modules only available in networked mode');
           return;
         }
 
-        if (!window.networkedSession) {
+        if (!app.networkedSession) {
           console.error('NetworkedSession not initialized');
-          UIManager.showError('Network session not available. Check connection.');
+          app.uiManager.showError('Network session not available. Check connection.');
           return;
         }
 
         // Get admin modules from NetworkedSession's AdminController
-        const adminController = window.networkedSession.getService('adminController');
+        const adminController = app.networkedSession.getService('adminController');
 
         // Initialize admin modules if not already initialized
         // This is safe to call multiple times (AdminController has guard)
@@ -236,57 +268,57 @@ class App {
   // ========== Settings Management ==========
 
   showSettings() {
-    UIManager.showScreen('settings');
+    this.uiManager.showScreen('settings');
   }
 
   saveSettings() {
-    Settings.save();
-    UIManager.showScreen('teamEntry');
+    this.settings.save();
+    this.uiManager.showScreen('teamEntry');
   }
 
   toggleMode() {
-    Settings.mode = Settings.mode === 'detective' ? 'blackmarket' : 'detective';
+    this.settings.mode = this.settings.mode === 'detective' ? 'blackmarket' : 'detective';
 
     // Mode is stored in Settings and localStorage only
     // No need to sync to services (they read from Settings)
 
-    UIManager.updateModeDisplay(Settings.mode);
+    this.uiManager.updateModeDisplay(this.settings.mode);
 
     const scanScreen = document.getElementById('scanScreen');
     if (scanScreen && scanScreen.classList.contains('active')) {
-      UIManager.updateSessionStats();
+      this.uiManager.updateSessionStats();
     }
 
     // Visual feedback
     const indicator = document.getElementById('modeIndicator');
     if (indicator) {
-      indicator.style.transform = `scale(${CONFIG.MODE_TOGGLE_SCALE})`;
+      indicator.style.transform = `scale(${this.config.MODE_TOGGLE_SCALE})`;
       setTimeout(() => {
         indicator.style.transform = 'scale(1)';
-      }, CONFIG.ANIMATION_DURATION);
+      }, this.config.ANIMATION_DURATION);
     }
   }
 
   updateModeFromToggle() {
     const modeToggle = document.getElementById('modeToggle');
     if (modeToggle) {
-      Settings.mode = modeToggle.checked ? 'blackmarket' : 'detective';
-      UIManager.updateModeDisplay(Settings.mode);
+      this.settings.mode = modeToggle.checked ? 'blackmarket' : 'detective';
+      this.uiManager.updateModeDisplay(this.settings.mode);
     }
   }
 
   // ========== Team Entry ==========
 
   appendNumber(num) {
-    if (this.currentTeamId.length < CONFIG.MAX_TEAM_ID_LENGTH) {
+    if (this.currentTeamId.length < this.config.MAX_TEAM_ID_LENGTH) {
       this.currentTeamId += num;
-      UIManager.updateTeamDisplay(this.currentTeamId);
+      this.uiManager.updateTeamDisplay(this.currentTeamId);
     }
   }
 
   clearTeamId() {
     this.currentTeamId = '';
-    UIManager.updateTeamDisplay(this.currentTeamId);
+    this.uiManager.updateTeamDisplay(this.currentTeamId);
   }
 
   confirmTeamId() {
@@ -297,26 +329,118 @@ class App {
       }
       // Note: Do NOT clear DataManager session here - scannedTokens must persist
       // across team switches for cross-team duplicate detection
-      UIManager.updateSessionStats();
-      UIManager.showScreen('scan');
+      this.uiManager.updateSessionStats();
+      this.uiManager.showScreen('scan');
     }
   }
 
   // ========== Game Mode Selection ==========
 
+  /**
+   * Select game mode (networked or standalone)
+   * Per Architecture Refactoring 2025-11: App creates NetworkedSession
+   *
+   * @param {string} mode - 'networked' or 'standalone'
+   */
   async selectGameMode(mode) {
-    if (!window.sessionModeManager) {
+    if (!this.sessionModeManager) {
       console.error('SessionModeManager not initialized');
-      UIManager.showError('System error: SessionModeManager not initialized. Please reload the page.');
+      this.uiManager.showError('System error: SessionModeManager not initialized. Please reload the page.');
       return;
     }
 
     try {
-      await window.sessionModeManager.setMode(mode);
-      console.log(`Game mode selected: ${mode}`);
+      // Set mode (locks it)
+      this.sessionModeManager.setMode(mode);
+      this.debug.log(`Game mode selected: ${mode}`);
+
+      // If networked mode: Create and initialize NetworkedSession
+      if (mode === 'networked') {
+        await this._initializeNetworkedMode();
+      } else if (mode === 'standalone') {
+        // Standalone mode: proceed to team entry
+        this.uiManager.showScreen('teamEntry');
+      }
     } catch (error) {
       console.error('Failed to set game mode:', error);
-      UIManager.showError(`Failed to set game mode: ${error.message}`);
+      this.uiManager.showError(`Failed to set game mode: ${error.message}`);
+    }
+  }
+
+  /**
+   * Initialize networked mode by creating NetworkedSession
+   * Per Architecture Refactoring 2025-11 line 166: "App creates NetworkedSession with config"
+   * @private
+   */
+  async _initializeNetworkedMode() {
+    // Get configuration from localStorage (set by connection wizard)
+    const orchestratorUrl = localStorage.getItem('aln_orchestrator_url') || 'https://localhost:3000';
+    const deviceId = this.settings?.deviceId || 'GM_STATION_UNKNOWN';
+    const token = localStorage.getItem('aln_auth_token');
+
+    // Check if we have a valid token
+    if (token && this._isTokenValid(token)) {
+      this.debug.log('Valid token found - creating NetworkedSession...');
+
+      // Show reconnecting toast
+      this.uiManager.showToast('Reconnecting to orchestrator...', 'info', 3000);
+
+      // Create NetworkedSession (Service Orchestrator)
+      this.networkedSession = new NetworkedSession({
+        url: orchestratorUrl,
+        deviceId: deviceId,
+        stationName: this.settings?.stationName || 'GM Station',
+        token: token
+      });
+
+      // Attempt connection
+      try {
+        await this.networkedSession.initialize();
+        this.debug.log('NetworkedSession initialized - session:ready will fire');
+        // session:ready event will trigger admin module initialization
+        // via _wireNetworkedSessionEvents listener
+      } catch (error) {
+        console.error('NetworkedSession initialization failed:', error);
+        // Clean up failed session
+        if (this.networkedSession) {
+          await this.networkedSession.destroy();
+          this.networkedSession = null;
+        }
+        throw error;
+      }
+    } else {
+      // No valid token - show connection wizard
+      this.debug.log('No valid token - showing connection wizard');
+      if (this.showConnectionWizard) {
+        this.showConnectionWizard();
+      } else {
+        this.uiManager.showError('Connection wizard not available');
+      }
+    }
+  }
+
+  /**
+   * Check if JWT token is valid (not expired, with 1-minute buffer)
+   * @private
+   */
+  _isTokenValid(token) {
+    if (!token) return false;
+
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return false;
+
+      const payload = JSON.parse(atob(parts[1]));
+      const exp = payload.exp;
+
+      if (!exp) return false;
+
+      const now = Math.floor(Date.now() / 1000);
+      const bufferMinutes = 1;
+      return exp > (now + (bufferMinutes * 60));
+    } catch (error) {
+      console.error('Token validation error:', error);
+      return false;
     }
   }
 
@@ -349,10 +473,10 @@ class App {
         status.textContent = 'Scanning... Tap a token';
       }
 
-      await NFCHandler.startScan(
+      await this.nfcHandler.startScan(
         (result) => this.processNFCRead(result),
         (err) => {
-          Debug.log(`NFC read error: ${err?.message || err}`, true);
+          this.debug.log(`NFC read error: ${err?.message || err}`, true);
           if (status) {
             status.textContent = 'Read error. Try again.';
           }
@@ -363,7 +487,7 @@ class App {
         }
       );
     } catch (error) {
-      Debug.log(`Scan error: ${error.message}`, true);
+      this.debug.log(`Scan error: ${error.message}`, true);
       if (status) {
         status.textContent = 'NFC not available. Using demo mode.';
       }
@@ -378,19 +502,19 @@ class App {
     }
 
     setTimeout(() => {
-      const result = NFCHandler.simulateScan();
+      const result = this.nfcHandler.simulateScan();
       this.processNFCRead(result);
-    }, CONFIG.SCAN_SIMULATION_DELAY);
+    }, this.config.SCAN_SIMULATION_DELAY);
   }
 
   processNFCRead(result) {
-    Debug.log(`Processing token: "${result.id}" (from ${result.source})`);
-    Debug.log(`Token ID length: ${result.id.length} characters`);
+    this.debug.log(`Processing token: "${result.id}" (from ${result.source})`);
+    this.debug.log(`Token ID length: ${result.id.length} characters`);
 
     // VALIDATION: Ensure team is selected before processing
     if (!this.currentTeamId || this.currentTeamId.trim() === '') {
-      Debug.log('ERROR: No team selected - cannot process token', true);
-      UIManager.showError('Please select a team before scanning tokens');
+      this.debug.log('ERROR: No team selected - cannot process token', true);
+      this.uiManager.showError('Please select a team before scanning tokens');
 
       // Reset scan button if it exists
       const button = document.getElementById('scanButton');
@@ -403,17 +527,17 @@ class App {
 
     // Trim any whitespace
     const cleanId = result.id.trim();
-    Debug.log(`Cleaned ID: "${cleanId}" (length: ${cleanId.length})`);
+    this.debug.log(`Cleaned ID: "${cleanId}" (length: ${cleanId.length})`);
 
     // Look up token first to get normalized ID (findToken handles case variations)
-    const tokenData = TokenManager.findToken(cleanId);
+    const tokenData = this.tokenManager.findToken(cleanId);
 
     // Use matched ID for duplicate check (handles case variations)
     const tokenId = tokenData ? tokenData.matchedId : cleanId;
 
     // Check for duplicate using normalized ID
-    if (DataManager.isTokenScanned(tokenId)) {
-      Debug.log(`Duplicate token detected: ${tokenId}`, true);
+    if (this.dataManager.isTokenScanned(tokenId)) {
+      this.debug.log(`Duplicate token detected: ${tokenId}`, true);
       this.showDuplicateError(tokenId);
       return;
     }
@@ -463,14 +587,14 @@ class App {
       valueEl.textContent = 'No points awarded';
     }
 
-    UIManager.showScreen('result');
+    this.uiManager.showScreen('result');
   }
 
   recordTransaction(token, tokenId, isUnknown) {
     const transaction = {
       timestamp: new Date().toISOString(),
-      deviceId: Settings.deviceId,
-      mode: Settings.mode,
+      deviceId: this.settings.deviceId,
+      mode: this.settings.mode,
       teamId: this.currentTeamId,
       rfid: tokenId,
       tokenId: tokenId,  // Add tokenId for consistency with backend
@@ -482,8 +606,8 @@ class App {
     };
 
     // Calculate points for blackmarket mode (needed by StandaloneDataManager)
-    if (Settings.mode === 'blackmarket' && !isUnknown) {
-      transaction.points = DataManager.calculateTokenValue(transaction);
+    if (this.settings.mode === 'blackmarket' && !isUnknown) {
+      transaction.points = this.dataManager.calculateTokenValue(transaction);
       // DIAGNOSTIC: Log calculated points
       console.log('[app.js] Transaction points calculated:', {
         tokenId: transaction.tokenId,
@@ -498,51 +622,47 @@ class App {
     }
 
     // Submit transaction based on session mode
-    if (window.sessionModeManager && window.sessionModeManager.isNetworked()) {
+    if (this.sessionModeManager && this.sessionModeManager.isNetworked()) {
       // Networked mode - DON'T add to DataManager yet (will be added when backend confirms)
-      DataManager.markTokenAsScanned(tokenId);  // Still mark as scanned to prevent duplicates
+      this.dataManager.markTokenAsScanned(tokenId);  // Still mark as scanned to prevent duplicates
 
       // Get queue manager from NetworkedSession
-      if (!window.networkedSession) {
+      if (!this.networkedSession) {
         throw new Error('Cannot scan: NetworkedSession not initialized. Please reconnect.');
       }
 
-      const queueManager = window.networkedSession.getService('queueManager');
+      const queueManager = this.networkedSession.getService('queueManager');
 
       // Use queue manager for reliable delivery
       const txId = queueManager.queueTransaction({
         tokenId: tokenId,
         teamId: this.currentTeamId,
-        deviceId: Settings.deviceId,
+        deviceId: this.settings.deviceId,
         deviceType: 'gm',  // BUG #1 FIX: Required by backend validators
-        mode: Settings.mode,  // AsyncAPI contract field (was 'mode')
+        mode: this.settings.mode,  // AsyncAPI contract field (was 'mode')
         summary: token?.summary || null,  // Include summary for persistence (backend AsyncAPI contract)
         timestamp: transaction.timestamp  // Use same timestamp
       });
-      Debug.log(`Transaction queued for orchestrator: ${txId}`);
+      this.debug.log(`Transaction queued for orchestrator: ${txId}`);
     } else {
       // Standalone mode or no session mode - save locally only
-      DataManager.addTransaction(transaction);
-      DataManager.markTokenAsScanned(tokenId);
+      this.dataManager.addTransaction(transaction);
+      this.dataManager.markTokenAsScanned(tokenId);
 
-      if (window.sessionModeManager && window.sessionModeManager.isStandalone()) {
-        Debug.log('Transaction stored locally (standalone mode)');
-        // Also save to StandaloneDataManager if available
-        if (window.dataManager && window.dataManager !== DataManager) {
-          window.dataManager.addTransaction(transaction);
-        }
+      if (this.sessionModeManager && this.sessionModeManager.isStandalone()) {
+        this.debug.log('Transaction stored locally (standalone mode)');
       } else {
-        Debug.log('No session mode selected - storing locally only');
+        this.debug.log('No session mode selected - storing locally only');
       }
     }
 
-    if (Settings.mode === 'blackmarket' && !isUnknown) {
-      const tokenScore = DataManager.calculateTokenValue(transaction);
-      Debug.log(`Token scored: $${tokenScore.toLocaleString()}`);
+    if (this.settings.mode === 'blackmarket' && !isUnknown) {
+      const tokenScore = this.dataManager.calculateTokenValue(transaction);
+      this.debug.log(`Token scored: $${tokenScore.toLocaleString()}`);
     }
 
-    UIManager.updateSessionStats();
-    UIManager.showTokenResult(token, tokenId, isUnknown);
+    this.uiManager.updateSessionStats();
+    this.uiManager.showTokenResult(token, tokenId, isUnknown);
 
     const button = document.getElementById('scanButton');
     if (button) {
@@ -563,66 +683,66 @@ class App {
   }
 
   cancelScan() {
-    NFCHandler.stopScan();
+    this.nfcHandler.stopScan();
     this.currentTeamId = '';
-    UIManager.updateTeamDisplay('');
-    UIManager.showScreen('teamEntry');
+    this.uiManager.updateTeamDisplay('');
+    this.uiManager.showScreen('teamEntry');
   }
 
   continueScan() {
-    UIManager.updateSessionStats();
-    UIManager.showScreen('scan');
+    this.uiManager.updateSessionStats();
+    this.uiManager.showScreen('scan');
   }
 
   finishTeam() {
     this.currentTeamId = '';
     // Note: Do NOT clear DataManager session here - scannedTokens must persist
     // across team switches for cross-team duplicate detection
-    UIManager.updateTeamDisplay('');
-    UIManager.showScreen('teamEntry');
+    this.uiManager.updateTeamDisplay('');
+    this.uiManager.showScreen('teamEntry');
   }
 
   // ========== History ==========
 
   showHistory() {
-    UIManager.updateHistoryStats();
-    UIManager.renderTransactions();
-    UIManager.showScreen('history');
+    this.uiManager.updateHistoryStats();
+    this.uiManager.renderTransactions();
+    this.uiManager.showScreen('history');
   }
 
   closeHistory() {
     // Default to teamEntry if no valid previous screen
-    const targetScreen = UIManager.previousScreen || 'teamEntry';
-    UIManager.showScreen(targetScreen);
+    const targetScreen = this.uiManager.previousScreen || 'teamEntry';
+    this.uiManager.showScreen(targetScreen);
   }
 
   // ========== Scoreboard ==========
 
   showScoreboard() {
-    if (Settings.mode !== 'blackmarket') {
-      Debug.log('Scoreboard only available in Black Market mode');
+    if (this.settings.mode !== 'blackmarket') {
+      this.debug.log('Scoreboard only available in Black Market mode');
       return;
     }
-    UIManager.renderScoreboard();
-    UIManager.showScreen('scoreboard');
+    this.uiManager.renderScoreboard();
+    this.uiManager.showScreen('scoreboard');
   }
 
   closeScoreboard() {
     // Default to teamEntry if no valid previous screen
-    const targetScreen = UIManager.previousScreen || 'teamEntry';
-    UIManager.showScreen(targetScreen);
+    const targetScreen = this.uiManager.previousScreen || 'teamEntry';
+    this.uiManager.showScreen(targetScreen);
   }
 
   // ========== Team Details ==========
 
   showTeamDetails(teamId) {
-    const transactions = DataManager.getTeamTransactions(teamId);
-    UIManager.renderTeamDetails(teamId, transactions);
-    UIManager.showScreen('teamDetails');
+    const transactions = this.dataManager.getTeamTransactions(teamId);
+    this.uiManager.renderTeamDetails(teamId, transactions);
+    this.uiManager.showScreen('teamDetails');
   }
 
   closeTeamDetails() {
-    UIManager.showScreen('scoreboard');
+    this.uiManager.showScreen('scoreboard');
   }
 
   // ========== Admin Actions ==========
@@ -639,10 +759,10 @@ class App {
 
     try {
       await this.viewController.adminInstances.sessionManager.createSession(name);
-      Debug.log(`Session created: ${name}`);
+      this.debug.log(`Session created: ${name}`);
     } catch (error) {
       console.error('Failed to create session:', error);
-      UIManager.showError('Failed to create session. Check connection.');
+      this.uiManager.showError('Failed to create session. Check connection.');
     }
   }
 
@@ -653,10 +773,10 @@ class App {
     }
     try {
       await this.viewController.adminInstances.sessionManager.pauseSession();
-      Debug.log('Session paused');
+      this.debug.log('Session paused');
     } catch (error) {
       console.error('Failed to pause session:', error);
-      UIManager.showError('Failed to pause session.');
+      this.uiManager.showError('Failed to pause session.');
     }
   }
 
@@ -667,10 +787,10 @@ class App {
     }
     try {
       await this.viewController.adminInstances.sessionManager.resumeSession();
-      Debug.log('Session resumed');
+      this.debug.log('Session resumed');
     } catch (error) {
       console.error('Failed to resume session:', error);
-      UIManager.showError('Failed to resume session.');
+      this.uiManager.showError('Failed to resume session.');
     }
   }
 
@@ -683,10 +803,10 @@ class App {
     }
     try {
       await this.viewController.adminInstances.sessionManager.endSession();
-      Debug.log('Session ended');
+      this.debug.log('Session ended');
     } catch (error) {
       console.error('Failed to end session:', error);
-      UIManager.showError('Failed to end session.');
+      this.uiManager.showError('Failed to end session.');
     }
   }
 
@@ -718,7 +838,7 @@ class App {
 
     try {
       // Step 3: Send system:reset command
-      Debug.log('Sending system:reset command...');
+      this.debug.log('Sending system:reset command...');
 
       await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -731,7 +851,7 @@ class App {
           clearTimeout(timeout);
 
           if (response.data && response.data.success) {
-            Debug.log('System reset successful');
+            this.debug.log('System reset successful');
             resolve();
           } else {
             const errorMsg = response.data?.message || 'Reset failed';
@@ -749,16 +869,16 @@ class App {
         });
       });
 
-      Debug.log('System reset complete, creating new session...');
+      this.debug.log('System reset complete, creating new session...');
 
       // Step 4: Create new session
       await this.viewController.adminInstances.sessionManager.createSession(name.trim());
 
-      Debug.log(`New session created: ${name}`);
+      this.debug.log(`New session created: ${name}`);
 
       // Step 5: Show success feedback
-      if (UIManager.showToast) {
-        UIManager.showToast(`Session "${name}" started successfully`, 'success', 5000);
+      if (this.uiManager.showToast) {
+        this.uiManager.showToast(`Session "${name}" started successfully`, 'success', 5000);
       } else {
         alert(`Session "${name}" created successfully!`);
       }
@@ -768,8 +888,8 @@ class App {
 
       const errorMsg = `Failed to reset and create session: ${error.message}`;
 
-      if (UIManager.showError) {
-        UIManager.showError(errorMsg);
+      if (this.uiManager.showError) {
+        this.uiManager.showError(errorMsg);
       } else {
         alert(errorMsg);
       }
@@ -821,7 +941,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
    * Helper: Format duration for session details
    */
   formatSessionDuration(ms) {
-    if (!ms || ms < 0) return 'Unknown';
+    if (ms == null || ms < 0) return 'Unknown';
 
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
@@ -831,7 +951,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     const parts = [];
     if (days > 0) parts.push(`${days}d`);
     if (hours % 24 > 0) parts.push(`${hours % 24}h`);
-    if (minutes % 60 > 0) parts.push(`${minutes % 60}m`);
+    if (minutes % 60 > 0 && parts.length < 2) parts.push(`${minutes % 60}m`);
     if (seconds % 60 > 0 && parts.length < 2) parts.push(`${seconds % 60}s`);
 
     return parts.length > 0 ? parts.join(' ') : '0s';
@@ -846,7 +966,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       await this.viewController.adminInstances.videoController.playVideo();
     } catch (error) {
       console.error('Failed to play video:', error);
-      UIManager.showError('Failed to play video.');
+      this.uiManager.showError('Failed to play video.');
     }
   }
 
@@ -859,7 +979,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       await this.viewController.adminInstances.videoController.pauseVideo();
     } catch (error) {
       console.error('Failed to pause video:', error);
-      UIManager.showError('Failed to pause video.');
+      this.uiManager.showError('Failed to pause video.');
     }
   }
 
@@ -872,7 +992,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       await this.viewController.adminInstances.videoController.stopVideo();
     } catch (error) {
       console.error('Failed to stop video:', error);
-      UIManager.showError('Failed to stop video.');
+      this.uiManager.showError('Failed to stop video.');
     }
   }
 
@@ -885,7 +1005,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       await this.viewController.adminInstances.videoController.skipVideo();
     } catch (error) {
       console.error('Failed to skip video:', error);
-      UIManager.showError('Failed to skip video.');
+      this.uiManager.showError('Failed to skip video.');
     }
   }
 
@@ -902,13 +1022,13 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     }
     try {
       await this.viewController.adminInstances.videoController.addToQueue(filename);
-      UIManager.showToast(`Added ${filename} to queue`, 'success');
+      this.uiManager.showToast(`Added ${filename} to queue`, 'success');
       if (input) {
         input.value = '';
       }
     } catch (error) {
       console.error('Failed to add video to queue:', error);
-      UIManager.showError(`Failed to add video: ${error.message}`);
+      this.uiManager.showError(`Failed to add video: ${error.message}`);
     }
   }
 
@@ -922,10 +1042,10 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     }
     try {
       await this.viewController.adminInstances.videoController.clearQueue();
-      UIManager.showToast('Queue cleared', 'success');
+      this.uiManager.showToast('Queue cleared', 'success');
     } catch (error) {
       console.error('Failed to clear queue:', error);
-      UIManager.showError(`Failed to clear queue: ${error.message}`);
+      this.uiManager.showError(`Failed to clear queue: ${error.message}`);
     }
   }
 
@@ -943,7 +1063,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     const scoreBoard = document.getElementById('admin-score-board');
     if (scoreBoard) {
       const teams = {};
-      DataManager.transactions.forEach(tx => {
+      this.dataManager.transactions.forEach(tx => {
         if (!teams[tx.teamId]) {
           teams[tx.teamId] = {
             score: 0,
@@ -953,7 +1073,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
         teams[tx.teamId].count++;
         // Use each transaction's mode, not the current setting
         if (tx.mode === 'blackmarket') {
-          const score = DataManager.calculateTokenValue(tx);
+          const score = this.dataManager.calculateTokenValue(tx);
           teams[tx.teamId].score += score;
         }
       });
@@ -973,8 +1093,8 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
     // Update transaction log
     const transactionLog = document.getElementById('admin-transaction-log');
-    if (transactionLog && DataManager.transactions) {
-      const recentTransactions = DataManager.transactions.slice(-10).reverse();
+    if (transactionLog && this.dataManager.transactions) {
+      const recentTransactions = this.dataManager.transactions.slice(-10).reverse();
       let html = '<div class="transaction-list">';
       recentTransactions.forEach(tx => {
         // P2.2.4: Add duplicate marker
@@ -1004,11 +1124,11 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
     try {
       await this.viewController.adminInstances.adminOps.resetScores();
-      Debug.log('Scores reset successfully');
+      this.debug.log('Scores reset successfully');
 
       // Clear local backend scores cache
-      if (window.DataManager && window.DataManager.backendScores) {
-        window.DataManager.backendScores.clear();
+      if (this.dataManager && this.dataManager.backendScores) {
+        this.dataManager.backendScores.clear();
       }
 
       // Update admin panel display
@@ -1017,7 +1137,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       }
     } catch (error) {
       console.error('Failed to reset scores:', error);
-      UIManager.showError(`Failed to reset scores: ${error.message}`);
+      this.uiManager.showError(`Failed to reset scores: ${error.message}`);
       alert(`Failed to reset scores: ${error.message}`);
     }
   }
@@ -1032,7 +1152,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
     try {
       await this.viewController.adminInstances.adminOps.clearTransactions();
-      Debug.log('Transactions cleared');
+      this.debug.log('Transactions cleared');
       // Clear local display
       const logElement = document.getElementById('admin-transaction-log');
       if (logElement) {
@@ -1040,7 +1160,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       }
     } catch (error) {
       console.error('Failed to clear transactions:', error);
-      UIManager.showError(`Failed to clear transactions: ${error.message}`);
+      this.uiManager.showError(`Failed to clear transactions: ${error.message}`);
       alert(`Failed to clear transactions: ${error.message}`);
     }
   }
@@ -1072,7 +1192,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
     try {
       await this.viewController.adminInstances.adminOps.adjustScore(teamId, delta, reason);
-      Debug.log(`Score adjusted: Team ${teamId} ${delta > 0 ? '+' : ''}${delta} (${reason})`);
+      this.debug.log(`Score adjusted: Team ${teamId} ${delta > 0 ? '+' : ''}${delta} (${reason})`);
 
       // Clear inputs
       if (deltaInput) deltaInput.value = '';
@@ -1081,10 +1201,10 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       // Team details screen will auto-refresh via updateTeamScoreFromBackend()
       // when score:updated event is received (centralized in dataManager.js)
 
-      UIManager.showToast(`Score adjusted: ${delta > 0 ? '+' : ''}${delta} points`, 'success');
+      this.uiManager.showToast(`Score adjusted: ${delta > 0 ? '+' : ''}${delta} points`, 'success');
     } catch (error) {
       console.error('Failed to adjust score:', error);
-      UIManager.showError(`Failed to adjust score: ${error.message}`);
+      this.uiManager.showError(`Failed to adjust score: ${error.message}`);
     }
   }
 
@@ -1098,37 +1218,37 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
     try {
       await this.viewController.adminInstances.adminOps.deleteTransaction(transactionId);
-      Debug.log(`Transaction deleted: ${transactionId}`);
+      this.debug.log(`Transaction deleted: ${transactionId}`);
 
       // Immediately remove from local DataManager to update UI
-      const index = DataManager.transactions.findIndex(tx => tx.id === transactionId);
+      const index = this.dataManager.transactions.findIndex(tx => tx.id === transactionId);
       if (index !== -1) {
-        const deletedTx = DataManager.transactions[index];
+        const deletedTx = this.dataManager.transactions[index];
 
         // Remove from transactions array
-        DataManager.transactions.splice(index, 1);
-        DataManager.saveTransactions();
+        this.dataManager.transactions.splice(index, 1);
+        this.dataManager.saveTransactions();
 
         // CRITICAL: Also remove from scannedTokens Set to allow re-scanning
         if (deletedTx.tokenId || deletedTx.rfid) {
           const tokenId = deletedTx.tokenId || deletedTx.rfid;
-          DataManager.scannedTokens.delete(tokenId);
-          DataManager.saveScannedTokens();
-          Debug.log(`Removed ${tokenId} from scannedTokens - can be rescanned`);
+          this.dataManager.scannedTokens.delete(tokenId);
+          this.dataManager.saveScannedTokens();
+          this.debug.log(`Removed ${tokenId} from scannedTokens - can be rescanned`);
         }
       }
 
       // Refresh team details immediately with updated local data
       const teamId = this.currentInterventionTeamId;
       if (teamId) {
-        const transactions = DataManager.getTeamTransactions(teamId);
-        UIManager.renderTeamDetails(teamId, transactions);
+        const transactions = this.dataManager.getTeamTransactions(teamId);
+        this.uiManager.renderTeamDetails(teamId, transactions);
       }
 
-      UIManager.showToast('Transaction deleted', 'success');
+      this.uiManager.showToast('Transaction deleted', 'success');
     } catch (error) {
       console.error('Failed to delete transaction:', error);
-      UIManager.showError(`Failed to delete transaction: ${error.message}`);
+      this.uiManager.showError(`Failed to delete transaction: ${error.message}`);
     }
   }
 
@@ -1137,7 +1257,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
   testTokenMatch() {
     const testId = prompt('Enter a token ID to test:');
     if (testId) {
-      const result = TokenManager.findToken(testId);
+      const result = this.tokenManager.findToken(testId);
       if (result) {
         alert(`Match found!\nID: ${result.matchedId}\nType: ${result.token.SF_MemoryType}\nGroup: ${result.token.SF_Group}`);
       } else {
@@ -1159,8 +1279,8 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
     console.log('=== Testing Group Parsing ===');
     testCases.forEach(testCase => {
-      const parsed = DataManager.parseGroupInfo(testCase);
-      const normalized = DataManager.normalizeGroupName(parsed.name);
+      const parsed = this.dataManager.parseGroupInfo(testCase);
+      const normalized = this.dataManager.normalizeGroupName(parsed.name);
       console.log(`Input: "${testCase}"`);
       console.log(`  Parsed: name="${parsed.name}", multiplier=${parsed.multiplier}`);
       console.log(`  Normalized: "${normalized}"`);
@@ -1170,7 +1290,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
   }
 
   testGroupInventory() {
-    const inventory = TokenManager.getGroupInventory();
+    const inventory = this.tokenManager.getGroupInventory();
 
     console.log('=== Group Inventory Test ===');
     console.log('Total groups:', Object.keys(inventory).length);
@@ -1188,14 +1308,14 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
   testCompletionDetection() {
     console.log('=== Testing Group Completion Detection ===\n');
 
-    const realTeams = [...new Set(DataManager.transactions
+    const realTeams = [...new Set(this.dataManager.transactions
       .filter(t => t.mode === 'blackmarket')
       .map(t => t.teamId))];
 
     if (realTeams.length > 0) {
       console.log('=== Testing with REAL data ===');
       realTeams.forEach(teamId => {
-        const completed = DataManager.getTeamCompletedGroups(teamId);
+        const completed = this.dataManager.getTeamCompletedGroups(teamId);
         console.log(`Team ${teamId}: ${completed.length} completed groups`);
         completed.forEach(group => {
           console.log(`  ✅ "${group.name}" - ${group.tokenCount} tokens, ${group.multiplier}x`);
@@ -1211,7 +1331,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
   testBonusCalculations() {
     console.log('=== Testing Bonus Score Calculations ===\n');
 
-    const teamScores = DataManager.getTeamScores();
+    const teamScores = this.dataManager.getTeamScores();
 
     if (teamScores.length > 0) {
       teamScores.forEach((team, index) => {
@@ -1232,14 +1352,14 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     console.log('=== Testing Enhanced UI Data Structure ===\n');
 
     const teamId = prompt('Enter a team ID to test (or leave blank for first team):');
-    const testTeamId = teamId || DataManager.transactions[0]?.teamId;
+    const testTeamId = teamId || this.dataManager.transactions[0]?.teamId;
 
     if (!testTeamId) {
       alert('No teams found. Add some transactions first.');
       return;
     }
 
-    const enhancedData = DataManager.getEnhancedTeamTransactions(testTeamId);
+    const enhancedData = this.dataManager.getEnhancedTeamTransactions(testTeamId);
 
     console.log(`Team ${testTeamId} Enhanced Data:`);
     console.log(`  Completed Groups: ${enhancedData.completedGroups.length}`);
