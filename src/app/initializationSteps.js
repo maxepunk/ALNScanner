@@ -36,10 +36,13 @@ export function initializeUIManager(uiManager) {
  *
  * @param {Function} SessionModeManagerClass - SessionModeManager constructor
  * @param {Object} windowObj - Window object
+ * @returns {Object} The created SessionModeManager instance
  */
 export function createSessionModeManager(SessionModeManagerClass, windowObj) {
-  windowObj.sessionModeManager = new SessionModeManagerClass();
+  const instance = new SessionModeManagerClass();
+  windowObj.sessionModeManager = instance;
   Debug.log('SessionModeManager initialized');
+  return instance;
 }
 
 /**
