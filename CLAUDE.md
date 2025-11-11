@@ -2,49 +2,74 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ IMPORTANT: Modern ES6 Architecture (Nov 2025)
+
+**This scanner now uses ES6 modules with Vite build system.**
+
+Previous architecture (20+ script tags) was migrated to modern ES6 modules. See [docs/plans/2025-11-11-es6-module-migration.md](docs/plans/2025-11-11-es6-module-migration.md) for complete migration details.
+
+### What Changed
+- **Before**: Single HTML file with 20+ `<script>` tags, global namespace pollution
+- **After**: ES6 modules with `import`/`export`, Vite build system, code splitting
+- **Breaking Change**: Must use `npm run dev` (cannot open index.html directly)
+
 ## Project Overview
 
 ALNScanner is the **Game Master (GM) Scanner** for "About Last Night" - a PWA for tracking team transactions via NFC token scanning during a 2-hour immersive game. This is the GM control tool, NOT the player-facing scanner.
 
 **Key Facts:**
-- Single-file PWA (index.html + modular JS)
-- No build process, no npm dependencies
+- ES6 module architecture with Vite 5.x build system
 - Dual operation modes: Networked (WebSocket) OR Standalone (offline)
 - Two game modes: Detective (star ratings) OR Black Market (currency)
 - Android Chrome/Edge 89+ required for NFC
+- Automated testing: Jest (598 unit tests) + Playwright (E2E)
+- Automated deployment to GitHub Pages
 
 ## Development Commands
 
 ### Local Development
 ```bash
-# HTTP server (testing without NFC)
-python3 -m http.server 8000
+# Install dependencies (first time)
+npm install
 
-# HTTPS server (required for NFC testing)
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
-npx http-server -S -C cert.pem -K key.pem
+# Development server with hot reload (HTTPS on port 8443)
+npm run dev
 
-# Test without NFC: Open in browser → use "Manual Entry" button
+# Build for production
+npm run build         # Output to dist/
+npm run preview       # Test production build locally
+
+# Run tests
+npm test              # Jest unit tests (598 tests)
+npm run test:e2e      # Playwright E2E tests
+npm run test:all      # All tests
 ```
 
 ### Token Synchronization
 ```bash
-# Sync tokens from shared repository
-python3 sync.py
-
-# Sync + deploy to GitHub Pages
-python3 sync.py --deploy
+# Sync tokens from shared repository (git submodule)
+git submodule update --init --recursive
 ```
 
 ### Testing with Backend
 ```bash
 # 1. Start orchestrator (from backend/)
-cd ../backend && npm run dev
+cd ../../backend && npm run dev
 
-# 2. Open scanner on Android device
+# 2. Open scanner (Vite dev server auto-opens browser)
 # 3. Select "Networked Mode"
 # 4. Enter orchestrator URL: https://[IP]:3000
 # 5. Authenticate with admin password
+```
+
+### Deployment
+```bash
+# Automatic deployment to GitHub Pages on push to main
+git push origin main
+
+# Manual deployment
+npm run build
+# Copy dist/ to server
 ```
 
 ## Architecture Overview
@@ -141,18 +166,55 @@ if (DataManager.isTokenScanned(tokenId)) {
 
 ## Frontend Architecture
 
-### Single-File PWA Structure
+### ES6 Module Structure
 
-**index.html (2116 lines):**
-- Lines 7-1373: Inline CSS (complete design system)
-- Lines 1375-1808: HTML structure (9 screens + 3 views)
-- Lines 1817-1839: Sequential `<script>` tags load modules
-- Lines 1849+: DOMContentLoaded initialization
+**Project Structure:**
+```
+ALNScanner-es6-migration/
+├── src/                    # ES6 modules (source code)
+│   ├── main.js            # Entry point - orchestrates initialization
+│   ├── app/               # Application layer
+│   │   ├── App.js         # Main application controller
+│   │   ├── AdminController.js
+│   │   ├── SessionModeManager.js
+│   │   └── initializationSteps.js
+│   ├── core/              # Core business logic
+│   │   ├── dataManager.js
+│   │   └── tokenManager.js
+│   ├── network/           # Network layer (WebSocket)
+│   │   ├── OrchestratorClient.js
+│   │   ├── ConnectionManager.js
+│   │   ├── NetworkedSession.js
+│   │   └── networkedQueueManager.js
+│   ├── ui/                # UI management
+│   │   ├── uiManager.js
+│   │   └── settings.js
+│   └── utils/             # Utilities
+│       ├── config.js
+│       ├── debug.js
+│       ├── nfcHandler.js
+│       └── adminModule.js
+├── tests/
+│   ├── unit/              # Jest unit tests (598 tests)
+│   └── e2e/               # Playwright E2E tests
+├── dist/                  # Build output (gitignored)
+├── index.html             # Minimal HTML - loads single module script
+├── vite.config.js         # Build configuration
+└── playwright.config.js   # E2E test configuration
+```
 
-**No Build Process:**
-- Pure HTML/JS/CSS (ES6+ with async/await)
-- Modules expose to `window.*` global scope
-- Sequential dependency loading via script order
+**Build System:**
+- **Vite 5.x**: Fast dev server with hot module reload
+- **Production**: Minified, code-split bundles
+- **Module Loading**: Single `<script type="module" src="/src/main.js">`
+- **Development**: https://localhost:8443 with self-signed cert (for NFC API)
+
+**Key Architectural Changes (from migration):**
+- ✅ All modules use `import`/`export` (no `window.XXX` pollution)
+- ✅ Removed Node.js `global` fallbacks (browser-only code)
+- ✅ Event-driven initialization (no imperative sequencing)
+- ✅ Dependency injection throughout
+- ✅ Real browser E2E testing (Playwright catches jsdom misses)
 
 ### Screen System (9 Screens)
 
@@ -179,30 +241,31 @@ if (DataManager.isTokenScanned(tokenId)) {
 
 ### Module Responsibilities
 
-**App Layer (js/app/):**
-- `app.js` - Main coordinator, NFC processing, admin actions
-- `sessionModeManager.js` - Mode locking (networked/standalone)
-- `initializationSteps.js` - 11-phase startup sequence (1A-1J)
+**App Layer ([src/app/](src/app/)):**
+- [App.js](src/app/App.js) - Main coordinator, NFC processing, admin actions (ES6 class)
+- [SessionModeManager.js](src/app/SessionModeManager.js) - Mode locking (networked/standalone)
+- [initializationSteps.js](src/app/initializationSteps.js) - 11-phase startup sequence (1A-1J)
+- [AdminController.js](src/app/AdminController.js) - Admin module lifecycle management
 
-**Core Layer (js/core/):**
-- `dataManager.js` - Transaction storage, scoring, group completion (both modes)
-- `standaloneDataManager.js` - Local-only persistence (standalone mode)
-- `tokenManager.js` - Token database loading, fuzzy matching, group inventory
+**Core Layer ([src/core/](src/core/)):**
+- [dataManager.js](src/core/dataManager.js) - Transaction storage, scoring, group completion (both modes)
+- [tokenManager.js](src/core/tokenManager.js) - Token database loading, fuzzy matching, group inventory
 
-**Network Layer (js/network/):**
-- `orchestratorClient.js` - WebSocket client (Socket.io)
-- `connectionManager.js` - Auth, connection state, retry logic
-- `networkedQueueManager.js` - Offline transaction queue
+**Network Layer ([src/network/](src/network/)):**
+- [OrchestratorClient.js](src/network/OrchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
+- [ConnectionManager.js](src/network/ConnectionManager.js) - Auth, connection state, retry logic
+- [NetworkedSession.js](src/network/NetworkedSession.js) - Service factory and lifecycle orchestrator
+- [networkedQueueManager.js](src/network/networkedQueueManager.js) - Offline transaction queue
 
-**UI Layer (js/ui/):**
-- `uiManager.js` - Screen navigation, stats rendering, error display
-- `settings.js` - localStorage persistence for config
+**UI Layer ([src/ui/](src/ui/)):**
+- [uiManager.js](src/ui/uiManager.js) - Screen navigation, stats rendering, error display
+- [settings.js](src/ui/settings.js) - localStorage persistence for config
 
-**Utils Layer (js/utils/):**
-- `adminModule.js` - SessionManager, VideoController, SystemMonitor
-- `nfcHandler.js` - Web NFC API wrapper
-- `debug.js` - Debug panel and logging
-- `config.js` - App constants
+**Utils Layer ([src/utils/](src/utils/)):**
+- [adminModule.js](src/utils/adminModule.js) - SessionManager, VideoController, SystemMonitor (named exports)
+- [nfcHandler.js](src/utils/nfcHandler.js) - Web NFC API wrapper
+- [debug.js](src/utils/debug.js) - Debug panel and logging (singleton class)
+- [config.js](src/utils/config.js) - App constants
 
 ## Transaction Flow
 
