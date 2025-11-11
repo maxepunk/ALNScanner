@@ -116,15 +116,21 @@ class NetworkedSession extends EventTarget {
    */
   _createServices() {
     // Create services in dependency order
+    // Reference from global scope (set by module exports or script tags)
+    const OrchestratorClientClass = typeof OrchestratorClient !== 'undefined' ? OrchestratorClient : global.OrchestratorClient;
+    const ConnectionManagerClass = typeof ConnectionManager !== 'undefined' ? ConnectionManager : global.ConnectionManager;
+    const NetworkedQueueManagerClass = typeof NetworkedQueueManager !== 'undefined' ? NetworkedQueueManager : global.NetworkedQueueManager;
+    const AdminControllerClass = typeof AdminController !== 'undefined' ? AdminController : global.AdminController;
+
     // 1. OrchestratorClient (no dependencies)
     this.services = {};
-    this.services.client = new OrchestratorClient({
+    this.services.client = new OrchestratorClientClass({
       url: this.config.url,
       deviceId: this.config.deviceId
     });
 
     // 2. ConnectionManager (depends on client)
-    this.services.connectionManager = new ConnectionManager({
+    this.services.connectionManager = new ConnectionManagerClass({
       url: this.config.url,
       deviceId: this.config.deviceId,
       token: this.config.token,
@@ -132,10 +138,10 @@ class NetworkedSession extends EventTarget {
     });
 
     // 3. NetworkedQueueManager (depends on client)
-    this.services.queueManager = new NetworkedQueueManager(this.services.client);
+    this.services.queueManager = new NetworkedQueueManagerClass(this.services.client);
 
     // 4. AdminController (depends on client)
-    this.services.adminController = new AdminController(this.services.client);
+    this.services.adminController = new AdminControllerClass(this.services.client);
   }
 
   /**

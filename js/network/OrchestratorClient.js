@@ -32,6 +32,7 @@ class OrchestratorClient extends EventTarget {
 
     this.socket = null;
     this.isConnected = false;
+    this.connectionTimeout = null; // Track timeout for cleanup
   }
 
   /**
@@ -65,14 +66,21 @@ class OrchestratorClient extends EventTarget {
     this._setupSocketHandlers();
 
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.socket.off('connect', onConnect);
-        this.socket.off('connect_error', onError);
+      this.connectionTimeout = setTimeout(() => {
+        // Guard against socket being null (e.g., if destroy() called during connection)
+        if (this.socket) {
+          this.socket.off('connect', onConnect);
+          this.socket.off('connect_error', onError);
+        }
+        this.connectionTimeout = null;
         reject(new Error('Connection timeout'));
       }, 10000);
 
       const onConnect = () => {
-        clearTimeout(timeout);
+        if (this.connectionTimeout) {
+          clearTimeout(this.connectionTimeout);
+          this.connectionTimeout = null;
+        }
         this.socket.off('connect_error', onError);
         this.isConnected = true;
         this.dispatchEvent(new CustomEvent('socket:connected'));
@@ -80,7 +88,10 @@ class OrchestratorClient extends EventTarget {
       };
 
       const onError = (error) => {
-        clearTimeout(timeout);
+        if (this.connectionTimeout) {
+          clearTimeout(this.connectionTimeout);
+          this.connectionTimeout = null;
+        }
         this.socket.off('connect', onConnect);
         this.dispatchEvent(new CustomEvent('socket:error', { detail: { error } }));
         reject(error);
@@ -212,6 +223,12 @@ class OrchestratorClient extends EventTarget {
    * @private
    */
   _cleanup() {
+    // Clear connection timeout if still pending
+    if (this.connectionTimeout) {
+      clearTimeout(this.connectionTimeout);
+      this.connectionTimeout = null;
+    }
+
     if (this.socket) {
       this.socket.removeAllListeners();
       if (this.socket.connected) {
