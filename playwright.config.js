@@ -31,8 +31,8 @@ module.exports = defineConfig({
 
   // Shared test configuration
   use: {
-    // Base URL for ALNScanner
-    baseURL: 'http://localhost:8000',
+    // Base URL for ALNScanner (Vite dev server)
+    baseURL: 'https://localhost:8443',
 
     // Browser context options
     trace: 'on-first-retry',
@@ -57,11 +57,12 @@ module.exports = defineConfig({
     }
   ],
 
-  // Local dev server (optional - comment out if running server manually)
-  // webServer: {
-  //   command: 'python3 -m http.server 8000',
-  //   url: 'http://localhost:8000',
-  //   reuseExistingServer: !process.env.CI,
-  //   timeout: 120000
-  // }
+  // Vite dev server for E2E tests
+  webServer: {
+    command: 'npm run dev',
+    port: 8443,
+    reuseExistingServer: !process.env.CI,
+    ignoreHTTPSErrors: true,
+    timeout: 120000
+  }
 });

@@ -4,10 +4,14 @@ node_modules/
 # Testing
 coverage/
 .nyc_output/
+tests/e2e/reports/
+playwright-report/
+test-results/
 
 # Build outputs
 dist/
 build/
+.vite/
 
 # IDE
 .vscode/
