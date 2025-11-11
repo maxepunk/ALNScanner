@@ -1953,55 +1953,11 @@
     <!-- Debug Panel (Legacy, replaced by debug-view) -->
     <!-- Debug toggle moved to tabs -->
 
-    <!-- Phase 4.1: Extracted Modules -->
-    <script src="js/utils/config.js"></script>
-    <script src="js/utils/debug.js"></script>
-    <script src="js/utils/nfcHandler.js"></script>
-    <script src="js/utils/adminModule.js"></script>
-
-    <!-- Phase 4.2: Core Modules -->
-    <script src="js/core/tokenManager.js"></script>
-    <script src="js/core/dataManager.js"></script>
-    <script src="js/core/standaloneDataManager.js"></script>
-
-    <!-- Phase 4.3: UI Modules -->
-    <script src="js/ui/uiManager.js"></script>
-    <script src="js/ui/settings.js"></script>
-
-    <!-- Phase 4.4: Network Modules - Refactored Architecture (Nov 2025) -->
-    <script src="js/network/OrchestratorClient.js"></script>
-    <script src="js/network/ConnectionManager.js"></script>
-    <script src="js/network/NetworkedSession.js"></script>
-    <script src="js/network/networkedQueueManager.js"></script>
-
-    <!-- Phase 4.5: App Modules -->
-    <script src="js/app/AdminController.js"></script>
-    <script src="js/app/sessionModeManager.js"></script>
-    <script src="js/app/initializationSteps.js"></script>
-    <script src="js/app/app.js"></script>
-
-    <script>
-        'use strict';
-        
-
-
-        // ============================================
-        // INITIALIZATION
-        // ============================================
-        window.addEventListener('DOMContentLoaded', async () => {
-            // Initialize core app (always works offline)
-            try {
-                await App.init();
-            } catch (error) {
-                Debug.log(`Initialization error: ${error.message}`, true);
-                console.error('App initialization failed:', error);
-                // Don't block with alert - app can still work offline
-            }
-
-            // Network mode initialization now handled by SessionModeManager
-            // (creates NetworkedSession when user selects networked mode)
-        });
-    </script>
+    <!-- ============================================
+         ES6 MODULE ENTRY POINT
+         Vite handles all module loading
+         ============================================ -->
+    <script type="module" src="/src/main.js"></script>
 
     <!-- ============================================
          ORCHESTRATOR WEBSOCKET INTEGRATION
@@ -2189,13 +2145,14 @@
             showConnectionWizard();
 
             // Pre-fill the server URL if we already have one
-            if (window.connectionManager && window.connectionManager.url) {
-                document.getElementById('serverUrl').value = window.connectionManager.url;
+            const connectionManager = window.App?.networkedSession?.services?.connectionManager;
+            if (connectionManager && connectionManager.url) {
+                document.getElementById('serverUrl').value = connectionManager.url;
             }
 
             // Pre-fill station name if we have one
-            if (window.connectionManager && window.connectionManager.stationName) {
-                document.getElementById('stationName').value = window.connectionManager.stationName;
+            if (connectionManager && connectionManager.stationName) {
+                document.getElementById('stationName').value = connectionManager.stationName;
             }
         }
 
@@ -2227,9 +2184,9 @@
     <script>
         // Clean disconnect on page unload (mirrors P0.4 backend cleanup)
         window.addEventListener('beforeunload', () => {
-            if (window.connectionManager?.orchestratorClient?.socket) {
+            if (window.networkedSession?.services?.client) {
                 console.log('Page unloading - disconnecting socket');
-                window.connectionManager.orchestratorClient.disconnect();
+                window.networkedSession.services.client.disconnect();
             }
         });
     </script>
@@ -2247,7 +2204,8 @@
             if (!indicator || !countSpan) return;
 
             // Get queue count from NetworkedQueueManager
-            const queueStatus = window.queueManager?.getStatus();
+            const queueManager = window.App?.networkedSession?.services?.queueManager;
+            const queueStatus = queueManager?.getStatus();
             const queueCount = queueStatus ? queueStatus.queuedCount : 0;
 
             // Update count display
@@ -2266,8 +2224,9 @@
             updateQueueIndicator(); // Initial update
 
             // Register event listener for queue changes (no polling)
-            if (window.queueManager) {
-                window.queueManager.addEventListener('queue:changed', (event) => {
+            const queueManager = window.App?.networkedSession?.services?.queueManager;
+            if (queueManager) {
+                queueManager.addEventListener('queue:changed', (event) => {
                     console.log('Queue changed:', event.detail);
                     updateQueueIndicator();
                 });
