@@ -37,7 +37,18 @@ export class NetworkedQueueManager extends EventTarget {
 
   /**
    * Merge transactions from fallback queue into main queue
-   * This rescues transactions that were saved during connection wizard
+   *
+   * CONTEXT: This is a migration helper for Phase 0 development.
+   * During connection wizard testing, transactions were temporarily saved to
+   * 'pendingNetworkedTransactions' (a fallback queue used before NetworkedQueueManager existed).
+   *
+   * This method rescues those orphaned transactions by:
+   * 1. Loading transactions from 'pendingNetworkedTransactions' (if present)
+   * 2. Merging them into the main queue (networkedTempQueue)
+   * 3. Removing the fallback queue
+   *
+   * This ensures no transactions are lost during the migration to the new queue system.
+   * Once all devices have migrated, this logic becomes a no-op (fallback queue won't exist).
    */
   mergeOrphanedTransactions() {
     try {
@@ -262,58 +273,9 @@ export class NetworkedQueueManager extends EventTarget {
     });
   }
 
-  /**
-   * Generate unique batch ID for idempotency
-   * @returns {string} Unique batch ID
-   * @private
-   */
-  generateBatchId() {
-    // Use timestamp + random for uniqueness
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 15);
-    return `${this.deviceId}-${timestamp}-${random}`;
-  }
-
-  /**
-   * Wait for batch:ack WebSocket event
-   * Returns Promise that resolves when ACK received, rejects on timeout
-   *
-   * @param {string} batchId - Batch ID to wait for
-   * @param {number} timeout - Timeout in milliseconds
-   * @returns {Promise<Object>} - Batch ACK payload
-   * @private
-   */
-  waitForBatchAck(batchId, timeout = 60000) {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        // Remove listener on timeout
-        this.client.removeEventListener('message:received', handler);
-        reject(new Error(`Batch ACK timeout after ${timeout}ms: ${batchId}`));
-      }, timeout);
-
-      const handler = (event) => {
-        const { type, payload } = event.detail;
-
-        // Only process batch:ack events
-        if (type !== 'batch:ack') return;
-
-        if (payload.batchId === batchId) {
-          clearTimeout(timer);
-          // Remove this specific listener
-          this.client.removeEventListener('message:received', handler);
-          this.debug.log('Received batch:ack from server', {
-            batchId: payload.batchId,
-            count: payload.count
-          });
-          resolve(payload);
-        }
-        // If batchId doesn't match, keep listening (might be from another device)
-      };
-
-      // Register listener for batch:ack
-      this.client.addEventListener('message:received', handler);
-    });
-  }
+  // TODO P0.2: Implement batch upload with batch:ack pattern per AsyncAPI Phase 1.2
+  // Current implementation uses transaction replay (transaction:submit) which is correct
+  // for Phase 0. Batch upload will be added in Phase 1.2 for performance optimization.
 
   /**
    * Save queue to localStorage

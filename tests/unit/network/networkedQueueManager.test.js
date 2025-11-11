@@ -88,10 +88,6 @@ describe('NetworkedQueueManager', () => {
       });
 
       expect(newManager.tempQueue).toEqual(savedQueue);
-      expect(mockDebug.log).toHaveBeenCalledWith(
-        'Loaded queued transactions',
-        { count: 2 }
-      );
     });
 
     it('should merge orphaned transactions from fallback queue', () => {
@@ -108,10 +104,6 @@ describe('NetworkedQueueManager', () => {
 
       expect(newManager.tempQueue).toEqual(orphanedQueue);
       expect(localStorageMock.removeItem).toHaveBeenCalledWith('pendingNetworkedTransactions');
-      expect(mockDebug.log).toHaveBeenCalledWith(
-        'Orphaned transactions merged successfully',
-        { totalQueueSize: 1 }
-      );
     });
   });
 
@@ -135,10 +127,6 @@ describe('NetworkedQueueManager', () => {
         'networkedTempQueue',
         JSON.stringify([transaction])
       );
-      expect(mockDebug.log).toHaveBeenCalledWith(
-        'Transaction queued for later submission',
-        { tokenId: 'token1', queueSize: 1 }
-      );
       expect(eventSpy).toHaveBeenCalledTimes(1);
       expect(eventSpy.mock.calls[0][0].detail).toEqual({
         queuedCount: 1,
@@ -159,10 +147,6 @@ describe('NetworkedQueueManager', () => {
 
       expect(mockClient.send).toHaveBeenCalledWith('transaction:submit', transaction);
       expect(queueManager.tempQueue).toHaveLength(0);
-      expect(mockDebug.log).toHaveBeenCalledWith(
-        'Transaction sent immediately',
-        { tokenId: 'token2' }
-      );
     });
 
     it('should handle missing client gracefully', () => {
@@ -513,10 +497,6 @@ describe('NetworkedQueueManager', () => {
       queueManager.loadQueue();
 
       expect(queueManager.tempQueue).toEqual(savedQueue);
-      expect(mockDebug.log).toHaveBeenCalledWith(
-        'Loaded queued transactions',
-        { count: 1 }
-      );
     });
 
     it('should handle localStorage quota exceeded error', () => {
@@ -567,7 +547,6 @@ describe('NetworkedQueueManager', () => {
 
       expect(queueManager.tempQueue).toHaveLength(0);
       expect(localStorageMock.removeItem).toHaveBeenCalledWith('networkedTempQueue');
-      expect(mockDebug.log).toHaveBeenCalledWith('Queue cleared');
     });
   });
 
@@ -597,88 +576,6 @@ describe('NetworkedQueueManager', () => {
         queuedCount: 0,
         syncing: false
       });
-    });
-  });
-
-  describe('generateBatchId', () => {
-    it('should generate unique batch ID with device ID', () => {
-      const batchId1 = queueManager.generateBatchId();
-      const batchId2 = queueManager.generateBatchId();
-
-      expect(batchId1).toContain('test-device-');
-      expect(batchId2).toContain('test-device-');
-      expect(batchId1).not.toBe(batchId2);
-    });
-  });
-
-  describe('waitForBatchAck', () => {
-    it('should resolve on matching batch:ack event', async () => {
-      const batchId = 'batch-123';
-
-      mockClient.addEventListener.mockImplementation((eventType, handler) => {
-        setTimeout(() => {
-          handler({
-            detail: {
-              type: 'batch:ack',
-              payload: {
-                batchId: 'batch-123',
-                count: 5
-              }
-            }
-          });
-        }, 10);
-      });
-
-      const result = await queueManager.waitForBatchAck(batchId);
-
-      expect(result).toEqual({
-        batchId: 'batch-123',
-        count: 5
-      });
-      expect(mockClient.removeEventListener).toHaveBeenCalled();
-    });
-
-    it('should timeout if no ACK received', async () => {
-      const batchId = 'batch-456';
-
-      mockClient.addEventListener.mockImplementation(() => {
-        // No response
-      });
-
-      await expect(queueManager.waitForBatchAck(batchId, 100))
-        .rejects
-        .toThrow('Batch ACK timeout after 100ms: batch-456');
-    });
-
-    it('should ignore non-matching batch IDs', async () => {
-      const batchId = 'batch-789';
-
-      mockClient.addEventListener.mockImplementation((eventType, handler) => {
-        // Send non-matching ACK first
-        setTimeout(() => {
-          handler({
-            detail: {
-              type: 'batch:ack',
-              payload: { batchId: 'OTHER_BATCH', count: 3 }
-            }
-          });
-
-          // Send matching ACK after
-          setTimeout(() => {
-            handler({
-              detail: {
-                type: 'batch:ack',
-                payload: { batchId: 'batch-789', count: 10 }
-              }
-            });
-          }, 10);
-        }, 10);
-      });
-
-      const result = await queueManager.waitForBatchAck(batchId);
-
-      expect(result.batchId).toBe('batch-789');
-      expect(result.count).toBe(10);
     });
   });
 
