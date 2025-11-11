@@ -21,7 +21,6 @@ import DataManager from './core/dataManager.js';
 import NFCHandler from './utils/nfcHandler.js';
 import CONFIG from './utils/config.js';
 import InitializationSteps from './app/initializationSteps.js';
-import SessionModeManager from './app/sessionModeManager.js';
 
 // Import App class
 import { App } from './app/app.js';
@@ -66,9 +65,8 @@ if (typeof window !== 'undefined') {
   window.UIManager = UIManager;
   window.TokenManager = TokenManager;
 
-  // SessionModeManager is created globally but set by App during mode selection
-  // Expose constructor for HTML script blocks that check window.sessionModeManager
-  window.SessionModeManager = SessionModeManager;
+  // Note: window.sessionModeManager is created by App during initialization
+  // (see App.init() -> initializationSteps.createSessionModeManager)
 }
 
 /**

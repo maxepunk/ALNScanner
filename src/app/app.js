@@ -18,7 +18,7 @@ import DataManager from '../core/dataManager.js';
 import NFCHandler from '../utils/nfcHandler.js';
 import CONFIG from '../utils/config.js';
 import InitializationSteps from './initializationSteps.js';
-import SessionModeManager from './sessionModeManager.js';
+import { SessionModeManager } from './sessionModeManager.js'; // Import class, not singleton
 import NetworkedSession from '../network/networkedSession.js';
 
 /**
