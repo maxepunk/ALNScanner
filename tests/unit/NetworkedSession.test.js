@@ -89,9 +89,10 @@ describe('NetworkedSession - Service Orchestration', () => {
       expect(mockServices.AdminController).toHaveBeenCalled();
 
       // Verify creation order (using call order tracking)
+      // Correct order: OrchestratorClient first (no deps), then ConnectionManager (depends on client), then others
       const callOrder = [
-        mockServices.ConnectionManager.mock.invocationCallOrder[0],
         mockServices.OrchestratorClient.mock.invocationCallOrder[0],
+        mockServices.ConnectionManager.mock.invocationCallOrder[0],
         mockServices.NetworkedQueueManager.mock.invocationCallOrder[0],
         mockServices.AdminController.mock.invocationCallOrder[0]
       ];

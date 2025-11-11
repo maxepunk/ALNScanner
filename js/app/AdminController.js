@@ -27,7 +27,23 @@ class AdminController extends EventTarget {
    * @emits initialized - Admin modules ready
    */
   initialize() {
-    throw new Error('Not implemented');
+    // Guard against re-initialization
+    if (this.initialized) {
+      console.warn('AdminController: Already initialized');
+      return;
+    }
+
+    // Create all admin modules (assuming AdminModule namespace exists)
+    this.modules = {
+      sessionManager: new AdminModule.SessionManager(this.client),
+      videoController: new AdminModule.VideoController(this.client),
+      systemMonitor: new AdminModule.SystemMonitor(),
+      adminOperations: new AdminModule.AdminOperations(this.client),
+      monitoringDisplay: new AdminModule.MonitoringDisplay(this.client)
+    };
+
+    this.initialized = true;
+    this.dispatchEvent(new CustomEvent('initialized'));
   }
 
   /**
@@ -37,21 +53,45 @@ class AdminController extends EventTarget {
    * @throws {Error} If not initialized
    */
   getModule(name) {
-    throw new Error('Not implemented');
+    if (!this.initialized) {
+      throw new Error('Admin modules not initialized');
+    }
+
+    if (!this.modules[name]) {
+      throw new Error(`Unknown module: ${name}`);
+    }
+
+    return this.modules[name];
   }
 
   /**
    * Pause admin operations (called on disconnect)
    */
   pause() {
-    throw new Error('Not implemented');
+    if (!this.modules) return;
+
+    // Pause modules that support pausing
+    if (this.modules.sessionManager?.pause) {
+      this.modules.sessionManager.pause();
+    }
+    if (this.modules.videoController?.pause) {
+      this.modules.videoController.pause();
+    }
   }
 
   /**
    * Resume admin operations (called on reconnect)
    */
   resume() {
-    throw new Error('Not implemented');
+    if (!this.modules) return;
+
+    // Resume modules that support resuming
+    if (this.modules.sessionManager?.resume) {
+      this.modules.sessionManager.resume();
+    }
+    if (this.modules.videoController?.resume) {
+      this.modules.videoController.resume();
+    }
   }
 
   /**
@@ -61,8 +101,15 @@ class AdminController extends EventTarget {
     // Graceful cleanup - no error if not initialized
     if (!this.modules) return;
 
-    // TODO: Implement module cleanup
-    throw new Error('Not implemented');
+    // Destroy all modules
+    Object.values(this.modules).forEach(module => {
+      if (module?.destroy) {
+        module.destroy();
+      }
+    });
+
+    this.modules = null;
+    this.initialized = false;
   }
 }
 

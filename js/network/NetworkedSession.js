@@ -30,7 +30,26 @@ class NetworkedSession extends EventTarget {
    * @emits session:error - Initialization failed
    */
   async initialize() {
-    throw new Error('Not implemented');
+    if (this.services) {
+      throw new Error('Session already initialized');
+    }
+
+    try {
+      this._createServices();
+      this._wireEventHandlers();
+      await this._initiateConnection();
+
+      this.state = 'connected';
+      this.dispatchEvent(new CustomEvent('session:ready', {
+        detail: { services: this.services }
+      }));
+    } catch (error) {
+      this.state = 'error';
+      this.dispatchEvent(new CustomEvent('session:error', {
+        detail: { error }
+      }));
+      throw error;
+    }
   }
 
   /**
@@ -40,7 +59,15 @@ class NetworkedSession extends EventTarget {
    * @throws {Error} If session not initialized
    */
   getService(name) {
-    throw new Error('Not implemented');
+    if (!this.services) {
+      throw new Error('Session not initialized');
+    }
+
+    if (!this.services[name]) {
+      throw new Error(`Unknown service: ${name}`);
+    }
+
+    return this.services[name];
   }
 
   /**
@@ -51,8 +78,36 @@ class NetworkedSession extends EventTarget {
     // Graceful cleanup - no error if not initialized
     if (!this.services) return;
 
-    // TODO: Implement reverse-order service cleanup
-    throw new Error('Not implemented');
+    // Destroy in reverse order (LIFO)
+    if (this.services.adminController) {
+      this.services.adminController.destroy();
+    }
+
+    if (this.services.queueManager) {
+      this.services.queueManager.destroy();
+    }
+
+    if (this.services.connectionManager) {
+      // Remove event listeners first
+      if (this._connectedHandler) {
+        this.services.connectionManager.removeEventListener('connected', this._connectedHandler);
+      }
+      if (this._disconnectedHandler) {
+        this.services.connectionManager.removeEventListener('disconnected', this._disconnectedHandler);
+      }
+      if (this._authRequiredHandler) {
+        this.services.connectionManager.removeEventListener('auth:required', this._authRequiredHandler);
+      }
+
+      await this.services.connectionManager.disconnect();
+    }
+
+    if (this.services.client) {
+      this.services.client.destroy();
+    }
+
+    this.services = null;
+    this.state = 'disconnected';
   }
 
   /**
@@ -60,7 +115,27 @@ class NetworkedSession extends EventTarget {
    * @private
    */
   _createServices() {
-    throw new Error('Not implemented');
+    // Create services in dependency order
+    // 1. OrchestratorClient (no dependencies)
+    this.services = {};
+    this.services.client = new OrchestratorClient({
+      url: this.config.url,
+      deviceId: this.config.deviceId
+    });
+
+    // 2. ConnectionManager (depends on client)
+    this.services.connectionManager = new ConnectionManager({
+      url: this.config.url,
+      deviceId: this.config.deviceId,
+      token: this.config.token,
+      client: this.services.client
+    });
+
+    // 3. NetworkedQueueManager (depends on client)
+    this.services.queueManager = new NetworkedQueueManager(this.services.client);
+
+    // 4. AdminController (depends on client)
+    this.services.adminController = new AdminController(this.services.client);
   }
 
   /**
@@ -68,7 +143,33 @@ class NetworkedSession extends EventTarget {
    * @private
    */
   _wireEventHandlers() {
-    throw new Error('Not implemented');
+    // Store handler references for cleanup
+    this._connectedHandler = () => {
+      // On connection: initialize admin and sync queue
+      if (this.services.adminController) {
+        this.services.adminController.initialize();
+      }
+      if (this.services.queueManager) {
+        this.services.queueManager.syncQueue();
+      }
+    };
+
+    this._disconnectedHandler = () => {
+      // On disconnection: pause admin operations
+      if (this.services.adminController) {
+        this.services.adminController.pause();
+      }
+    };
+
+    this._authRequiredHandler = () => {
+      // Forward auth:required event to session listeners
+      this.dispatchEvent(new CustomEvent('auth:required'));
+    };
+
+    // Wire events
+    this.services.connectionManager.addEventListener('connected', this._connectedHandler);
+    this.services.connectionManager.addEventListener('disconnected', this._disconnectedHandler);
+    this.services.connectionManager.addEventListener('auth:required', this._authRequiredHandler);
   }
 
   /**
@@ -76,7 +177,7 @@ class NetworkedSession extends EventTarget {
    * @private
    */
   async _initiateConnection() {
-    throw new Error('Not implemented');
+    await this.services.connectionManager.connect();
   }
 }
 
