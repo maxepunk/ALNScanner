@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { createHtmlPlugin } from 'vite-plugin-html';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 
 export default defineConfig({
   root: './', // Project root is current directory
@@ -44,6 +45,9 @@ export default defineConfig({
   },
 
   plugins: [
+    // HTTPS with self-signed certificate (required for NFC API)
+    basicSsl(),
+
     // HTML processing
     createHtmlPlugin({
       minify: true
