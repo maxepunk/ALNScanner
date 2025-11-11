@@ -78,12 +78,6 @@
                         await window.networkedSession.initialize();
                         console.log('Auto-connect successful');
 
-                        // Expose services for backward compatibility
-                        window.connectionManager = window.networkedSession.getService('connectionManager');
-                        window.orchestratorClient = window.networkedSession.getService('client');
-                        window.queueManager = window.networkedSession.getService('queueManager');
-                        window.adminController = window.networkedSession.getService('adminController');
-
                         // Connection successful - return success
                         return true;
                     } catch (error) {

@@ -303,8 +303,10 @@ const AdminModule = {
 
         refresh() {
             // Request latest status from server
-            if (window.connectionManager?.client) {
-                window.connectionManager.client.requestStateSync();
+            if (window.networkedSession?.state === 'connected') {
+                const client = window.networkedSession.getService('client');
+                // Send state sync request via client
+                client.send('sync:request', {});
             }
         }
     },
