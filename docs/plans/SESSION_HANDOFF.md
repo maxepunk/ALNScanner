@@ -3,8 +3,8 @@
 **Branch:** `feature/es6-module-migration`
 **Worktree:** `/home/maxepunk/projects/AboutLastNight/ALN-Ecosystem/ALNScanner-es6-migration`
 **Last Updated:** 2025-11-11
-**Session Status:** Phase 3 in progress (Core modules)
-**Test Status:** 190/190 passing ✅
+**Session Status:** Phase 3 - DataManager COMPLETE ✅
+**Test Status:** 256/256 passing ✅
 
 ---
 
@@ -17,10 +17,10 @@ cd /home/maxepunk/projects/AboutLastNight/ALN-Ecosystem/ALNScanner-es6-migration
 # Verify branch and status
 git branch --show-current  # Should be: feature/es6-module-migration
 git status
-git log --oneline -10
+git log --oneline -15
 
 # Run tests
-npm test                    # All tests (190 passing)
+npm test                    # All tests (256 passing)
 npm run dev                 # Vite dev server (port 8443)
 
 # Check what's committed
@@ -79,7 +79,7 @@ We're adding:
 - `package.json` (scripts: dev, build, build:backend)
 - `tests/helpers/test-setup.js` (polyfills)
 
-#### Phase 2: Utility Modules (4 commits)
+#### Phase 2: Utility Modules (4 commits, 50 tests)
 All modules in `src/utils/` converted to ES6:
 
 1. **config.js** (5 tests)
@@ -108,17 +108,59 @@ All modules in `src/utils/` converted to ES6:
 - ✅ Only mock external dependencies (socket.io, fetch, Web APIs)
 - ❌ NO testing anti-patterns (not testing mock interactions)
 
-#### Phase 3: TokenManager (1 commit, 20 tests)
+#### Phase 3: Core Modules (3 commits, 86 tests total)
+
+##### 1. TokenManager (20 tests)
+**Commit:** `refactor(core): convert TokenManager to ES6 with comprehensive tests`
 **File:** `src/core/tokenManager.js`
 
 - ES6 class with singleton
-- Dependency injection for DataManager helpers (until DataManager converted)
+- Dependency injection for DataManager helpers (resolved when DataManager converted)
 - Fuzzy token matching (case-insensitive, with/without colons)
 - Group inventory building
 - Demo data fallback
 - All tests passing ✅
 
-**Important:** TokenManager has fallback group parsing until DataManager is converted, then will use injected helpers via `setDataManagerHelpers()`.
+##### 2. DataManager (66 tests) ✅ **COMPLETE**
+**Commits:**
+- `ffb3c11` - Batch 1: Core structure
+- `bf72586` - Batch 2: Scoring & group completion
+- `2bf955c` - Batch 3: Network & mode-specific behavior
+
+**File:** `src/core/dataManager.js` (827 lines)
+
+**Batch 1 - Core Structure (33 tests):**
+- Constructor with dependency injection (**CRITICAL:** see architecture notes below)
+- Transaction storage (load/save/add with normalization)
+- Scanned tokens tracking (mode-specific keys)
+- Session management (reset/clear)
+- Helper methods (parseGroupInfo, normalizeGroupName)
+- Basic stats (getSessionStats, calculateTokenValue)
+
+**Batch 2 - Scoring & Group Completion (14 tests):**
+- calculateTeamScoreWithBonuses() - Black Market scoring with bonuses
+- getTeamCompletedGroups() - Group completion detection
+- getTeamTransactions() - Filtered and sorted queries
+- getGlobalStats() - Aggregate statistics
+
+**Business Logic Validated:**
+- Base values: 1★=$100, 2★=$500, 3★=$1k, 4★=$5k, 5★=$10k
+- Type multipliers: Personal=1x, Business=3x, Technical=5x
+- Group bonuses: (multiplier - 1) × baseValue per token
+- Only groups with 2+ tokens and multiplier > 1 eligible
+
+**Batch 3 - Network & Mode-Specific (19 tests):**
+- updateTeamScoreFromBackend() - Backend sync with UI triggers
+- updateGameState() - Orchestrator state sync
+- getTeamScores() - Backend (networked) or local (offline)
+- calculateLocalTeamScores() - Offline fallback
+- getEnhancedTeamTransactions() - Grouped data for UI
+- exportData() - CSV/JSON export
+
+**Network Behavior:**
+- Backend scores authoritative when connected
+- Local calculation fallback when offline
+- Proper DOM triggers (scoreboard, team details refresh)
 
 ---
 
@@ -128,28 +170,64 @@ All modules in `src/utils/` converted to ES6:
 
 **Next Files to Convert:**
 
-1. **DataManager** (`js/core/dataManager.js` - 833 lines) ⚠️ COMPLEX
-   - Used in BOTH networked and standalone modes
-   - Dual storage keys: `networked_scannedTokens` vs `standalone_scannedTokens`
-   - Networked mode: Caches backend scores, backend authoritative
-   - Standalone mode: Local scoring calculations
-   - Dependencies: TokenManager, Settings, Debug, UIManager, App
-   - Has `parseGroupInfo()` and `normalizeGroupName()` that TokenManager needs
-
-2. **StandaloneDataManager** (`js/core/standaloneDataManager.js` - 286 lines)
+1. **StandaloneDataManager** (`js/core/standaloneDataManager.js` - 286 lines) ⏳ NEXT
    - Standalone mode ONLY
    - Local session management
    - Team score calculations
    - Group completion bonus logic
    - localStorage persistence
+   - **Dependencies:** DataManager (now available ✅), Settings, Debug
 
-3. **UIManager** (`js/ui/uiManager.js`) - Screen navigation, stats rendering
+2. **UIManager** (`js/ui/uiManager.js`) - Screen navigation, stats rendering
+   - Dependencies: DataManager ✅, TokenManager ✅, Settings
 
-4. **Settings** (`js/ui/settings.js`) - localStorage config persistence
+3. **Settings** (`js/ui/settings.js`) - localStorage config persistence
+   - Minimal dependencies (Debug)
 
 ---
 
-## Critical Architecture Notes
+## Critical Architecture Decisions 🏗️
+
+### ⚠️ FUTURE-PROOF DEPENDENCY INJECTION
+
+**Problem Identified During DataManager Conversion:**
+Original code had direct `window` access that would require refactoring in future phases:
+```javascript
+// BAD (original): Would need refactoring in Phase 5
+const mode = window.sessionModeManager?.mode || 'standalone';
+if (window.networkedSession?.state === 'connected') { ... }
+```
+
+**Solution Implemented:**
+Inject ALL dependencies as constructor parameters, even those not yet converted to ES6:
+```javascript
+// GOOD (future-proof):
+constructor({ tokenManager, settings, debug, uiManager, app, sessionModeManager, networkedSession } = {}) {
+  this.sessionModeManager = sessionModeManager;  // Will convert in Phase 5
+  this.networkedSession = networkedSession;      // Will convert in Phase 4
+}
+
+getScannedTokensKey() {
+  const mode = this.sessionModeManager?.mode || 'standalone';  // Uses injected!
+}
+```
+
+**Why This Matters:**
+- ✅ **Zero refactoring** needed when `sessionModeManager` converts to ES6 (Phase 5.2)
+- ✅ **Zero refactoring** needed when `networkedSession` converts to ES6 (Phase 4.3)
+- ✅ **Cleaner tests** - Dependencies mocked via constructor, not global mutations
+- ✅ **Better architecture** - Dependency injection throughout
+
+**Pattern for Remaining Modules:**
+When converting any module, inject ALL dependencies even if they're still script-tag modules:
+```javascript
+// Singleton creation (in browser)
+const instance = new YourModule({
+  dependency1: typeof window !== 'undefined' ? window.Dependency1 : null,
+  dependency2: typeof window !== 'undefined' ? window.Dependency2 : null,
+  // ... etc
+});
+```
 
 ### Dual Mode Architecture ⚠️ MUST UNDERSTAND
 
@@ -171,7 +249,7 @@ All modules in `src/utils/` converted to ES6:
 - localStorage persistence for sessions
 - GitHub Pages deployable
 
-**Critical:** DataManager must respect mode separation via `getScannedTokensKey()` method.
+**Critical:** DataManager respects mode separation via `getScannedTokensKey()` method (using injected `sessionModeManager`).
 
 ### Backend Integration
 
@@ -198,17 +276,19 @@ All modules in `src/utils/` converted to ES6:
 2. Mocking internal modules we're testing
 3. Skipping TDD red-green-refactor
 
-### Best Practices ✅
-1. Test REAL behavior (promises resolve/reject, state updates)
-2. Only mock external dependencies (APIs, DOM, Web APIs)
-3. Watch tests fail first when adding new features
-4. Validate at checkpoints (run full suite frequently)
+### Best Practices ✅ (Applied to DataManager)
+1. **RED Phase:** Write tests first, watch them fail
+2. **GREEN Phase:** Implement to make tests pass
+3. **REFACTOR Phase:** Clean up (if needed)
+4. Test REAL behavior (promises resolve/reject, state updates)
+5. Only mock external dependencies (APIs, DOM, Web APIs)
+6. Comprehensive edge case coverage
 
 ### Validation Checkpoints
 Run after each module conversion:
 ```bash
 npm test -- <module>.test.js    # Individual module
-npm test                         # Full suite (should stay at 190+ passing)
+npm test                         # Full suite (should stay at 256 passing)
 ```
 
 ---
@@ -222,20 +302,30 @@ npm test                         # Full suite (should stay at 190+ passing)
 - Bullet point details
 - Test count and status
 - Key changes
+- Architecture notes (if applicable)
 ```
 
 **Types:** `refactor`, `feat`, `build`, `docs`, `test`
 **Scopes:** `utils`, `core`, `ui`, `network`, `app`
 
-### Example Commits from This Session
+### Recent Commits (DataManager)
 ```
-build: add Vite build infrastructure
-build: configure Vite for backend orchestrator compatibility
-refactor(utils): convert config.js to ES6 module with tests
-refactor(utils): convert debug.js to ES6 module with tests
-refactor(utils): convert nfcHandler.js to ES6 module with tests
-refactor(utils): convert adminModule.js to ES6 with comprehensive tests
-refactor(core): convert TokenManager to ES6 with comprehensive tests
+ffb3c11 refactor(core): convert DataManager batch 1 - core structure to ES6
+  - Future-proof dependency injection (sessionModeManager, networkedSession)
+  - Mode-specific storage keys
+  - 33 tests passing
+
+bf72586 refactor(core): convert DataManager batch 2 - scoring & group completion
+  - Black Market scoring with bonuses
+  - Group completion logic
+  - 47 tests total (33 + 14)
+
+2bf955c refactor(core): convert DataManager batch 3 - network & mode-specific
+  - Backend score synchronization
+  - Network/offline fallback
+  - Enhanced transaction grouping
+  - Export functionality
+  - 66 tests total (33 + 14 + 19)
 ```
 
 ---
@@ -244,25 +334,29 @@ refactor(core): convert TokenManager to ES6 with comprehensive tests
 
 ```
 ALNScanner-es6-migration/
-├── src/                          # ES6 modules (NEW)
+├── src/                          # ES6 modules
 │   ├── main.js                   # Entry point (placeholder)
-│   ├── utils/                    # ✅ COMPLETE
+│   ├── utils/                    # ✅ COMPLETE (50 tests)
 │   │   ├── config.js
 │   │   ├── debug.js
 │   │   ├── nfcHandler.js
 │   │   └── adminModule.js
-│   ├── core/                     # 🔄 IN PROGRESS
-│   │   ├── tokenManager.js       # ✅ DONE
-│   │   ├── dataManager.js        # ⏳ NEXT
-│   │   └── standaloneDataManager.js
+│   ├── core/                     # 🔄 IN PROGRESS (86 tests)
+│   │   ├── tokenManager.js       # ✅ DONE (20 tests)
+│   │   ├── dataManager.js        # ✅ DONE (66 tests)
+│   │   └── standaloneDataManager.js  # ⏳ NEXT
 │   ├── ui/                       # ⏳ TODO
+│   │   ├── uiManager.js
+│   │   └── settings.js
 │   ├── network/                  # ⏳ TODO
 │   └── app/                      # ⏳ TODO
 ├── js/                           # Old modules (KEEP for reference)
 ├── tests/
 │   ├── unit/
 │   │   ├── utils/                # ✅ COMPLETE (50 tests)
-│   │   └── core/                 # 🔄 IN PROGRESS (20 tests)
+│   │   └── core/                 # 🔄 IN PROGRESS (86 tests)
+│   │       ├── tokenManager.test.js    (20 tests)
+│   │       └── dataManager.test.js     (66 tests)
 │   ├── integration/              # Existing tests (passing)
 │   └── e2e/                      # Playwright specs (existing)
 ├── vite.config.js
@@ -276,9 +370,10 @@ ALNScanner-es6-migration/
 
 ## Remaining Work (Phases 3-9)
 
-### Phase 3: Core & UI Modules (70% remaining)
-- [ ] DataManager (833 lines, dual mode aware)
-- [ ] StandaloneDataManager (286 lines, standalone only)
+### Phase 3: Core & UI Modules (40% remaining)
+- [x] TokenManager (20 tests) ✅
+- [x] DataManager (66 tests) ✅
+- [ ] StandaloneDataManager (286 lines, standalone only) ⏳ **NEXT**
 - [ ] UIManager (screen navigation)
 - [ ] Settings (localStorage config)
 
@@ -319,28 +414,33 @@ ALNScanner-es6-migration/
 
 ## Potential Issues & Solutions
 
-### Issue 1: DataManager Circular Dependencies
+### Issue 1: DataManager Circular Dependencies ✅ SOLVED
 **Problem:** DataManager needs TokenManager, TokenManager needs DataManager helpers
-**Solution:** Dependency injection via `setDataManagerHelpers()` (already implemented in TokenManager)
+**Solution:** Dependency injection via `setDataManagerHelpers()` (implemented in TokenManager)
+**Status:** ✅ Resolved - TokenManager now receives helpers from DataManager
 
-### Issue 2: Mode-Specific Storage Keys
+### Issue 2: Mode-Specific Storage Keys ✅ SOLVED
 **Problem:** Must not leak data between networked/standalone modes
-**Solution:** DataManager has `getScannedTokensKey()` method - use it consistently
+**Solution:** DataManager has `getScannedTokensKey()` method using injected `sessionModeManager`
+**Status:** ✅ Implemented with proper dependency injection
 
-### Issue 3: Global Window Dependencies
-**Problem:** Old code uses `window.App`, `window.UIManager`, etc.
-**Solution:** Pass as constructor parameters (dependency injection)
+### Issue 3: Global Window Dependencies ✅ SOLVED
+**Problem:** Old code uses `window.App`, `window.UIManager`, `window.networkedSession`, etc.
+**Solution:** Pass ALL as constructor parameters (dependency injection), even if not yet ES6
+**Status:** ✅ Pattern established in DataManager - apply to remaining modules
 
-### Issue 4: Test Environment
+### Issue 4: Test Environment ✅ SOLVED
 **Problem:** jsdom doesn't have TextEncoder, NDEFReader, etc.
 **Solution:** Already added polyfills in `tests/helpers/test-setup.js`
+**Status:** ✅ Working for all current tests
 
 ---
 
 ## Key Files to Reference
 
 ### Planning Documents
-- `docs/plans/2025-11-11-es6-module-migration.md` - Migration plan
+- `docs/plans/2025-11-11-es6-module-migration.md` - Migration plan (ORIGINAL)
+- `docs/plans/SESSION_HANDOFF.md` - **THIS FILE** (current state)
 - `docs/plans/ARCHITECTURE_REFACTORING_2025-11.md` - Original refactor plan
 - `CLAUDE.md` - Project overview (worktree version)
 - `../ALNScanner/CLAUDE.md` - Original scanner CLAUDE.md
@@ -351,8 +451,14 @@ ALNScanner-es6-migration/
 - `../backend/.env` - Backend config (HTTPS, ports)
 
 ### Test Files (Reference for Patterns)
-- `tests/unit/utils/adminModule.test.js` - Best example (28 tests, 5 classes)
+- `tests/unit/core/dataManager.test.js` - **BEST EXAMPLE** (66 tests, 3 batches, TDD)
+- `tests/unit/utils/adminModule.test.js` - Multi-class example (28 tests, 5 classes)
 - `tests/unit/core/tokenManager.test.js` - Dependency injection example
+
+### Code Files (Reference for Patterns)
+- `src/core/dataManager.js` - **BEST EXAMPLE** for dependency injection pattern
+- `src/core/tokenManager.js` - Example of helper injection
+- `src/utils/adminModule.js` - Multi-class ES6 module
 
 ---
 
@@ -366,9 +472,9 @@ cd /home/maxepunk/projects/AboutLastNight/ALN-Ecosystem/ALNScanner-es6-migration
 npm install
 
 # Verify setup
-npm test                 # Should show 190 passing
+npm test                 # Should show 256 passing
 npm run dev             # Should start Vite on port 8443
-git log --oneline -10   # Should show recent commits
+git log --oneline -15   # Should show DataManager commits
 ```
 
 ---
@@ -401,39 +507,82 @@ When picking up this work:
    ```bash
    cd /home/maxepunk/projects/AboutLastNight/ALN-Ecosystem/ALNScanner-es6-migration
    git status
-   npm test  # Should show 190 passing
+   npm test  # Should show 256 passing
    ```
 
 2. **Review Recent Commits**
    ```bash
-   git log --oneline -10
+   git log --oneline -15
+   # Should see DataManager commits: ffb3c11, bf72586, 2bf955c
    ```
 
 3. **Understand Current State**
    - Read this document (SESSION_HANDOFF.md)
-   - Review latest test output
-   - Check todo list state
+   - Review `tests/unit/core/dataManager.test.js` for testing patterns
+   - Review `src/core/dataManager.js` for dependency injection pattern
+   - Understand future-proof architecture decisions
 
 4. **Resume Work**
-   - Next file: `js/core/dataManager.js` → `src/core/dataManager.js`
+   - **Next file:** `js/core/standaloneDataManager.js` → `src/core/standaloneDataManager.js`
    - Convert to ES6 class
-   - Add comprehensive tests
-   - Validate dual mode behavior
+   - Apply dependency injection pattern (inject DataManager, Settings, Debug)
+   - Add comprehensive tests (TDD: RED → GREEN → REFACTOR)
+   - Validate standalone mode behavior
 
-5. **Maintain Testing Standards**
-   - Test real behavior, not mock interactions
-   - Only mock external dependencies
-   - Run full suite after each module
+5. **Maintain Architecture Standards**
+   - ✅ Inject ALL dependencies (even if not yet ES6)
+   - ✅ Test real behavior, not mock interactions
+   - ✅ TDD approach (write tests first)
+   - ✅ Run full suite after completion
 
 ---
 
-## Questions for Next Session
+## Next Steps (Recommended Approach)
 
-1. Should we batch remaining Phase 3 modules for review?
-2. Any concerns about DataManager complexity (833 lines)?
-3. Want to validate approach before converting more core modules?
+### StandaloneDataManager Conversion
+
+**File:** `js/core/standaloneDataManager.js` → `src/core/standaloneDataManager.js`
+
+**Dependencies to Inject:**
+- `dataManager` (now ES6 ✅)
+- `settings` (not yet ES6, inject from window)
+- `debug` (ES6 ✅)
+
+**Key Methods:**
+- Local session management
+- Team score calculations (uses DataManager.calculateTeamScoreWithBonuses)
+- Group completion logic
+- localStorage persistence
+
+**Testing Approach:**
+1. Write tests first (RED)
+2. Implement (GREEN)
+3. Validate with DataManager integration
+4. Ensure mode isolation (standalone only)
+
+**Estimated Size:** ~286 lines, ~15-20 tests
+
+---
+
+## Questions for Continuation
+
+1. **StandaloneDataManager Batching:** Convert in one batch or split into smaller pieces?
+2. **UIManager Complexity:** Assess complexity before conversion (may be large)
+3. **Settings Timing:** Convert before or after UIManager?
+
+---
+
+## Lessons Learned This Session
+
+1. **Dependency Injection is Key** - Inject everything, even window globals not yet converted
+2. **TDD Works** - RED → GREEN → REFACTOR caught edge cases early
+3. **Batch Large Modules** - DataManager at 827 lines benefited from 3-batch approach
+4. **Test Real Behavior** - Avoided anti-patterns, all 66 tests validate actual outcomes
+5. **Future-Proof Now** - Small upfront cost (DI) saves major refactoring later
 
 ---
 
 **End of Handoff Document**
-**Next Action:** Convert DataManager with dual mode awareness
+**Next Action:** Convert StandaloneDataManager to ES6 with dependency injection pattern
+**Current Test Count:** 256/256 passing ✅
+**Phase 3 Progress:** TokenManager ✅, DataManager ✅, 3 modules remaining
