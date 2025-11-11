@@ -251,7 +251,7 @@ export async function applyInitialScreenDecision(decision, sessionModeManager, u
 
   if (decision.action === 'clearModeAndShowWizard') {
     // Networked mode restored but no valid token - clear and show wizard
-    Debug.log('Networked mode restored but no valid token - showing wizard', true);
+    Debug.log('Networked mode restored but no valid token - showing wizard');
     sessionModeManager.clearMode();
     uiManager.showScreen(decision.screen);
     showWizardFn();
