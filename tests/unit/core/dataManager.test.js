@@ -721,3 +721,474 @@ describe('DataManager - Batch 2: Scoring & Group Completion', () => {
     });
   });
 });
+
+describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
+  let DataManager;
+  let dataManager;
+  let mockTokenManager;
+  let mockSettings;
+  let mockDebug;
+  let mockUIManager;
+  let mockApp;
+  let mockNetworkedSession;
+
+  beforeEach(async () => {
+    localStorage.clear();
+
+    const module = await import('../../../src/core/dataManager.js');
+    DataManager = module.DataManager;
+
+    mockTokenManager = {
+      findToken: jest.fn(),
+      getGroupInventory: jest.fn(),
+    };
+
+    mockSettings = {
+      deviceId: 'test-device',
+      mode: 'blackmarket',
+    };
+
+    mockDebug = {
+      log: jest.fn(),
+    };
+
+    mockUIManager = {
+      renderScoreboard: jest.fn(),
+      renderTeamDetails: jest.fn(),
+      updateHistoryBadge: jest.fn(),
+      updateSessionStats: jest.fn(),
+    };
+
+    mockApp = {
+      currentInterventionTeamId: '001',
+      viewController: {
+        currentView: 'scanner',
+      },
+      updateAdminPanel: jest.fn(),
+    };
+
+    mockNetworkedSession = {
+      state: 'connected',
+    };
+
+    dataManager = new DataManager({
+      tokenManager: mockTokenManager,
+      settings: mockSettings,
+      debug: mockDebug,
+      uiManager: mockUIManager,
+      app: mockApp,
+      networkedSession: mockNetworkedSession,
+    });
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  describe('updateTeamScoreFromBackend', () => {
+    beforeEach(() => {
+      // Mock DOM elements
+      global.document.getElementById = jest.fn();
+    });
+
+    it('should store backend score when connected', () => {
+      const scoreData = {
+        teamId: '001',
+        currentScore: 50000,
+        baseScore: 30000,
+        bonusPoints: 20000,
+        tokensScanned: 5,
+        completedGroups: 2,
+        adminAdjustments: [],
+        lastUpdate: '2025-11-11T10:00:00Z',
+      };
+
+      dataManager.updateTeamScoreFromBackend(scoreData);
+
+      expect(dataManager.backendScores.has('001')).toBe(true);
+      const stored = dataManager.backendScores.get('001');
+      expect(stored.currentScore).toBe(50000);
+      expect(stored.baseScore).toBe(30000);
+      expect(stored.bonusPoints).toBe(20000);
+    });
+
+    it('should not update when disconnected', () => {
+      mockNetworkedSession.state = 'disconnected';
+
+      const scoreData = {
+        teamId: '001',
+        currentScore: 50000,
+      };
+
+      dataManager.updateTeamScoreFromBackend(scoreData);
+
+      expect(dataManager.backendScores.size).toBe(0);
+    });
+
+    it('should trigger scoreboard refresh if container present', () => {
+      const mockScoreboardContainer = document.createElement('div');
+      mockScoreboardContainer.id = 'scoreboardContainer';
+      global.document.getElementById.mockReturnValue(mockScoreboardContainer);
+
+      const scoreData = {
+        teamId: '001',
+        currentScore: 50000,
+        baseScore: 30000,
+        bonusPoints: 20000,
+        tokensScanned: 5,
+        completedGroups: 2,
+      };
+
+      dataManager.updateTeamScoreFromBackend(scoreData);
+
+      expect(mockUIManager.renderScoreboard).toHaveBeenCalled();
+    });
+
+    it('should update admin panel if in admin view', () => {
+      mockApp.viewController.currentView = 'admin';
+
+      const scoreData = {
+        teamId: '001',
+        currentScore: 50000,
+        baseScore: 30000,
+        bonusPoints: 20000,
+        tokensScanned: 5,
+        completedGroups: 2,
+      };
+
+      dataManager.updateTeamScoreFromBackend(scoreData);
+
+      expect(mockApp.updateAdminPanel).toHaveBeenCalled();
+    });
+
+    it('should refresh team details if viewing that team', () => {
+      const mockTeamDetailsScreen = document.createElement('div');
+      mockTeamDetailsScreen.id = 'teamDetailsScreen';
+      mockTeamDetailsScreen.classList.add('active');
+      global.document.getElementById.mockReturnValue(mockTeamDetailsScreen);
+
+      mockApp.currentInterventionTeamId = '001';
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', tokenId: 'token1' },
+      ];
+
+      const scoreData = {
+        teamId: '001',
+        currentScore: 50000,
+        baseScore: 30000,
+        bonusPoints: 20000,
+        tokensScanned: 5,
+        completedGroups: 2,
+      };
+
+      dataManager.updateTeamScoreFromBackend(scoreData);
+
+      expect(mockUIManager.renderTeamDetails).toHaveBeenCalledWith('001', expect.any(Array));
+    });
+  });
+
+  describe('getTeamScores', () => {
+    it('should return backend scores when connected and available', () => {
+      dataManager.backendScores.set('001', {
+        currentScore: 50000,
+        baseScore: 30000,
+        bonusPoints: 20000,
+        tokensScanned: 5,
+        completedGroups: 2,
+      });
+
+      dataManager.backendScores.set('002', {
+        currentScore: 30000,
+        baseScore: 25000,
+        bonusPoints: 5000,
+        tokensScanned: 3,
+        completedGroups: 1,
+      });
+
+      const result = dataManager.getTeamScores();
+
+      expect(result).toHaveLength(2);
+      expect(result[0].teamId).toBe('001'); // Higher score first
+      expect(result[0].score).toBe(50000);
+      expect(result[0].isFromBackend).toBe(true);
+      expect(result[1].teamId).toBe('002');
+      expect(result[1].score).toBe(30000);
+    });
+
+    it('should fall back to local calculation when disconnected', () => {
+      mockNetworkedSession.state = 'disconnected';
+
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Personal', valueRating: 5, isUnknown: false },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({});
+
+      const result = dataManager.getTeamScores();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].teamId).toBe('001');
+      expect(result[0].isFromBackend).toBeUndefined(); // Local calculation
+    });
+
+    it('should fall back to local calculation when no backend scores', () => {
+      dataManager.backendScores.clear();
+
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Personal', valueRating: 5, isUnknown: false },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({});
+
+      const result = dataManager.getTeamScores();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].isFromBackend).toBeUndefined();
+    });
+  });
+
+  describe('calculateLocalTeamScores', () => {
+    it('should calculate scores for all teams', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Personal', valueRating: 5, isUnknown: false },
+        { teamId: '002', mode: 'blackmarket', memoryType: 'Technical', valueRating: 4, isUnknown: false },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({});
+
+      const result = dataManager.calculateLocalTeamScores();
+
+      expect(result).toHaveLength(2);
+      expect(result[0].score).toBe(25000); // 4-star Technical 5x (sorted by score)
+      expect(result[1].score).toBe(10000); // 5-star Personal 1x
+    });
+
+    it('should include transaction arrays', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Personal', valueRating: 5, isUnknown: false },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({});
+
+      const result = dataManager.calculateLocalTeamScores();
+
+      expect(result[0].transactions).toHaveLength(1);
+    });
+  });
+
+  describe('getEnhancedTeamTransactions', () => {
+    it('should organize transactions by completion status', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Technical', valueRating: 5, isUnknown: false, group: 'Complete Group (x5)', rfid: 'token1' },
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Technical', valueRating: 4, isUnknown: false, group: 'Complete Group (x5)', rfid: 'token2' },
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Personal', valueRating: 3, isUnknown: false, group: 'Incomplete (x3)', rfid: 'token3' },
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Personal', valueRating: 2, isUnknown: false, group: 'No Group', rfid: 'token4' },
+        { teamId: '001', mode: 'blackmarket', valueRating: 0, isUnknown: true, group: 'Unknown', rfid: 'token5' },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({
+        'complete group': {
+          displayName: 'Complete Group',
+          multiplier: 5,
+          tokens: new Set(['token1', 'token2']),
+        },
+        'incomplete': {
+          displayName: 'Incomplete',
+          multiplier: 3,
+          tokens: new Set(['token3', 'token6']), // Missing token6
+        },
+      });
+
+      const result = dataManager.getEnhancedTeamTransactions('001');
+
+      expect(result.hasCompletedGroups).toBe(true);
+      expect(result.completedGroups).toHaveLength(1);
+      expect(result.completedGroups[0].displayName).toBe('Complete Group');
+
+      expect(result.hasIncompleteGroups).toBe(true);
+      expect(result.incompleteGroups).toHaveLength(1);
+      expect(result.incompleteGroups[0].displayName).toBe('Incomplete');
+      expect(result.incompleteGroups[0].progress).toBe('1/2');
+
+      expect(result.hasUngroupedTokens).toBe(true);
+      expect(result.ungroupedTokens).toHaveLength(1);
+
+      expect(result.hasUnknownTokens).toBe(true);
+      expect(result.unknownTokens).toHaveLength(1);
+    });
+
+    it('should calculate bonus values for completed groups', () => {
+      dataManager.transactions = [
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Technical', valueRating: 5, isUnknown: false, group: 'Server Logs (x5)', rfid: 'token1' },
+        { teamId: '001', mode: 'blackmarket', memoryType: 'Technical', valueRating: 4, isUnknown: false, group: 'Server Logs (x5)', rfid: 'token2' },
+      ];
+
+      mockTokenManager.getGroupInventory.mockReturnValue({
+        'server logs': {
+          displayName: 'Server Logs',
+          multiplier: 5,
+          tokens: new Set(['token1', 'token2']),
+        },
+      });
+
+      const result = dataManager.getEnhancedTeamTransactions('001');
+
+      expect(result.completedGroups[0].totalBaseValue).toBe(75000); // 50000 + 25000
+      expect(result.completedGroups[0].bonusValue).toBe(300000); // 4x each token's base
+    });
+  });
+
+  describe('updateGameState', () => {
+    it('should update session ID when changed', () => {
+      const state = {
+        sessionId: 'new-session-123',
+      };
+
+      dataManager.updateGameState(state);
+
+      expect(dataManager.currentSessionId).toBe('new-session-123');
+      expect(mockDebug.log).toHaveBeenCalledWith('Session updated: new-session-123');
+    });
+
+    it('should add new transactions from state', () => {
+      const state = {
+        transactions: [
+          {
+            id: 'backend-1',
+            tokenId: 'token1',
+            teamId: '001',
+            timestamp: '2025-11-11T10:00:00Z',
+            memoryType: 'Personal',
+            group: 'Test',
+            rating: 3,
+          },
+        ],
+      };
+
+      dataManager.updateGameState(state);
+
+      expect(dataManager.transactions).toHaveLength(1);
+      expect(dataManager.transactions[0].rfid).toBe('token1');
+    });
+
+    it('should not add duplicate transactions', () => {
+      dataManager.transactions = [
+        { id: 'existing-1', rfid: 'token1', timestamp: '2025-11-11T10:00:00Z' },
+      ];
+
+      const state = {
+        transactions: [
+          {
+            id: 'existing-1',
+            tokenId: 'token1',
+            teamId: '001',
+            timestamp: '2025-11-11T10:00:00Z',
+          },
+        ],
+      };
+
+      dataManager.updateGameState(state);
+
+      expect(dataManager.transactions).toHaveLength(1);
+    });
+
+    it('should trigger UI updates after adding transactions', () => {
+      const state = {
+        transactions: [
+          {
+            id: 'backend-1',
+            tokenId: 'token1',
+            teamId: '001',
+            timestamp: '2025-11-11T10:00:00Z',
+            memoryType: 'Personal',
+            group: 'Test',
+            rating: 3,
+          },
+        ],
+      };
+
+      dataManager.updateGameState(state);
+
+      expect(mockUIManager.updateHistoryBadge).toHaveBeenCalled();
+      expect(mockUIManager.updateSessionStats).toHaveBeenCalled();
+    });
+  });
+
+  describe('exportData', () => {
+    beforeEach(() => {
+      // Mock DOM APIs
+      global.URL.createObjectURL = jest.fn(() => 'blob:mock-url');
+      global.URL.revokeObjectURL = jest.fn();
+      global.Blob = jest.fn(function(content, options) {
+        this.content = content;
+        this.options = options;
+      });
+
+      // Mock alert
+      global.alert = jest.fn();
+    });
+
+    it('should alert when no transactions to export', () => {
+      dataManager.exportData('json');
+
+      expect(global.alert).toHaveBeenCalledWith('No transactions to export');
+    });
+
+    it('should export JSON format', () => {
+      dataManager.transactions = [
+        { id: '1', tokenId: 'token1', teamId: '001' },
+      ];
+
+      // Mock DOM createElement and appendChild
+      const mockLink = {
+        href: '',
+        download: '',
+        click: jest.fn(),
+      };
+      global.document.createElement = jest.fn(() => mockLink);
+      global.document.body.appendChild = jest.fn();
+      global.document.body.removeChild = jest.fn();
+
+      dataManager.exportData('json');
+
+      expect(global.Blob).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.stringContaining('token1')]),
+        { type: 'application/json' }
+      );
+      expect(mockLink.download).toMatch(/transactions_\d+\.json/);
+      expect(mockLink.click).toHaveBeenCalled();
+    });
+
+    it('should export CSV format', () => {
+      dataManager.transactions = [
+        {
+          timestamp: '2025-11-11T10:00:00Z',
+          deviceId: 'scanner-1',
+          mode: 'blackmarket',
+          teamId: '001',
+          rfid: 'token1',
+          memoryType: 'Personal',
+          group: 'Test Group',
+          valueRating: 5,
+        },
+      ];
+
+      const mockLink = {
+        href: '',
+        download: '',
+        click: jest.fn(),
+      };
+      global.document.createElement = jest.fn(() => mockLink);
+      global.document.body.appendChild = jest.fn();
+      global.document.body.removeChild = jest.fn();
+
+      dataManager.exportData('csv');
+
+      expect(global.Blob).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.stringContaining('timestamp')]),
+        { type: 'text/csv' }
+      );
+      expect(mockLink.download).toMatch(/transactions_\d+\.csv/);
+    });
+  });
+});

@@ -500,6 +500,316 @@ export class DataManager extends EventTarget {
 
     return transactions;
   }
+
+  /**
+   * Update game state from orchestrator
+   */
+  updateGameState(state) {
+    if (state && typeof state === 'object') {
+      // Update any relevant local state
+      if (state.sessionId && this.currentSessionId !== state.sessionId) {
+        this.currentSessionId = state.sessionId;
+        this.debug?.log(`Session updated: ${state.sessionId}`);
+      }
+
+      if (state.gameMode && state.gameMode !== this.gameMode) {
+        this.gameMode = state.gameMode;
+        this.debug?.log(`Game mode updated: ${state.gameMode}`);
+      }
+
+      // If state includes new transactions, add them
+      if (state.transactions && Array.isArray(state.transactions)) {
+        state.transactions.forEach(transaction => {
+          // Only add if we don't already have this transaction
+          const exists = this.transactions.find(t =>
+            t.id === transaction.id ||
+            (t.rfid === transaction.tokenId && t.timestamp === transaction.timestamp)
+          );
+          if (!exists) {
+            const localTransaction = {
+              id: transaction.id || Date.now().toString(),
+              rfid: transaction.tokenId,
+              teamId: transaction.teamId || 'Unknown',
+              timestamp: transaction.timestamp || new Date().toISOString(),
+              memoryType: transaction.memoryType || 'Unknown',
+              group: transaction.group || 'Unknown',
+              rating: transaction.rating || 1,
+              mode: this.settings?.mode || 'detective'
+            };
+            this.transactions.push(localTransaction);
+          }
+        });
+        this.saveTransactions();
+        this.uiManager?.updateHistoryBadge();
+        this.uiManager?.updateSessionStats();
+      }
+    }
+  }
+
+  /**
+   * Update team score from backend broadcast
+   * @param {Object} scoreData - Score data from backend
+   */
+  updateTeamScoreFromBackend(scoreData) {
+    // Only update if we're connected to orchestrator
+    if (!this.networkedSession || this.networkedSession.state !== 'connected') {
+      return;
+    }
+
+    // Store backend scores for display
+    if (!this.backendScores) {
+      this.backendScores = new Map();
+    }
+
+    this.backendScores.set(scoreData.teamId, {
+      currentScore: scoreData.currentScore,
+      baseScore: scoreData.baseScore,
+      bonusPoints: scoreData.bonusPoints,
+      tokensScanned: scoreData.tokensScanned,
+      completedGroups: scoreData.completedGroups,
+      adminAdjustments: scoreData.adminAdjustments || [],
+      lastUpdate: scoreData.lastUpdate
+    });
+
+    // Trigger UI update if viewing scanner scoreboard
+    if (document.getElementById('scoreboardContainer')) {
+      this.uiManager?.renderScoreboard();
+    }
+
+    // Also update admin panel if it's active
+    if (this.app?.viewController && this.app.viewController.currentView === 'admin') {
+      this.app.updateAdminPanel();
+    }
+
+    // Refresh team details screen if currently viewing this team
+    // (matches pattern from transaction:deleted in orchestratorClient.js:284)
+    const teamDetailsScreen = document.getElementById('teamDetailsScreen');
+    if (teamDetailsScreen?.classList.contains('active') &&
+        this.app?.currentInterventionTeamId === scoreData.teamId) {
+      const transactions = this.getTeamTransactions(scoreData.teamId);
+      this.uiManager?.renderTeamDetails(scoreData.teamId, transactions);
+      this.debug?.log(`Team details refreshed for team ${scoreData.teamId} after score update`);
+    }
+
+    this.debug?.log(`Score updated from backend for team ${scoreData.teamId}: $${scoreData.currentScore}`);
+  }
+
+  /**
+   * Get all team scores for scoreboard
+   * @returns {Array} Sorted team scores
+   */
+  getTeamScores() {
+    // If connected and have backend scores, use those as source of truth
+    if (this.networkedSession?.state === 'connected' && this.backendScores?.size > 0) {
+      const scores = Array.from(this.backendScores.entries()).map(([teamId, score]) => ({
+        teamId,
+        score: score.currentScore,
+        baseScore: score.baseScore,
+        bonusScore: score.bonusPoints,
+        tokenCount: score.tokensScanned,
+        completedGroups: score.completedGroups,
+        isFromBackend: true  // Flag to show this is authoritative
+      }));
+
+      // Sort by score
+      scores.sort((a, b) => b.score - a.score);
+      return scores;
+    }
+
+    // Fallback to local calculation when disconnected
+    return this.calculateLocalTeamScores();
+  }
+
+  /**
+   * Calculate team scores locally (fallback when disconnected)
+   * @returns {Array} Sorted team scores
+   */
+  calculateLocalTeamScores() {
+    const teamGroups = {};
+
+    const blackMarketTransactions = this.transactions.filter(t =>
+      t.mode === 'blackmarket'
+    );
+
+    blackMarketTransactions.forEach(t => {
+      if (!teamGroups[t.teamId]) {
+        teamGroups[t.teamId] = [];
+      }
+      teamGroups[t.teamId].push(t);
+    });
+
+    const teamScores = Object.keys(teamGroups).map(teamId => {
+      const transactions = teamGroups[teamId];
+      const scoreData = this.calculateTeamScoreWithBonuses(teamId);
+
+      return {
+        teamId: teamId,
+        score: scoreData.totalScore,
+        baseScore: scoreData.baseScore,
+        bonusScore: scoreData.bonusScore,
+        tokenCount: transactions.length,
+        completedGroups: scoreData.completedGroups,
+        transactions: transactions
+      };
+    });
+
+    teamScores.sort((a, b) => b.score - a.score);
+    return teamScores;
+  }
+
+  /**
+   * Get enhanced team transactions with grouping
+   * @param {string} teamId - Team ID
+   * @returns {Object} Grouped transaction data
+   */
+  getEnhancedTeamTransactions(teamId) {
+    const transactions = this.getTeamTransactions(teamId);
+    const groupInventory = this.tokenManager?.getGroupInventory() || {};
+    const completedGroups = this.getTeamCompletedGroups(teamId);
+    const completedGroupNames = new Set(completedGroups.map(g => g.normalizedName));
+
+    // Calculate bonus values
+    const groupBonusData = {};
+    completedGroups.forEach(group => {
+      groupBonusData[group.normalizedName] = {
+        displayName: group.name,
+        multiplier: group.multiplier,
+        tokens: [],
+        totalBaseValue: 0,
+        bonusValue: 0
+      };
+    });
+
+    // Organize transactions
+    const completedGroupTokens = {};
+    const incompleteGroupTokens = {};
+    const ungroupedTokens = [];
+    const unknownTokens = [];
+
+    transactions.forEach(t => {
+      if (t.isUnknown) {
+        unknownTokens.push(t);
+        return;
+      }
+
+      const groupInfo = this.parseGroupInfo(t.group);
+      const normalizedGroupName = this.normalizeGroupName(groupInfo.name);
+      const groupData = groupInventory[normalizedGroupName];
+
+      if (!groupData || groupData.tokens.size <= 1) {
+        ungroupedTokens.push(t);
+        return;
+      }
+
+      const tokenValue = this.calculateTokenValue(t);
+
+      if (completedGroupNames.has(normalizedGroupName)) {
+        // Completed group
+        if (!completedGroupTokens[normalizedGroupName]) {
+          completedGroupTokens[normalizedGroupName] = [];
+        }
+        completedGroupTokens[normalizedGroupName].push(t);
+
+        if (groupBonusData[normalizedGroupName]) {
+          groupBonusData[normalizedGroupName].tokens.push(t);
+          groupBonusData[normalizedGroupName].totalBaseValue += tokenValue;
+          groupBonusData[normalizedGroupName].bonusValue += tokenValue * (groupInfo.multiplier - 1);
+        }
+      } else {
+        // Incomplete group
+        if (!incompleteGroupTokens[normalizedGroupName]) {
+          incompleteGroupTokens[normalizedGroupName] = {
+            displayName: groupData.displayName,
+            multiplier: groupData.multiplier,
+            tokens: [],
+            totalTokens: groupData.tokens.size,
+            collectedTokens: 0
+          };
+        }
+        incompleteGroupTokens[normalizedGroupName].tokens.push(t);
+      }
+    });
+
+    // Calculate progress
+    Object.keys(incompleteGroupTokens).forEach(normalizedName => {
+      const group = incompleteGroupTokens[normalizedName];
+      group.collectedTokens = group.tokens.length;
+      group.progress = `${group.collectedTokens}/${group.totalTokens}`;
+      group.percentage = Math.round((group.collectedTokens / group.totalTokens) * 100);
+    });
+
+    // Convert to arrays and sort
+    const completedGroupsArray = Object.entries(completedGroupTokens).map(([normalizedName, tokens]) => ({
+      ...groupBonusData[normalizedName],
+      normalizedName,
+      tokens
+    })).sort((a, b) => b.bonusValue - a.bonusValue);
+
+    const incompleteGroupsArray = Object.values(incompleteGroupTokens)
+      .sort((a, b) => b.percentage - a.percentage);
+
+    return {
+      completedGroups: completedGroupsArray,
+      incompleteGroups: incompleteGroupsArray,
+      ungroupedTokens,
+      unknownTokens,
+      hasCompletedGroups: completedGroupsArray.length > 0,
+      hasIncompleteGroups: incompleteGroupsArray.length > 0,
+      hasUngroupedTokens: ungroupedTokens.length > 0,
+      hasUnknownTokens: unknownTokens.length > 0
+    };
+  }
+
+  /**
+   * Export data in specified format
+   * @param {string} format - 'json' or 'csv'
+   */
+  exportData(format) {
+    if (this.transactions.length === 0) {
+      alert('No transactions to export');
+      return;
+    }
+
+    let data, filename, type;
+
+    if (format === 'json') {
+      data = JSON.stringify(this.transactions, null, 2);
+      filename = `transactions_${Date.now()}.json`;
+      type = 'application/json';
+    } else {
+      // CSV format
+      const headers = ['timestamp', 'deviceId', 'mode', 'teamId', 'rfid', 'memoryType', 'group', 'valueRating'];
+      const rows = [headers.join(',')];
+
+      this.transactions.forEach(t => {
+        const row = [
+          t.timestamp,
+          t.deviceId,
+          t.mode,
+          t.teamId,
+          t.rfid,
+          `"${t.memoryType}"`,
+          `"${t.group}"`,
+          t.valueRating || 0
+        ];
+        rows.push(row.join(','));
+      });
+
+      data = rows.join('\n');
+      filename = `transactions_${Date.now()}.csv`;
+      type = 'text/csv';
+    }
+
+    const blob = new Blob([data], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 }
 
 // Create singleton instance for browser
