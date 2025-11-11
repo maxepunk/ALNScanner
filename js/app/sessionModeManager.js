@@ -48,17 +48,13 @@
                     console.log('Standalone data cleared - orchestrator will be source of truth');
                 }
 
-                // Initialize ConnectionManager (or use existing one from determineInitialScreen)
-                if (!window.connectionManager) {
-                    window.connectionManager = new ConnectionManager();
-                }
-                window.connectionManager.migrateLocalStorage();
+                // Get configuration from localStorage (set by connection wizard)
+                const orchestratorUrl = localStorage.getItem('aln_orchestrator_url') || 'https://localhost:3000';
+                const deviceId = window.Settings?.deviceId || 'GM_STATION_UNKNOWN';
+                const token = localStorage.getItem('aln_auth_token');
 
-                // NetworkedQueueManager will be created after authentication succeeds
-                // and OrchestratorClient is instantiated with valid connection
-
-                // Check if we have a valid token - if yes, auto-connect
-                if (window.connectionManager.isTokenValid()) {
+                // Check if we have a valid token - if yes, create session and auto-connect
+                if (token && this._isTokenValid(token)) {
                     console.log('Valid token found - attempting auto-connect...');
 
                     // Show reconnecting toast
@@ -66,14 +62,90 @@
                         window.UIManager.showToast('Reconnecting to orchestrator...', 'info', 3000);
                     }
 
+                    // Create NetworkedSession
+                    window.networkedSession = new NetworkedSession({
+                        url: orchestratorUrl,
+                        deviceId: deviceId,
+                        stationName: window.Settings?.stationName || 'GM Station',
+                        token: token
+                    });
+
+                    // Wire session events
+                    this._wireSessionEvents(window.networkedSession);
+
                     // Attempt connection
-                    await window.connectionManager.connect();
-                    console.log('Auto-connect successful');
-                    // Connection successful - return success
-                    return true;
+                    try {
+                        await window.networkedSession.initialize();
+                        console.log('Auto-connect successful');
+
+                        // Expose services for backward compatibility
+                        window.connectionManager = window.networkedSession.getService('connectionManager');
+                        window.orchestratorClient = window.networkedSession.getService('client');
+                        window.queueManager = window.networkedSession.getService('queueManager');
+                        window.adminController = window.networkedSession.getService('adminController');
+
+                        // Connection successful - return success
+                        return true;
+                    } catch (error) {
+                        console.error('Auto-connect failed:', error);
+                        // Clean up failed session
+                        if (window.networkedSession) {
+                            await window.networkedSession.destroy();
+                            window.networkedSession = null;
+                        }
+                        throw error;
+                    }
                 } else {
                     // No valid token - caller should show connection wizard
                     console.log('No valid token - initialization incomplete');
+                    return false;
+                }
+            }
+
+            /**
+             * Wire NetworkedSession events to UI
+             * @private
+             */
+            _wireSessionEvents(session) {
+                session.addEventListener('session:ready', () => {
+                    console.log('NetworkedSession ready');
+                });
+
+                session.addEventListener('session:error', (event) => {
+                    console.error('NetworkedSession error:', event.detail.error);
+                    if (window.UIManager) {
+                        window.UIManager.showError('Connection error: ' + event.detail.error.message);
+                    }
+                });
+
+                session.addEventListener('auth:required', () => {
+                    console.warn('Authentication required');
+                    // Clear invalid token and show connection wizard
+                    localStorage.removeItem('aln_auth_token');
+                    if (typeof showConnectionWizard === 'function') {
+                        showConnectionWizard();
+                    }
+                });
+            }
+
+            /**
+             * Check if JWT token is valid (not expired, with 1-minute buffer)
+             * @private
+             */
+            _isTokenValid(token) {
+                try {
+                    const parts = token.split('.');
+                    if (parts.length !== 3) return false;
+
+                    const payload = JSON.parse(atob(parts[1]));
+                    const expiry = payload.exp;
+                    if (!expiry) return false;
+
+                    const now = Math.floor(Date.now() / 1000);
+                    const buffer = 60; // 1-minute safety buffer
+                    return (expiry - buffer) > now;
+                } catch (error) {
+                    console.error('Token validation error:', error);
                     return false;
                 }
             }
@@ -123,9 +195,8 @@
                     return true;
                 }
 
-                // Networked mode - verify WebSocket connection exists and is active
-                // IMPORTANT: Property is 'isConnected' (not 'connected') - see OrchestratorClient line 5473
-                return window.connectionManager?.client?.isConnected === true;
+                // Networked mode - verify session is connected
+                return window.networkedSession?.state === 'connected';
             }
         }
 

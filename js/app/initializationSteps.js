@@ -182,10 +182,9 @@ function determineInitialScreen(sessionModeManager) {
 
     // Case 3: Networked mode - check if we have valid token for auto-connect
     if (savedMode === 'networked') {
-        // Create temporary ConnectionManager to check token
-        const tempConnMgr = new ConnectionManager();
+        const token = localStorage.getItem('aln_auth_token');
 
-        if (tempConnMgr.isTokenValid()) {
+        if (token && isTokenValid(token)) {
             // Valid token - try auto-connect
             return { screen: 'loading', action: 'autoConnect', savedMode };
         } else {
@@ -196,6 +195,34 @@ function determineInitialScreen(sessionModeManager) {
 
     // Fallback
     return { screen: 'gameModeScreen', action: null, savedMode: null };
+}
+
+/**
+ * Check if JWT token is valid (not expired, with 1-minute buffer)
+ * @param {string} token - JWT token string
+ * @returns {boolean} True if valid
+ * @private
+ */
+function isTokenValid(token) {
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return false;
+
+        // Use atob for browser, Buffer for Node.js
+        const decode = typeof atob !== 'undefined'
+            ? (str) => atob(str)
+            : (str) => Buffer.from(str, 'base64').toString();
+
+        const payload = JSON.parse(decode(parts[1]));
+        const expiry = payload.exp;
+        if (!expiry) return false;
+
+        const now = Math.floor(Date.now() / 1000);
+        const buffer = 60; // 1-minute safety buffer
+        return (expiry - buffer) > now;
+    } catch (error) {
+        return false;
+    }
 }
 
 /**
