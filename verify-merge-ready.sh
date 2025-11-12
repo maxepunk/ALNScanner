@@ -103,7 +103,7 @@ else
   ((fail_count++))
 fi
 
-if ls dist/assets/index-*.js 1> /dev/null 2>&1; then
+if ls dist/assets/main-*.js 1> /dev/null 2>&1 || ls dist/assets/index-*.js 1> /dev/null 2>&1; then
   check "JavaScript bundle present"
 else
   echo -e "${RED}✗${NC} JavaScript bundle missing"
