@@ -1953,55 +1953,11 @@
     <!-- Debug Panel (Legacy, replaced by debug-view) -->
     <!-- Debug toggle moved to tabs -->
 
-    <!-- Phase 4.1: Extracted Modules -->
-    <script src="js/utils/config.js"></script>
-    <script src="js/utils/debug.js"></script>
-    <script src="js/utils/nfcHandler.js"></script>
-    <script src="js/utils/adminModule.js"></script>
-
-    <!-- Phase 4.2: Core Modules -->
-    <script src="js/core/tokenManager.js"></script>
-    <script src="js/core/dataManager.js"></script>
-    <script src="js/core/standaloneDataManager.js"></script>
-
-    <!-- Phase 4.3: UI Modules -->
-    <script src="js/ui/uiManager.js"></script>
-    <script src="js/ui/settings.js"></script>
-
-    <!-- Phase 4.4: Network Modules - Refactored Architecture (Nov 2025) -->
-    <script src="js/network/OrchestratorClient.js"></script>
-    <script src="js/network/ConnectionManager.js"></script>
-    <script src="js/network/NetworkedSession.js"></script>
-    <script src="js/network/networkedQueueManager.js"></script>
-
-    <!-- Phase 4.5: App Modules -->
-    <script src="js/app/AdminController.js"></script>
-    <script src="js/app/sessionModeManager.js"></script>
-    <script src="js/app/initializationSteps.js"></script>
-    <script src="js/app/app.js"></script>
-
-    <script>
-        'use strict';
-        
-
-
-        // ============================================
-        // INITIALIZATION
-        // ============================================
-        window.addEventListener('DOMContentLoaded', async () => {
-            // Initialize core app (always works offline)
-            try {
-                await App.init();
-            } catch (error) {
-                Debug.log(`Initialization error: ${error.message}`, true);
-                console.error('App initialization failed:', error);
-                // Don't block with alert - app can still work offline
-            }
-
-            // Network mode initialization now handled by SessionModeManager
-            // (creates NetworkedSession when user selects networked mode)
-        });
-    </script>
+    <!-- ============================================
+         ES6 MODULE ENTRY POINT
+         Vite handles all module loading
+         ============================================ -->
+    <script type="module" src="/src/main.js"></script>
 
     <!-- ============================================
          ORCHESTRATOR WEBSOCKET INTEGRATION
@@ -2020,6 +1976,98 @@
          * Ensures reliable transaction submission with network resilience
          */
 
+        /**
+         * Scan for game servers via HTTP brute-force
+         * Web browsers cannot do UDP, so we scan common IPs/ports using /health endpoint
+         * Based on player scanner discovery pattern from aln-memory-scanner/config.html
+         */
+        async function scanForServers() {
+            const statusDiv = document.getElementById('discoveryStatus');
+            const serversDiv = document.getElementById('discoveredServers');
+            const btn = document.getElementById('scanServersBtn');
+
+            btn.disabled = true;
+            btn.textContent = '🔍 Scanning...';
+            statusDiv.textContent = 'Looking for orchestrators on the network...';
+            statusDiv.style.color = '#2196F3';
+            serversDiv.innerHTML = '';
+
+            try {
+                // Detect current subnet dynamically
+                const currentHost = window.location.hostname;
+                let subnet = '192.168.1'; // Default fallback
+
+                // Try to detect subnet from current host
+                if (currentHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+                    const parts = currentHost.split('.');
+                    if (parts.length >= 3) {
+                        subnet = parts.slice(0, 3).join('.');
+                    }
+                }
+
+                const commonPorts = [3000, 8080];
+                // Use same protocol as current page to avoid mixed content blocking
+                const protocol = window.location.protocol.replace(':', ''); // 'https' or 'http'
+                const promises = [];
+
+                // Scan detected subnet (254 IPs × 2 ports = 508 requests max)
+                // Limited to 20 concurrent to avoid overwhelming network
+                for (let i = 1; i <= 254; i++) {
+                    for (const port of commonPorts) {
+                        const url = `${protocol}://${subnet}.${i}:${port}`;
+                        promises.push(
+                            fetch(`${url}/health`, {
+                                method: 'GET',
+                                mode: 'cors',
+                                signal: AbortSignal.timeout(500)
+                            })
+                            .then(response => response.ok ? url : null)
+                            .catch(() => null)
+                        );
+                    }
+
+                    // Limit concurrent requests to avoid overwhelming the network
+                    if (promises.length >= 20) {
+                        await Promise.race(promises);
+                    }
+                }
+
+                // Also try localhost
+                promises.push(
+                    fetch(`${protocol}://localhost:3000/health`, {
+                        signal: AbortSignal.timeout(1000)
+                    })
+                    .then(response => response.ok ? `${protocol}://localhost:3000` : null)
+                    .catch(() => null)
+                );
+
+                // Try current origin if served from orchestrator
+                if (window.location.pathname.startsWith('/gm-scanner/')) {
+                    promises.push(Promise.resolve(window.location.origin));
+                }
+
+                const results = await Promise.all(promises);
+                const foundServers = [...new Set(results.filter(url => url !== null))];
+
+                if (foundServers.length > 0) {
+                    statusDiv.textContent = `✅ Found ${foundServers.length} orchestrator(s)`;
+                    statusDiv.style.color = '#4CAF50';
+
+                    // Use existing displayDiscoveredServers pattern
+                    displayDiscoveredServers(foundServers.map(url => ({ url })));
+                } else {
+                    statusDiv.textContent = '⚠️ No orchestrators found. Please enter URL manually below.';
+                    statusDiv.style.color = '#ff9800';
+                }
+            } catch (error) {
+                statusDiv.textContent = '❌ Discovery failed. Please enter URL manually below.';
+                statusDiv.style.color = '#f44336';
+                console.error('Server discovery error:', error);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔍 Scan for Game Servers';
+            }
+        }
 
         // Display discovered servers
         function displayDiscoveredServers(servers) {
@@ -2189,13 +2237,14 @@
             showConnectionWizard();
 
             // Pre-fill the server URL if we already have one
-            if (window.connectionManager && window.connectionManager.url) {
-                document.getElementById('serverUrl').value = window.connectionManager.url;
+            const connectionManager = window.App?.networkedSession?.services?.connectionManager;
+            if (connectionManager && connectionManager.url) {
+                document.getElementById('serverUrl').value = connectionManager.url;
             }
 
             // Pre-fill station name if we have one
-            if (window.connectionManager && window.connectionManager.stationName) {
-                document.getElementById('stationName').value = window.connectionManager.stationName;
+            if (connectionManager && connectionManager.stationName) {
+                document.getElementById('stationName').value = connectionManager.stationName;
             }
         }
 
@@ -2227,9 +2276,9 @@
     <script>
         // Clean disconnect on page unload (mirrors P0.4 backend cleanup)
         window.addEventListener('beforeunload', () => {
-            if (window.connectionManager?.orchestratorClient?.socket) {
+            if (window.networkedSession?.services?.client) {
                 console.log('Page unloading - disconnecting socket');
-                window.connectionManager.orchestratorClient.disconnect();
+                window.networkedSession.services.client.disconnect();
             }
         });
     </script>
@@ -2247,7 +2296,8 @@
             if (!indicator || !countSpan) return;
 
             // Get queue count from NetworkedQueueManager
-            const queueStatus = window.queueManager?.getStatus();
+            const queueManager = window.App?.networkedSession?.services?.queueManager;
+            const queueStatus = queueManager?.getStatus();
             const queueCount = queueStatus ? queueStatus.queuedCount : 0;
 
             // Update count display
@@ -2266,8 +2316,9 @@
             updateQueueIndicator(); // Initial update
 
             // Register event listener for queue changes (no polling)
-            if (window.queueManager) {
-                window.queueManager.addEventListener('queue:changed', (event) => {
+            const queueManager = window.App?.networkedSession?.services?.queueManager;
+            if (queueManager) {
+                queueManager.addEventListener('queue:changed', (event) => {
                     console.log('Queue changed:', event.detail);
                     updateQueueIndicator();
                 });

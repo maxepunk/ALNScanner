@@ -12,12 +12,14 @@
  * - Expose minimal window globals for HTML onclick handlers (temporary until Phase 9)
  */
 
-// Import core dependencies (singleton instances)
+// Import core dependencies
+// Note: Debug, Settings, TokenManager, NFCHandler, CONFIG are singletons (pre-created instances)
+// Note: DataManager, UIManager are classes (instances created below with DI)
 import Debug from './utils/debug.js';
-import UIManager from './ui/uiManager.js';
+import { UIManager as UIManagerClass } from './ui/uiManager.js';
 import Settings from './ui/settings.js';
 import TokenManager from './core/tokenManager.js';
-import DataManager from './core/dataManager.js';
+import { DataManager as DataManagerClass } from './core/dataManager.js';
 import NFCHandler from './utils/nfcHandler.js';
 import CONFIG from './utils/config.js';
 import InitializationSteps from './app/initializationSteps.js';
@@ -30,8 +32,65 @@ import { ConnectionWizard, QueueStatusManager, setupCleanupHandlers } from './ui
 import { bindDOMEvents } from './utils/domEventBindings.js';
 
 /**
+ * Create service instances with proper dependency injection
+ *
+ * Architecture: Event-Driven Coordination (no direct cross-dependencies)
+ * - DataManager emits events (transaction:added, data:cleared, etc.)
+ * - UIManager listens to DataManager events
+ * - Event wiring happens in main.js (centralized)
+ */
+
+// Create DataManager first (no UI dependencies)
+const DataManager = new DataManagerClass({
+  tokenManager: TokenManager,
+  settings: Settings,
+  debug: Debug
+  // app, sessionModeManager, networkedSession set later by App
+});
+
+// Create UIManager with DataManager dependency
+const UIManager = new UIManagerClass({
+  settings: Settings,
+  dataManager: DataManager
+  // sessionModeManager, app set later by App
+});
+
+// Wire event-driven communication: DataManager → UIManager
+DataManager.addEventListener('transaction:added', () => {
+  UIManager.updateHistoryBadge();
+  UIManager.updateSessionStats();
+});
+
+DataManager.addEventListener('data:cleared', () => {
+  UIManager.updateHistoryBadge();
+});
+
+DataManager.addEventListener('game-state:updated', () => {
+  UIManager.updateHistoryBadge();
+  UIManager.updateSessionStats();
+});
+
+DataManager.addEventListener('team-score:updated', (event) => {
+  const { teamId, transactions } = event.detail;
+
+  // Update scoreboard if visible
+  if (document.getElementById('scoreboardContainer')) {
+    UIManager.renderScoreboard();
+  }
+
+  // Update team details if viewing this team
+  const teamDetailsScreen = document.getElementById('teamDetailsScreen');
+  const app = window.__app; // Temporary access until App is created
+  if (teamDetailsScreen?.classList.contains('active') &&
+      app?.currentInterventionTeamId === teamId) {
+    UIManager.renderTeamDetails(teamId, transactions);
+    Debug.log(`Team details refreshed for team ${teamId} after score update`);
+  }
+});
+
+/**
  * Create App instance with dependency injection
- * All dependencies are singleton instances imported from modules
+ * Now using created instances (not pre-created singletons)
  */
 const app = new App({
   debug: Debug,
@@ -45,6 +104,9 @@ const app = new App({
   // Note: sessionModeManager and networkedSession are set internally by App
   // during mode selection (see App.selectGameMode)
 });
+
+// Make app available for event handler above (temporary until better solution)
+window.__app = app;
 
 /**
  * Create connection wizard and queue status manager

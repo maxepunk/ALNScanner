@@ -776,16 +776,7 @@ class UIManager {
   }
 }
 
-// Create singleton instance (browser context)
-// Dependencies will be injected from window when available
-const uiManager = typeof window !== 'undefined'
-  ? new UIManager({
-      settings: window.Settings,
-      dataManager: window.DataManager,
-      sessionModeManager: window.sessionModeManager,
-      app: window.App
-    })
-  : new UIManager();
-
-export default uiManager;
+// Export class (not pre-created instance)
+// Instance created in main.js with proper dependency injection
+export default UIManager;
 export { UIManager };

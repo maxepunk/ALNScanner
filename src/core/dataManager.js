@@ -7,14 +7,13 @@
  */
 
 export class DataManager extends EventTarget {
-  constructor({ tokenManager, settings, debug, uiManager, app, sessionModeManager, networkedSession } = {}) {
+  constructor({ tokenManager, settings, debug, app, sessionModeManager, networkedSession } = {}) {
     super();
 
     // Inject dependencies for testability
     this.tokenManager = tokenManager;
     this.settings = settings;
     this.debug = debug;
-    this.uiManager = uiManager;
     this.app = app;
     this.sessionModeManager = sessionModeManager;  // For mode-specific storage keys
     this.networkedSession = networkedSession;      // For connection state checks
@@ -197,7 +196,12 @@ export class DataManager extends EventTarget {
       this.transactions.push(normalizedTx);
       this.currentSession.push(normalizedTx);
       this.saveTransactions();
-      this.uiManager?.updateHistoryBadge();
+
+      // Emit event for UI updates (event-driven architecture)
+      this.dispatchEvent(new CustomEvent('transaction:added', {
+        detail: { transaction: normalizedTx }
+      }));
+
       this.debug?.log('Added transaction to DataManager', {
         tokenId: normalizedTx.tokenId,
         memoryType: normalizedTx.memoryType,
@@ -335,7 +339,10 @@ export class DataManager extends EventTarget {
       this.resetForNewSession();  // Use resetForNewSession for consistency
       localStorage.removeItem('transactions');
       localStorage.removeItem('currentSessionId');
-      this.uiManager?.updateHistoryBadge();
+
+      // Emit event for UI updates (event-driven architecture)
+      this.dispatchEvent(new CustomEvent('data:cleared'));
+
       alert('All data cleared');
       location.reload();
     }
@@ -540,8 +547,11 @@ export class DataManager extends EventTarget {
           }
         });
         this.saveTransactions();
-        this.uiManager?.updateHistoryBadge();
-        this.uiManager?.updateSessionStats();
+
+        // Emit event for UI updates (event-driven architecture)
+        this.dispatchEvent(new CustomEvent('game-state:updated', {
+          detail: { state }
+        }));
       }
     }
   }
@@ -571,24 +581,18 @@ export class DataManager extends EventTarget {
       lastUpdate: scoreData.lastUpdate
     });
 
-    // Trigger UI update if viewing scanner scoreboard
-    if (document.getElementById('scoreboardContainer')) {
-      this.uiManager?.renderScoreboard();
-    }
+    // Emit event for UI updates (event-driven architecture)
+    this.dispatchEvent(new CustomEvent('team-score:updated', {
+      detail: {
+        teamId: scoreData.teamId,
+        scoreData,
+        transactions: this.getTeamTransactions(scoreData.teamId)
+      }
+    }));
 
     // Also update admin panel if it's active
     if (this.app?.viewController && this.app.viewController.currentView === 'admin') {
       this.app.updateAdminPanel();
-    }
-
-    // Refresh team details screen if currently viewing this team
-    // (matches pattern from transaction:deleted in orchestratorClient.js:284)
-    const teamDetailsScreen = document.getElementById('teamDetailsScreen');
-    if (teamDetailsScreen?.classList.contains('active') &&
-        this.app?.currentInterventionTeamId === scoreData.teamId) {
-      const transactions = this.getTeamTransactions(scoreData.teamId);
-      this.uiManager?.renderTeamDetails(scoreData.teamId, transactions);
-      this.debug?.log(`Team details refreshed for team ${scoreData.teamId} after score update`);
     }
 
     this.debug?.log(`Score updated from backend for team ${scoreData.teamId}: $${scoreData.currentScore}`);
@@ -812,16 +816,6 @@ export class DataManager extends EventTarget {
   }
 }
 
-// Create singleton instance for browser
-const instance = new DataManager({
-  tokenManager: typeof window !== 'undefined' ? window.TokenManager : null,
-  settings: typeof window !== 'undefined' ? window.Settings : null,
-  debug: typeof window !== 'undefined' ? window.Debug : null,
-  uiManager: typeof window !== 'undefined' ? window.UIManager : null,
-  app: typeof window !== 'undefined' ? window.App : null,
-  sessionModeManager: typeof window !== 'undefined' ? window.sessionModeManager : null,
-  networkedSession: typeof window !== 'undefined' ? window.networkedSession : null
-});
-
-// Export both class and singleton
-export default instance;
+// Export class (not pre-created instance)
+// Instance created in main.js with proper dependency injection
+export default DataManager;
