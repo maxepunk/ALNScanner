@@ -46,13 +46,13 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     const currentTeam = await scanner.getCurrentTeam();
     expect(currentTeam).toBe('123');
 
-    // Perform manual scan
-    await scanner.manualScan('test_token_001');
+    // Perform manual scan (using real token 'rat002')
+    await scanner.manualScan('rat002');
 
     // Verify result screen appears
     await expect(scanner.resultScreen).toBeVisible();
     const resultStatus = await scanner.getResultStatus();
-    expect(resultStatus.toLowerCase()).toMatch(/accepted|success/);
+    expect(resultStatus.toLowerCase()).toContain('complete');  // "Transaction Complete!"
 
     // Continue scanning
     await scanner.continueScan();
@@ -65,19 +65,19 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     await scanner.enterTeam('456');
     await scanner.confirmTeam();
 
-    // First scan should succeed
-    await scanner.manualScan('duplicate_test_token');
+    // First scan should succeed (using real token 'alr001')
+    await scanner.manualScan('alr001');
     await expect(scanner.resultScreen).toBeVisible();
     const firstResult = await scanner.getResultStatus();
-    expect(firstResult.toLowerCase()).toMatch(/accepted|success/);
+    expect(firstResult.toLowerCase()).toMatch(/complete|success/);
 
     await scanner.continueScan();
 
     // Second scan of SAME token should show duplicate error
-    await scanner.manualScan('duplicate_test_token');
+    await scanner.manualScan('alr001');
     await expect(scanner.resultScreen).toBeVisible();
     const duplicateResult = await scanner.getResultStatus();
-    expect(duplicateResult.toLowerCase()).toContain('duplicate');
+    expect(duplicateResult.toLowerCase()).toContain('already');  // "Token Already Scanned"
   });
 
   test('should maintain team context across multiple scans', async () => {

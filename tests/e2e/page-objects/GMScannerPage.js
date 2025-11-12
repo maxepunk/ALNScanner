@@ -143,15 +143,12 @@ class GMScannerPage {
    * @param {string} tokenId - Token ID to scan
    */
   async manualScan(tokenId) {
-    // Setup dialog handler BEFORE clicking button
-    const dialogPromise = this.page.waitForEvent('dialog');
+    // Setup dialog handler BEFORE clicking button (use once, not waitForEvent)
+    // This prevents the click from hanging when dialog appears
+    this.page.once('dialog', dialog => dialog.accept(tokenId));
 
-    // Click manual entry button
+    // Click manual entry button (dialog will be auto-handled)
     await this.manualEntryBtn.click();
-
-    // Handle prompt dialog
-    const dialog = await dialogPromise;
-    await dialog.accept(tokenId);
 
     // Wait for result screen to appear
     await this.resultScreen.waitFor({ state: 'visible', timeout: 5000 });
