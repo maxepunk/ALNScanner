@@ -60,7 +60,6 @@ describe('DataManager - Batch 1: Core Structure', () => {
       tokenManager: mockTokenManager,
       settings: mockSettings,
       debug: mockDebug,
-      uiManager: mockUIManager,
       app: mockApp,
       sessionModeManager: mockSessionModeManager,
       networkedSession: mockNetworkedSession,
@@ -76,10 +75,10 @@ describe('DataManager - Batch 1: Core Structure', () => {
       expect(dataManager.tokenManager).toBe(mockTokenManager);
       expect(dataManager.settings).toBe(mockSettings);
       expect(dataManager.debug).toBe(mockDebug);
-      expect(dataManager.uiManager).toBe(mockUIManager);
       expect(dataManager.app).toBe(mockApp);
       expect(dataManager.sessionModeManager).toBe(mockSessionModeManager);
       expect(dataManager.networkedSession).toBe(mockNetworkedSession);
+      expect(dataManager).toBeInstanceOf(EventTarget); // DataManager is event-driven
     });
 
     it('should initialize empty state', () => {
@@ -213,6 +212,10 @@ describe('DataManager - Batch 1: Core Structure', () => {
 
   describe('addTransaction', () => {
     it('should add simple transaction', () => {
+      // Listen for event that DataManager emits
+      const eventListener = jest.fn();
+      dataManager.addEventListener('transaction:added', eventListener);
+
       const transaction = {
         tokenId: 'token1',
         teamId: '001',
@@ -227,7 +230,7 @@ describe('DataManager - Batch 1: Core Structure', () => {
       expect(dataManager.currentSession).toHaveLength(1);
       expect(dataManager.transactions[0].tokenId).toBe('token1');
       expect(dataManager.transactions[0].teamId).toBe('001');
-      expect(mockUIManager.updateHistoryBadge).toHaveBeenCalled();
+      expect(eventListener).toHaveBeenCalled(); // DataManager emits events, doesn't call UI directly
     });
 
     it('should normalize backend transaction format', () => {
@@ -825,10 +828,13 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
       expect(dataManager.backendScores.size).toBe(0);
     });
 
-    it('should trigger scoreboard refresh if container present', () => {
-      const mockScoreboardContainer = document.createElement('div');
-      mockScoreboardContainer.id = 'scoreboardContainer';
-      global.document.getElementById.mockReturnValue(mockScoreboardContainer);
+    it('should emit team-score:updated event', () => {
+      // Listen for event that DataManager emits
+      const eventListener = jest.fn();
+      dataManager.addEventListener('team-score:updated', eventListener);
+
+      // Set connection state so update proceeds
+      dataManager.networkedSession.state = 'connected';
 
       const scoreData = {
         teamId: '001',
@@ -841,7 +847,7 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
 
       dataManager.updateTeamScoreFromBackend(scoreData);
 
-      expect(mockUIManager.renderScoreboard).toHaveBeenCalled();
+      expect(eventListener).toHaveBeenCalled(); // DataManager emits events, doesn't call UI directly
     });
 
     it('should update admin panel if in admin view', () => {
@@ -861,11 +867,13 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
       expect(mockApp.updateAdminPanel).toHaveBeenCalled();
     });
 
-    it('should refresh team details if viewing that team', () => {
-      const mockTeamDetailsScreen = document.createElement('div');
-      mockTeamDetailsScreen.id = 'teamDetailsScreen';
-      mockTeamDetailsScreen.classList.add('active');
-      global.document.getElementById.mockReturnValue(mockTeamDetailsScreen);
+    it('should emit event with transaction data', () => {
+      // Listen for event that DataManager emits
+      const eventListener = jest.fn();
+      dataManager.addEventListener('team-score:updated', eventListener);
+
+      // Set connection state so update proceeds
+      dataManager.networkedSession.state = 'connected';
 
       mockApp.currentInterventionTeamId = '001';
       dataManager.transactions = [
@@ -883,7 +891,14 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
 
       dataManager.updateTeamScoreFromBackend(scoreData);
 
-      expect(mockUIManager.renderTeamDetails).toHaveBeenCalledWith('001', expect.any(Array));
+      expect(eventListener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: expect.objectContaining({
+            teamId: '001',
+            transactions: expect.any(Array)
+          })
+        })
+      );
     });
   });
 
@@ -1092,7 +1107,11 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
       expect(dataManager.transactions).toHaveLength(1);
     });
 
-    it('should trigger UI updates after adding transactions', () => {
+    it('should emit game-state:updated event after adding transactions', () => {
+      // Listen for event that DataManager emits
+      const eventListener = jest.fn();
+      dataManager.addEventListener('game-state:updated', eventListener);
+
       const state = {
         transactions: [
           {
@@ -1109,8 +1128,7 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
 
       dataManager.updateGameState(state);
 
-      expect(mockUIManager.updateHistoryBadge).toHaveBeenCalled();
-      expect(mockUIManager.updateSessionStats).toHaveBeenCalled();
+      expect(eventListener).toHaveBeenCalled(); // DataManager emits events, doesn't call UI directly
     });
   });
 

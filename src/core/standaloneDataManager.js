@@ -245,8 +245,9 @@ class StandaloneDataManager extends EventTarget {
     // Get unique groups from team's transactions
     const scannedGroups = {};
     teamTransactions.forEach(tx => {
-      if (tx.tokenGroup) {
-        const txGroupMatch = tx.tokenGroup.match(/^(.+?)\s*\(x\d+\)\s*$/);
+      // FIXED: Check tx.group not tx.tokenGroup (consistent with line 188)
+      if (tx.group) {
+        const txGroupMatch = tx.group.match(/^(.+?)\s*\(x\d+\)\s*$/);
         if (txGroupMatch) {
           const txGroupId = txGroupMatch[1].trim();
           if (!scannedGroups[txGroupId]) {

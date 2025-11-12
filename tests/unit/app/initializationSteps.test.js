@@ -49,6 +49,7 @@ describe('InitializationSteps - ES6 Module', () => {
     mockSessionModeManager = {
       restoreMode: jest.fn(),
       clearMode: jest.fn(),
+      setMode: jest.fn(),
       initStandaloneMode: jest.fn(),
       initNetworkedMode: jest.fn()
     };
@@ -103,7 +104,7 @@ describe('InitializationSteps - ES6 Module', () => {
   });
 
   describe('createSessionModeManager()', () => {
-    it('should create SessionModeManager instance and attach to window', () => {
+    it('should create SessionModeManager instance and return it', () => {
       class MockSessionModeManager {
         constructor() {
           this.mode = null;
@@ -111,15 +112,15 @@ describe('InitializationSteps - ES6 Module', () => {
         }
       }
 
-      createSessionModeManager(MockSessionModeManager, mockWindow);
+      const instance = createSessionModeManager(MockSessionModeManager);
 
-      expect(mockWindow.sessionModeManager).toBeInstanceOf(MockSessionModeManager);
+      expect(instance).toBeInstanceOf(MockSessionModeManager);
     });
 
     it('should log initialization message', () => {
       class MockSessionModeManager {}
 
-      createSessionModeManager(MockSessionModeManager, mockWindow);
+      createSessionModeManager(MockSessionModeManager);
 
       // Check that a log message was created (don't test implementation)
       expect(Debug.messages.length).toBeGreaterThan(0);
@@ -461,28 +462,29 @@ describe('InitializationSteps - ES6 Module', () => {
 
       await applyInitialScreenDecision(decision, mockSessionModeManager, mockUIManager, mockShowWizard);
 
-      expect(mockSessionModeManager.initStandaloneMode).toHaveBeenCalledTimes(1);
+      expect(mockSessionModeManager.setMode).toHaveBeenCalledWith('standalone');
       expect(mockUIManager.showScreen).toHaveBeenCalledWith('teamEntry');
       expect(mockShowWizard).not.toHaveBeenCalled();
     });
 
     it('should auto-connect successfully when action is autoConnect', async () => {
       const decision = { screen: 'loading', action: 'autoConnect', savedMode: 'networked' };
-      mockSessionModeManager.initNetworkedMode.mockResolvedValue(undefined);
+      const mockInitNetworkedMode = jest.fn().mockResolvedValue(undefined);
 
-      await applyInitialScreenDecision(decision, mockSessionModeManager, mockUIManager, mockShowWizard);
+      await applyInitialScreenDecision(decision, mockSessionModeManager, mockUIManager, mockShowWizard, mockInitNetworkedMode);
 
       expect(mockUIManager.showScreen).toHaveBeenCalledWith('loading');
-      expect(mockSessionModeManager.initNetworkedMode).toHaveBeenCalledTimes(1);
+      expect(mockSessionModeManager.setMode).toHaveBeenCalledWith('networked');
+      expect(mockInitNetworkedMode).toHaveBeenCalledTimes(1);
       expect(mockUIManager.showScreen).toHaveBeenCalledWith('teamEntry');
       expect(mockShowWizard).not.toHaveBeenCalled();
     });
 
     it('should handle auto-connect failure by showing wizard', async () => {
       const decision = { screen: 'loading', action: 'autoConnect', savedMode: 'networked' };
-      mockSessionModeManager.initNetworkedMode.mockRejectedValue(new Error('Connection failed'));
+      const mockInitNetworkedMode = jest.fn().mockRejectedValue(new Error('Connection failed'));
 
-      await applyInitialScreenDecision(decision, mockSessionModeManager, mockUIManager, mockShowWizard);
+      await applyInitialScreenDecision(decision, mockSessionModeManager, mockUIManager, mockShowWizard, mockInitNetworkedMode);
 
       expect(mockUIManager.showScreen).toHaveBeenCalledWith('loading');
       expect(mockSessionModeManager.clearMode).toHaveBeenCalledTimes(1);

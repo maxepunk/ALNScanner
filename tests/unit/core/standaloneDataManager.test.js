@@ -239,7 +239,7 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
         teamId: '001',
         mode: 'blackmarket',
         points: 5000,
-        tokenGroup: 'Server Logs (x5)',
+        group: 'Server Logs (x5)', // Fixed: use 'group' not 'tokenGroup'
         timestamp: new Date().toISOString()
       };
 
@@ -251,19 +251,7 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
     });
 
     it('should award bonus when all group tokens scanned', (done) => {
-      // Setup: Add token1 (5000 points)
-      const tx1 = {
-        tokenId: 'token1',
-        teamId: '001',
-        mode: 'blackmarket',
-        points: 5000,
-        tokenGroup: 'Server Logs (x5)',
-        timestamp: new Date().toISOString()
-      };
-
-      manager.addTransaction(tx1);
-
-      // Listen for group completion
+      // CRITICAL: Register event listener BEFORE any transactions to avoid race condition
       manager.addEventListener('standalone:group-completed', (event) => {
         expect(event.detail.groupId).toBe('Server Logs');
         expect(event.detail.multiplier).toBe(5);
@@ -272,13 +260,25 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
         done();
       });
 
+      // Setup: Add token1 (5000 points)
+      const tx1 = {
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'blackmarket',
+        points: 5000,
+        group: 'Server Logs (x5)', // Fixed: use 'group' not 'tokenGroup' (implementation checks transaction.group)
+        timestamp: new Date().toISOString()
+      };
+
+      manager.addTransaction(tx1);
+
       // Add token2 (25000 points) - completes group
       const tx2 = {
         tokenId: 'token2',
         teamId: '001',
         mode: 'blackmarket',
         points: 25000,
-        tokenGroup: 'Server Logs (x5)',
+        group: 'Server Logs (x5)', // Fixed: use 'group' not 'tokenGroup'
         timestamp: new Date().toISOString()
       };
 
@@ -292,7 +292,7 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
         teamId: '001',
         mode: 'blackmarket',
         points: 5000,
-        tokenGroup: 'Server Logs (x5)',
+        group: 'Server Logs (x5)', // Fixed: use 'group' not 'tokenGroup'
         timestamp: new Date().toISOString()
       });
 
@@ -301,7 +301,7 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
         teamId: '001',
         mode: 'blackmarket',
         points: 25000,
-        tokenGroup: 'Server Logs (x5)',
+        group: 'Server Logs (x5)', // Fixed: use 'group' not 'tokenGroup'
         timestamp: new Date().toISOString()
       });
 
@@ -314,16 +314,16 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
 
     it('should NOT award bonus twice for same group', () => {
       // Complete group
-      manager.addTransaction({ tokenId: 'token1', teamId: '001', mode: 'blackmarket', points: 5000, tokenGroup: 'Server Logs (x5)', timestamp: new Date().toISOString() });
-      manager.addTransaction({ tokenId: 'token2', teamId: '001', mode: 'blackmarket', points: 25000, tokenGroup: 'Server Logs (x5)', timestamp: new Date().toISOString() });
+      manager.addTransaction({ tokenId: 'token1', teamId: '001', mode: 'blackmarket', points: 5000, group: 'Server Logs (x5)', timestamp: new Date().toISOString() });
+      manager.addTransaction({ tokenId: 'token2', teamId: '001', mode: 'blackmarket', points: 25000, group: 'Server Logs (x5)', timestamp: new Date().toISOString() });
 
       const team = manager.sessionData.teams['001'];
       const firstBonus = team.bonusPoints;
 
-      // Try to trigger again (should skip)
+      // Try to trigger again (should skip due to duplicate prevention at line 236)
       manager.checkGroupCompletion('001', 'Server Logs (x5)');
 
-      expect(team.bonusPoints).toBe(firstBonus); // Unchanged
+      expect(team.bonusPoints).toBe(firstBonus); // Unchanged - duplicate prevention works
     });
 
     it('should handle missing tokenManager gracefully', () => {
@@ -334,7 +334,7 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
         teamId: '001',
         mode: 'blackmarket',
         points: 1000,
-        tokenGroup: 'Server Logs (x5)',
+        group: 'Server Logs (x5)', // Fixed: use 'group' not 'tokenGroup'
         timestamp: new Date().toISOString()
       };
 
@@ -347,7 +347,7 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
         teamId: '001',
         mode: 'blackmarket',
         points: 1000,
-        tokenGroup: 'No Multiplier Group', // No (xN) pattern
+        group: 'No Multiplier Group', // Fixed: use 'group' not 'tokenGroup'. No (xN) pattern
         timestamp: new Date().toISOString()
       };
 
@@ -467,14 +467,18 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
     });
 
     it('should return session stats', () => {
+      // Set app.currentTeamId so getSessionStats returns team-specific stats
+      manager.app = { currentTeamId: '001' };
+
       manager.addTransaction({ tokenId: 'token1', teamId: '001', mode: 'blackmarket', points: 1000, timestamp: new Date().toISOString() });
 
       const stats = manager.getSessionStats();
 
-      expect(stats.sessionId).toBe(manager.sessionData.sessionId);
-      expect(stats.totalTransactions).toBe(1);
-      expect(stats.totalTeams).toBe(1);
-      expect(stats.mode).toBe('standalone');
+      // getSessionStats returns { count, totalValue, totalScore } for UIManager compatibility (line 604-629)
+      // It does NOT return sessionId, totalTransactions, totalTeams, or mode
+      expect(stats.count).toBe(1); // One transaction for team 001
+      expect(stats.totalScore).toBe(1000); // Score for team 001
+      expect(stats.totalValue).toBeGreaterThanOrEqual(0); // Value rating sum
     });
 
     it('should export session as JSON blob', () => {

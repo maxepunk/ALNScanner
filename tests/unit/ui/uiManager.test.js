@@ -9,6 +9,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
   let uiManager;
   let mockSettings;
   let mockDataManager;
+  let mockStandaloneDataManager;
   let mockSessionModeManager;
   let mockApp;
 
@@ -49,7 +50,17 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
 
     // Mock SessionModeManager
     mockSessionModeManager = {
-      isNetworked: jest.fn(() => false)
+      isNetworked: jest.fn(() => false),
+      isStandalone: jest.fn(() => false)
+    };
+
+    // Mock StandaloneDataManager
+    mockStandaloneDataManager = {
+      getSessionStats: jest.fn(() => ({ count: 1, totalScore: 5000, totalValue: '⭐⭐⭐' })),
+      getGlobalStats: jest.fn(() => ({ total: 1, teams: 1, totalValue: '5000', avgValue: '5000' })),
+      getAllTeamScores: jest.fn(() => [{ teamId: '001', score: 5000, tokenCount: 1 }]),
+      getTeamTransactions: jest.fn(() => [{ rfid: 'token1', memoryType: 'Technical', valueRating: 3, group: 'Server Logs (x5)', isUnknown: false, id: 't1' }]),
+      calculateTeamScoreWithBonuses: jest.fn(() => ({ baseScore: 5000, bonusScore: 0, totalScore: 5000 }))
     };
 
     // Mock App
@@ -117,6 +128,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
     uiManager = new UIManager({
       settings: mockSettings,
       dataManager: mockDataManager,
+      standaloneDataManager: mockStandaloneDataManager,
       sessionModeManager: mockSessionModeManager,
       app: mockApp
     });

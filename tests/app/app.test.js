@@ -67,6 +67,16 @@ jest.mock('../../src/core/dataManager.js', () => ({
   }
 }));
 
+jest.mock('../../src/core/standaloneDataManager.js', () => ({
+  default: {
+    app: null,
+    addTransaction: jest.fn(),
+    getSessionStats: jest.fn(() => ({ total: 0, scanned: 0, score: 0 })),
+    getTeamScore: jest.fn(() => 0),
+    getAllTeamScores: jest.fn(() => [])
+  }
+}));
+
 jest.mock('../../src/utils/nfcHandler.js', () => ({
   default: {
     startScan: jest.fn(),
@@ -109,6 +119,14 @@ jest.mock('../../src/app/sessionModeManager.js', () => ({
   }
 }));
 
+jest.mock('../../src/network/networkedSession.js', () => ({
+  default: jest.fn().mockImplementation(() => ({
+    initialize: jest.fn().mockResolvedValue(),
+    destroy: jest.fn().mockResolvedValue(),
+    getService: jest.fn()
+  }))
+}));
+
 const { App } = require('../../src/app/app.js');
 
 // Import mocked dependencies to inject
@@ -117,6 +135,7 @@ const UIManager = require('../../src/ui/uiManager.js').default;
 const Settings = require('../../src/ui/settings.js').default;
 const TokenManager = require('../../src/core/tokenManager.js').default;
 const DataManager = require('../../src/core/dataManager.js').default;
+const StandaloneDataManager = require('../../src/core/standaloneDataManager.js').default;
 const NFCHandler = require('../../src/utils/nfcHandler.js').default;
 const CONFIG = require('../../src/utils/config.js').default;
 const InitializationSteps = require('../../src/app/initializationSteps.js').default;
@@ -126,12 +145,26 @@ describe('App', () => {
   let app;
   let mockSessionModeManager;
 
+  // Helper function to create a valid JWT token for tests
+  const createValidToken = (expiresInHours = 24) => {
+    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+    const payload = btoa(JSON.stringify({
+      exp: Math.floor(Date.now() / 1000) + (expiresInHours * 3600),
+      iat: Math.floor(Date.now() / 1000)
+    }));
+    const signature = 'test-signature';
+    return `${header}.${payload}.${signature}`;
+  };
+
   beforeEach(() => {
     // Ensure real timers are restored before each test
     jest.useRealTimers();
 
     // Clear all mocks
     jest.clearAllMocks();
+
+    // Clear localStorage
+    localStorage.clear();
 
     // Setup DOM
     document.body.innerHTML = `
@@ -182,6 +215,7 @@ describe('App', () => {
       settings: Settings,
       tokenManager: TokenManager,
       dataManager: DataManager,
+      standaloneDataManager: StandaloneDataManager,
       nfcHandler: NFCHandler,
       config: CONFIG,
       initializationSteps: InitializationSteps,
@@ -360,6 +394,11 @@ describe('App', () => {
 
   describe('Game Mode Selection', () => {
     it('should select networked mode', async () => {
+      // Set up valid token and required localStorage keys
+      localStorage.setItem('aln_auth_token', createValidToken());
+      localStorage.setItem('orchestratorUrl', 'https://test.example.com:3000');
+      localStorage.setItem('aln_deviceId', 'TEST_DEVICE');
+
       await app.selectGameMode('networked');
 
       expect(mockSessionModeManager.setMode).toHaveBeenCalledWith('networked');
@@ -382,6 +421,12 @@ describe('App', () => {
 
     it('should handle setMode errors', async () => {
       const UIManager = require('../../src/ui/uiManager.js').default;
+
+      // Set up valid token and required localStorage keys
+      localStorage.setItem('aln_auth_token', createValidToken());
+      localStorage.setItem('orchestratorUrl', 'https://test.example.com:3000');
+      localStorage.setItem('aln_deviceId', 'TEST_DEVICE');
+
       mockSessionModeManager.setMode.mockImplementation(() => {
         throw new Error('Connection failed');
       });
@@ -534,15 +579,15 @@ describe('App', () => {
 
   describe('Transaction Recording', () => {
     it('should record transaction in standalone mode', () => {
-      const DataManager = require('../../src/core/dataManager.js').default;
+      const StandaloneDataManager = require('../../src/core/standaloneDataManager.js').default;
       mockSessionModeManager.isStandalone.mockReturnValue(true);
       app.currentTeamId = '123';
 
       const token = { SF_MemoryType: 'Technical', SF_ValueRating: 5, SF_Group: 'Test' };
       app.recordTransaction(token, 'test123', false);
 
-      expect(DataManager.addTransaction).toHaveBeenCalled();
-      expect(DataManager.markTokenAsScanned).toHaveBeenCalledWith('test123');
+      // In standalone mode, transactions go to StandaloneDataManager, not DataManager
+      expect(StandaloneDataManager.addTransaction).toHaveBeenCalled();
     });
 
     it('should queue transaction in networked mode', () => {
