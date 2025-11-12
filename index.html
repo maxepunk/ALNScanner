@@ -1503,7 +1503,7 @@
 
             <!-- Discovery Section (PRIMARY) -->
             <div id="discoverySection">
-                <button id="scanServersBtn" class="primary-btn" onclick="scanForServers()">
+                <button id="scanServersBtn" class="primary-btn" data-action="connectionWizard.scanForServers">
                     🔍 Scan for Game Servers
                 </button>
                 <div id="discoveryStatus"></div>
@@ -1513,7 +1513,7 @@
             <div class="divider">─── OR Enter Manually ───</div>
 
             <!-- Manual Configuration -->
-            <form id="connectionForm" onsubmit="handleConnectionSubmit(event)">
+            <form id="connectionForm">
                 <div class="form-group">
                     <label>Server Address:</label>
                     <input type="text" id="serverUrl" placeholder="http://10.0.0.135:3000">
@@ -1533,7 +1533,7 @@
 
                 <div class="button-group">
                     <button type="submit" class="primary-btn">Connect</button>
-                    <button type="button" onclick="cancelNetworkedMode()" class="secondary-btn">Cancel</button>
+                    <button type="button" data-action="connectionWizard.cancelNetworkedMode" class="secondary-btn">Cancel</button>
                 </div>
             </form>
         </div>
@@ -1542,38 +1542,38 @@
         <div class="header">
             <div class="header-nav" id="headerNav">
                 <!-- Connection Status Indicator -->
-                <a href="#" onclick="showConnectionWizard(); return false;" id="connectionStatus" class="connection-status disconnected" title="Click to configure connection">
+                <a href="#" data-action="connectionWizard.showConnectionWizard" id="connectionStatus" class="connection-status disconnected" title="Click to configure connection">
                     <span class="status-dot"></span>
                     <span class="status-text">Disconnected</span>
                 </a>
-                <button class="nav-button" onclick="App.showHistory()" title="View transaction history">
+                <button class="nav-button" data-action="app.showHistory" title="View transaction history">
                     📋<span id="historyBadge" class="badge" style="display: none;">0</span>
                 </button>
-                <button class="nav-button" id="scoreboardButton" onclick="App.showScoreboard()" title="View scoreboard" style="display: none;">
+                <button class="nav-button" id="scoreboardButton" data-action="app.showScoreboard" title="View scoreboard" style="display: none;">
                     🏆
                 </button>
-                <button class="nav-button" onclick="App.showSettings()" title="Settings">
+                <button class="nav-button" data-action="app.showSettings" title="Settings">
                     ⚙️
                 </button>
             </div>
             <div class="header-content">
                 <h1>Transaction Station</h1>
-                <div id="modeIndicator" class="mode-indicator mode-detective" onclick="App.toggleMode()" title="Click to switch mode">Detective Mode</div>
+                <div id="modeIndicator" class="mode-indicator mode-detective" data-action="app.toggleMode" title="Click to switch mode">Detective Mode</div>
                 <div class="device-id">Device ID: <span id="deviceIdDisplay">001</span></div>
             </div>
         </div>
 
         <!-- View Selector Tabs (Only visible in networked mode) -->
         <div id="viewSelector" class="view-selector" style="display: none;">
-            <button class="view-tab active" data-view="scanner" onclick="App.switchView('scanner')">
+            <button class="view-tab active" data-view="scanner" data-action="app.switchView" data-arg="scanner">
                 <span class="tab-icon">📱</span>
                 <span class="tab-text">Scanner</span>
             </button>
-            <button class="view-tab" data-view="admin" onclick="App.switchView('admin')">
+            <button class="view-tab" data-view="admin" data-action="app.switchView" data-arg="admin">
                 <span class="tab-icon">⚙️</span>
                 <span class="tab-text">Admin</span>
             </button>
-            <button class="view-tab" data-view="debug" onclick="App.switchView('debug')">
+            <button class="view-tab" data-view="debug" data-action="app.switchView" data-arg="debug">
                 <span class="tab-icon">🐛</span>
                 <span class="tab-text">Debug</span>
             </button>
@@ -1612,18 +1612,18 @@
 
             <!-- Network configuration removed - use connection wizard instead -->
 
-            <button class="btn btn-primary" onclick="App.saveSettings()">Save & Start Station</button>
+            <button class="btn btn-primary" data-action="app.saveSettings">Save & Start Station</button>
             <div class="settings-panel" style="margin-top: 20px;">
                 <h3>Data Management</h3>
-                <button class="btn btn-secondary" onclick="DataManager.exportData('json')">Export JSON</button>
-                <button class="btn btn-secondary" onclick="DataManager.exportData('csv')">Export CSV</button>
-                <button class="btn btn-secondary" onclick="DataManager.clearData()">Clear All Data</button>
-                <button class="btn btn-secondary" onclick="App.testTokenMatch()">Test Token Match</button>
-                <button class="btn btn-secondary" onclick="App.testGroupParsing()">Test Group Parsing</button>
-                <button class="btn btn-secondary" onclick="App.testGroupInventory()">Test Group Inventory</button>
-                <button class="btn btn-secondary" onclick="App.testCompletionDetection()">Test Completions</button>
-                <button class="btn btn-secondary" onclick="App.testBonusCalculations()">Test Bonuses</button>
-                <button class="btn btn-secondary" onclick="App.testEnhancedUI()">Test Enhanced UI</button>
+                <button class="btn btn-secondary" data-action="dataManager.exportData" data-arg="json">Export JSON</button>
+                <button class="btn btn-secondary" data-action="dataManager.exportData" data-arg="csv">Export CSV</button>
+                <button class="btn btn-secondary" data-action="dataManager.clearData">Clear All Data</button>
+                <button class="btn btn-secondary" data-action="app.testTokenMatch">Test Token Match</button>
+                <button class="btn btn-secondary" data-action="app.testGroupParsing">Test Group Parsing</button>
+                <button class="btn btn-secondary" data-action="app.testGroupInventory">Test Group Inventory</button>
+                <button class="btn btn-secondary" data-action="app.testCompletionDetection">Test Completions</button>
+                <button class="btn btn-secondary" data-action="app.testBonusCalculations">Test Bonuses</button>
+                <button class="btn btn-secondary" data-action="app.testEnhancedUI">Test Enhanced UI</button>
             </div>
         </div>
 
@@ -1640,7 +1640,7 @@
                 <h2 style="color: white; margin-bottom: 40px; font-size: 28px;">How are you playing today?</h2>
 
                 <div style="display: flex; gap: 30px; flex-wrap: wrap; justify-content: center;">
-                    <button class="mode-option" onclick="App.selectGameMode('networked')" style="
+                    <button class="mode-option" data-action="app.selectGameMode" data-arg="networked" style="
                         background: rgba(255, 255, 255, 0.1);
                         border: 2px solid rgba(255, 255, 255, 0.3);
                         border-radius: 20px;
@@ -1655,7 +1655,7 @@
                         <p style="opacity: 0.8; margin-top: 10px;">With orchestrator server for<br>multi-device coordination</p>
                     </button>
 
-                    <button class="mode-option" onclick="App.selectGameMode('standalone')" style="
+                    <button class="mode-option" data-action="app.selectGameMode" data-arg="standalone" style="
                         background: rgba(255, 255, 255, 0.1);
                         border: 2px solid rgba(255, 255, 255, 0.3);
                         border-radius: 20px;
@@ -1677,18 +1677,18 @@
         <div id="teamEntryScreen" class="screen">
             <div class="team-display" id="teamDisplay">_</div>
             <div class="numpad">
-                <button onclick="App.appendNumber(1)">1</button>
-                <button onclick="App.appendNumber(2)">2</button>
-                <button onclick="App.appendNumber(3)">3</button>
-                <button onclick="App.appendNumber(4)">4</button>
-                <button onclick="App.appendNumber(5)">5</button>
-                <button onclick="App.appendNumber(6)">6</button>
-                <button onclick="App.appendNumber(7)">7</button>
-                <button onclick="App.appendNumber(8)">8</button>
-                <button onclick="App.appendNumber(9)">9</button>
-                <button class="clear" onclick="App.clearTeamId()">Clear</button>
-                <button onclick="App.appendNumber(0)">0</button>
-                <button class="enter" onclick="App.confirmTeamId()">Enter</button>
+                <button data-action="app.appendNumber" data-arg="1">1</button>
+                <button data-action="app.appendNumber" data-arg="2">2</button>
+                <button data-action="app.appendNumber" data-arg="3">3</button>
+                <button data-action="app.appendNumber" data-arg="4">4</button>
+                <button data-action="app.appendNumber" data-arg="5">5</button>
+                <button data-action="app.appendNumber" data-arg="6">6</button>
+                <button data-action="app.appendNumber" data-arg="7">7</button>
+                <button data-action="app.appendNumber" data-arg="8">8</button>
+                <button data-action="app.appendNumber" data-arg="9">9</button>
+                <button class="clear" data-action="app.clearTeamId">Clear</button>
+                <button data-action="app.appendNumber" data-arg="0">0</button>
+                <button class="enter" data-action="app.confirmTeamId">Enter</button>
             </div>
         </div>
 
@@ -1702,9 +1702,9 @@
                 <h2>Tap Memory Token</h2>
                 <p id="scanStatus">Waiting for NFC tag...</p>
             </div>
-            <button id="scanButton" class="btn btn-primary" onclick="App.startScan()">Start Scanning</button>
-            <button class="btn btn-secondary" onclick="App.manualEntry()">Manual Entry (Debug)</button>
-            <button class="btn btn-secondary" onclick="App.cancelScan()">Back to Team Entry</button>
+            <button id="scanButton" class="btn btn-primary" data-action="app.startScan">Start Scanning</button>
+            <button class="btn btn-secondary" data-action="app.manualEntry">Manual Entry (Debug)</button>
+            <button class="btn btn-secondary" data-action="app.cancelScan">Back to Team Entry</button>
             <div class="stats">
                 <div class="stat-item">
                     <div class="stat-value" id="teamTokenCount">0</div>
@@ -1745,8 +1745,8 @@
                     <span class="value summary-text" id="resultSummary">-</span>
                 </div>
             </div>
-            <button class="btn btn-primary" onclick="App.continueScan()">Scan Another Token</button>
-            <button class="btn btn-secondary" onclick="App.finishTeam()">Finish Team</button>
+            <button class="btn btn-primary" data-action="app.continueScan">Scan Another Token</button>
+            <button class="btn btn-secondary" data-action="app.finishTeam">Finish Team</button>
         </div>
 
         <!-- History Screen -->
@@ -1785,7 +1785,7 @@
                 </div>
             </div>
             
-            <button class="btn btn-primary" onclick="App.closeHistory()">Back</button>
+            <button class="btn btn-primary" data-action="app.closeHistory">Back</button>
         </div>
 
         <!-- Scoreboard Screen -->
@@ -1799,7 +1799,7 @@
                 <!-- Populated by JavaScript -->
             </div>
             
-            <button class="btn btn-primary" onclick="App.closeScoreboard()">Back</button>
+            <button class="btn btn-primary" data-action="app.closeScoreboard">Back</button>
         </div>
 
         <!-- Team Details Screen -->
@@ -1837,12 +1837,12 @@
                 <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
                     <input type="number" id="scoreAdjustmentInput" placeholder="Amount (+ or -)" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
                     <input type="text" id="scoreAdjustmentReason" placeholder="Reason (optional)" style="flex: 2; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                    <button class="btn" onclick="App.adjustTeamScore()" style="background: #ffc107; color: #000;">Adjust Score</button>
+                    <button class="btn" data-action="app.adjustTeamScore" style="background: #ffc107; color: #000;">Adjust Score</button>
                 </div>
                 <p style="font-size: 12px; color: #856404; margin: 0;">Use positive numbers to add points, negative to subtract. Changes sync across all scanners.</p>
             </div>
 
-            <button class="btn btn-primary" onclick="App.closeTeamDetails()">Back to Scoreboard</button>
+            <button class="btn btn-primary" data-action="app.closeTeamDetails">Back to Scoreboard</button>
         </div>
     </div>
 
@@ -1876,10 +1876,10 @@
                 </div>
 
                 <div class="video-controls">
-                    <button class="btn" onclick="App.adminPlayVideo()">Play</button>
-                    <button class="btn" onclick="App.adminPauseVideo()">Pause</button>
-                    <button class="btn" onclick="App.adminStopVideo()">Stop</button>
-                    <button class="btn" onclick="App.adminSkipVideo()">Skip</button>
+                    <button class="btn" data-action="app.adminPlayVideo">Play</button>
+                    <button class="btn" data-action="app.adminPauseVideo">Pause</button>
+                    <button class="btn" data-action="app.adminStopVideo">Stop</button>
+                    <button class="btn" data-action="app.adminSkipVideo">Skip</button>
                 </div>
 
                 <!-- Queue Display -->
@@ -1898,9 +1898,9 @@
                         <datalist id="available-videos">
                             <!-- Populated by loadAvailableVideos() -->
                         </datalist>
-                        <button class="btn" onclick="App.adminAddVideoToQueue()">Add to Queue</button>
+                        <button class="btn" data-action="app.adminAddVideoToQueue">Add to Queue</button>
                     </div>
-                    <button class="btn btn-secondary" onclick="App.adminClearQueue()" style="width: 100%;">Clear Entire Queue</button>
+                    <button class="btn btn-secondary" data-action="app.adminClearQueue" style="width: 100%;">Clear Entire Queue</button>
                 </div>
             </section>
 
@@ -1930,7 +1930,7 @@
                 <div id="admin-score-board" class="score-board">
                     <!-- Scores will be populated here -->
                 </div>
-                <button class="btn btn-danger" onclick="App.adminResetScores()">Reset All Scores</button>
+                <button class="btn btn-danger" data-action="app.adminResetScores">Reset All Scores</button>
             </section>
 
             <!-- Transaction Log Section -->
@@ -1939,7 +1939,7 @@
                 <div id="admin-transaction-log" class="transaction-log">
                     <!-- Transactions will be populated here -->
                 </div>
-                <button class="btn" onclick="App.adminClearTransactions()">Clear History</button>
+                <button class="btn" data-action="app.adminClearTransactions">Clear History</button>
             </section>
         </div> <!-- End of admin-view -->
 
@@ -1965,293 +1965,27 @@
     <!-- Socket.io v4 Client Library (auto-served by orchestrator at /socket.io/socket.io.js) -->
     <script src="/socket.io/socket.io.js"></script>
 
-    <script>
-        /**
-         * ConnectionManager - Single source of truth for all orchestrator connections
-         * Unifies connection logic, token management, and localStorage access
-         */
+    <!-- ============================================
+         CONNECTION WIZARD (ES6 MODULES)
+         ============================================ -->
+    <!--
+         Connection wizard functionality moved to ES6 module:
+         src/ui/connectionWizard.js
 
-        /**
-         * NetworkedQueueManager - Manages transaction queue
-         * Ensures reliable transaction submission with network resilience
-         */
+         Functions now available via ConnectionWizard class:
+         - scanForServers()
+         - handleConnectionSubmit()
+         - cancelNetworkedMode()
+         - showConnectionWizard()
+         - showAuthModal()
 
-        /**
-         * Scan for game servers via HTTP brute-force
-         * Web browsers cannot do UDP, so we scan common IPs/ports using /health endpoint
-         * Based on player scanner discovery pattern from aln-memory-scanner/config.html
-         */
-        async function scanForServers() {
-            const statusDiv = document.getElementById('discoveryStatus');
-            const serversDiv = document.getElementById('discoveredServers');
-            const btn = document.getElementById('scanServersBtn');
+         Use data-action attributes for event binding:
+         - data-action="connectionWizard.scanForServers"
+         - data-action="connectionWizard.handleConnectionSubmit"
+         - etc.
 
-            btn.disabled = true;
-            btn.textContent = '🔍 Scanning...';
-            statusDiv.textContent = 'Looking for orchestrators on the network...';
-            statusDiv.style.color = '#2196F3';
-            serversDiv.innerHTML = '';
-
-            try {
-                // Detect current subnet dynamically
-                const currentHost = window.location.hostname;
-                let subnet = '192.168.1'; // Default fallback
-
-                // Try to detect subnet from current host
-                if (currentHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
-                    const parts = currentHost.split('.');
-                    if (parts.length >= 3) {
-                        subnet = parts.slice(0, 3).join('.');
-                    }
-                }
-
-                const commonPorts = [3000, 8080];
-                // Use same protocol as current page to avoid mixed content blocking
-                const protocol = window.location.protocol.replace(':', ''); // 'https' or 'http'
-                const promises = [];
-
-                // Scan detected subnet (254 IPs × 2 ports = 508 requests max)
-                // Limited to 20 concurrent to avoid overwhelming network
-                for (let i = 1; i <= 254; i++) {
-                    for (const port of commonPorts) {
-                        const url = `${protocol}://${subnet}.${i}:${port}`;
-                        promises.push(
-                            fetch(`${url}/health`, {
-                                method: 'GET',
-                                mode: 'cors',
-                                signal: AbortSignal.timeout(500)
-                            })
-                            .then(response => response.ok ? url : null)
-                            .catch(() => null)
-                        );
-                    }
-
-                    // Limit concurrent requests to avoid overwhelming the network
-                    if (promises.length >= 20) {
-                        await Promise.race(promises);
-                    }
-                }
-
-                // Also try localhost
-                promises.push(
-                    fetch(`${protocol}://localhost:3000/health`, {
-                        signal: AbortSignal.timeout(1000)
-                    })
-                    .then(response => response.ok ? `${protocol}://localhost:3000` : null)
-                    .catch(() => null)
-                );
-
-                // Try current origin if served from orchestrator
-                if (window.location.pathname.startsWith('/gm-scanner/')) {
-                    promises.push(Promise.resolve(window.location.origin));
-                }
-
-                const results = await Promise.all(promises);
-                const foundServers = [...new Set(results.filter(url => url !== null))];
-
-                if (foundServers.length > 0) {
-                    statusDiv.textContent = `✅ Found ${foundServers.length} orchestrator(s)`;
-                    statusDiv.style.color = '#4CAF50';
-
-                    // Use existing displayDiscoveredServers pattern
-                    displayDiscoveredServers(foundServers.map(url => ({ url })));
-                } else {
-                    statusDiv.textContent = '⚠️ No orchestrators found. Please enter URL manually below.';
-                    statusDiv.style.color = '#ff9800';
-                }
-            } catch (error) {
-                statusDiv.textContent = '❌ Discovery failed. Please enter URL manually below.';
-                statusDiv.style.color = '#f44336';
-                console.error('Server discovery error:', error);
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '🔍 Scan for Game Servers';
-            }
-        }
-
-        // Display discovered servers
-        function displayDiscoveredServers(servers) {
-            const statusDiv = document.getElementById('discoveryStatus');
-            const serversDiv = document.getElementById('discoveredServers');
-
-            statusDiv.textContent = `✅ Found ${servers.length} game server(s)`;
-            serversDiv.innerHTML = '';
-
-            servers.forEach(server => {
-                const serverEl = document.createElement('div');
-                serverEl.className = 'server-item';
-                serverEl.innerHTML = `
-                    <span>🎮 Game Server at ${server.ip || server.url}</span>
-                    <button onclick="selectServer('${server.url}')">Select</button>
-                `;
-                serversDiv.appendChild(serverEl);
-            });
-        }
-
-        // Select discovered server
-        function selectServer(url) {
-            document.getElementById('serverUrl').value = url;
-            document.getElementById('discoveryStatus').textContent = '✅ Server selected';
-
-            // Generate station name if empty
-            if (!document.getElementById('stationName').value) {
-                const stationNum = localStorage.getItem('lastStationNum') || '1';
-                document.getElementById('stationName').value = `GM Station ${stationNum}`;
-            }
-        }
-
-        // Unified connection form handler
-        async function handleConnectionSubmit(event) {
-            event.preventDefault();
-
-            const serverUrl = document.getElementById('serverUrl').value;
-            const stationName = document.getElementById('stationName').value;
-            const password = document.getElementById('gmPassword').value;
-            const statusDiv = document.getElementById('connectionStatusMsg');
-
-            // Validate inputs
-            if (!serverUrl || !stationName || !password) {
-                statusDiv.textContent = '⚠️ Please fill in all fields';
-                statusDiv.style.color = '#ff9800';
-                return;
-            }
-
-            statusDiv.textContent = '⏳ Connecting...';
-            statusDiv.style.color = '#2196F3';
-
-            try {
-                // Normalize URL - add http:// if no protocol specified
-                let normalizedUrl = serverUrl.trim();
-                if (!normalizedUrl.match(/^https?:\/\//i)) {
-                    normalizedUrl = `http://${normalizedUrl}`;
-                    statusDiv.textContent = `🔧 Using ${normalizedUrl}`;
-                }
-
-                // 1. Test server reachability (use orchestrator health endpoint)
-                const healthCheck = await fetch(`${normalizedUrl}/health`, {
-                    method: 'GET',
-                    mode: 'cors',
-                    signal: AbortSignal.timeout(3000)
-                });
-
-                if (!healthCheck.ok) {
-                    throw new Error('Server not responding');
-                }
-
-                // 2. Authenticate
-                const authResponse = await fetch(`${normalizedUrl}/api/admin/auth`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password })
-                });
-
-                if (!authResponse.ok) {
-                    statusDiv.textContent = '❌ Invalid password';
-                    statusDiv.style.color = '#f44336';
-                    return;
-                }
-
-                const { token } = await authResponse.json();
-
-                // 3. Save configuration to localStorage
-                localStorage.setItem('aln_orchestrator_url', normalizedUrl);
-                localStorage.setItem('aln_auth_token', token);
-                localStorage.setItem('aln_station_name', stationName);
-
-                // Set device ID in Settings
-                if (typeof Settings !== 'undefined') {
-                    Settings.deviceId = stationName.replace(/\s+/g, '_');
-                    Settings.stationName = stationName;
-                    Settings.save();
-                }
-
-                // Handle station number
-                const match = stationName.match(/\d+$/);
-                if (match) {
-                    const nextNum = parseInt(match[0]) + 1;
-                    localStorage.setItem('lastStationNum', nextNum.toString());
-                }
-
-                // 4. Initialize networked mode via SessionModeManager
-                // This will create NetworkedSession with proper service orchestration
-                if (!window.sessionModeManager) {
-                    window.sessionModeManager = new SessionModeManager();
-                }
-
-                const connected = await window.sessionModeManager.setMode('networked');
-
-                if (connected) {
-                    statusDiv.textContent = '✅ Connected! Syncing data...';
-                    statusDiv.style.color = '#4CAF50';
-
-                    // Show viewSelector (admin panel tabs)
-                    document.getElementById('viewSelector').style.display = 'flex';
-
-                    // Reload settings to update deviceId display
-                    if (window.Settings) {
-                        window.Settings.load();
-                    }
-
-                    // Close modal and transition to team entry screen
-                    setTimeout(() => {
-                        document.getElementById('connectionModal').style.display = 'none';
-                        UIManager.showScreen('teamEntry');
-                    }, 1000);
-                } else {
-                    throw new Error('Failed to establish connection');
-                }
-
-            } catch (error) {
-                statusDiv.textContent = `❌ Connection failed: ${error.message}`;
-                statusDiv.style.color = '#f44336';
-            }
-        }
-
-        // Cancel networked mode and return to game mode selection
-        function cancelNetworkedMode() {
-            // Close the connection modal
-            document.getElementById('connectionModal').style.display = 'none';
-
-            // Clear the session mode manager's lock so user can choose again
-            if (window.sessionModeManager) {
-                window.sessionModeManager.clearMode();
-            }
-
-            // Return to game mode selection screen
-            UIManager.showScreen('gameModeScreen');
-        }
-
-        // Show connection wizard
-        function showConnectionWizard() {
-            const modal = document.getElementById('connectionModal');
-            modal.style.display = 'flex';
-
-            // Auto-scan on open for better UX (but don't block)
-            setTimeout(scanForServers, 100);
-        }
-
-
-        // Show non-blocking authentication modal
-        async function showAuthModal() {
-            // Show the connection wizard modal instead of using prompt
-            showConnectionWizard();
-
-            // Pre-fill the server URL if we already have one
-            const connectionManager = window.App?.networkedSession?.services?.connectionManager;
-            if (connectionManager && connectionManager.url) {
-                document.getElementById('serverUrl').value = connectionManager.url;
-            }
-
-            // Pre-fill station name if we have one
-            if (connectionManager && connectionManager.stationName) {
-                document.getElementById('stationName').value = connectionManager.stationName;
-            }
-        }
-
-        // Note: Offline mode button initialization moved to main DOMContentLoaded handler at line 3522
-        // Game mode selection is handled by App.selectGameMode() at line 3832
-
-    </script>
+         See src/utils/domEventBindings.js for event delegation.
+    -->
 
     <!-- ============================================
          WEBSOCKET CONTRACT TESTS (TDD)
@@ -2273,58 +2007,20 @@
     <!-- ============================================
          PHASE 2.4 (P1.4): CLEANUP ON PAGE UNLOAD
          ============================================ -->
-    <script>
-        // Clean disconnect on page unload (mirrors P0.4 backend cleanup)
-        window.addEventListener('beforeunload', () => {
-            if (window.networkedSession?.services?.client) {
-                console.log('Page unloading - disconnecting socket');
-                window.networkedSession.services.client.disconnect();
-            }
-        });
-    </script>
+    <!--
+         Cleanup handler moved to ES6 module:
+         src/ui/connectionWizard.js - setupCleanupHandlers()
+
+         Automatically initialized in src/main.js
+    -->
 
     <!-- P2.2.3: Queue Status Indicator Update Logic (Event-Driven) -->
-    <script>
-        /**
-         * Update the queue status indicator with current queue count
-         * P2.2.3: Event-driven updates (no polling)
-         */
-        function updateQueueIndicator() {
-            const indicator = document.getElementById('queueStatusIndicator');
-            const countSpan = document.getElementById('queueCount');
+    <!--
+         Queue status indicator logic moved to ES6 module:
+         src/ui/connectionWizard.js - QueueStatusManager class
 
-            if (!indicator || !countSpan) return;
-
-            // Get queue count from NetworkedQueueManager
-            const queueManager = window.App?.networkedSession?.services?.queueManager;
-            const queueStatus = queueManager?.getStatus();
-            const queueCount = queueStatus ? queueStatus.queuedCount : 0;
-
-            // Update count display
-            countSpan.textContent = queueCount;
-
-            // Show/hide indicator based on queue count
-            if (queueCount > 0) {
-                indicator.classList.add('visible');
-            } else {
-                indicator.classList.remove('visible');
-            }
-        }
-
-        // Event-driven updates: Listen to queue changes
-        window.addEventListener('DOMContentLoaded', () => {
-            updateQueueIndicator(); // Initial update
-
-            // Register event listener for queue changes (no polling)
-            const queueManager = window.App?.networkedSession?.services?.queueManager;
-            if (queueManager) {
-                queueManager.addEventListener('queue:changed', (event) => {
-                    console.log('Queue changed:', event.detail);
-                    updateQueueIndicator();
-                });
-            }
-        });
-    </script>
+         Automatically initialized in src/main.js with event-driven updates.
+    -->
 
     <!-- P2.2.3: Queue Status Indicator -->
     <div id="queueStatusIndicator" class="queue-indicator" title="Offline scans queued for upload">

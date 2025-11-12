@@ -31,16 +31,15 @@ export function initializeUIManager(uiManager) {
 }
 
 /**
- * Create SessionModeManager and attach to window
+ * Create SessionModeManager singleton
+ * Returns instance for storage on app object (no window global assignment)
  * CRITICAL: Must be called before viewController.init()
  *
  * @param {Function} SessionModeManagerClass - SessionModeManager constructor
- * @param {Object} windowObj - Window object
  * @returns {Object} The created SessionModeManager instance
  */
-export function createSessionModeManager(SessionModeManagerClass, windowObj) {
+export function createSessionModeManager(SessionModeManagerClass) {
   const instance = new SessionModeManagerClass();
-  windowObj.sessionModeManager = instance;
   Debug.log('SessionModeManager initialized');
   return instance;
 }

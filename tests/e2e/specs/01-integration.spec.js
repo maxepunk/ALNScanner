@@ -1,238 +1,104 @@
 /**
- * Browser Integration Tests - Refactored Components
+ * Browser Integration Tests - ES6 Module Architecture
  *
- * Simplified tests focusing on what can be effectively tested in browser.
- * Full networked flow testing requires mock orchestrator (beyond scope).
+ * Validates that the ES6 module system loads correctly and the app
+ * initializes properly WITHOUT window global dependencies.
+ *
+ * NOTE: Component instantiation tests removed - those belong in unit tests.
+ * User journey tests are in separate spec files (L1 smoke, L2 standalone flow).
  */
 
 const { test, expect } = require('@playwright/test');
-const { createValidToken } = require('../fixtures/testTokens');
-const { injectMockSocketIo } = require('../fixtures/mockWebSocket');
 
-test.describe('Browser Integration - Component Loading', () => {
+test.describe('Browser Integration - ES6 Module Loading', () => {
   test.beforeEach(async ({ page }) => {
-    await injectMockSocketIo(page);
     await page.goto('/');
-    await page.waitForFunction(() => typeof window.App !== 'undefined', { timeout: 10000 });
+    // Wait for app to initialize (game mode screen appears)
+    await page.waitForSelector('#gameModeScreen', { timeout: 10000 });
   });
 
-  test('should load all refactored network components', async ({ page }) => {
-    const result = await page.evaluate(() => {
-      return {
-        NetworkedSession: typeof window.NetworkedSession === 'function',
-        OrchestratorClient: typeof window.OrchestratorClient === 'function',
-        ConnectionManager: typeof window.ConnectionManager === 'function',
-        AdminController: typeof window.AdminController === 'function',
-        SessionModeManager: typeof window.SessionModeManager === 'function'
-      };
-    });
+  test('should load ES6 modules and initialize app', async ({ page }) => {
+    // Verify game mode selection screen is visible
+    const gameModeScreen = await page.locator('#gameModeScreen');
+    await expect(gameModeScreen).toBeVisible();
 
-    expect(result.NetworkedSession).toBe(true);
-    expect(result.OrchestratorClient).toBe(true);
-    expect(result.ConnectionManager).toBe(true);
-    expect(result.AdminController).toBe(true);
-    expect(result.SessionModeManager).toBe(true);
+    // Verify both mode options are present
+    const standaloneBtn = await page.locator('button[data-action="app.selectGameMode"][data-arg="standalone"]');
+    const networkedBtn = await page.locator('button[data-action="app.selectGameMode"][data-arg="networked"]');
+
+    await expect(standaloneBtn).toBeVisible();
+    await expect(networkedBtn).toBeVisible();
   });
 
-  test('should create NetworkedSession instance', async ({ page }) => {
-    const result = await page.evaluate((token) => {
-      try {
-        const session = new window.NetworkedSession({
-          url: 'https://localhost:3000',
-          deviceId: 'TEST_E2E',
-          stationName: 'E2E Test',
-          token: token
-        });
+  test('should have functional data-action event delegation', async ({ page }) => {
+    // Click settings button to verify event delegation works
+    const settingsBtn = await page.locator('button[data-action="app.showSettings"]');
+    await settingsBtn.click();
 
-        return {
-          success: true,
-          hasConfig: session.config !== null,
-          initialState: session.state,
-          servicesNull: session.services === null,
-          isEventTarget: session instanceof EventTarget
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error.message
-        };
-      }
-    }, createValidToken());
+    // Verify settings screen appears
+    const settingsScreen = await page.locator('#settingsScreen');
+    await expect(settingsScreen).toBeVisible();
 
-    expect(result.success).toBe(true);
-    expect(result.hasConfig).toBe(true);
-    expect(result.initialState).toBe('disconnected');
-    expect(result.servicesNull).toBe(true);
-    expect(result.isEventTarget).toBe(true);
+    // Verify settings form has expected fields
+    const deviceIdInput = await page.locator('#deviceId');
+    await expect(deviceIdInput).toBeVisible();
   });
 
-  test('should create OrchestratorClient instance', async ({ page }) => {
-    const result = await page.evaluate(() => {
-      try {
-        const client = new window.OrchestratorClient({
-          url: 'https://localhost:3000',
-          deviceId: 'TEST_E2E'
-        });
+  test('should initialize without console errors', async ({ page }) => {
+    const errors = [];
 
-        return {
-          success: true,
-          hasConfig: client.config !== null,
-          socketNull: client.socket === null,
-          isConnected: client.isConnected,
-          isEventTarget: client instanceof EventTarget
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error.message
-        };
+    // Capture console errors
+    page.on('console', msg => {
+      if (msg.type() === 'error') {
+        errors.push(msg.text());
       }
     });
 
-    expect(result.success).toBe(true);
-    expect(result.hasConfig).toBe(true);
-    expect(result.socketNull).toBe(true);
-    expect(result.isConnected).toBe(false);
-    expect(result.isEventTarget).toBe(true);
+    // Reload page to capture initialization
+    await page.reload();
+    await page.waitForSelector('#gameModeScreen', { timeout: 10000 });
+
+    // Filter out expected errors (e.g., socket.io connection attempts, SSL cert warnings, debug warnings)
+    const criticalErrors = errors.filter(err =>
+      !err.includes('socket.io') &&
+      !err.includes('Failed to load resource') &&
+      !err.includes('WebSocket') &&
+      !err.includes('SSL certificate error') &&
+      !err.includes('multiplier') && // Debug warnings about game logic
+      !err.includes('⚠️') // Warning symbols
+    );
+
+    expect(criticalErrors).toHaveLength(0);
   });
 
-  test('should create ConnectionManager instance', async ({ page }) => {
-    const result = await page.evaluate((token) => {
-      try {
-        const mockClient = { test: 'client' };
-        const manager = new window.ConnectionManager({
-          url: 'https://localhost:3000',
-          deviceId: 'TEST_E2E',
-          token: token,
-          client: mockClient
-        });
+  test('should have connection wizard available', async ({ page }) => {
+    // Click connection status to open wizard
+    const connectionStatus = await page.locator('#connectionStatus[data-action="connectionWizard.showConnectionWizard"]');
+    await connectionStatus.click();
 
-        return {
-          success: true,
-          hasConfig: manager.config !== null,
-          hasClient: manager.client !== null,
-          initialState: manager.state,
-          hasToken: manager.token !== null,
-          isEventTarget: manager instanceof EventTarget
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error.message
-        };
-      }
-    }, createValidToken());
+    // Verify connection modal appears
+    const connectionModal = await page.locator('#connectionModal');
+    await expect(connectionModal).toBeVisible();
 
-    expect(result.success).toBe(true);
-    expect(result.hasConfig).toBe(true);
-    expect(result.hasClient).toBe(true);
-    expect(result.initialState).toBe('disconnected');
-    expect(result.hasToken).toBe(true);
-    expect(result.isEventTarget).toBe(true);
+    // Verify scan button is present
+    const scanBtn = await page.locator('#scanServersBtn[data-action="connectionWizard.scanForServers"]');
+    await expect(scanBtn).toBeVisible();
   });
 
-  test('should create AdminController instance', async ({ page }) => {
-    const result = await page.evaluate(() => {
-      try {
-        const mockClient = { test: 'client' };
-        const controller = new window.AdminController(mockClient);
+  test('should have functional standalone mode selection', async ({ page }) => {
+    // Select standalone mode
+    const standaloneBtn = await page.locator('button[data-action="app.selectGameMode"][data-arg="standalone"]');
+    await standaloneBtn.click();
 
-        return {
-          success: true,
-          hasClient: controller.client !== null,
-          notInitialized: controller.initialized === false,
-          modulesNull: controller.modules === null
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error.message
-        };
-      }
-    });
+    // Wait for team entry screen
+    await page.waitForSelector('#teamEntryScreen.active', { timeout: 5000 });
 
-    expect(result.success).toBe(true);
-    expect(result.hasClient).toBe(true);
-    expect(result.notInitialized).toBe(true);
-    expect(result.modulesNull).toBe(true);
-  });
+    // Verify team entry screen is visible
+    const teamEntryScreen = await page.locator('#teamEntryScreen.active');
+    await expect(teamEntryScreen).toBeVisible();
 
-  test('should create SessionModeManager instance', async ({ page }) => {
-    const result = await page.evaluate(() => {
-      try {
-        const manager = new window.SessionModeManager();
-
-        return {
-          success: true,
-          modeNull: manager.mode === null,
-          notLocked: manager.locked === false,
-          hasInitMethod: typeof manager.initNetworkedMode === 'function',
-          hasStandaloneMethod: typeof manager.initStandaloneMode === 'function'
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error.message
-        };
-      }
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.modeNull).toBe(true);
-    expect(result.notLocked).toBe(true);
-    expect(result.hasInitMethod).toBe(true);
-    expect(result.hasStandaloneMethod).toBe(true);
-  });
-
-  test('should have NetworkedSession getService method', async ({ page }) => {
-    const result = await page.evaluate((token) => {
-      const session = new window.NetworkedSession({
-        url: 'https://localhost:3000',
-        deviceId: 'TEST_E2E',
-        token: token
-      });
-
-      try {
-        session.getService('connectionManager');
-        return { threw: false };
-      } catch (error) {
-        return {
-          threw: true,
-          errorMessage: error.message,
-          isCorrectError: error.message.includes('not initialized')
-        };
-      }
-    }, createValidToken());
-
-    expect(result.threw).toBe(true);
-    expect(result.isCorrectError).toBe(true);
-  });
-
-  test('should have NetworkedSession destroy method', async ({ page }) => {
-    const result = await page.evaluate(async (token) => {
-      const session = new window.NetworkedSession({
-        url: 'https://localhost:3000',
-        deviceId: 'TEST_E2E',
-        token: token
-      });
-
-      try {
-        await session.destroy();
-        return {
-          success: true,
-          state: session.state,
-          servicesNull: session.services === null
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error.message
-        };
-      }
-    }, createValidToken());
-
-    expect(result.success).toBe(true);
-    expect(result.state).toBe('disconnected');
-    expect(result.servicesNull).toBe(true);
+    // Verify numpad is functional
+    const numberBtn = await page.locator('button[data-action="app.appendNumber"][data-arg="1"]');
+    await expect(numberBtn).toBeVisible();
   });
 });

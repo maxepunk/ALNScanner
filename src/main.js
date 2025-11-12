@@ -25,6 +25,10 @@ import InitializationSteps from './app/initializationSteps.js';
 // Import App class
 import { App } from './app/app.js';
 
+// Import connection wizard and DOM event bindings
+import { ConnectionWizard, QueueStatusManager, setupCleanupHandlers } from './ui/connectionWizard.js';
+import { bindDOMEvents } from './utils/domEventBindings.js';
+
 /**
  * Create App instance with dependency injection
  * All dependencies are singleton instances imported from modules
@@ -43,31 +47,23 @@ const app = new App({
 });
 
 /**
- * Expose window globals for HTML onclick handlers
- *
- * TEMPORARY: These will be removed in Phase 9 when we convert
- * HTML onclick handlers to proper event listeners.
- *
- * HTML onclick handlers that need these:
- * - App: Most common (showHistory, selectGameMode, switchView, etc.)
- * - DataManager: exportData, clearData
- * - Settings: Referenced in inline script blocks
- * - Debug: For debug panel functionality
- *
- * Note: showConnectionWizard, scanForServers, selectServer, and
- * cancelNetworkedMode are defined in HTML script blocks (not here)
+ * Create connection wizard and queue status manager
+ * These handle networked mode connection UI and offline queue indicator
  */
-if (typeof window !== 'undefined') {
-  window.App = app;
-  window.DataManager = DataManager;
-  window.Settings = Settings;
-  window.Debug = Debug;
-  window.UIManager = UIManager;
-  window.TokenManager = TokenManager;
+const connectionWizard = new ConnectionWizard(app);
+const queueStatusManager = new QueueStatusManager(app);
 
-  // Note: window.sessionModeManager is created by App during initialization
-  // (see App.init() -> initializationSteps.createSessionModeManager)
-}
+/**
+ * Bind DOM event handlers using event delegation
+ * Replaces window globals and onclick handlers with data-action attributes
+ */
+bindDOMEvents(app, DataManager, Settings, Debug, UIManager, connectionWizard, queueStatusManager);
+
+/**
+ * Setup cleanup handlers for page unload
+ * Ensures graceful disconnect when closing page
+ */
+setupCleanupHandlers(app);
 
 /**
  * Initialize application
@@ -81,6 +77,14 @@ async function initializeApp() {
   try {
     await app.init();
     Debug.log('Application initialization complete');
+
+    // Initialize connection wizard (bind form events)
+    connectionWizard.init();
+    Debug.log('Connection wizard initialized');
+
+    // Initialize queue status manager (event-driven updates)
+    queueStatusManager.init();
+    Debug.log('Queue status manager initialized');
   } catch (error) {
     Debug.log(`Initialization error: ${error.message}`, true);
     console.error('App initialization failed:', error);

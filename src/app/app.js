@@ -70,8 +70,8 @@ class App {
     await this.initializationSteps.showLoadingScreen(this.uiManager);
 
     // CRITICAL: Initialize SessionModeManager BEFORE viewController (Phase 1E)
-    // Store reference as instance property (not window global)
-    this.sessionModeManager = this.initializationSteps.createSessionModeManager(SessionModeManager, window);
+    // Store reference as instance property (no window global assignment)
+    this.sessionModeManager = this.initializationSteps.createSessionModeManager(SessionModeManager);
 
     // Initialize view controller (Phase 1F)
     this.initializationSteps.initializeViewController(this.viewController);
