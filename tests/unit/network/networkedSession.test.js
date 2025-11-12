@@ -100,7 +100,11 @@ describe('NetworkedSession', () => {
         client: mockClient,
       });
 
-      expect(NetworkedQueueManager).toHaveBeenCalledWith(mockClient);
+      expect(NetworkedQueueManager).toHaveBeenCalledWith({
+        client: mockClient,
+        deviceId: 'GM_TEST',
+        debug: console
+      });
       expect(AdminController).toHaveBeenCalledWith(mockClient);
 
       expect(session.services).not.toBeNull();
@@ -418,7 +422,11 @@ describe('NetworkedSession', () => {
     it('should pass client to NetworkedQueueManager', async () => {
       await session.initialize();
 
-      expect(NetworkedQueueManager).toHaveBeenCalledWith(mockClient);
+      expect(NetworkedQueueManager).toHaveBeenCalledWith({
+        client: mockClient,
+        deviceId: 'GM_TEST',
+        debug: console
+      });
     });
 
     it('should pass client to AdminController', async () => {
