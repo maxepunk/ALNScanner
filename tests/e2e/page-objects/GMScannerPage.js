@@ -289,11 +289,11 @@ class GMScannerPage {
   }
 
   /**
-   * Save settings and return to game mode screen
+   * Save settings and return to team entry screen
    */
   async saveSettings() {
     await this.saveSettingsBtn.click();
-    await this.gameModeScreen.waitFor({ state: 'visible', timeout: 5000 });
+    await this.teamEntryScreen.waitFor({ state: 'visible', timeout: 5000 });
   }
 
   /**

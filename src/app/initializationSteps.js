@@ -247,8 +247,9 @@ function isTokenValid(token) {
  * @param {Object} sessionModeManager - SessionModeManager instance
  * @param {Object} uiManager - UIManager instance
  * @param {Function} showWizardFn - showConnectionWizard function
+ * @param {Function} initNetworkedModeFn - Async function to initialize networked mode (from app._initializeNetworkedMode)
  */
-export async function applyInitialScreenDecision(decision, sessionModeManager, uiManager, showWizardFn) {
+export async function applyInitialScreenDecision(decision, sessionModeManager, uiManager, showWizardFn, initNetworkedModeFn = null) {
   Debug.log(`Applying screen decision: screen=${decision.screen}, action=${decision.action}`);
 
   if (decision.action === 'clearModeAndShowWizard') {
@@ -259,9 +260,9 @@ export async function applyInitialScreenDecision(decision, sessionModeManager, u
     showWizardFn();
 
   } else if (decision.action === 'initStandalone') {
-    // Standalone mode - initialize and show team entry
-    Debug.log('Initializing standalone mode');
-    sessionModeManager.initStandaloneMode();
+    // Standalone mode - lock mode and show team entry
+    Debug.log('Restoring standalone mode');
+    sessionModeManager.setMode('standalone');
     uiManager.showScreen(decision.screen);
 
   } else if (decision.action === 'autoConnect') {
@@ -270,10 +271,16 @@ export async function applyInitialScreenDecision(decision, sessionModeManager, u
     uiManager.showScreen(decision.screen); // Show loading screen
 
     try {
-      // Initialize networked mode without showing wizard
-      await sessionModeManager.initNetworkedMode();
-      Debug.log('Auto-connect successful - showing team entry');
-      uiManager.showScreen('teamEntry');
+      // Lock networked mode and initialize NetworkedSession
+      sessionModeManager.setMode('networked');
+
+      if (initNetworkedModeFn) {
+        await initNetworkedModeFn();
+        Debug.log('Auto-connect successful - showing team entry');
+        uiManager.showScreen('teamEntry');
+      } else {
+        throw new Error('initNetworkedModeFn not provided for auto-connect');
+      }
     } catch (error) {
       Debug.log('Auto-connect failed - showing wizard');
       console.error('Auto-connect error:', error);

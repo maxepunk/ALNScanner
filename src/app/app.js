@@ -100,7 +100,8 @@ class App {
       screenDecision,
       this.sessionModeManager,
       this.uiManager,
-      this.showConnectionWizard
+      this.showConnectionWizard,
+      this._initializeNetworkedMode.bind(this)
     );
 
     // Wire event listeners for networked session
