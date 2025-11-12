@@ -235,29 +235,21 @@ export class ConnectionWizard {
         localStorage.setItem('lastStationNum', nextNum.toString());
       }
 
-      // 4. Initialize networked mode via SessionModeManager
-      // This will create NetworkedSession with proper service orchestration
-      const sessionModeManager = this.app.sessionModeManager;
-      const connected = await sessionModeManager.setMode('networked');
+      // 4. Trigger networked mode initialization via App (event-driven pattern)
+      // Per Architecture Refactoring 2025-11: App creates NetworkedSession, not wizard
+      statusDiv.textContent = '✅ Authenticated! Connecting...';
+      statusDiv.style.color = '#4CAF50';
 
-      if (connected) {
-        statusDiv.textContent = '✅ Connected! Syncing data...';
-        statusDiv.style.color = '#4CAF50';
+      // Delegate to App.selectGameMode() for proper event-driven initialization:
+      // - App will lock mode via SessionModeManager
+      // - App will create NetworkedSession with services
+      // - NetworkedSession will emit session:ready event
+      // - App's session:ready listener will initialize admin modules
+      // - App will close modal and show team entry screen
+      await this.app.selectGameMode('networked');
 
-        // Show viewSelector (admin panel tabs)
-        document.getElementById('viewSelector').style.display = 'flex';
-
-        // Reload settings to update deviceId display
-        settings.load();
-
-        // Close modal and transition to team entry screen
-        setTimeout(() => {
-          document.getElementById('connectionModal').style.display = 'none';
-          this.app.uiManager.showScreen('teamEntry');
-        }, 1000);
-      } else {
-        throw new Error('Failed to establish connection');
-      }
+      // Success handled by App's session:ready event listener
+      // (Modal close and UI transition happen in App._initializeNetworkedMode)
 
     } catch (error) {
       statusDiv.textContent = `❌ Connection failed: ${error.message}`;

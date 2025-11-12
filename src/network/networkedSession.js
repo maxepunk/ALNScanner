@@ -144,7 +144,11 @@ export class NetworkedSession extends EventTarget {
     });
 
     // 3. NetworkedQueueManager (depends on client)
-    this.services.queueManager = new NetworkedQueueManager(this.services.client);
+    this.services.queueManager = new NetworkedQueueManager({
+      client: this.services.client,
+      deviceId: this.config.deviceId,
+      debug: console
+    });
 
     // 4. AdminController (depends on client)
     this.services.adminController = new AdminController(this.services.client);

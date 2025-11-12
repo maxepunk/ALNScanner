@@ -16,19 +16,35 @@ class UIManager {
    * Create UIManager instance
    * @param {Object} options - Dependency injection options
    * @param {Object} options.settings - Settings instance (for mode checking)
-   * @param {Object} options.dataManager - DataManager instance (for stats/scores)
-   * @param {Object} options.sessionModeManager - SessionModeManager instance (for networked check)
+   * @param {Object} options.dataManager - DataManager instance (for networked mode stats/scores)
+   * @param {Object} options.standaloneDataManager - StandaloneDataManager instance (for standalone mode)
+   * @param {Object} options.sessionModeManager - SessionModeManager instance (for mode check)
    * @param {Object} options.app - App instance (for callbacks like showTeamDetails, deleteTeamTransaction)
    */
-  constructor({ settings, dataManager, sessionModeManager, app } = {}) {
+  constructor({ settings, dataManager, standaloneDataManager, sessionModeManager, app } = {}) {
     this.settings = settings;
     this.dataManager = dataManager;
+    this.standaloneDataManager = standaloneDataManager;
     this.sessionModeManager = sessionModeManager;
     this.app = app;
 
     this.screens = {};
     this.previousScreen = null;
     this.errorContainer = null;
+  }
+
+  /**
+   * Get appropriate data source based on session mode
+   * Single Source of Truth: Route to correct manager based on mode
+   * @returns {Object} DataManager (networked) or StandaloneDataManager (standalone)
+   */
+  _getDataSource() {
+    // Check if in standalone mode
+    if (this.sessionModeManager?.isStandalone()) {
+      return this.standaloneDataManager;
+    }
+    // Default to DataManager (networked mode or no mode set)
+    return this.dataManager;
   }
 
   /**
@@ -196,9 +212,10 @@ class UIManager {
    * Update session statistics display
    */
   updateSessionStats() {
-    if (!this.dataManager || !this.settings) return;
+    const dataSource = this._getDataSource();
+    if (!dataSource || !this.settings) return;
 
-    const stats = this.dataManager.getSessionStats();
+    const stats = dataSource.getSessionStats();
     const tokenCount = document.getElementById('teamTokenCount');
     const valueElement = document.getElementById('teamTotalValue');
     const labelElement = document.getElementById('teamValueLabel');
@@ -222,12 +239,13 @@ class UIManager {
    * Update history badge count
    */
   updateHistoryBadge() {
-    if (!this.dataManager) return;
+    const dataSource = this._getDataSource();
+    if (!dataSource) return;
 
     const badge = document.getElementById('historyBadge');
     if (!badge) return;
 
-    const count = this.dataManager.transactions.length;
+    const count = dataSource.transactions.length;
     if (count > 0) {
       badge.textContent = count;
       badge.style.display = 'inline';
@@ -240,9 +258,10 @@ class UIManager {
    * Update history statistics
    */
   updateHistoryStats() {
-    if (!this.dataManager) return;
+    const dataSource = this._getDataSource();
+    if (!dataSource) return;
 
-    const stats = this.dataManager.getGlobalStats();
+    const stats = dataSource.getGlobalStats();
     const totalScans = document.getElementById('totalScans');
     const uniqueTeams = document.getElementById('uniqueTeams');
     const totalValue = document.getElementById('totalValue');
@@ -258,12 +277,13 @@ class UIManager {
    * Render scoreboard
    */
   renderScoreboard() {
-    if (!this.dataManager || !this.app) return;
+    const dataSource = this._getDataSource();
+    if (!dataSource || !this.app) return;
 
     const container = document.getElementById('scoreboardContainer');
     if (!container) return;
 
-    const teamScores = this.dataManager.getTeamScores();
+    const teamScores = dataSource.getTeamScores();
 
     if (teamScores.length === 0) {
       container.innerHTML = `
@@ -304,11 +324,12 @@ class UIManager {
    * @param {Array} transactions - Team transactions
    */
   renderTeamDetails(teamId, transactions) {
-    if (!this.dataManager) return;
+    const dataSource = this._getDataSource();
+    if (!dataSource) return;
 
     // Get enhanced data structure
-    const enhancedData = this.dataManager.getEnhancedTeamTransactions(teamId);
-    const scoreData = this.dataManager.calculateTeamScoreWithBonuses(teamId);
+    const enhancedData = dataSource.getEnhancedTeamTransactions(teamId);
+    const scoreData = dataSource.calculateTeamScoreWithBonuses(teamId);
 
     // Check if networked mode for intervention controls
     const isNetworked = this.sessionModeManager?.isNetworked();
@@ -415,8 +436,9 @@ class UIManager {
       container.innerHTML = html;
     }
 
-    // Check if backend has authoritative score (networked mode)
-    const backendScore = this.dataManager.backendScores?.get(teamId);
+    // Check if backend has authoritative score (networked mode only)
+    // backendScores only exists in DataManager, not StandaloneDataManager
+    const backendScore = isNetworked && this.dataManager?.backendScores?.get(teamId);
 
     // Use backend scores if available (authoritative in networked mode)
     let displayBaseScore = scoreData.baseScore;
@@ -495,9 +517,10 @@ class UIManager {
    * @returns {string} HTML string
    */
   renderTokenCard(token, hasBonus = false, isUnknown = false, showDelete = false) {
-    if (!this.dataManager) return '';
+    const dataSource = this._getDataSource();
+    if (!dataSource) return '';
 
-    const tokenValue = this.dataManager.calculateTokenValue(token);
+    const tokenValue = dataSource.calculateTokenValue(token);
 
     // Add duplicate marker
     const isDuplicate = token.status === 'duplicate';
@@ -506,11 +529,11 @@ class UIManager {
 
     let calculationText = '';
     if (!isUnknown && !token.isUnknown) {
-      const baseValue = this.dataManager.SCORING_CONFIG.BASE_VALUES[token.valueRating] || 0;
-      const multiplier = this.dataManager.SCORING_CONFIG.TYPE_MULTIPLIERS[token.memoryType] || 1;
+      const baseValue = dataSource.SCORING_CONFIG.BASE_VALUES[token.valueRating] || 0;
+      const multiplier = dataSource.SCORING_CONFIG.TYPE_MULTIPLIERS[token.memoryType] || 1;
 
       if (hasBonus) {
-        const groupInfo = this.dataManager.parseGroupInfo(token.group);
+        const groupInfo = dataSource.parseGroupInfo(token.group);
         const finalValue = tokenValue * groupInfo.multiplier;
         calculationText = `
           <strong>${baseValue.toLocaleString()}</strong> ×
@@ -535,7 +558,7 @@ class UIManager {
       </button>
     ` : '';
 
-    const groupInfo = this.dataManager.parseGroupInfo(token.group);
+    const groupInfo = dataSource.parseGroupInfo(token.group);
     const displayValue = hasBonus ? tokenValue * groupInfo.multiplier : tokenValue;
 
     return `
@@ -581,12 +604,13 @@ class UIManager {
    * @param {Array} filtered - Filtered transactions (optional)
    */
   renderTransactions(filtered = null) {
-    if (!this.dataManager) return;
+    const dataSource = this._getDataSource();
+    if (!dataSource) return;
 
     const container = document.getElementById('historyContainer');
     if (!container) return;
 
-    const transactions = filtered || this.dataManager.transactions;
+    const transactions = filtered || dataSource.transactions;
 
     if (transactions.length === 0) {
       container.innerHTML = `
@@ -605,7 +629,7 @@ class UIManager {
 
       let valueDisplay;
       if (t.mode === 'blackmarket') {
-        valueDisplay = `$${this.dataManager.calculateTokenValue(t).toLocaleString()}`;
+        valueDisplay = `$${dataSource.calculateTokenValue(t).toLocaleString()}`;
       } else {
         valueDisplay = isUnknown ? 'N/A' : '⭐'.repeat(t.valueRating || 0);
       }
@@ -636,7 +660,8 @@ class UIManager {
    * Filter transactions based on search criteria
    */
   filterTransactions() {
-    if (!this.dataManager) return;
+    const dataSource = this._getDataSource();
+    if (!dataSource) return;
 
     const searchEl = document.getElementById('searchFilter');
     const modeEl = document.getElementById('modeFilter');
@@ -646,7 +671,7 @@ class UIManager {
     const search = searchEl.value.toLowerCase();
     const mode = modeEl.value;
 
-    let filtered = this.dataManager.transactions.filter(t => {
+    let filtered = dataSource.transactions.filter(t => {
       const matchesSearch = !search ||
         t.rfid.toLowerCase().includes(search) ||
         t.teamId.toLowerCase().includes(search) ||
@@ -711,7 +736,8 @@ class UIManager {
    * @param {boolean} isUnknown - Whether token is unknown
    */
   showTokenResult(token, tokenId, isUnknown) {
-    if (!this.dataManager || !this.settings) return;
+    const dataSource = this._getDataSource();
+    if (!dataSource || !this.settings) return;
 
     const statusEl = document.getElementById('resultStatus');
     const rfidEl = document.getElementById('resultRfid');
@@ -753,7 +779,7 @@ class UIManager {
       groupEl.textContent = token.SF_Group;
 
       if (this.settings.mode === 'blackmarket') {
-        const tokenScore = this.dataManager.calculateTokenValue({
+        const tokenScore = dataSource.calculateTokenValue({
           valueRating: token.SF_ValueRating,
           memoryType: token.SF_MemoryType,
           isUnknown: false

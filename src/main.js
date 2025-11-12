@@ -14,12 +14,13 @@
 
 // Import core dependencies
 // Note: Debug, Settings, TokenManager, NFCHandler, CONFIG are singletons (pre-created instances)
-// Note: DataManager, UIManager are classes (instances created below with DI)
+// Note: DataManager, UIManager, StandaloneDataManager are classes (instances created below with DI)
 import Debug from './utils/debug.js';
 import { UIManager as UIManagerClass } from './ui/uiManager.js';
 import Settings from './ui/settings.js';
 import TokenManager from './core/tokenManager.js';
 import { DataManager as DataManagerClass } from './core/dataManager.js';
+import { StandaloneDataManager as StandaloneDataManagerClass } from './core/standaloneDataManager.js';
 import NFCHandler from './utils/nfcHandler.js';
 import CONFIG from './utils/config.js';
 import InitializationSteps from './app/initializationSteps.js';
@@ -48,10 +49,18 @@ const DataManager = new DataManagerClass({
   // app, sessionModeManager, networkedSession set later by App
 });
 
-// Create UIManager with DataManager dependency
+// Create StandaloneDataManager for standalone mode scoring
+const StandaloneDataManager = new StandaloneDataManagerClass({
+  tokenManager: TokenManager,
+  debug: Debug
+});
+
+// Create UIManager with both DataManager and StandaloneDataManager
+// UIManager will route to appropriate manager based on session mode
 const UIManager = new UIManagerClass({
   settings: Settings,
-  dataManager: DataManager
+  dataManager: DataManager,
+  standaloneDataManager: StandaloneDataManager
   // sessionModeManager, app set later by App
 });
 
@@ -88,6 +97,20 @@ DataManager.addEventListener('team-score:updated', (event) => {
   }
 });
 
+// Wire event-driven communication: StandaloneDataManager → UIManager
+// (Standalone mode uses different events but triggers same UI updates)
+StandaloneDataManager.addEventListener('standalone:transaction-added', () => {
+  UIManager.updateHistoryBadge();
+  UIManager.updateSessionStats();
+});
+
+StandaloneDataManager.addEventListener('standalone:scores-updated', () => {
+  // Update scoreboard if visible
+  if (document.getElementById('scoreboardContainer')) {
+    UIManager.renderScoreboard();
+  }
+});
+
 /**
  * Create App instance with dependency injection
  * Now using created instances (not pre-created singletons)
@@ -98,6 +121,7 @@ const app = new App({
   settings: Settings,
   tokenManager: TokenManager,
   dataManager: DataManager,
+  standaloneDataManager: StandaloneDataManager,
   nfcHandler: NFCHandler,
   config: CONFIG,
   initializationSteps: InitializationSteps
@@ -114,6 +138,12 @@ window.__app = app;
  */
 const connectionWizard = new ConnectionWizard(app);
 const queueStatusManager = new QueueStatusManager(app);
+
+/**
+ * Inject showConnectionWizard method into app
+ * Required by App._initializeNetworkedMode() when no valid auth token exists
+ */
+app.showConnectionWizard = connectionWizard.showConnectionWizard.bind(connectionWizard);
 
 /**
  * Bind DOM event handlers using event delegation

@@ -9,7 +9,7 @@ export default defineConfig({
   // Base path configuration
   // Development: standalone server on port 8443
   // Production (via backend): served at /gm-scanner/
-  base: process.env.VITE_BASE_PATH || '/',
+  base: process.env.VITE_BASE_PATH || (process.env.NODE_ENV === 'production' ? '/gm-scanner/' : '/'),
 
   build: {
     outDir: 'dist',

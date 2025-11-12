@@ -38,6 +38,7 @@ class App {
     this.settings = dependencies.settings || Settings;
     this.tokenManager = dependencies.tokenManager || TokenManager;
     this.dataManager = dependencies.dataManager || DataManager;
+    this.standaloneDataManager = dependencies.standaloneDataManager || null;
     this.nfcHandler = dependencies.nfcHandler || NFCHandler;
     this.config = dependencies.config || CONFIG;
     this.initializationSteps = dependencies.initializationSteps || InitializationSteps;
@@ -72,6 +73,15 @@ class App {
     // CRITICAL: Initialize SessionModeManager BEFORE viewController (Phase 1E)
     // Store reference as instance property (no window global assignment)
     this.sessionModeManager = this.initializationSteps.createSessionModeManager(SessionModeManager);
+
+    // CRITICAL: Inject sessionModeManager and app into UIManager (Phase S1 fix)
+    // This allows UIManager._getDataSource() to route correctly to StandaloneDataManager in standalone mode
+    this.uiManager.sessionModeManager = this.sessionModeManager;
+    this.uiManager.app = this;
+
+    // CRITICAL: Inject app into StandaloneDataManager (Phase S1 fix)
+    // This allows StandaloneDataManager.getSessionStats() to access currentTeamId for per-team stats
+    this.standaloneDataManager.app = this;
 
     // Initialize view controller (Phase 1F)
     this.initializationSteps.initializeViewController(this.viewController);
@@ -351,15 +361,30 @@ class App {
     }
 
     try {
-      // Set mode (locks it)
-      this.sessionModeManager.setMode(mode);
-      this.debug.log(`Game mode selected: ${mode}`);
-
-      // If networked mode: Create and initialize NetworkedSession
+      // For networked mode: Check auth token first before locking mode
       if (mode === 'networked') {
+        const token = localStorage.getItem('aln_auth_token');
+
+        if (!token || !this._isTokenValid(token)) {
+          // No valid token - show connection wizard WITHOUT locking mode yet
+          // The wizard's handleConnectionSubmit will lock mode after successful auth
+          this.debug.log('Networked mode selected - showing connection wizard (mode not locked yet)');
+          if (this.showConnectionWizard) {
+            this.showConnectionWizard();
+          } else {
+            this.uiManager.showError('Connection wizard not available');
+          }
+          return;
+        }
+
+        // Valid token exists - lock mode and initialize
+        this.sessionModeManager.setMode(mode);
+        this.debug.log(`Game mode locked: ${mode}`);
         await this._initializeNetworkedMode();
       } else if (mode === 'standalone') {
-        // Standalone mode: proceed to team entry
+        // Standalone mode: lock immediately and proceed
+        this.sessionModeManager.setMode(mode);
+        this.debug.log(`Game mode locked: ${mode}`);
         this.uiManager.showScreen('teamEntry');
       }
     } catch (error) {
@@ -400,6 +425,25 @@ class App {
         this.debug.log('NetworkedSession initialized - session:ready will fire');
         // session:ready event will trigger admin module initialization
         // via _wireNetworkedSessionEvents listener
+
+        // Close connection wizard modal (if open) and show team entry screen
+        // Per Architecture Refactoring 2025-11: App manages UI transitions after NetworkedSession ready
+        const connectionModal = document.getElementById('connectionModal');
+        if (connectionModal && connectionModal.style.display !== 'none') {
+          connectionModal.style.display = 'none';
+          this.debug.log('Connection wizard closed after successful initialization');
+        }
+
+        // Show viewSelector (admin panel tabs) in networked mode
+        const viewSelector = document.getElementById('viewSelector');
+        if (viewSelector) {
+          viewSelector.style.display = 'flex';
+        }
+
+        // Transition to team entry screen
+        this.uiManager.showScreen('teamEntry');
+        this.debug.log('UI transitioned to team entry screen');
+
       } catch (error) {
         console.error('NetworkedSession initialization failed:', error);
         // Clean up failed session
@@ -536,8 +580,12 @@ class App {
     // Use matched ID for duplicate check (handles case variations)
     const tokenId = tokenData ? tokenData.matchedId : cleanId;
 
-    // Check for duplicate using normalized ID
-    if (this.dataManager.isTokenScanned(tokenId)) {
+    // Check for duplicate using normalized ID (mode-aware)
+    const dataSource = this.sessionModeManager?.isStandalone()
+      ? this.standaloneDataManager
+      : this.dataManager;
+
+    if (dataSource && dataSource.isTokenScanned(tokenId)) {
       this.debug.log(`Duplicate token detected: ${tokenId}`, true);
       this.showDuplicateError(tokenId);
       return;
@@ -646,19 +694,31 @@ class App {
       });
       this.debug.log(`Transaction queued for orchestrator: ${txId}`);
     } else {
-      // Standalone mode or no session mode - save locally only
-      this.dataManager.addTransaction(transaction);
-      this.dataManager.markTokenAsScanned(tokenId);
-
+      // Standalone mode - use StandaloneDataManager ONLY (Single Source of Truth)
       if (this.sessionModeManager && this.sessionModeManager.isStandalone()) {
-        this.debug.log('Transaction stored locally (standalone mode)');
+        // ARCHITECTURE: StandaloneDataManager is the ONLY data source for standalone mode
+        // UIManager is now mode-aware and will read from StandaloneDataManager via _getDataSource()
+        if (!this.standaloneDataManager) {
+          throw new Error('StandaloneDataManager not initialized');
+        }
+
+        // Add to StandaloneDataManager (handles scoring, group bonuses, and persists to localStorage.standaloneSession)
+        this.standaloneDataManager.addTransaction(transaction);
+        this.debug.log('Transaction stored in StandaloneDataManager (standalone mode - single source of truth)');
       } else {
-        this.debug.log('No session mode selected - storing locally only');
+        // No session mode selected yet - store in DataManager only
+        this.dataManager.addTransaction(transaction);
+        this.dataManager.markTokenAsScanned(tokenId);
+        this.debug.log('No session mode selected - storing in DataManager only');
       }
     }
 
     if (this.settings.mode === 'blackmarket' && !isUnknown) {
-      const tokenScore = this.dataManager.calculateTokenValue(transaction);
+      // Use appropriate data manager based on mode
+      const dataSource = this.sessionModeManager?.isStandalone()
+        ? this.standaloneDataManager
+        : this.dataManager;
+      const tokenScore = dataSource.calculateTokenValue(transaction);
       this.debug.log(`Token scored: $${tokenScore.toLocaleString()}`);
     }
 
