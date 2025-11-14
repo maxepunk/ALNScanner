@@ -68,6 +68,13 @@ const UIManager = new UIManagerClass({
 DataManager.addEventListener('transaction:added', () => {
   UIManager.updateHistoryBadge();
   UIManager.updateSessionStats();
+
+  // Auto-update history screen if visible (was missing)
+  const historyScreen = document.getElementById('historyScreen');
+  if (historyScreen?.classList.contains('active')) {
+    UIManager.updateHistoryStats();
+    UIManager.renderTransactions();
+  }
 });
 
 DataManager.addEventListener('data:cleared', () => {
@@ -102,6 +109,13 @@ DataManager.addEventListener('team-score:updated', (event) => {
 StandaloneDataManager.addEventListener('standalone:transaction-added', () => {
   UIManager.updateHistoryBadge();
   UIManager.updateSessionStats();
+
+  // Auto-update history screen if visible
+  const historyScreen = document.getElementById('historyScreen');
+  if (historyScreen?.classList.contains('active')) {
+    UIManager.updateHistoryStats();
+    UIManager.renderTransactions();
+  }
 });
 
 StandaloneDataManager.addEventListener('standalone:scores-updated', () => {
