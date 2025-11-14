@@ -373,6 +373,107 @@ describe('AdminModule - ES6 Exports', () => {
 
       await expect(ops.clearData()).resolves.toEqual({ success: true });
     });
+
+    describe('Score Management', () => {
+      it('should reset scores via _sendCommand', async () => {
+        const ops = new AdminOperations(mockConnection);
+
+        setTimeout(() => {
+          mockConnection.dispatchEvent(
+            new CustomEvent('message:received', {
+              detail: {
+                type: 'gm:command:ack',
+                payload: { success: true }
+              }
+            })
+          );
+        }, 10);
+
+        await expect(ops.resetScores()).resolves.toEqual({ success: true });
+
+        // Verify gm:command was sent with correct action
+        expect(mockConnection.send).toHaveBeenCalledWith('gm:command', {
+          action: 'score:reset',
+          payload: {}
+        });
+      });
+
+      it('should adjust team score via _sendCommand', async () => {
+        const ops = new AdminOperations(mockConnection);
+
+        setTimeout(() => {
+          mockConnection.dispatchEvent(
+            new CustomEvent('message:received', {
+              detail: {
+                type: 'gm:command:ack',
+                payload: { success: true }
+              }
+            })
+          );
+        }, 10);
+
+        await expect(ops.adjustScore('001', 500, 'Manual adjustment')).resolves.toEqual({
+          success: true
+        });
+
+        // Verify gm:command was sent with correct payload
+        expect(mockConnection.send).toHaveBeenCalledWith('gm:command', {
+          action: 'score:adjust',
+          payload: { teamId: '001', delta: 500, reason: 'Manual adjustment' }
+        });
+      });
+
+      it('should delete transaction via _sendCommand', async () => {
+        const ops = new AdminOperations(mockConnection);
+
+        setTimeout(() => {
+          mockConnection.dispatchEvent(
+            new CustomEvent('message:received', {
+              detail: {
+                type: 'gm:command:ack',
+                payload: { success: true }
+              }
+            })
+          );
+        }, 10);
+
+        await expect(ops.deleteTransaction('tx-12345')).resolves.toEqual({ success: true });
+
+        // Verify gm:command was sent with correct payload
+        expect(mockConnection.send).toHaveBeenCalledWith('gm:command', {
+          action: 'transaction:delete',
+          payload: { transactionId: 'tx-12345' }
+        });
+      });
+
+      it(
+        'should timeout if no acknowledgment received within 5s',
+        async () => {
+          const ops = new AdminOperations(mockConnection);
+
+          // Don't send any ack - let it timeout
+          await expect(ops.resetScores()).rejects.toThrow('score:reset timeout');
+        },
+        6000
+      ); // 6s timeout to allow 5s method timeout + buffer
+
+      it('should reject if command fails', async () => {
+        const ops = new AdminOperations(mockConnection);
+
+        setTimeout(() => {
+          mockConnection.dispatchEvent(
+            new CustomEvent('message:received', {
+              detail: {
+                type: 'gm:command:ack',
+                payload: { success: false, message: 'No active session' }
+              }
+            })
+          );
+        }, 10);
+
+        await expect(ops.adjustScore('001', 100, 'Test')).rejects.toThrow('No active session');
+      });
+    });
   });
 
   describe.skip('MonitoringDisplay', () => {

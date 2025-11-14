@@ -270,6 +270,18 @@ export class AdminOperations {
     return this._sendSystemCommand('system:clear');
   }
 
+  async resetScores() {
+    return this._sendCommand('score:reset', {});
+  }
+
+  async adjustScore(teamId, delta, reason) {
+    return this._sendCommand('score:adjust', { teamId, delta, reason });
+  }
+
+  async deleteTransaction(transactionId) {
+    return this._sendCommand('transaction:delete', { transactionId });
+  }
+
   _sendSystemCommand(action) {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -308,6 +320,50 @@ export class AdminOperations {
   }
 
   /**
+   * Send admin command and wait for acknowledgment
+   * @param {string} action - Command action (e.g., 'score:reset')
+   * @param {Object} payload - Command payload
+   * @returns {Promise} Resolves with response data
+   * @private
+   */
+  _sendCommand(action, payload) {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.connection.removeEventListener('message:received', ackHandler);
+        reject(new Error(`${action} timeout`));
+      }, 5000);
+
+      // One-time handler for gm:command:ack
+      const ackHandler = (event) => {
+        const { type, payload: response } = event.detail;
+
+        // Only process gm:command:ack events
+        if (type !== 'gm:command:ack') return;
+
+        // Cleanup
+        clearTimeout(timeout);
+        this.connection.removeEventListener('message:received', ackHandler);
+
+        // Check response (response IS the data, already unwrapped)
+        if (response.success) {
+          resolve(response);
+        } else {
+          reject(new Error(response.message || `Failed: ${action}`));
+        }
+      };
+
+      // Register one-time listener
+      this.connection.addEventListener('message:received', ackHandler);
+
+      // Send command via OrchestratorClient (uses AsyncAPI envelope wrapper)
+      this.connection.send('gm:command', {
+        action: action,
+        payload: payload
+      });
+    });
+  }
+
+  /**
    * Cleanup event listeners
    */
   destroy() {
@@ -341,15 +397,33 @@ export class MonitoringDisplay {
   _handleMessage(event) {
     const { type, payload } = event.detail;
 
+    // DEBUG: Log message arrival (Phase 1 instrumentation)
+    console.log('[MonitoringDisplay] _handleMessage called:', type, payload);
+
     switch (type) {
       case 'transaction:new':
         // CRITICAL: transaction:new payload is { transaction: {...} }, not flat
         if (payload && payload.transaction) {
+          console.log('[MonitoringDisplay] Calling updateTransactionDisplay');
+
+          // CRITICAL FIX: Add transaction to DataManager for scanner view history
+          // (allows scanner view to show all system transactions)
+          if (window.DataManager) {
+            window.DataManager.addTransaction(payload.transaction);
+          }
+
+          // Update admin panel transaction log (display only)
           this.updateTransactionDisplay(payload.transaction);
         }
         break;
 
       case 'score:updated':
+        console.log('[MonitoringDisplay] Calling updateScoreDisplay');
+        // CRITICAL FIX: Update DataManager cache BEFORE displaying
+        // (matches sync:full pattern at line 818)
+        if (window.DataManager && payload) {
+          window.DataManager.updateTeamScoreFromBackend(payload);
+        }
         this.updateScoreDisplay(payload);
         break;
 
@@ -468,13 +542,25 @@ export class MonitoringDisplay {
    * Shows all team scores with breakdown
    */
   updateScoreDisplay(scoreData) {
-    if (!scoreData) return;
+    console.log('[MonitoringDisplay] updateScoreDisplay called with:', scoreData);
+
+    if (!scoreData) {
+      console.warn('[MonitoringDisplay] updateScoreDisplay: no scoreData provided');
+      return;
+    }
 
     const scoreBoard = document.getElementById('admin-score-board');
-    if (!scoreBoard) return;
+    if (!scoreBoard) {
+      console.error('[MonitoringDisplay] updateScoreDisplay: #admin-score-board element not found in DOM');
+      return;
+    }
+
+    console.log('[MonitoringDisplay] Found #admin-score-board element');
 
     // Build complete score table from DataManager.backendScores
     if (window.DataManager && window.DataManager.backendScores) {
+      console.log('[MonitoringDisplay] window.DataManager.backendScores exists, size:', window.DataManager.backendScores.size);
+
       let html = '<table class="score-table"><tr><th>Team</th><th>Tokens</th><th>Score</th></tr>';
 
       window.DataManager.backendScores.forEach((teamScore, teamId) => {
@@ -490,6 +576,9 @@ export class MonitoringDisplay {
 
       html += '</table>';
       scoreBoard.innerHTML = html;
+      console.log('[MonitoringDisplay] Updated #admin-score-board with HTML:', html);
+    } else {
+      console.warn('[MonitoringDisplay] window.DataManager or window.DataManager.backendScores not available');
     }
   }
 
