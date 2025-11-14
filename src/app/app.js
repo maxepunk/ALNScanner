@@ -212,7 +212,6 @@ class App {
 
           // Refresh admin panel
           if (this.adminInstances) {
-            this.adminInstances.systemMonitor.refresh();
             // Fetch current session state
             this.fetchCurrentSession();
           }
@@ -230,7 +229,7 @@ class App {
 
         if (!this.adminInstances?.sessionManager) return;
 
-        this.debug.log(this.adminInstances.sessionManager.currentSession
+        app.debug.log(this.adminInstances.sessionManager.currentSession
           ? 'Session active: ' + JSON.stringify(this.adminInstances.sessionManager.currentSession)
           : 'No active session');
       },
