@@ -35,6 +35,11 @@ export class ConnectionManager extends EventTarget {
     this.maxRetries = config.maxRetries || 5;
     this.retryTimer = null;
     this.disconnectHandler = null;
+
+    // Wire global connection status indicator updates
+    this.addEventListener('connecting', () => this._updateGlobalConnectionStatus('connecting'));
+    this.addEventListener('connected', () => this._updateGlobalConnectionStatus('connected'));
+    this.addEventListener('disconnected', () => this._updateGlobalConnectionStatus('disconnected'));
   }
 
   /**
@@ -255,6 +260,33 @@ export class ConnectionManager extends EventTarget {
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
+    }
+  }
+
+  /**
+   * Update global connection status indicator in header
+   * @param {string} status - Connection status: 'connecting', 'connected', 'disconnected'
+   * @private
+   */
+  _updateGlobalConnectionStatus(status) {
+    const statusElement = document.getElementById('connectionStatus');
+    if (!statusElement) return;
+
+    // Remove all status classes
+    statusElement.classList.remove('connected', 'connecting', 'disconnected');
+
+    // Add current status class
+    statusElement.classList.add(status);
+
+    // Update text
+    const textElement = statusElement.querySelector('.status-text');
+    if (textElement) {
+      const statusText = {
+        connecting: 'Connecting...',
+        connected: 'Connected',
+        disconnected: 'Disconnected'
+      };
+      textElement.textContent = statusText[status] || 'Unknown';
     }
   }
 }

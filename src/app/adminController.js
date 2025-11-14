@@ -48,7 +48,7 @@ export class AdminController extends EventTarget {
       videoController: new VideoController(this.client),
       systemMonitor: new SystemMonitor(this.client),
       adminOperations: new AdminOperations(this.client),
-      monitoringDisplay: new MonitoringDisplay()
+      monitoringDisplay: new MonitoringDisplay(this.client)
     };
 
     this.initialized = true;
