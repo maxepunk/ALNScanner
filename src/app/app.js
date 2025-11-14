@@ -1210,6 +1210,14 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     this.showScoreboard();
   }
 
+  /**
+   * Navigate to full transaction history from admin panel
+   */
+  viewFullHistory() {
+    this.switchView('scanner');
+    this.showHistory();
+  }
+
 
   // ========== GM Intervention (Networked Mode Only) ==========
 
