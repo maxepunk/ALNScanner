@@ -896,6 +896,9 @@ export class MonitoringDisplay {
     // Update orchestrator connection status only
     // Device updates handled by updateAllDisplays() via sync:full → updateDeviceList()
 
+    // Guard against null connection (can happen if admin panel opened before connection)
+    if (!this.connection) return;
+
     const orchestratorElem = document.getElementById('orchestrator-status');
     if (orchestratorElem) {
       const status = this.connection.isConnected ? 'connected' : 'disconnected';
