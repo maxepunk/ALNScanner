@@ -245,29 +245,6 @@ export class SystemMonitor {
     }
   }
 
-  async checkVLC() {
-    try {
-      const response = await fetch(`${this.connection.config.url}/api/vlc/status`);
-      const data = await response.json();
-      this.vlcHealth = data.connected ? 'connected' : 'disconnected';
-      return this.vlcHealth;
-    } catch (error) {
-      this.vlcHealth = 'error';
-      throw error;
-    }
-  }
-
-  async refresh() {
-    await Promise.all([
-      this.checkHealth().catch(() => 'error'),
-      this.checkVLC().catch(() => 'error')
-    ]);
-    return {
-      backend: this.backendHealth,
-      vlc: this.vlcHealth
-    };
-  }
-
   /**
    * Cleanup (no event listeners)
    */
