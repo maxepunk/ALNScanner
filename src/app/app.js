@@ -1142,7 +1142,10 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       let html = '<table class="score-table"><tr><th>Team</th><th>Tokens</th><th>Score</th></tr>';
       Object.keys(teams).forEach(teamId => {
         html += `<tr>
-          <td>${teamId}</td>
+          <td style="cursor: pointer; color: #007bff; text-decoration: underline;"
+              onclick="window.App.showTeamDetails('${teamId}')">
+            ${teamId}
+          </td>
           <td>${teams[teamId].count}</td>
           <td>${teams[teamId].score.toLocaleString()}</td>
         </tr>`;

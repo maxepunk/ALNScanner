@@ -614,7 +614,10 @@ export class MonitoringDisplay {
         const currentScore = teamScore.currentScore || 0;
 
         html += `<tr>
-          <td>${teamId}</td>
+          <td style="cursor: pointer; color: #007bff; text-decoration: underline;"
+              onclick="window.App.showTeamDetails('${teamId}')">
+            ${teamId}
+          </td>
           <td>${tokensScanned}</td>
           <td>${currentScore.toLocaleString()}</td>
         </tr>`;
