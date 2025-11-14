@@ -18,6 +18,8 @@
  * - MonitoringDisplay: DOM updates (event-driven)
  */
 
+import { Debug } from './debug.js';
+
 /**
  * SessionManager - Session Lifecycle Management
  * Handles create/pause/resume/end via WebSocket commands
@@ -270,14 +272,34 @@ export class AdminOperations {
     return this._sendSystemCommand('system:clear');
   }
 
+  /**
+   * Reset all team scores to zero
+   * Sends score:reset command via WebSocket
+   * @returns {Promise} Resolves when scores are reset
+   */
   async resetScores() {
     return this._sendCommand('score:reset', {});
   }
 
-  async adjustScore(teamId, delta, reason) {
+  /**
+   * Adjust a team's score by a delta amount
+   * Sends score:adjust command via WebSocket
+   * @param {string} teamId - Team identifier (e.g., '001', '002')
+   * @param {number} delta - Score adjustment amount (positive or negative)
+   * @param {string} [reason='Admin adjustment'] - Reason for adjustment (audit trail)
+   * @returns {Promise} Resolves when score is adjusted
+   */
+  async adjustScore(teamId, delta, reason = 'Admin adjustment') {
     return this._sendCommand('score:adjust', { teamId, delta, reason });
   }
 
+  /**
+   * Delete a transaction by ID
+   * Sends transaction:delete command via WebSocket
+   * Reverses the transaction's score impact and removes from history
+   * @param {string} transactionId - Transaction ID to delete
+   * @returns {Promise} Resolves when transaction is deleted
+   */
   async deleteTransaction(transactionId) {
     return this._sendCommand('transaction:delete', { transactionId });
   }
@@ -398,13 +420,13 @@ export class MonitoringDisplay {
     const { type, payload } = event.detail;
 
     // DEBUG: Log message arrival (Phase 1 instrumentation)
-    console.log('[MonitoringDisplay] _handleMessage called:', type, payload);
+    Debug.log(`[MonitoringDisplay] _handleMessage called: ${type}`);
 
     switch (type) {
       case 'transaction:new':
         // CRITICAL: transaction:new payload is { transaction: {...} }, not flat
         if (payload && payload.transaction) {
-          console.log('[MonitoringDisplay] Calling updateTransactionDisplay');
+          Debug.log('[MonitoringDisplay] Calling updateTransactionDisplay');
 
           // CRITICAL FIX: Add transaction to DataManager for scanner view history
           // (allows scanner view to show all system transactions)
@@ -418,7 +440,7 @@ export class MonitoringDisplay {
         break;
 
       case 'score:updated':
-        console.log('[MonitoringDisplay] Calling updateScoreDisplay');
+        Debug.log('[MonitoringDisplay] Calling updateScoreDisplay');
         // CRITICAL FIX: Update DataManager cache BEFORE displaying
         // (matches sync:full pattern at line 818)
         if (window.DataManager && payload) {
@@ -542,24 +564,24 @@ export class MonitoringDisplay {
    * Shows all team scores with breakdown
    */
   updateScoreDisplay(scoreData) {
-    console.log('[MonitoringDisplay] updateScoreDisplay called with:', scoreData);
+    Debug.log('[MonitoringDisplay] updateScoreDisplay called');
 
     if (!scoreData) {
-      console.warn('[MonitoringDisplay] updateScoreDisplay: no scoreData provided');
+      Debug.log('[MonitoringDisplay] updateScoreDisplay: no scoreData provided', true);
       return;
     }
 
     const scoreBoard = document.getElementById('admin-score-board');
     if (!scoreBoard) {
-      console.error('[MonitoringDisplay] updateScoreDisplay: #admin-score-board element not found in DOM');
+      Debug.log('[MonitoringDisplay] updateScoreDisplay: #admin-score-board element not found in DOM', true);
       return;
     }
 
-    console.log('[MonitoringDisplay] Found #admin-score-board element');
+    Debug.log('[MonitoringDisplay] Found #admin-score-board element');
 
     // Build complete score table from DataManager.backendScores
     if (window.DataManager && window.DataManager.backendScores) {
-      console.log('[MonitoringDisplay] window.DataManager.backendScores exists, size:', window.DataManager.backendScores.size);
+      Debug.log(`[MonitoringDisplay] window.DataManager.backendScores exists, size: ${window.DataManager.backendScores.size}`);
 
       let html = '<table class="score-table"><tr><th>Team</th><th>Tokens</th><th>Score</th></tr>';
 
@@ -576,9 +598,9 @@ export class MonitoringDisplay {
 
       html += '</table>';
       scoreBoard.innerHTML = html;
-      console.log('[MonitoringDisplay] Updated #admin-score-board with HTML:', html);
+      Debug.log('[MonitoringDisplay] Updated #admin-score-board with score table');
     } else {
-      console.warn('[MonitoringDisplay] window.DataManager or window.DataManager.backendScores not available');
+      Debug.log('[MonitoringDisplay] window.DataManager or window.DataManager.backendScores not available', true);
     }
   }
 
@@ -589,7 +611,7 @@ export class MonitoringDisplay {
   updateSessionDisplay(session) {
     const container = document.getElementById('session-status-container');
     if (!container) {
-      console.warn('session-status-container not found in DOM');
+      Debug.log('session-status-container not found in DOM', true);
       return;
     }
 
@@ -836,9 +858,9 @@ export class MonitoringDisplay {
         .join('');
 
       datalist.innerHTML = videoOptions;
-      console.log('Loaded video options:', Object.keys(data.tokens).filter(id => data.tokens[id].video).length);
+      Debug.log(`Loaded video options: ${Object.keys(data.tokens).filter(id => data.tokens[id].video).length}`);
     } catch (error) {
-      console.error('Failed to load available videos:', error);
+      Debug.log(`Failed to load available videos: ${error.message}`, true);
     }
   }
 
