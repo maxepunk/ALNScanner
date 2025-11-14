@@ -2,49 +2,77 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ IMPORTANT: Modern ES6 Architecture (Nov 2025)
+
+**This scanner now uses ES6 modules with Vite build system.**
+
+Previous architecture (20+ script tags) was migrated to modern ES6 modules. See [docs/plans/2025-11-11-es6-module-migration.md](docs/plans/2025-11-11-es6-module-migration.md) for complete migration details.
+
+### What Changed
+- **Before**: Single HTML file with 20+ `<script>` tags, global namespace pollution
+- **After**: ES6 modules with `import`/`export`, Vite build system, code splitting
+- **Breaking Change**: Must use `npm run dev` (cannot open index.html directly)
+
 ## Project Overview
 
 ALNScanner is the **Game Master (GM) Scanner** for "About Last Night" - a PWA for tracking team transactions via NFC token scanning during a 2-hour immersive game. This is the GM control tool, NOT the player-facing scanner.
 
 **Key Facts:**
-- Single-file PWA (index.html + modular JS)
-- No build process, no npm dependencies
+- ES6 module architecture with Vite 5.x build system
 - Dual operation modes: Networked (WebSocket) OR Standalone (offline)
 - Two game modes: Detective (star ratings) OR Black Market (currency)
 - Android Chrome/Edge 89+ required for NFC
+- Automated testing: Jest (598 unit tests) + Playwright (E2E)
+- Automated deployment to GitHub Pages
 
 ## Development Commands
 
 ### Local Development
 ```bash
-# HTTP server (testing without NFC)
-python3 -m http.server 8000
+# Install dependencies (first time)
+npm install
 
-# HTTPS server (required for NFC testing)
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
-npx http-server -S -C cert.pem -K key.pem
+# Development server with hot reload (HTTPS on port 8443)
+npm run dev
 
-# Test without NFC: Open in browser → use "Manual Entry" button
+# Build for production
+npm run build         # Output to dist/
+npm run preview       # Test production build locally
+
+# Run tests
+npm test              # Jest unit tests (L1: 598 tests, ~15-30s)
+npm run test:e2e      # Playwright E2E tests (L2: scanner only, ~2-3 min)
+npm run test:all      # All tests (L1 + L2)
+
+# Pre-merge verification
+./verify-merge-ready.sh  # 8-phase readiness check (tests + build + artifacts)
 ```
 
 ### Token Synchronization
 ```bash
-# Sync tokens from shared repository
-python3 sync.py
-
-# Sync + deploy to GitHub Pages
-python3 sync.py --deploy
+# Sync tokens from shared repository (git submodule)
+git submodule update --init --recursive
 ```
 
 ### Testing with Backend
 ```bash
 # 1. Start orchestrator (from backend/)
-cd ../backend && npm run dev
+cd ../../backend && npm run dev
 
-# 2. Open scanner on Android device
+# 2. Open scanner (Vite dev server auto-opens browser)
 # 3. Select "Networked Mode"
 # 4. Enter orchestrator URL: https://[IP]:3000
 # 5. Authenticate with admin password
+```
+
+### Deployment
+```bash
+# Automatic deployment to GitHub Pages on push to main
+git push origin main
+
+# Manual deployment
+npm run build
+# Copy dist/ to server
 ```
 
 ## Architecture Overview
@@ -76,6 +104,129 @@ cd ../backend && npm run dev
 - Type multipliers (Personal 1x, Business 3x, Technical 5x)
 - Group completion bonuses (2x - 20x)
 - Exclusive scoreboard feature
+
+## Testing Architecture
+
+### Test Taxonomy
+
+The scanner uses a 3-tier testing strategy:
+
+**L1: Smoke Tests (Unit-level Verification)**
+- **Location**: `tests/unit/` (598 tests)
+- **Scope**: Module-level testing with mocks
+- **Purpose**: Verify individual components work correctly in isolation
+- **Run**: `npm test`
+- **Duration**: ~15-30s
+- **Coverage**: 598 tests across all modules (app, core, network, ui, utils)
+
+**L2: Scanner E2E Tests (No Orchestrator)**
+- **Location**: `tests/e2e/specs/`
+- **Scope**: Full scanner testing WITHOUT backend orchestrator
+- **Purpose**: Verify scanner works standalone in real browser environment
+- **Run**: `npm run test:e2e`
+- **Duration**: ~2-3 minutes
+- **Coverage**: Standalone mode, UI navigation, localStorage persistence
+- **Environment**: Playwright with Chromium (real browser, not jsdom)
+
+**L3: Full Stack E2E Tests (Scanner + Orchestrator)**
+- **Location**: `../../backend/tests/e2e/flows/` (parent repo)
+- **Scope**: Complete integration testing with live orchestrator backend
+- **Purpose**: Verify end-to-end transaction flow, WebSocket communication, scoring
+- **Run**: From parent repo: `cd ../../backend && npm run test:e2e`
+- **Duration**: ~4-5 minutes
+- **Coverage**: Networked mode, WebSocket auth, transaction submission, scoring validation
+- **Environment**: Playwright + live backend server
+
+### Test Directory Structure
+
+```
+ALNScanner/
+├── tests/
+│   ├── unit/                       # L1: Jest unit tests
+│   │   ├── app/                    # App layer (App.js, SessionModeManager, etc.)
+│   │   ├── core/                   # Business logic (DataManager, TokenManager)
+│   │   ├── network/                # WebSocket layer (OrchestratorClient, etc.)
+│   │   ├── ui/                     # UI management (UIManager, Settings)
+│   │   └── utils/                  # Utilities (Config, Debug, NFC)
+│   └── e2e/                        # L2: Playwright E2E (scanner only)
+│       └── specs/
+│           ├── standalone-mode.spec.js
+│           └── ui-navigation.spec.js
+└── ...
+
+../../backend/tests/e2e/flows/      # L3: Full stack E2E (parent repo)
+├── 07b-gm-scanner-networked-blackmarket.test.js  # Transaction flow
+├── 07c-gm-scanner-scoring-parity.test.js         # Scoring validation
+└── ...
+```
+
+### Testing Best Practices
+
+**When to Run Which Tests:**
+- **Daily Development**: L1 only (`npm test` - fast feedback)
+- **Pre-PR**: L1 + L2 (`npm run test:all` - verify scanner works standalone)
+- **Pre-Merge**: L1 + L2 + L3 + CI checks (`./verify-merge-ready.sh` - full validation)
+
+**Test Pattern: Event-Driven Architecture**
+- DataManager and StandaloneDataManager emit CustomEvents
+- Tests register event listeners BEFORE triggering actions (avoid race conditions)
+- Example pattern:
+```javascript
+it('should emit event when transaction added', (done) => {
+  // CRITICAL: Register listener BEFORE action
+  manager.addEventListener('transaction:added', (event) => {
+    expect(event.detail.transaction).toBeDefined();
+    done();
+  });
+
+  // Then trigger action
+  manager.addTransaction({ /* ... */ });
+});
+```
+
+**Test Pattern: Dependency Injection**
+- All modules accept dependencies via constructor (testability)
+- Tests inject mocks for controlled behavior
+- Example:
+```javascript
+const app = new App({
+  sessionModeManager: mockSessionModeManager,
+  dataManager: mockDataManager,
+  standaloneDataManager: mockStandaloneDataManager,
+  tokenManager: mockTokenManager
+});
+```
+
+**Test Pattern: JWT Token Validation**
+- App.js validates JWT token expiration before allowing networked mode
+- Tests must provide valid tokens in localStorage:
+```javascript
+const createValidToken = (expiresInHours = 24) => {
+  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = btoa(JSON.stringify({
+    exp: Math.floor(Date.now() / 1000) + (expiresInHours * 3600),
+    iat: Math.floor(Date.now() / 1000)
+  }));
+  return `${header}.${payload}.test-signature`;
+};
+
+localStorage.setItem('aln_auth_token', createValidToken());
+```
+
+### CI/CD Integration
+
+**GitHub Actions Workflow** (`.github/workflows/test.yml`):
+- **Job 1: Unit Tests** - Runs L1 with coverage reporting
+- **Job 2: Build Verification** - Vite build + artifact validation
+- **Job 3: Integration Check** - Critical file verification + smoke tests
+- **Job 4: Summary** - Aggregate results, fail if any job failed
+
+**Local Verification** (`./verify-merge-ready.sh`):
+- 8-phase pre-merge checklist
+- Runs all L1 tests (598/598 passing)
+- Verifies production build succeeds
+- Checks bundle size (<10MB)
+- Validates critical files present
 
 ## Game Business Logic
 
@@ -141,18 +292,55 @@ if (DataManager.isTokenScanned(tokenId)) {
 
 ## Frontend Architecture
 
-### Single-File PWA Structure
+### ES6 Module Structure
 
-**index.html (2116 lines):**
-- Lines 7-1373: Inline CSS (complete design system)
-- Lines 1375-1808: HTML structure (9 screens + 3 views)
-- Lines 1817-1839: Sequential `<script>` tags load modules
-- Lines 1849+: DOMContentLoaded initialization
+**Project Structure:**
+```
+ALNScanner-es6-migration/
+├── src/                    # ES6 modules (source code)
+│   ├── main.js            # Entry point - orchestrates initialization
+│   ├── app/               # Application layer
+│   │   ├── App.js         # Main application controller
+│   │   ├── AdminController.js
+│   │   ├── SessionModeManager.js
+│   │   └── initializationSteps.js
+│   ├── core/              # Core business logic
+│   │   ├── dataManager.js
+│   │   └── tokenManager.js
+│   ├── network/           # Network layer (WebSocket)
+│   │   ├── OrchestratorClient.js
+│   │   ├── ConnectionManager.js
+│   │   ├── NetworkedSession.js
+│   │   └── networkedQueueManager.js
+│   ├── ui/                # UI management
+│   │   ├── uiManager.js
+│   │   └── settings.js
+│   └── utils/             # Utilities
+│       ├── config.js
+│       ├── debug.js
+│       ├── nfcHandler.js
+│       └── adminModule.js
+├── tests/
+│   ├── unit/              # Jest unit tests (598 tests)
+│   └── e2e/               # Playwright E2E tests
+├── dist/                  # Build output (gitignored)
+├── index.html             # Minimal HTML - loads single module script
+├── vite.config.js         # Build configuration
+└── playwright.config.js   # E2E test configuration
+```
 
-**No Build Process:**
-- Pure HTML/JS/CSS (ES6+ with async/await)
-- Modules expose to `window.*` global scope
-- Sequential dependency loading via script order
+**Build System:**
+- **Vite 5.x**: Fast dev server with hot module reload
+- **Production**: Minified, code-split bundles
+- **Module Loading**: Single `<script type="module" src="/src/main.js">`
+- **Development**: https://localhost:8443 with self-signed cert (for NFC API)
+
+**Key Architectural Changes (from migration):**
+- ✅ All modules use `import`/`export` (no `window.XXX` pollution)
+- ✅ Removed Node.js `global` fallbacks (browser-only code)
+- ✅ Event-driven initialization (no imperative sequencing)
+- ✅ Dependency injection throughout
+- ✅ Real browser E2E testing (Playwright catches jsdom misses)
 
 ### Screen System (9 Screens)
 
@@ -179,30 +367,31 @@ if (DataManager.isTokenScanned(tokenId)) {
 
 ### Module Responsibilities
 
-**App Layer (js/app/):**
-- `app.js` - Main coordinator, NFC processing, admin actions
-- `sessionModeManager.js` - Mode locking (networked/standalone)
-- `initializationSteps.js` - 11-phase startup sequence (1A-1J)
+**App Layer ([src/app/](src/app/)):**
+- [App.js](src/app/App.js) - Main coordinator, NFC processing, admin actions (ES6 class)
+- [SessionModeManager.js](src/app/SessionModeManager.js) - Mode locking (networked/standalone)
+- [initializationSteps.js](src/app/initializationSteps.js) - 11-phase startup sequence (1A-1J)
+- [AdminController.js](src/app/AdminController.js) - Admin module lifecycle management
 
-**Core Layer (js/core/):**
-- `dataManager.js` - Transaction storage, scoring, group completion (both modes)
-- `standaloneDataManager.js` - Local-only persistence (standalone mode)
-- `tokenManager.js` - Token database loading, fuzzy matching, group inventory
+**Core Layer ([src/core/](src/core/)):**
+- [dataManager.js](src/core/dataManager.js) - Transaction storage, scoring, group completion (both modes)
+- [tokenManager.js](src/core/tokenManager.js) - Token database loading, fuzzy matching, group inventory
 
-**Network Layer (js/network/):**
-- `orchestratorClient.js` - WebSocket client (Socket.io)
-- `connectionManager.js` - Auth, connection state, retry logic
-- `networkedQueueManager.js` - Offline transaction queue
+**Network Layer ([src/network/](src/network/)):**
+- [OrchestratorClient.js](src/network/OrchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
+- [ConnectionManager.js](src/network/ConnectionManager.js) - Auth, connection state, retry logic
+- [NetworkedSession.js](src/network/NetworkedSession.js) - Service factory and lifecycle orchestrator
+- [networkedQueueManager.js](src/network/networkedQueueManager.js) - Offline transaction queue
 
-**UI Layer (js/ui/):**
-- `uiManager.js` - Screen navigation, stats rendering, error display
-- `settings.js` - localStorage persistence for config
+**UI Layer ([src/ui/](src/ui/)):**
+- [uiManager.js](src/ui/uiManager.js) - Screen navigation, stats rendering, error display
+- [settings.js](src/ui/settings.js) - localStorage persistence for config
 
-**Utils Layer (js/utils/):**
-- `adminModule.js` - SessionManager, VideoController, SystemMonitor
-- `nfcHandler.js` - Web NFC API wrapper
-- `debug.js` - Debug panel and logging
-- `config.js` - App constants
+**Utils Layer ([src/utils/](src/utils/)):**
+- [adminModule.js](src/utils/adminModule.js) - SessionManager, VideoController, SystemMonitor (named exports)
+- [nfcHandler.js](src/utils/nfcHandler.js) - Web NFC API wrapper
+- [debug.js](src/utils/debug.js) - Debug panel and logging (singleton class)
+- [config.js](src/utils/config.js) - App constants
 
 ## Transaction Flow
 
@@ -481,6 +670,152 @@ localStorage.getItem('gameSessionMode')
 Object.keys(localStorage).filter(k => k.startsWith('aln_') || k.includes('mode') || k.includes('orchestrator'))
 ```
 
+## Troubleshooting
+
+### Build Issues
+
+**Problem: Vite build fails with "Cannot find module '@vitejs/plugin-basic-ssl'"**
+```
+Error: Cannot find module '@vitejs/plugin-basic-ssl'
+```
+- **Cause**: Missing HTTPS plugin required for Web NFC API
+- **Fix**: Install plugin: `npm install --save-dev @vitejs/plugin-basic-ssl`
+- **Verification**: Check `package.json` devDependencies includes `"@vitejs/plugin-basic-ssl": "^1.1.0"`
+
+**Problem: Vite dev server starts but page won't load**
+```
+Failed to load module script: MIME type text/html not supported
+```
+- **Cause**: Browser trying to load HTML instead of JavaScript module
+- **Fix**: Clear browser cache and hard reload (Ctrl+Shift+R)
+- **Workaround**: Stop dev server, delete `node_modules/.vite`, restart `npm run dev`
+
+**Problem: Production build succeeds but dist/ directory empty**
+```
+vite v5.4.11 building for production...
+✓ built in 2s
+```
+- **Cause**: Vite config issue or missing source files
+- **Fix**: Check `vite.config.js` has correct `build.outDir: 'dist'`
+- **Verification**: `ls -la dist/` should show index.html and assets/ directory
+
+### Test Issues
+
+**Problem: Jest fails with "SyntaxError: Cannot use import statement outside a module"**
+```
+SyntaxError: Cannot use import statement outside a module
+  > 1 | import { Debug } from '../utils/debug.js';
+```
+- **Cause**: Missing or incorrect Babel configuration for ES6 modules
+- **Fix**: Ensure `babel.config.js` exists at project root with:
+```javascript
+module.exports = {
+  presets: [
+    ['@babel/preset-env', { targets: { node: 'current' } }]
+  ]
+};
+```
+- **Verification**: Check `package.json` includes `"@babel/preset-env": "^7.26.0"` in devDependencies
+
+**Problem: Tests fail with "ReferenceError: global is not defined"**
+```
+ReferenceError: global is not defined
+  at OrchestratorClient.js:15
+```
+- **Cause**: Browser-only code using Node.js `global` fallback
+- **Fix**: Remove `global` fallback from OrchestratorClient.js (already fixed in ES6 migration)
+- **Verification**: `grep -r "global\." src/` should return no results
+
+**Problem: Tests timeout waiting for event listeners**
+```
+Timeout - Async callback was not invoked within the 5000 ms timeout
+```
+- **Cause**: Event listener registered AFTER action triggered (race condition)
+- **Fix**: Always register event listeners BEFORE triggering actions:
+```javascript
+// CORRECT
+manager.addEventListener('event', handler);
+manager.triggerAction();
+
+// WRONG - race condition
+manager.triggerAction();
+manager.addEventListener('event', handler);
+```
+
+**Problem: Mock errors "TypeError: X is not a function"**
+```
+TypeError: this.sessionModeManager?.isStandalone is not a function
+```
+- **Cause**: Incomplete mock object missing required methods
+- **Fix**: Add all expected methods to mock:
+```javascript
+const mockSessionModeManager = {
+  isNetworked: jest.fn(() => false),
+  isStandalone: jest.fn(() => false),
+  setMode: jest.fn()
+};
+```
+
+### Runtime Issues
+
+**Problem: WebSocket connection fails with "Transport error"**
+```
+Transport error
+Socket.io connection rejected
+```
+- **Cause**: Invalid or expired JWT token
+- **Fix**:
+  1. Check localStorage: `localStorage.getItem('aln_auth_token')`
+  2. Decode token payload (base64): `atob(token.split('.')[1])`
+  3. Verify `exp` (expiration) timestamp is in future
+  4. Re-authenticate if expired: Clear localStorage, reconnect, enter admin password
+
+**Problem: "Failed to fetch" when connecting to orchestrator**
+```
+Failed to fetch
+TypeError: NetworkError when attempting to fetch resource
+```
+- **Cause**: CORS issue or orchestrator not running
+- **Fix**:
+  1. Verify orchestrator is running: `curl -k https://[IP]:3000/health`
+  2. Check scanner using correct protocol (https:// not http://)
+  3. Verify orchestrator `.env` has `ENABLE_HTTPS=true`
+  4. Check browser console for CORS errors
+
+**Problem: NFC reads not working in dev mode**
+```
+SecurityError: Web NFC is only available in secure contexts
+```
+- **Cause**: Dev server not using HTTPS
+- **Fix**: Vite config already includes HTTPS plugin, but browser may need cert trust
+- **Steps**:
+  1. Navigate to `https://localhost:8443`
+  2. Browser shows "not private" warning
+  3. Click "Advanced" → "Proceed to localhost (unsafe)"
+  4. Certificate trusted, NFC now works
+
+**Problem: Transactions not persisting after reload**
+```
+localStorage.getItem('transactions') returns null after reload
+```
+- **Cause**: localStorage quota exceeded or privacy mode
+- **Fix**:
+  1. Check quota: `navigator.storage.estimate()`
+  2. Clear old data: `localStorage.clear()` (loses all data)
+  3. Disable privacy/incognito mode (blocks localStorage)
+
+**Problem: Group completion bonuses not calculating**
+```
+Expected bonus: $120,000, Received: $0
+```
+- **Cause**: Field name inconsistency (tx.tokenGroup vs tx.group)
+- **Fix**: Already fixed in standaloneDataManager.js:249 (uses `tx.group` consistently)
+- **Verification**: Check transaction object structure in localStorage:
+```javascript
+JSON.parse(localStorage.getItem('transactions'))[0]
+// Should have 'group' field, not 'tokenGroup'
+```
+
 ## Common Issues
 
 ### NFC Not Working
@@ -509,14 +844,15 @@ Object.keys(localStorage).filter(k => k.startsWith('aln_') || k.includes('mode')
 
 ## Important Notes
 
-- **NO BUILD PROCESS**: Pure HTML/JS/CSS, deploy index.html directly
+- **ES6 MODULE BUILD**: Uses Vite build system, deploy dist/ directory after `npm run build`
+- **CANNOT OPEN DIRECTLY**: Must use `npm run dev` (no direct file:// opening)
 - **NO QR CODES**: This app uses NFC only (QR codes are Player Scanner's job)
 - **SHARED TOKENS**: Both scanners use same token database via git submodule
 - **GM FOCUSED**: All features designed for game master operations
 - **MODE LOCKING**: Once networked/standalone selected, cannot change until reload
-- **CLASS-BASED**: DataManager uses ES6 classes with dependency injection
+- **CLASS-BASED**: All modules use ES6 classes with dependency injection
 - **EVENT-DRIVEN**: EventTarget pattern for pub/sub, WebSocket for networked mode
-- **HTTPS REQUIRED**: Web NFC API only works over HTTPS (except localhost)
+- **HTTPS REQUIRED**: Web NFC API only works over HTTPS (dev server uses port 8443)
 
 ## Related Documentation
 

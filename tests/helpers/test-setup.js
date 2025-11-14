@@ -87,4 +87,11 @@ if (typeof global.EventTarget === 'undefined') {
   };
 }
 
+// Mock TextEncoder/TextDecoder for NFC tests (not available in jsdom)
+if (typeof global.TextEncoder === 'undefined') {
+  const { TextEncoder, TextDecoder } = require('util');
+  global.TextEncoder = TextEncoder;
+  global.TextDecoder = TextDecoder;
+}
+
 // Reset logic moved to test-hooks.js (uses setupFilesAfterEnv)

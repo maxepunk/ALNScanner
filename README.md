@@ -60,63 +60,97 @@ High-stakes competitive mode where memories have monetary value. Teams compete f
 
 ## 🛠 Technology Stack
 
-- **Frontend**: Vanilla JavaScript (ES6+)
+- **Frontend**: Vanilla JavaScript (ES6+ Modules)
+- **Build System**: Vite 5.x with hot module reload
+- **Testing**: Jest (598 unit tests) + Playwright (E2E)
 - **Styling**: Custom CSS with responsive design
 - **NFC**: Web NFC API
 - **Storage**: localStorage for persistence
-- **Architecture**: Modular single-page application
-- **Build**: Zero dependencies, single HTML file
+- **Architecture**: Modular ES6 with dependency injection
+- **Deployment**: Static build to dist/ directory
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Modern Chrome/Edge browser (v89+)
-- NFC-enabled device (Android phone/tablet)
-- HTTPS connection (required for Web NFC)
+- **Node.js**: v20+ with npm
+- **Browser**: Modern Chrome/Edge (v89+)
+- **Device**: NFC-enabled Android phone/tablet
+- **Connection**: HTTPS required for Web NFC
 
 ### Instant Setup
 1. Clone the repository
-2. Serve the HTML file over HTTPS
-3. Open on NFC-enabled device
-4. Start scanning!
+2. Install dependencies
+3. Start development server
+4. Open on NFC-enabled device
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/memory-transaction-station.git
+git clone https://github.com/maxepunk/ALNScanner.git
 
 # Navigate to directory
-cd memory-transaction-station
+cd ALNScanner
 
-# Serve with any HTTPS server
-npx serve -s --ssl-cert cert.pem --ssl-key key.pem
+# Install dependencies
+npm install
+
+# Start development server (HTTPS on port 8443)
+npm run dev
+
+# Scanner opens automatically at https://localhost:8443
 ```
 
 ## 📦 Installation
 
-### Option 1: Direct Hosting
-Simply host the `index.html` file on any HTTPS-enabled web server.
+### Option 1: Development Mode (Recommended)
+For local development with hot module reload and HTTPS:
 
-### Option 2: Local Development
 ```bash
-# Using Python
-python3 -m http.server 8000 --bind 127.0.0.1
+# Install dependencies
+npm install
 
-# Using Node.js
-npx http-server -S -C cert.pem -K key.pem
+# Start dev server (auto-opens browser at https://localhost:8443)
+npm run dev
 
-# Using PHP
-php -S localhost:8000
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
 ```
 
-### Option 3: GitHub Pages
-1. Fork this repository
-2. Enable GitHub Pages in settings
-3. Access at `https://yourusername.github.io/memory-transaction-station`
+**Note**: Dev server auto-generates self-signed certificate for HTTPS (required for NFC API).
 
-### SSL Certificate Generation (for local testing)
+### Option 2: Production Deployment
+Build and deploy the static site:
+
 ```bash
-# Generate self-signed certificate
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
+# Build for production (outputs to dist/)
+npm run build
+
+# Deploy dist/ directory to any static host
+# Examples: GitHub Pages, Netlify, Vercel, Apache, Nginx
+```
+
+### Option 3: GitHub Pages (Automated)
+Automatic deployment on push to main branch:
+
+1. Push changes to `main` branch
+2. GitHub Actions builds and deploys automatically
+3. Access at `https://maxepunk.github.io/ALNScanner/`
+
+### Option 4: Backend Integration
+Connect to orchestrator backend for networked mode:
+
+```bash
+# 1. Start orchestrator (from parent repo)
+cd ../../backend && npm run dev
+
+# 2. Start scanner dev server
+cd ../ALNScanner && npm run dev
+
+# 3. Select "Networked Mode" in scanner UI
+# 4. Enter orchestrator URL: https://[IP]:3000
+# 5. Authenticate with admin password
 ```
 
 ## 📖 Usage Guide
@@ -243,6 +277,59 @@ Logging system with visual debug panel.
 
 ## 🧪 Testing
 
+### Automated Testing
+
+The scanner uses a 3-tier testing strategy:
+
+**L1: Unit Tests (Jest)**
+```bash
+npm test                    # Run all 598 unit tests (~15-30s)
+npm test -- --coverage      # With coverage report
+npm test -- dataManager     # Run specific test suite
+```
+
+- **Location**: `tests/unit/`
+- **Coverage**: 598 tests across all modules
+- **Scope**: Individual component testing with mocks
+
+**L2: Scanner E2E Tests (Playwright)**
+```bash
+npm run test:e2e           # Run E2E tests (~2-3 min)
+npm run test:all           # L1 + L2 combined
+```
+
+- **Location**: `tests/e2e/specs/`
+- **Scope**: Full scanner testing WITHOUT backend orchestrator
+- **Coverage**: Standalone mode, UI navigation, localStorage
+
+**L3: Full Stack E2E Tests (Parent Repo)**
+```bash
+# Run from parent repository
+cd ../../backend
+npm run test:e2e
+```
+
+- **Location**: `../../backend/tests/e2e/flows/`
+- **Scope**: Complete integration with live orchestrator
+- **Coverage**: Networked mode, WebSocket, transaction flow
+
+### Pre-Merge Verification
+
+Run comprehensive checks before merging:
+```bash
+./verify-merge-ready.sh
+```
+
+This script performs 8 validation checks:
+1. Dependencies installed
+2. Critical files present
+3. Vite HTTPS plugin configured
+4. All 598 unit tests passing
+5. Production build succeeds
+6. Build artifacts verified
+7. Bundle size check (<10MB)
+8. Critical module tests passing
+
 ### Built-in Test Functions
 Access via Settings > Data Management:
 
@@ -309,22 +396,34 @@ We welcome contributions! Please follow these guidelines:
 
 ### Development Setup
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Install dependencies: `npm install`
+4. Make your changes
+5. Test thoroughly: `npm run test:all`
+6. Submit a pull request
 
 ### Code Style
-- Use ES6+ features
-- Document functions with JSDoc
-- Follow existing module patterns
-- Maintain single-file architecture
+- Use ES6+ modules with `import`/`export`
+- Document functions with JSDoc comments
+- Follow dependency injection pattern
+- Use event-driven architecture (EventTarget)
+- Maintain modular structure in `src/` directory
 
 ### Testing Requirements
-- Test all game modes
-- Verify scoring calculations
-- Check responsive design
-- Validate NFC functionality
+- All unit tests must pass (598/598)
+- Add tests for new features
+- Run E2E tests for UI changes: `npm run test:e2e`
+- Verify both game modes (Detective + Black Market)
+- Check responsive design on mobile devices
+- Validate NFC functionality on Android device
+
+### Build Verification
+Before submitting PR:
+```bash
+npm run test:all              # All tests
+npm run build                 # Production build
+./verify-merge-ready.sh       # Pre-merge checks
+```
 
 ## 🔧 Troubleshooting
 

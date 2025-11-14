@@ -1,55 +1,58 @@
 /**
  * AdminController Tests - Admin Module Lifecycle
+ * ES6 Module Tests
  *
  * Tests the admin module creation, initialization guard, and lifecycle management.
- * These tests SHOULD FAIL initially - that's the point of TDD!
  */
 
-const AdminController = require('../../js/app/AdminController');
+import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import AdminController from '../../src/app/adminController.js';
+import * as adminModule from '../../src/utils/adminModule.js';
+
+// Mock the entire adminModule
+jest.mock('../../src/utils/adminModule.js', () => ({
+  SessionManager: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn(),
+    pause: jest.fn(),
+    resume: jest.fn()
+  })),
+  VideoController: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn(),
+    pause: jest.fn(),
+    resume: jest.fn()
+  })),
+  SystemMonitor: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn(),
+    refresh: jest.fn()
+  })),
+  AdminOperations: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn()
+  })),
+  MonitoringDisplay: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn(),
+    updateConnectionStatus: jest.fn()
+  }))
+}));
 
 describe('AdminController - Admin Module Lifecycle', () => {
   let controller;
   let mockClient;
-  let mockAdminModules;
 
   beforeEach(() => {
+    // Clear all mock calls before each test
+    jest.clearAllMocks();
+
     mockClient = {
       send: jest.fn(),
-      addEventListener: jest.fn()
+      addEventListener: jest.fn(),
+      socket: {
+        emit: jest.fn(),
+        on: jest.fn(),
+        once: jest.fn()
+      }
     };
-
-    // Mock AdminModule namespace (global in browser context)
-    mockAdminModules = {
-      SessionManager: jest.fn().mockImplementation(() => ({
-        destroy: jest.fn(),
-        pause: jest.fn(),
-        resume: jest.fn()
-      })),
-      VideoController: jest.fn().mockImplementation(() => ({
-        destroy: jest.fn(),
-        pause: jest.fn(),
-        resume: jest.fn()
-      })),
-      SystemMonitor: jest.fn().mockImplementation(() => ({
-        destroy: jest.fn(),
-        refresh: jest.fn()
-      })),
-      AdminOperations: jest.fn().mockImplementation(() => ({
-        destroy: jest.fn()
-      })),
-      MonitoringDisplay: jest.fn().mockImplementation(() => ({
-        destroy: jest.fn(),
-        updateConnectionStatus: jest.fn()
-      }))
-    };
-
-    global.AdminModule = mockAdminModules;
 
     controller = new AdminController(mockClient);
-  });
-
-  afterEach(() => {
-    delete global.AdminModule;
   });
 
   describe('constructor', () => {
@@ -71,11 +74,11 @@ describe('AdminController - Admin Module Lifecycle', () => {
     it('should create all admin modules once', () => {
       controller.initialize();
 
-      expect(mockAdminModules.SessionManager).toHaveBeenCalledWith(mockClient);
-      expect(mockAdminModules.VideoController).toHaveBeenCalledWith(mockClient);
-      expect(mockAdminModules.SystemMonitor).toHaveBeenCalled();
-      expect(mockAdminModules.AdminOperations).toHaveBeenCalledWith(mockClient);
-      expect(mockAdminModules.MonitoringDisplay).toHaveBeenCalledWith(mockClient);
+      expect(adminModule.SessionManager).toHaveBeenCalledWith(mockClient);
+      expect(adminModule.VideoController).toHaveBeenCalledWith(mockClient);
+      expect(adminModule.SystemMonitor).toHaveBeenCalledWith(mockClient);
+      expect(adminModule.AdminOperations).toHaveBeenCalledWith(mockClient);
+      expect(adminModule.MonitoringDisplay).toHaveBeenCalled();
 
       expect(controller.initialized).toBe(true);
     });
@@ -96,11 +99,11 @@ describe('AdminController - Admin Module Lifecycle', () => {
       controller.initialize(); // Second call
 
       // Should only be called once
-      expect(mockAdminModules.SessionManager).toHaveBeenCalledTimes(1);
-      expect(mockAdminModules.VideoController).toHaveBeenCalledTimes(1);
-      expect(mockAdminModules.SystemMonitor).toHaveBeenCalledTimes(1);
-      expect(mockAdminModules.AdminOperations).toHaveBeenCalledTimes(1);
-      expect(mockAdminModules.MonitoringDisplay).toHaveBeenCalledTimes(1);
+      expect(adminModule.SessionManager).toHaveBeenCalledTimes(1);
+      expect(adminModule.VideoController).toHaveBeenCalledTimes(1);
+      expect(adminModule.SystemMonitor).toHaveBeenCalledTimes(1);
+      expect(adminModule.AdminOperations).toHaveBeenCalledTimes(1);
+      expect(adminModule.MonitoringDisplay).toHaveBeenCalledTimes(1);
     });
 
     it('should emit initialized event', () => {
@@ -132,7 +135,7 @@ describe('AdminController - Admin Module Lifecycle', () => {
       controller.initialize();
 
       expect(() => controller.getModule('invalidModule'))
-        .toThrow();
+        .toThrow('Unknown module: invalidModule');
     });
   });
 
@@ -149,6 +152,13 @@ describe('AdminController - Admin Module Lifecycle', () => {
     it('should not throw if not initialized', () => {
       expect(() => controller.pause()).not.toThrow();
     });
+
+    it('should handle modules without pause method gracefully', () => {
+      controller.initialize();
+      controller.modules.sessionManager.pause = undefined;
+
+      expect(() => controller.pause()).not.toThrow();
+    });
   });
 
   describe('resume', () => {
@@ -162,6 +172,13 @@ describe('AdminController - Admin Module Lifecycle', () => {
     });
 
     it('should not throw if not initialized', () => {
+      expect(() => controller.resume()).not.toThrow();
+    });
+
+    it('should handle modules without resume method gracefully', () => {
+      controller.initialize();
+      controller.modules.sessionManager.resume = undefined;
+
       expect(() => controller.resume()).not.toThrow();
     });
   });
@@ -191,6 +208,71 @@ describe('AdminController - Admin Module Lifecycle', () => {
 
     it('should not throw if not initialized', () => {
       expect(() => controller.destroy()).not.toThrow();
+    });
+
+    it('should handle modules without destroy method gracefully', () => {
+      controller.initialize();
+      controller.modules.sessionManager.destroy = undefined;
+
+      expect(() => controller.destroy()).not.toThrow();
+    });
+  });
+
+  describe('event-driven coordination', () => {
+    it('should allow external listeners on initialized event', () => {
+      const listener1 = jest.fn();
+      const listener2 = jest.fn();
+
+      controller.addEventListener('initialized', listener1);
+      controller.addEventListener('initialized', listener2);
+
+      controller.initialize();
+
+      expect(listener1).toHaveBeenCalledTimes(1);
+      expect(listener2).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not emit initialized event on re-initialization attempt', () => {
+      const handler = jest.fn();
+      controller.addEventListener('initialized', handler);
+
+      controller.initialize();
+      handler.mockClear();
+      controller.initialize(); // Second attempt
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('module lifecycle coordination', () => {
+    it('should initialize all modules before setting initialized flag', () => {
+      let flagValue;
+      adminModule.SessionManager.mockImplementationOnce(() => {
+        flagValue = controller.initialized;
+        return { destroy: jest.fn(), pause: jest.fn(), resume: jest.fn() };
+      });
+
+      controller.initialize();
+
+      expect(flagValue).toBe(false); // Flag should still be false during construction
+      expect(controller.initialized).toBe(true); // But true after
+    });
+
+    it('should allow access to modules immediately after initialize', () => {
+      controller.initialize();
+
+      expect(() => controller.getModule('sessionManager')).not.toThrow();
+      expect(() => controller.getModule('videoController')).not.toThrow();
+      expect(() => controller.getModule('systemMonitor')).not.toThrow();
+      expect(() => controller.getModule('adminOperations')).not.toThrow();
+      expect(() => controller.getModule('monitoringDisplay')).not.toThrow();
+    });
+
+    it('should allow pause/resume immediately after initialize', () => {
+      controller.initialize();
+
+      expect(() => controller.pause()).not.toThrow();
+      expect(() => controller.resume()).not.toThrow();
     });
   });
 });

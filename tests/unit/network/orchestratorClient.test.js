@@ -5,7 +5,8 @@
  * All token validation, retry logic, and reconnection handling is ConnectionManager's job.
  */
 
-const OrchestratorClient = require('../../js/network/OrchestratorClient');
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import OrchestratorClient from '../../../src/network/orchestratorClient.js';
 
 describe('OrchestratorClient - Dumb Pipe', () => {
   let client;
