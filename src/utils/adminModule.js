@@ -18,7 +18,7 @@
  * - MonitoringDisplay: DOM updates (event-driven)
  */
 
-import { Debug } from './debug.js';
+import Debug from './debug.js';
 
 /**
  * SessionManager - Session Lifecycle Management

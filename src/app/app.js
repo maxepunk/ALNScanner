@@ -1202,28 +1202,6 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     }
   }
 
-  async adminClearTransactions() {
-    if (!confirm('Are you sure you want to clear transaction history?')) return;
-
-    if (!this.viewController.adminInstances?.adminOps) {
-      alert('Admin functions not available.');
-      return;
-    }
-
-    try {
-      await this.viewController.adminInstances.adminOps.clearTransactions();
-      this.debug.log('Transactions cleared');
-      // Clear local display
-      const logElement = document.getElementById('admin-transaction-log');
-      if (logElement) {
-        logElement.innerHTML = '';
-      }
-    } catch (error) {
-      console.error('Failed to clear transactions:', error);
-      this.uiManager.showError(`Failed to clear transactions: ${error.message}`);
-      alert(`Failed to clear transactions: ${error.message}`);
-    }
-  }
 
   // ========== GM Intervention (Networked Mode Only) ==========
 
