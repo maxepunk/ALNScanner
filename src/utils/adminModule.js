@@ -262,6 +262,29 @@ export class SystemMonitor {
 export class AdminOperations {
   constructor(connection) {
     this.connection = connection;
+
+    // Bind handler for cleanup
+    this._messageHandler = this._handleMessage.bind(this);
+
+    // Listen to all messages (for command acknowledgments and broadcasts)
+    this.connection.addEventListener('message:received', this._messageHandler);
+  }
+
+  /**
+   * Handle incoming messages
+   * @private
+   */
+  _handleMessage(event) {
+    const { type } = event.detail;
+
+    // Handle scores:reset broadcast (informational)
+    if (type === 'scores:reset') {
+      // sync:full will follow automatically
+      // MonitoringDisplay handles the actual UI update
+      Debug.log('[AdminOperations] Scores reset broadcast received');
+    }
+
+    // Command acknowledgments handled by _sendCommand's one-time listeners
   }
 
   async restartSystem() {
@@ -389,8 +412,9 @@ export class AdminOperations {
    * Cleanup event listeners
    */
   destroy() {
-    // AdminOperations creates temporary listeners per command
-    // No persistent listeners to cleanup
+    if (this.connection && this._messageHandler) {
+      this.connection.removeEventListener('message:received', this._messageHandler);
+    }
   }
 }
 
