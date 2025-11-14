@@ -1968,12 +1968,14 @@
     <script src="js/ui/uiManager.js"></script>
     <script src="js/ui/settings.js"></script>
 
-    <!-- Phase 4.4: Network Modules -->
-    <script src="js/network/connectionManager.js"></script>
+    <!-- Phase 4.4: Network Modules - Refactored Architecture (Nov 2025) -->
+    <script src="js/network/OrchestratorClient.js"></script>
+    <script src="js/network/ConnectionManager.js"></script>
+    <script src="js/network/NetworkedSession.js"></script>
     <script src="js/network/networkedQueueManager.js"></script>
-    <script src="js/network/orchestratorClient.js"></script>
 
     <!-- Phase 4.5: App Modules -->
+    <script src="js/app/AdminController.js"></script>
     <script src="js/app/sessionModeManager.js"></script>
     <script src="js/app/initializationSteps.js"></script>
     <script src="js/app/app.js"></script>
@@ -1987,7 +1989,7 @@
         // INITIALIZATION
         // ============================================
         window.addEventListener('DOMContentLoaded', async () => {
-            // 1. Initialize core app (always works offline)
+            // Initialize core app (always works offline)
             try {
                 await App.init();
             } catch (error) {
@@ -1996,16 +1998,8 @@
                 // Don't block with alert - app can still work offline
             }
 
-            // 2. Initialize ConnectionManager
-            window.connectionManager = new ConnectionManager();
-            window.connectionManager.migrateLocalStorage();
-
-            // 3. Try orchestrator connection (non-blocking)
-            setTimeout(() => {
-                window.connectionManager.connect();
-            }, 100); // Small delay to let UI render
-
-            // Mode selection handled by SessionModeManager now
+            // Network mode initialization now handled by SessionModeManager
+            // (creates NetworkedSession when user selects networked mode)
         });
     </script>
 
@@ -2111,16 +2105,17 @@
 
                 const { token } = await authResponse.json();
 
-                // 3. Save configuration using ConnectionManager
-                if (!window.connectionManager) {
-                    window.connectionManager = new ConnectionManager();
-                }
+                // 3. Save configuration to localStorage
+                localStorage.setItem('aln_orchestrator_url', normalizedUrl);
+                localStorage.setItem('aln_auth_token', token);
+                localStorage.setItem('aln_station_name', stationName);
 
-                // Configure through ConnectionManager
-                window.connectionManager.url = normalizedUrl;
-                window.connectionManager.token = token;
-                window.connectionManager.deviceId = stationName.replace(/\s+/g, '_');
-                window.connectionManager.stationName = stationName;
+                // Set device ID in Settings
+                if (typeof Settings !== 'undefined') {
+                    Settings.deviceId = stationName.replace(/\s+/g, '_');
+                    Settings.stationName = stationName;
+                    Settings.save();
+                }
 
                 // Handle station number
                 const match = stationName.match(/\d+$/);
@@ -2129,49 +2124,29 @@
                     localStorage.setItem('lastStationNum', nextNum.toString());
                 }
 
-                // 4. Use ConnectionManager to connect
-                if (!window.connectionManager) {
-                    window.connectionManager = new ConnectionManager();
+                // 4. Initialize networked mode via SessionModeManager
+                // This will create NetworkedSession with proper service orchestration
+                if (!window.sessionModeManager) {
+                    window.sessionModeManager = new SessionModeManager();
                 }
 
-                // Save the token and connect
-                window.connectionManager.token = token;
-                window.connectionManager.url = normalizedUrl;
-                window.connectionManager.stationName = stationName;
-                window.connectionManager.deviceId = stationName.replace(/\s+/g, '_');
-
-                const connected = await window.connectionManager.connect();
+                const connected = await window.sessionModeManager.setMode('networked');
 
                 if (connected) {
                     statusDiv.textContent = '✅ Connected! Syncing data...';
                     statusDiv.style.color = '#4CAF50';
 
-                    // Ensure SessionModeManager exists and is set to networked mode
-                    // This handles both first connection and reconnection scenarios
-                    if (!window.sessionModeManager) {
-                        window.sessionModeManager = new SessionModeManager();
-                    }
-
-                    // Always set networked mode and show tabs (handles reconnection)
-                    window.sessionModeManager.mode = 'networked';
-                    window.sessionModeManager.locked = true;
-                    localStorage.setItem('gameSessionMode', 'networked');
-
-                    // Show viewSelector (admin panel tabs) - normally done by initNetworkedMode
-                    // but we skip calling that to avoid showing connection wizard again
+                    // Show viewSelector (admin panel tabs)
                     document.getElementById('viewSelector').style.display = 'flex';
 
-                    // CRITICAL FIX: Reload settings to update deviceId display
-                    // After successful connection, Settings needs to reflect the actual deviceId
-                    // that was saved to connectionManager (not the default '001')
+                    // Reload settings to update deviceId display
                     if (window.Settings) {
                         window.Settings.load();
                     }
 
-                    // 5. Close modal and transition to team entry screen
+                    // Close modal and transition to team entry screen
                     setTimeout(() => {
                         document.getElementById('connectionModal').style.display = 'none';
-                        // CRITICAL: Hide game mode screen and show team entry
                         UIManager.showScreen('teamEntry');
                     }, 1000);
                 } else {

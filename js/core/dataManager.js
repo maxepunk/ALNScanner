@@ -404,7 +404,7 @@
      */
     updateTeamScoreFromBackend(scoreData) {
         // Only update if we're connected to orchestrator
-        if (!window.connectionManager?.client?.isConnected) {
+        if (!window.networkedSession || window.networkedSession.state !== 'connected') {
             return;
         }
 
@@ -517,7 +517,7 @@
      */
     getTeamScores() {
         // If connected and have backend scores, use those as source of truth
-        if (window.connectionManager?.client?.isConnected && this.backendScores?.size > 0) {
+        if (window.networkedSession?.state === 'connected' && this.backendScores?.size > 0) {
             const scores = Array.from(this.backendScores.entries()).map(([teamId, score]) => ({
                 teamId,
                 score: score.currentScore,

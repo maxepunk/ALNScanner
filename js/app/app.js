@@ -65,10 +65,8 @@
             toggleMode() {
                 Settings.mode = Settings.mode === 'detective' ? 'blackmarket' : 'detective';
 
-                // Use ConnectionManager if available
-                if (window.connectionManager) {
-                    window.connectionManager.mode = Settings.mode;
-                }
+                // Mode is stored in Settings and localStorage only
+                // No need to sync to services (they read from Settings)
 
                 UIManager.updateModeDisplay(Settings.mode);
                 
@@ -211,26 +209,36 @@
                         return;
                     }
 
-                    if (!window.connectionManager?.client) {
-                        console.error('No WebSocket connection available for admin modules');
-                        UIManager.showError('No WebSocket connection available for admin modules. Check connection.');
+                    if (!window.networkedSession) {
+                        console.error('NetworkedSession not initialized');
+                        UIManager.showError('Network session not available. Check connection.');
                         return;
                     }
 
-                    // Create admin module instances sharing the same WebSocket connection
+                    // Get admin modules from NetworkedSession's AdminController
+                    const adminController = window.networkedSession.getService('adminController');
+
+                    // Initialize admin modules if not already initialized
+                    // This is safe to call multiple times (AdminController has guard)
+                    if (!adminController.initialized) {
+                        console.log('Initializing admin modules...');
+                        adminController.initialize();
+                    }
+
+                    // Reference admin modules (created by AdminController)
                     this.adminInstances = {
-                        sessionManager: new AdminModule.SessionManager(window.connectionManager.client),
-                        videoController: new AdminModule.VideoController(window.connectionManager.client),
-                        systemMonitor: new AdminModule.SystemMonitor(),
-                        adminOps: new AdminModule.AdminOperations(window.connectionManager.client),
-                        monitoring: new AdminModule.MonitoringDisplay(window.connectionManager.client)
+                        sessionManager: adminController.getModule('sessionManager'),
+                        videoController: adminController.getModule('videoController'),
+                        systemMonitor: adminController.getModule('systemMonitor'),
+                        adminOps: adminController.getModule('adminOperations'),
+                        monitoring: adminController.getModule('monitoringDisplay')
                     };
 
                     // Note: MonitoringDisplay automatically registers event listeners
                     // for all monitoring display updates (session, video, system, scores, transactions)
                     // No need to manually register event listeners here
 
-                    console.log('Admin modules initialized with shared WebSocket connection');
+                    console.log('Admin modules referenced from AdminController');
                 }
             },
 
@@ -796,13 +804,15 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
                     // Networked mode - DON'T add to DataManager yet (will be added when backend confirms)
                     DataManager.markTokenAsScanned(tokenId);  // Still mark as scanned to prevent duplicates
 
-                    // Queue manager MUST be ready - fail visibly if not
-                    if (!window.queueManager) {
-                        throw new Error('Cannot scan: NetworkedQueueManager not initialized. Please reconnect.');
+                    // Get queue manager from NetworkedSession
+                    if (!window.networkedSession) {
+                        throw new Error('Cannot scan: NetworkedSession not initialized. Please reconnect.');
                     }
 
+                    const queueManager = window.networkedSession.getService('queueManager');
+
                     // Use queue manager for reliable delivery
-                    const txId = window.queueManager.queueTransaction({
+                    const txId = queueManager.queueTransaction({
                         tokenId: tokenId,
                         teamId: this.currentTeamId,
                         deviceId: Settings.deviceId,

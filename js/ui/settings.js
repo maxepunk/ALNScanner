@@ -12,14 +12,9 @@ const Settings = {
      * Load settings from localStorage
      */
     load() {
-        // Use ConnectionManager if available, fallback to localStorage
-        if (window.connectionManager) {
-            this.deviceId = window.connectionManager.deviceId;
-            this.mode = window.connectionManager.mode;
-        } else {
-            this.deviceId = localStorage.getItem('deviceId') || '001';
-            this.mode = localStorage.getItem('mode') || 'detective';
-        }
+        // Load from localStorage
+        this.deviceId = localStorage.getItem('deviceId') || '001';
+        this.mode = localStorage.getItem('mode') || 'detective';
 
         document.getElementById('deviceId').value = this.deviceId;
         document.getElementById('deviceIdDisplay').textContent = this.deviceId;
@@ -38,14 +33,9 @@ const Settings = {
             this.mode = document.getElementById('modeToggle').checked ? 'blackmarket' : 'detective';
         }
 
-        // Use ConnectionManager if available
-        if (window.connectionManager) {
-            window.connectionManager.deviceId = this.deviceId;
-            window.connectionManager.mode = this.mode;
-        } else {
-            localStorage.setItem('deviceId', this.deviceId);
-            localStorage.setItem('mode', this.mode);
-        }
+        // Save to localStorage
+        localStorage.setItem('deviceId', this.deviceId);
+        localStorage.setItem('mode', this.mode);
 
         document.getElementById('deviceIdDisplay').textContent = this.deviceId;
         UIManager.updateModeDisplay(this.mode);
