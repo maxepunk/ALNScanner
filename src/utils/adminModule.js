@@ -98,11 +98,11 @@ export class SessionManager {
         clearTimeout(timeout);
         this.connection.removeEventListener('message:received', ackHandler);
 
-        // Check response
-        if (response.data.success) {
-          resolve(response.data);
+        // Check response (response IS the data, already unwrapped)
+        if (response.success) {
+          resolve(response);
         } else {
-          reject(new Error(response.data.message || `Failed: ${action}`));
+          reject(new Error(response.message || `Failed: ${action}`));
         }
       };
 
@@ -195,11 +195,11 @@ export class VideoController {
         clearTimeout(timeout);
         this.connection.removeEventListener('message:received', ackHandler);
 
-        // Check response
-        if (response.data.success) {
-          resolve(response.data);
+        // Check response (response IS the data, already unwrapped)
+        if (response.success) {
+          resolve(response);
         } else {
-          reject(new Error(response.data.message || `Failed: ${action}`));
+          reject(new Error(response.message || `Failed: ${action}`));
         }
       };
 
@@ -288,11 +288,11 @@ export class AdminOperations {
         clearTimeout(timeout);
         this.connection.removeEventListener('message:received', ackHandler);
 
-        // Check response
-        if (response.data.success) {
-          resolve(response.data);
+        // Check response (response IS the data, already unwrapped)
+        if (response.success) {
+          resolve(response);
         } else {
-          reject(new Error(response.data.message || `Failed: ${action}`));
+          reject(new Error(response.message || `Failed: ${action}`));
         }
       };
 
