@@ -1202,6 +1202,14 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     }
   }
 
+  /**
+   * Navigate to full scoreboard view from admin panel
+   */
+  viewFullScoreboard() {
+    this.switchView('scanner');
+    this.showScoreboard();
+  }
+
 
   // ========== GM Intervention (Networked Mode Only) ==========
 
