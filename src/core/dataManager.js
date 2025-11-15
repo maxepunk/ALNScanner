@@ -135,6 +135,20 @@ export class DataManager extends EventTarget {
   }
 
   /**
+   * Unmark token as scanned (allow re-scanning)
+   * Called when transaction is deleted
+   * @param {string} tokenId - Token ID to unmark
+   */
+  unmarkTokenAsScanned(tokenId) {
+    const wasRemoved = this.scannedTokens.delete(tokenId);
+    if (wasRemoved) {
+      this.saveScannedTokens();
+      this.debug?.log(`[DataManager] Token unmarked for re-scanning: ${tokenId}`);
+    }
+    return wasRemoved;
+  }
+
+  /**
    * Add a transaction to the local store
    *
    * @param {Object} transaction - Transaction object
@@ -231,6 +245,13 @@ export class DataManager extends EventTarget {
 
     const removedTx = this.transactions[index];
     this.transactions.splice(index, 1);
+
+    // CRITICAL FIX: Remove from scannedTokens Set to allow re-scanning
+    // Mirrors backend behavior (transactionService.js:663-666)
+    if (removedTx.tokenId) {
+      this.unmarkTokenAsScanned(removedTx.tokenId);
+      this.debug?.log(`[DataManager] Token ${removedTx.tokenId} can now be re-scanned`);
+    }
 
     // Event-driven: Emit event for UI updates
     this.debug?.log('[DataManager] Dispatching transaction:deleted event');

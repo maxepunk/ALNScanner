@@ -733,6 +733,7 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
   let mockDebug;
   let mockUIManager;
   let mockApp;
+  let mockSessionModeManager;
   let mockNetworkedSession;
 
   beforeEach(async () => {
@@ -770,6 +771,10 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
       updateAdminPanel: jest.fn(),
     };
 
+    mockSessionModeManager = {
+      mode: 'networked',  // Default to networked for Batch 3 tests
+    };
+
     mockNetworkedSession = {
       state: 'connected',
     };
@@ -780,6 +785,7 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
       debug: mockDebug,
       uiManager: mockUIManager,
       app: mockApp,
+      sessionModeManager: mockSessionModeManager,
       networkedSession: mockNetworkedSession,
     });
   });
@@ -1207,6 +1213,152 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
         { type: 'text/csv' }
       );
       expect(mockLink.download).toMatch(/transactions_\d+\.csv/);
+    });
+  });
+
+  describe('removeTransaction and duplicate detection', () => {
+    it('should remove transaction from array', () => {
+      const manager = new DataManager({ debug: mockDebug, sessionModeManager: mockSessionModeManager });
+
+      // Add a transaction
+      const transaction = {
+        id: 'tx_123',
+        tokenId: 'test_token_001',
+        teamId: '001',
+        timestamp: new Date().toISOString(),
+        status: 'accepted'
+      };
+
+      manager.transactions.push(transaction);
+      expect(manager.transactions.length).toBe(1);
+
+      // Remove it
+      const result = manager.removeTransaction('tx_123');
+
+      expect(result).toBe(true);
+      expect(manager.transactions.length).toBe(0);
+    });
+
+    it('should return false when transaction not found', () => {
+      const manager = new DataManager({ debug: mockDebug, sessionModeManager: mockSessionModeManager });
+
+      const result = manager.removeTransaction('nonexistent_tx');
+
+      expect(result).toBe(false);
+    });
+
+    it('should emit transaction:deleted event', (done) => {
+      const manager = new DataManager({ debug: mockDebug, sessionModeManager: mockSessionModeManager });
+
+      const transaction = {
+        id: 'tx_456',
+        tokenId: 'test_token_002',
+        teamId: '001',
+        timestamp: new Date().toISOString()
+      };
+
+      manager.transactions.push(transaction);
+
+      // Listen for event BEFORE triggering deletion
+      manager.addEventListener('transaction:deleted', (event) => {
+        expect(event.detail.transactionId).toBe('tx_456');
+        expect(event.detail.transaction.tokenId).toBe('test_token_002');
+        done();
+      });
+
+      manager.removeTransaction('tx_456');
+    });
+
+    it('should unmark token from scannedTokens Set when transaction deleted (BUG FIX)', () => {
+      const manager = new DataManager({ debug: mockDebug, sessionModeManager: mockSessionModeManager });
+
+      const tokenId = 'bug_fix_token';
+      const transaction = {
+        id: 'tx_bugfix',
+        tokenId: tokenId,
+        teamId: '001',
+        timestamp: new Date().toISOString()
+      };
+
+      // Simulate scan: mark token as scanned
+      manager.markTokenAsScanned(tokenId);
+      manager.transactions.push(transaction);
+
+      // Verify token is marked as scanned
+      expect(manager.isTokenScanned(tokenId)).toBe(true);
+      expect(manager.scannedTokens.has(tokenId)).toBe(true);
+
+      // Delete the transaction
+      manager.removeTransaction('tx_bugfix');
+
+      // CRITICAL: Token should be unmarked to allow re-scanning
+      expect(manager.isTokenScanned(tokenId)).toBe(false);
+      expect(manager.scannedTokens.has(tokenId)).toBe(false);
+    });
+
+    it('should persist scannedTokens changes to localStorage after unmarking', () => {
+      const manager = new DataManager({ debug: mockDebug, sessionModeManager: mockSessionModeManager });
+
+      const tokenId = 'persistence_test_token';
+      const transaction = {
+        id: 'tx_persist',
+        tokenId: tokenId,
+        teamId: '001',
+        timestamp: new Date().toISOString()
+      };
+
+      // Mark and add
+      manager.markTokenAsScanned(tokenId);
+      manager.transactions.push(transaction);
+
+      // Verify saved
+      const key = manager.getScannedTokensKey();
+      let saved = JSON.parse(localStorage.getItem(key) || '[]');
+      expect(saved).toContain(tokenId);
+
+      // Delete transaction (should unmark and save)
+      manager.removeTransaction('tx_persist');
+
+      // Verify removed from localStorage
+      saved = JSON.parse(localStorage.getItem(key) || '[]');
+      expect(saved).not.toContain(tokenId);
+    });
+
+    it('should allow re-scanning after deletion (end-to-end scenario)', () => {
+      const manager = new DataManager({ debug: mockDebug, sessionModeManager: mockSessionModeManager });
+
+      const tokenId = 'rescan_token';
+      const transaction1 = {
+        id: 'tx_scan1',
+        tokenId: tokenId,
+        teamId: '001',
+        timestamp: new Date().toISOString()
+      };
+
+      // First scan
+      manager.markTokenAsScanned(tokenId);
+      manager.transactions.push(transaction1);
+      expect(manager.isTokenScanned(tokenId)).toBe(true);
+
+      // Delete transaction
+      manager.removeTransaction('tx_scan1');
+      expect(manager.isTokenScanned(tokenId)).toBe(false);
+
+      // Re-scan should work now
+      const transaction2 = {
+        id: 'tx_scan2',
+        tokenId: tokenId,
+        teamId: '001',
+        timestamp: new Date().toISOString()
+      };
+
+      manager.markTokenAsScanned(tokenId);
+      manager.transactions.push(transaction2);
+
+      // Should have new transaction
+      expect(manager.transactions.length).toBe(1);
+      expect(manager.transactions[0].id).toBe('tx_scan2');
+      expect(manager.isTokenScanned(tokenId)).toBe(true);
     });
   });
 });
