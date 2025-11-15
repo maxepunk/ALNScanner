@@ -424,8 +424,9 @@ export class AdminOperations {
  * Follows EventTarget pattern established by SessionManager
  */
 export class MonitoringDisplay {
-  constructor(connection) {
+  constructor(connection, dataManager) {
     this.connection = connection;
+    this.dataManager = dataManager;  // Injected dependency for ES6 architecture
     this.devices = [];  // Local cache for device list
 
     // Bind handler for cleanup
@@ -434,6 +435,33 @@ export class MonitoringDisplay {
 
     // Load available videos for manual queue dropdown
     this.loadAvailableVideos();
+
+    // ✅ FIX: Request initial state to eliminate race condition
+    // Backend auto-sends sync:full on connect, but may arrive before
+    // MonitoringDisplay initialized. Explicitly request to ensure data loaded.
+    this._requestInitialState();
+  }
+
+  /**
+   * Request initial state from backend
+   * Uses unwrapped event pattern - sync:request expects no data
+   * Backend handler: socket.on('sync:request', () => handleSyncRequest(socket))
+   * Backend responds with wrapped sync:full (handled by _handleMessage)
+   *
+   * Pattern reference: backend/tests/e2e/helpers/scanner-init.js:158-160
+   * @private
+   */
+  _requestInitialState() {
+    if (this.connection?.socket?.connected) {
+      // Use unwrapped pattern per server.js:69 handler
+      // sync:request is simple event - NO AsyncAPI envelope
+      // Per scanner-init.js:158: "simple event (no envelope wrapping)"
+      this.connection.socket.emit('sync:request');
+
+      console.log('[MonitoringDisplay] Requested initial state via sync:request');
+    } else {
+      console.warn('[MonitoringDisplay] Cannot request state - socket not connected');
+    }
   }
 
   /**
@@ -454,8 +482,8 @@ export class MonitoringDisplay {
 
           // CRITICAL FIX: Add transaction to DataManager for scanner view history
           // (allows scanner view to show all system transactions)
-          if (window.DataManager) {
-            window.DataManager.addTransaction(payload.transaction);
+          if (this.dataManager) {
+            this.dataManager.addTransaction(payload.transaction);
           }
 
           // Update admin panel transaction log (display only)
@@ -467,14 +495,29 @@ export class MonitoringDisplay {
         Debug.log('[MonitoringDisplay] Calling updateScoreDisplay');
         // CRITICAL FIX: Update DataManager cache BEFORE displaying
         // (matches sync:full pattern at line 818)
-        if (window.DataManager && payload) {
-          window.DataManager.updateTeamScoreFromBackend(payload);
+        if (this.dataManager && payload) {
+          this.dataManager.updateTeamScoreFromBackend(payload);
         }
         this.updateScoreDisplay(payload);
         break;
 
       case 'session:update':
         this.updateSessionDisplay(payload);
+
+        // CRITICAL FIX: Handle session lifecycle transitions
+        // Backend resets transactions via transactionService.resetScores() on session end
+        // Frontend must also clear DataManager to prevent stale data across sessions
+        if (this.dataManager) {
+          if (payload.status === 'ended') {
+            // Session ended: clear all data, no active session
+            Debug.log('[MonitoringDisplay] Session ended, clearing DataManager');
+            this.dataManager.resetForNewSession(null);
+          } else if (payload.status === 'active' && payload.id) {
+            // New session started: clear old data, track new session ID
+            Debug.log('[MonitoringDisplay] New session started, resetting with ID:', payload.id);
+            this.dataManager.resetForNewSession(payload.id);
+          }
+        }
         break;
 
       case 'video:status':
@@ -504,6 +547,46 @@ export class MonitoringDisplay {
         this.devices = this.devices.filter(d => d.deviceId !== payload.deviceId);
         this.updateDeviceList(this.devices);
         this.updateSystemDisplay();
+        break;
+
+      case 'scores:reset':
+        Debug.log('[MonitoringDisplay] Scores reset broadcast received');
+
+        // ✅ Event-driven pattern: Let DataManager emit event
+        if (this.dataManager) {
+          this.dataManager.clearBackendScores();
+          // DataManager will emit event → main.js will update UI automatically
+        }
+
+        // Admin panel score board still cleared directly (admin-specific UI)
+        const scoreBoard = document.getElementById('admin-score-board');
+        if (scoreBoard) {
+          const tbody = scoreBoard.querySelector('tbody');
+          if (tbody) {
+            tbody.innerHTML = '';
+          }
+        }
+        // sync:full will follow automatically with complete state
+        break;
+
+      case 'transaction:deleted':
+        Debug.log('[MonitoringDisplay] Transaction deleted:', payload?.transactionId);
+
+        // ✅ Event-driven pattern: Let DataManager emit event
+        if (this.dataManager && payload?.transactionId) {
+          this.dataManager.removeTransaction(payload.transactionId);
+          // DataManager will emit event → main.js will update UI automatically
+        }
+
+        // Admin panel transaction log still updated directly (admin-specific UI)
+        const transactionLog = document.getElementById('admin-transaction-log');
+        if (transactionLog && payload?.transactionId) {
+          const txElement = transactionLog.querySelector(`[data-transaction-id="${payload.transactionId}"]`);
+          if (txElement) {
+            txElement.remove();
+          }
+        }
+        // Score will be updated via score:updated broadcast that follows deletion
         break;
 
       case 'sync:full':
@@ -604,18 +687,18 @@ export class MonitoringDisplay {
     Debug.log('[MonitoringDisplay] Found #admin-score-board element');
 
     // Build complete score table from DataManager.backendScores
-    if (window.DataManager && window.DataManager.backendScores) {
-      Debug.log(`[MonitoringDisplay] window.DataManager.backendScores exists, size: ${window.DataManager.backendScores.size}`);
+    if (this.dataManager && this.dataManager.backendScores) {
+      Debug.log(`[MonitoringDisplay] DataManager.backendScores exists, size: ${this.dataManager.backendScores.size}`);
 
       let html = '<table class="score-table"><tr><th>Team</th><th>Tokens</th><th>Score</th></tr>';
 
-      window.DataManager.backendScores.forEach((teamScore, teamId) => {
+      this.dataManager.backendScores.forEach((teamScore, teamId) => {
         const tokensScanned = teamScore.tokensScanned || 0;
         const currentScore = teamScore.currentScore || 0;
 
         html += `<tr>
           <td style="cursor: pointer; color: #007bff; text-decoration: underline;"
-              onclick="window.App.showTeamDetails('${teamId}')">
+              data-action="app.showTeamDetails" data-arg="${teamId}">
             ${teamId}
           </td>
           <td>${tokensScanned}</td>
@@ -627,7 +710,7 @@ export class MonitoringDisplay {
       scoreBoard.innerHTML = html;
       Debug.log('[MonitoringDisplay] Updated #admin-score-board with score table');
     } else {
-      Debug.log('[MonitoringDisplay] window.DataManager or window.DataManager.backendScores not available', true);
+      Debug.log('[MonitoringDisplay] DataManager or DataManager.backendScores not available', true);
     }
   }
 
@@ -935,8 +1018,8 @@ export class MonitoringDisplay {
     if (syncData.scores && Array.isArray(syncData.scores)) {
       // Process each score through DataManager
       syncData.scores.forEach(scoreData => {
-        if (window.DataManager) {
-          window.DataManager.updateTeamScoreFromBackend(scoreData);
+        if (this.dataManager) {
+          this.dataManager.updateTeamScoreFromBackend(scoreData);
         }
       });
 
@@ -986,19 +1069,19 @@ export class MonitoringDisplay {
    */
   refreshAllDisplays() {
     // Refresh from DataManager cached data
-    if (window.DataManager) {
+    if (this.dataManager) {
       // Trigger score display rebuild
-      if (window.DataManager.backendScores && window.DataManager.backendScores.size > 0) {
-        const firstScore = Array.from(window.DataManager.backendScores.values())[0];
+      if (this.dataManager.backendScores && this.dataManager.backendScores.size > 0) {
+        const firstScore = Array.from(this.dataManager.backendScores.values())[0];
         this.updateScoreDisplay(firstScore);
       }
 
       // Refresh transaction log (last 10)
-      if (window.DataManager.transactions && window.DataManager.transactions.length > 0) {
+      if (this.dataManager.transactions && this.dataManager.transactions.length > 0) {
         const transactionLog = document.getElementById('admin-transaction-log');
         if (transactionLog) {
           transactionLog.innerHTML = '';
-          const recent = window.DataManager.transactions.slice(-10).reverse();
+          const recent = this.dataManager.transactions.slice(-10).reverse();
           recent.forEach(tx => this.updateTransactionDisplay(tx));
         }
       }
