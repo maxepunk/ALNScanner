@@ -559,4 +559,208 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
       });
     });
   });
+
+  describe('removeTransaction', () => {
+    beforeEach(() => {
+      // Setup: Add initial transactions
+      manager.addTransaction({
+        id: 'tx_001',
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'blackmarket',
+        points: 1000,
+        rfid: 'token1',
+        group: 'Server Logs (x5)',
+        valueRating: 3,
+        memoryType: 'Technical',
+        timestamp: new Date().toISOString()
+      });
+
+      manager.addTransaction({
+        id: 'tx_002',
+        tokenId: 'token2',
+        teamId: '001',
+        mode: 'blackmarket',
+        points: 5000,
+        rfid: 'token2',
+        group: 'Server Logs (x5)',
+        valueRating: 4,
+        memoryType: 'Technical',
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    it('should remove transaction from sessionData', () => {
+      const result = manager.removeTransaction('tx_001');
+
+      expect(result).toBeDefined();
+      expect(result.tokenId).toBe('token1');
+      expect(manager.sessionData.transactions).toHaveLength(1);
+      expect(manager.sessionData.transactions[0].id).toBe('tx_002');
+    });
+
+    it('should remove token from scannedTokens Set to allow re-scanning', () => {
+      // Verify token is in scannedTokens before deletion
+      expect(manager.scannedTokens.has('token1')).toBe(true);
+
+      manager.removeTransaction('tx_001');
+
+      // Token should be removed from scannedTokens
+      expect(manager.scannedTokens.has('token1')).toBe(false);
+      // token2 should still be there
+      expect(manager.scannedTokens.has('token2')).toBe(true);
+    });
+
+    it('should NOT remove token if other transactions use same token', () => {
+      // Add another transaction with same token for different team
+      manager.addTransaction({
+        id: 'tx_003',
+        tokenId: 'token1',
+        teamId: '002',
+        mode: 'blackmarket',
+        points: 1000,
+        rfid: 'token1',
+        timestamp: new Date().toISOString()
+      });
+
+      manager.removeTransaction('tx_001');
+
+      // Token should still be in scannedTokens because tx_003 uses it
+      expect(manager.scannedTokens.has('token1')).toBe(true);
+    });
+
+    it('should recalculate affected team score', () => {
+      // Initial score should be 6000 (1000 + 5000)
+      const teamBefore = manager.sessionData.teams['001'];
+      expect(teamBefore.baseScore).toBe(6000);
+      expect(teamBefore.tokensScanned).toBe(2);
+
+      manager.removeTransaction('tx_001');
+
+      // After deletion, score should be recalculated from remaining transactions
+      const teamAfter = manager.sessionData.teams['001'];
+      expect(teamAfter.baseScore).toBe(5000); // Only tx_002 remains
+      expect(teamAfter.tokensScanned).toBe(1);
+    });
+
+    it('should emit standalone:transaction-removed event', (done) => {
+      manager.addEventListener('standalone:transaction-removed', (event) => {
+        expect(event.detail.transaction).toBeDefined();
+        expect(event.detail.transaction.id).toBe('tx_001');
+        expect(event.detail.teamId).toBe('001');
+        done();
+      });
+
+      manager.removeTransaction('tx_001');
+    });
+
+    it('should update localStorage', () => {
+      manager.removeTransaction('tx_001');
+
+      const saved = localStorage.getItem('standaloneSession');
+      expect(saved).toBeDefined();
+      const parsed = JSON.parse(saved);
+      expect(parsed.transactions).toHaveLength(1);
+      expect(parsed.transactions[0].id).toBe('tx_002');
+    });
+
+    it('should return null if transaction not found', () => {
+      const result = manager.removeTransaction('non_existent_tx');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('adjustTeamScore', () => {
+    beforeEach(() => {
+      // Setup: Add transaction to create team with initial score
+      manager.addTransaction({
+        id: 'tx_001',
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'blackmarket',
+        points: 1000,
+        rfid: 'token1',
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    it('should add delta to team score', () => {
+      const teamBefore = manager.sessionData.teams['001'];
+      expect(teamBefore.score).toBe(1000);
+
+      manager.adjustTeamScore('001', 500, 'Bonus points');
+
+      const teamAfter = manager.sessionData.teams['001'];
+      expect(teamAfter.score).toBe(1500);
+    });
+
+    it('should record adjustment in adminAdjustments array', () => {
+      manager.adjustTeamScore('001', 500, 'Bonus points');
+
+      const team = manager.sessionData.teams['001'];
+      expect(team.adminAdjustments).toBeDefined();
+      expect(team.adminAdjustments).toHaveLength(1);
+      expect(team.adminAdjustments[0].delta).toBe(500);
+      expect(team.adminAdjustments[0].reason).toBe('Bonus points');
+    });
+
+    it('should include delta, reason, timestamp, gmStation in record', () => {
+      manager.adjustTeamScore('001', -200, 'Penalty');
+
+      const adjustment = manager.sessionData.teams['001'].adminAdjustments[0];
+      expect(adjustment.delta).toBe(-200);
+      expect(adjustment.reason).toBe('Penalty');
+      expect(adjustment.timestamp).toBeDefined();
+      expect(adjustment.gmStation).toBe('standalone');
+    });
+
+    it('should emit standalone:score-adjusted event', (done) => {
+      manager.addEventListener('standalone:score-adjusted', (event) => {
+        expect(event.detail.teamId).toBe('001');
+        expect(event.detail.delta).toBe(300);
+        expect(event.detail.reason).toBe('Test adjustment');
+        expect(event.detail.newScore).toBe(1300);
+        done();
+      });
+
+      manager.adjustTeamScore('001', 300, 'Test adjustment');
+    });
+
+    it('should persist changes to localStorage', () => {
+      manager.adjustTeamScore('001', 750, 'Extra points');
+
+      const saved = localStorage.getItem('standaloneSession');
+      expect(saved).toBeDefined();
+      const parsed = JSON.parse(saved);
+      expect(parsed.teams['001'].score).toBe(1750);
+      expect(parsed.teams['001'].adminAdjustments).toHaveLength(1);
+    });
+
+    it('should throw error if team not found', () => {
+      expect(() => {
+        manager.adjustTeamScore('999', 100, 'Test');
+      }).toThrow('Team 999 not found');
+    });
+
+    it('should handle positive and negative deltas correctly', () => {
+      manager.adjustTeamScore('001', 500, 'Bonus');
+      expect(manager.sessionData.teams['001'].score).toBe(1500);
+
+      manager.adjustTeamScore('001', -300, 'Penalty');
+      expect(manager.sessionData.teams['001'].score).toBe(1200);
+
+      // Check both adjustments are recorded
+      const adjustments = manager.sessionData.teams['001'].adminAdjustments;
+      expect(adjustments).toHaveLength(2);
+      expect(adjustments[0].delta).toBe(500);
+      expect(adjustments[1].delta).toBe(-300);
+    });
+
+    it('should use default reason if not provided', () => {
+      manager.adjustTeamScore('001', 100);
+
+      const adjustment = manager.sessionData.teams['001'].adminAdjustments[0];
+      expect(adjustment.reason).toBe('Manual GM adjustment');
+    });
+  });
 });

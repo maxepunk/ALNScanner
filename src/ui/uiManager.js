@@ -40,10 +40,23 @@ class UIManager {
    */
   _getDataSource() {
     // Check if in standalone mode
-    if (this.sessionModeManager?.isStandalone()) {
+    const isStandalone = this.sessionModeManager?.isStandalone();
+
+    // DEBUGGING: Check which data source is being used and why
+    const debug = {
+      isStandalone,
+      hasSessionModeManager: !!this.sessionModeManager,
+      dataManagerTxCount: this.dataManager?.transactions?.length || 0,
+      standaloneTxCount: this.standaloneDataManager?.transactions?.length || 0
+    };
+    console.log(`[UIManager] _getDataSource: standalone=${isStandalone}, DataManager txs=${debug.dataManagerTxCount}, Standalone txs=${debug.standaloneTxCount}`);
+
+    if (isStandalone) {
+      console.log('[UIManager] Returning StandaloneDataManager');
       return this.standaloneDataManager;
     }
     // Default to DataManager (networked mode or no mode set)
+    console.log('[UIManager] Returning DataManager (networked)');
     return this.dataManager;
   }
 
@@ -306,7 +319,7 @@ class UIManager {
       const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
 
       return `
-        <div class="scoreboard-entry ${rankClass}" onclick="App.showTeamDetails('${team.teamId}')">
+        <div class="scoreboard-entry ${rankClass}" data-action="app.showTeamDetails" data-arg="${team.teamId}" style="cursor: pointer;">
           <div class="scoreboard-rank">${medal}</div>
           <div class="scoreboard-team">
             Team ${team.teamId}
@@ -367,8 +380,9 @@ class UIManager {
             </div>`;
 
         // Add tokens in this group
+        const hasActiveSession = this.sessionModeManager?.isNetworked() || this.sessionModeManager?.isStandalone();
         group.tokens.forEach(token => {
-          html += this.renderTokenCard(token, true, false, isNetworked);
+          html += this.renderTokenCard(token, true, false, hasActiveSession);
         });
 
         html += '</div>';
@@ -394,8 +408,9 @@ class UIManager {
             </div>`;
 
         // Add tokens in this group
+        const hasActiveSession = this.sessionModeManager?.isNetworked() || this.sessionModeManager?.isStandalone();
         group.tokens.forEach(token => {
-          html += this.renderTokenCard(token, false, false, isNetworked);
+          html += this.renderTokenCard(token, false, false, hasActiveSession);
         });
 
         html += '</div>';
@@ -406,8 +421,9 @@ class UIManager {
     if (enhancedData.hasUngroupedTokens) {
       html += '<div class="section-divider">📦 Individual Tokens</div>';
 
+      const hasActiveSession = this.sessionModeManager?.isNetworked() || this.sessionModeManager?.isStandalone();
       enhancedData.ungroupedTokens.forEach(token => {
-        html += this.renderTokenCard(token, false, false, isNetworked);
+        html += this.renderTokenCard(token, false, false, hasActiveSession);
       });
     }
 
@@ -496,10 +512,12 @@ class UIManager {
       adjustmentsSection.style.display = 'none';
     }
 
-    // Show/hide intervention controls based on mode
+    // Show intervention controls in both networked and standalone modes
     const interventionControls = document.getElementById('teamInterventionControls');
     if (interventionControls) {
-      interventionControls.style.display = isNetworked ? 'block' : 'none';
+      // Show controls if we have an active game session (networked or standalone)
+      const hasActiveSession = this.sessionModeManager?.isNetworked() || this.sessionModeManager?.isStandalone();
+      interventionControls.style.display = hasActiveSession ? 'block' : 'none';
     }
 
     // Store team ID for intervention handlers
@@ -513,7 +531,7 @@ class UIManager {
    * @param {Object} token - Token data (transaction object)
    * @param {boolean} hasBonus - Whether token has group bonus
    * @param {boolean} isUnknown - Whether token is unknown
-   * @param {boolean} showDelete - Show delete button (networked mode only)
+   * @param {boolean} showDelete - Show delete button (both networked and standalone modes)
    * @returns {string} HTML string
    */
   renderTokenCard(token, hasBonus = false, isUnknown = false, showDelete = false) {
@@ -550,10 +568,10 @@ class UIManager {
       calculationText = 'Unknown token - No value';
     }
 
-    // Delete button (networked mode only)
+    // Delete button (both modes)
     const deleteButton = showDelete && token.id ? `
-      <button class="btn" onclick="App.deleteTeamTransaction('${token.id}')"
-              style="background: #dc3545; color: white; padding: 4px 8px; font-size: 12px; margin-left: 8px;">
+      <button class="btn" data-action="app.deleteTeamTransaction" data-arg="${token.id}"
+              style="background: #dc3545; color: white; padding: 4px 8px; font-size: 12px; margin-left: 8px; cursor: pointer;">
         🗑️ Delete
       </button>
     ` : '';

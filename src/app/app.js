@@ -416,12 +416,19 @@ class App {
         deviceId: deviceId,
         stationName: this.settings?.stationName || 'GM Station',
         token: token
-      });
+      }, this.dataManager);
 
       // Attempt connection
       try {
         await this.networkedSession.initialize();
         this.debug.log('NetworkedSession initialized - session:ready will fire');
+
+        // Wire DataManager to NetworkedSession for connection-aware score updates
+        // CRITICAL FIX: DataManager needs this.networkedSession reference to validate connection state
+        // before updating backendScores (see dataManager.js:570)
+        this.dataManager.networkedSession = this.networkedSession;
+        this.debug.log('DataManager.networkedSession injected for score update validation');
+
         // session:ready event will trigger admin module initialization
         // via _wireNetworkedSessionEvents listener
 
@@ -796,6 +803,15 @@ class App {
   // ========== Team Details ==========
 
   showTeamDetails(teamId) {
+    // CRITICAL: teamDetailsScreen is inside scanner-view, so switch to scanner view first
+    // if currently in admin view (common when clicking team from admin panel score board)
+    if (this.viewController && this.viewController.currentView === 'admin') {
+      this.viewController.switchView('scanner');
+    }
+
+    // CRITICAL: Track current team for intervention actions (deletion, score adjustment)
+    this.currentInterventionTeamId = teamId;
+
     const transactions = this.dataManager.getTeamTransactions(teamId);
     this.uiManager.renderTeamDetails(teamId, transactions);
     this.uiManager.showScreen('teamDetails');
@@ -1143,7 +1159,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       Object.keys(teams).forEach(teamId => {
         html += `<tr>
           <td style="cursor: pointer; color: #007bff; text-decoration: underline;"
-              onclick="window.App.showTeamDetails('${teamId}')">
+              data-action="app.showTeamDetails" data-arg="${teamId}">
             ${teamId}
           </td>
           <td>${teams[teamId].count}</td>
@@ -1189,12 +1205,13 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       await this.viewController.adminInstances.adminOps.resetScores();
       this.debug.log('Scores reset successfully');
 
-      // Clear local backend scores cache
-      if (this.dataManager && this.dataManager.backendScores) {
-        this.dataManager.backendScores.clear();
-      }
+      // ✅ Remove local mutation - let MonitoringDisplay handle broadcast
+      // Backend will send scores:reset broadcast
+      // MonitoringDisplay will call DataManager.clearBackendScores()
+      // DataManager will emit event
+      // main.js will update UI
 
-      // Update admin panel display
+      // Update admin panel display (optional immediate feedback)
       if (this.viewController.currentView === 'admin') {
         this.updateAdminPanel();
       }
@@ -1222,7 +1239,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
   }
 
 
-  // ========== GM Intervention (Networked Mode Only) ==========
+  // ========== GM Intervention (Both Modes) ==========
 
   async adjustTeamScore() {
     const teamId = this.currentInterventionTeamId;
@@ -1242,6 +1259,31 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
     const reason = reasonInput?.value.trim() || 'Manual GM adjustment';
 
+    const isStandalone = this.sessionModeManager?.isStandalone();
+
+    // Standalone mode: Use StandaloneDataManager (local only)
+    if (isStandalone) {
+      try {
+        this.standaloneDataManager.adjustTeamScore(teamId, delta, reason);
+        this.debug.log(`Score adjusted (standalone): Team ${teamId} ${delta > 0 ? '+' : ''}${delta} (${reason})`);
+
+        // Clear inputs
+        if (deltaInput) deltaInput.value = '';
+        if (reasonInput) reasonInput.value = '';
+
+        // Refresh team details immediately with updated local data
+        const transactions = this.standaloneDataManager.getTeamTransactions(teamId);
+        this.uiManager.renderTeamDetails(teamId, transactions);
+
+        this.uiManager.showToast(`Score adjusted: ${delta > 0 ? '+' : ''}${delta} points`, 'success');
+      } catch (error) {
+        console.error('Failed to adjust score (standalone):', error);
+        this.uiManager.showError(`Failed to adjust score: ${error.message}`);
+      }
+      return;
+    }
+
+    // Networked mode: Use AdminOps (backend authoritative)
     if (!this.viewController?.adminInstances?.adminOps) {
       alert('Admin functions not available. Ensure you are in networked mode.');
       return;
@@ -1249,7 +1291,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
     try {
       await this.viewController.adminInstances.adminOps.adjustScore(teamId, delta, reason);
-      this.debug.log(`Score adjusted: Team ${teamId} ${delta > 0 ? '+' : ''}${delta} (${reason})`);
+      this.debug.log(`Score adjusted (networked): Team ${teamId} ${delta > 0 ? '+' : ''}${delta} (${reason})`);
 
       // Clear inputs
       if (deltaInput) deltaInput.value = '';
@@ -1260,7 +1302,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
       this.uiManager.showToast(`Score adjusted: ${delta > 0 ? '+' : ''}${delta} points`, 'success');
     } catch (error) {
-      console.error('Failed to adjust score:', error);
+      console.error('Failed to adjust score (networked):', error);
       this.uiManager.showError(`Failed to adjust score: ${error.message}`);
     }
   }
@@ -1268,6 +1310,34 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
   async deleteTeamTransaction(transactionId) {
     if (!confirm('Delete this transaction? This cannot be undone.')) return;
 
+    const isStandalone = this.sessionModeManager?.isStandalone();
+
+    // Standalone mode: Use StandaloneDataManager (local only)
+    if (isStandalone) {
+      try {
+        const deletedTx = this.standaloneDataManager.removeTransaction(transactionId);
+        if (deletedTx) {
+          this.debug.log(`Transaction deleted (standalone): ${transactionId}`);
+
+          // Refresh team details immediately with updated local data
+          const teamId = this.currentInterventionTeamId;
+          if (teamId) {
+            const transactions = this.standaloneDataManager.getTeamTransactions(teamId);
+            this.uiManager.renderTeamDetails(teamId, transactions);
+          }
+
+          this.uiManager.showToast('Transaction deleted', 'success');
+        } else {
+          this.uiManager.showError('Transaction not found');
+        }
+      } catch (error) {
+        console.error('Failed to delete transaction (standalone):', error);
+        this.uiManager.showError(`Failed to delete transaction: ${error.message}`);
+      }
+      return;
+    }
+
+    // Networked mode: Use AdminOps (backend authoritative)
     if (!this.viewController?.adminInstances?.adminOps) {
       alert('Admin functions not available. Ensure you are in networked mode.');
       return;
@@ -1275,36 +1345,17 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
     try {
       await this.viewController.adminInstances.adminOps.deleteTransaction(transactionId);
-      this.debug.log(`Transaction deleted: ${transactionId}`);
+      this.debug.log(`Transaction deleted (networked): ${transactionId}`);
 
-      // Immediately remove from local DataManager to update UI
-      const index = this.dataManager.transactions.findIndex(tx => tx.id === transactionId);
-      if (index !== -1) {
-        const deletedTx = this.dataManager.transactions[index];
-
-        // Remove from transactions array
-        this.dataManager.transactions.splice(index, 1);
-        this.dataManager.saveTransactions();
-
-        // CRITICAL: Also remove from scannedTokens Set to allow re-scanning
-        if (deletedTx.tokenId || deletedTx.rfid) {
-          const tokenId = deletedTx.tokenId || deletedTx.rfid;
-          this.dataManager.scannedTokens.delete(tokenId);
-          this.dataManager.saveScannedTokens();
-          this.debug.log(`Removed ${tokenId} from scannedTokens - can be rescanned`);
-        }
-      }
-
-      // Refresh team details immediately with updated local data
-      const teamId = this.currentInterventionTeamId;
-      if (teamId) {
-        const transactions = this.dataManager.getTeamTransactions(teamId);
-        this.uiManager.renderTeamDetails(teamId, transactions);
-      }
+      // ✅ Remove local mutations - let broadcast flow handle it
+      // Backend sends transaction:deleted broadcast
+      // MonitoringDisplay calls DataManager.removeTransaction()
+      // DataManager emits event
+      // main.js listener re-renders team details if active
 
       this.uiManager.showToast('Transaction deleted', 'success');
     } catch (error) {
-      console.error('Failed to delete transaction:', error);
+      console.error('Failed to delete transaction (networked):', error);
       this.uiManager.showError(`Failed to delete transaction: ${error.message}`);
     }
   }

@@ -23,9 +23,10 @@ import {
 } from '../utils/adminModule.js';
 
 export class AdminController extends EventTarget {
-  constructor(client) {
+  constructor(client, dataManager) {
     super();
     this.client = client; // OrchestratorClient reference for admin modules to use
+    this.dataManager = dataManager; // DataManager reference for MonitoringDisplay
     this.modules = null;
     this.initialized = false;
   }
@@ -48,7 +49,7 @@ export class AdminController extends EventTarget {
       videoController: new VideoController(this.client),
       systemMonitor: new SystemMonitor(this.client),
       adminOperations: new AdminOperations(this.client),
-      monitoringDisplay: new MonitoringDisplay(this.client)
+      monitoringDisplay: new MonitoringDisplay(this.client, this.dataManager)
     };
 
     this.initialized = true;

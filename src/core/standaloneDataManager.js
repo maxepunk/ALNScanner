@@ -99,6 +99,78 @@ class StandaloneDataManager extends EventTarget {
   }
 
   /**
+   * Remove transaction from local session
+   * Recalculates team scores from remaining transactions
+   * @param {string} transactionId - Transaction ID to remove
+   * @returns {Object|null} Removed transaction or null if not found
+   */
+  removeTransaction(transactionId) {
+    // Find transaction index
+    const index = this.sessionData.transactions.findIndex(tx => tx.id === transactionId);
+    if (index === -1) {
+      this.debug?.log(`Transaction not found: ${transactionId}`, true);
+      return null;
+    }
+
+    // Remove from transactions array
+    const removedTx = this.sessionData.transactions.splice(index, 1)[0];
+    const tokenId = removedTx.tokenId || removedTx.rfid;
+    const affectedTeamId = removedTx.teamId;
+
+    // CRITICAL: Remove from scannedTokens Set to allow re-scanning
+    // Only remove if no other transactions have this token
+    const tokenStillExists = this.sessionData.transactions.some(
+      tx => (tx.tokenId || tx.rfid) === tokenId
+    );
+    if (!tokenStillExists && tokenId) {
+      this.scannedTokens.delete(tokenId);
+      this.debug?.log(`Token ${tokenId} removed from scannedTokens - can be rescanned`);
+    }
+
+    // Recalculate affected team's scores from remaining transactions
+    if (affectedTeamId && this.sessionData.teams[affectedTeamId]) {
+      const team = this.sessionData.teams[affectedTeamId];
+
+      // Reset team scores
+      team.baseScore = 0;
+      team.bonusPoints = 0;
+      team.score = 0;
+      team.tokensScanned = 0;
+      team.completedGroups = [];
+
+      // Replay all remaining transactions for this team
+      this.sessionData.transactions
+        .filter(tx => tx.teamId === affectedTeamId)
+        .forEach(tx => this.updateLocalScores(tx));
+
+      this.debug?.log(`Recalculated scores for team ${affectedTeamId}`, {
+        newScore: team.score,
+        transactions: this.sessionData.transactions.filter(tx => tx.teamId === affectedTeamId).length
+      });
+    }
+
+    // Persist to localStorage
+    this.saveLocalSession();
+
+    // Emit event for UI updates
+    this.dispatchEvent(new CustomEvent('standalone:transaction-removed', {
+      detail: {
+        transaction: removedTx,
+        teamId: affectedTeamId,
+        sessionId: this.sessionData.sessionId
+      }
+    }));
+
+    this.debug?.log(`Transaction removed: ${transactionId}`, {
+      tokenId,
+      teamId: affectedTeamId,
+      canRescan: !tokenStillExists
+    });
+
+    return removedTx;
+  }
+
+  /**
    * Check if token has been scanned (duplicate detection)
    * @param {string} tokenId - Token ID to check
    * @returns {boolean} True if token already scanned
@@ -382,6 +454,61 @@ class StandaloneDataManager extends EventTarget {
       completedGroups: team.completedGroups.length,
       groupBreakdown: {}  // TODO: Could be enhanced if needed
     };
+  }
+
+  /**
+   * Manually adjust a team's score (GM intervention)
+   * Creates an admin adjustment record with audit trail
+   * @param {string} teamId - Team identifier (e.g., '001', '002')
+   * @param {number} delta - Score adjustment amount (positive or negative)
+   * @param {string} [reason='Manual GM adjustment'] - Reason for adjustment (audit trail)
+   */
+  adjustTeamScore(teamId, delta, reason = 'Manual GM adjustment') {
+    // Validate team exists
+    if (!this.sessionData.teams[teamId]) {
+      throw new Error(`Team ${teamId} not found`);
+    }
+
+    const team = this.sessionData.teams[teamId];
+
+    // Initialize adminAdjustments array if doesn't exist
+    if (!team.adminAdjustments) {
+      team.adminAdjustments = [];
+    }
+
+    // Create adjustment record
+    const adjustment = {
+      delta: parseInt(delta),
+      reason: reason,
+      timestamp: new Date().toISOString(),
+      gmStation: 'standalone'  // No device ID in standalone mode
+    };
+
+    // Add to adjustments array (audit trail)
+    team.adminAdjustments.push(adjustment);
+
+    // Apply adjustment to current score
+    team.score += adjustment.delta;
+
+    this.debug?.log(`[Standalone] Team ${teamId} score adjusted by ${delta}`, {
+      reason,
+      newScore: team.score,
+      totalAdjustments: team.adminAdjustments.length
+    });
+
+    // Persist to localStorage
+    this.saveLocalSession();
+
+    // Emit event for UI updates
+    this.dispatchEvent(new CustomEvent('standalone:score-adjusted', {
+      detail: {
+        teamId,
+        delta: adjustment.delta,
+        reason: adjustment.reason,
+        newScore: team.score,
+        adjustment: adjustment
+      }
+    }));
   }
 
   /**

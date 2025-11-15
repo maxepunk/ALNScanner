@@ -33,7 +33,7 @@ This document traces the complete user experience from app launch to first token
 **Visual:** "⏳ Loading token database..." message
 
 ### Step 1.2: Initial Screen Decision Logic
-**File:** `js/app/initializationSteps.js` lines 152-194
+**File:** `src/app/initializationSteps.js` lines 152-194
 **Decision Tree:**
 ```
 Does user have saved mode from previous session?
@@ -71,7 +71,7 @@ Does user have saved mode from previous session?
 **Handler:** `App.selectGameMode('networked')` (line 115 in app.js)
 
 ### Step 2.2: SessionModeManager.setMode('networked') Called
-**File:** `js/app/sessionModeManager.js` lines 7-26
+**File:** `src/app/sessionModeManager.js` lines 7-26
 **What Happens:**
 1. Mode set to 'networked'
 2. Mode **LOCKED** (cannot change during session)
@@ -333,7 +333,7 @@ UIManager.showScreen('teamEntry');
 - Enter button: Green
 
 ### Step 4.2: User Enters Team ID
-**File:** `js/app/app.js` lines 93-112
+**File:** `src/app/app.js` lines 93-112
 **Trigger:** User clicks number buttons
 
 **For Each Number Clicked:**
@@ -459,7 +459,7 @@ reader.onreading = (event) => {
 **Example:** `result = { id: "534e2b03", source: "nfc", raw: "534e2b03" }`
 
 ### Step 5.3b: Token Processing Pipeline
-**File:** `js/app/app.js` lines 690-730
+**File:** `src/app/app.js` lines 690-730
 **Handler:** `App.processNFCRead(result)`
 
 **Validation 1: Team Selected**
@@ -519,7 +519,7 @@ if (DataManager.isTokenScanned(tokenId)) {
 - Prevents same token counted twice per team
 
 ### Step 5.3c: Transaction Recording
-**File:** `js/app/app.js` lines 754-814
+**File:** `src/app/app.js` lines 754-814
 **Handler:** `App.recordTransaction(token, tokenId, isUnknown)`
 
 **For FOUND Tokens:**
@@ -594,7 +594,7 @@ GroupMultiplier: Extracted from group name (e.g., "Group Name (x5)" → 5x)
 ```
 
 ### Step 5.4: Result Screen Displayed
-**File:** `js/app/app.js` line 809 & `js/ui/uiManager.js` lines 252-420
+**File:** `src/app/app.js` line 809 & `src/ui/uiManager.js` lines 252-420
 **Handler:** `UIManager.showTokenResult(token, tokenId, isUnknown)`
 
 **Screen Shows:**
@@ -836,7 +836,7 @@ if (rfid && rfid.trim()) {
 ## PHASE 8: REAL-TIME SYNCHRONIZATION (NETWORKED MODE)
 
 ### 8.1: WebSocket Events Received
-**File:** `js/network/orchestratorClient.js`
+**File:** `src/network/orchestratorClient.js`
 
 **Event Type 1: sync:full** (on connect + periodically)
 ```javascript
@@ -881,7 +881,7 @@ if (rfid && rfid.trim()) {
 **Handled By:** AdminModule.VideoController (updates UI)
 
 ### 8.2: Automatic UI Updates
-**File:** `js/utils/adminModule.js` lines 300-400 (MonitoringDisplay class)
+**File:** `src/utils/adminModule.js` lines 300-400 (MonitoringDisplay class)
 
 **Updates Happen When:**
 - `session:update` event received → SessionManager updates currentSession
@@ -1112,28 +1112,28 @@ Once user selects "Networked" mode:
 ## FILE REFERENCES SUMMARY
 
 ### Initialization & Mode Selection
-- `/js/app/app.js` - Main app coordinator (init, selectGameMode, startScan, etc.)
-- `/js/app/sessionModeManager.js` - Mode locking logic
-- `/js/app/initializationSteps.js` - Phased startup sequence
+- `/src/app/app.js` - Main app coordinator (init, selectGameMode, startScan, etc.)
+- `/src/app/sessionModeManager.js` - Mode locking logic
+- `/src/app/initializationSteps.js` - Phased startup sequence
 
 ### Connection & Authentication
-- `/js/network/connectionManager.js` - JWT auth, health checks, retry logic
-- `/js/network/orchestratorClient.js` - WebSocket client, event handlers
+- `/src/network/connectionManager.js` - JWT auth, health checks, retry logic
+- `/src/network/orchestratorClient.js` - WebSocket client, event handlers
 - `/index.html` lines 1934-2051 - Connection form, wizard modal
 
 ### UI & Screen Management
-- `/js/ui/uiManager.js` - Screen transitions, error display
+- `/src/ui/uiManager.js` - Screen transitions, error display
 - `/index.html` lines 1377-1823 - All screens & view selector tabs
 
 ### Admin Panel
-- `/js/utils/adminModule.js` - SessionManager, VideoController, SystemMonitor, MonitoringDisplay
+- `/src/utils/adminModule.js` - SessionManager, VideoController, SystemMonitor, MonitoringDisplay
 - `/index.html` lines 1725-1817 - Admin view HTML structure
 
 ### Scanning & Transactions
-- `/js/utils/nfcHandler.js` - Web NFC API wrapper
-- `/js/network/networkedQueueManager.js` - Transaction queueing & retry
-- `/js/core/tokenManager.js` - Token database & fuzzy matching
-- `/js/core/dataManager.js` - Scoring, group completion detection
+- `/src/utils/nfcHandler.js` - Web NFC API wrapper
+- `/src/network/networkedQueueManager.js` - Transaction queueing & retry
+- `/src/core/tokenManager.js` - Token database & fuzzy matching
+- `/src/core/dataManager.js` - Scoring, group completion detection
 
 ### Styling
 - `/index.html` lines 7-1373 - All CSS (inline)

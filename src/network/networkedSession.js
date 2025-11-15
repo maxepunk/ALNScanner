@@ -21,9 +21,10 @@ import NetworkedQueueManager from './networkedQueueManager.js';
 import AdminController from '../app/adminController.js';
 
 export class NetworkedSession extends EventTarget {
-  constructor(config) {
+  constructor(config, dataManager) {
     super();
     this.config = config; // { url, deviceId, stationName, token }
+    this.dataManager = dataManager; // DataManager reference for AdminController
     this.services = null;
     this.state = 'disconnected'; // disconnected, connecting, connected, error
   }
@@ -150,8 +151,8 @@ export class NetworkedSession extends EventTarget {
       debug: console
     });
 
-    // 4. AdminController (depends on client)
-    this.services.adminController = new AdminController(this.services.client);
+    // 4. AdminController (depends on client and dataManager)
+    this.services.adminController = new AdminController(this.services.client, this.dataManager);
   }
 
   /**

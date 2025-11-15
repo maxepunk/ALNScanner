@@ -66,14 +66,73 @@ const UIManager = new UIManagerClass({
 
 // Wire event-driven communication: DataManager → UIManager
 DataManager.addEventListener('transaction:added', () => {
+  Debug.log('[main.js] transaction:added event received!');
   UIManager.updateHistoryBadge();
   UIManager.updateSessionStats();
 
-  // Auto-update history screen if visible (was missing)
+  // Auto-update history screen if visible
   const historyScreen = document.getElementById('historyScreen');
   if (historyScreen?.classList.contains('active')) {
+    Debug.log('[main.js] History screen is active, calling renderTransactions()');
     UIManager.updateHistoryStats();
     UIManager.renderTransactions();
+  }
+
+  // Auto-update team details screen if visible
+  const teamDetailsScreen = document.getElementById('teamDetailsScreen');
+  if (teamDetailsScreen?.classList.contains('active')) {
+    Debug.log('[main.js] Team details screen is active, re-rendering after addition');
+    // Get current team from app instance
+    const currentTeamId = window.__app?.currentInterventionTeamId;
+    if (currentTeamId) {
+      const transactions = DataManager.getTeamTransactions(currentTeamId);
+      UIManager.renderTeamDetails(currentTeamId, transactions);
+      Debug.log('[main.js] Team details re-rendered for team:', currentTeamId);
+    }
+  }
+});
+
+// Listen for transaction deletions (mirrors transaction:added pattern)
+DataManager.addEventListener('transaction:deleted', () => {
+  Debug.log('[main.js] transaction:deleted event received!');
+  UIManager.updateHistoryBadge();
+  UIManager.updateSessionStats();
+
+  // Auto-update history screen if visible
+  const historyScreen = document.getElementById('historyScreen');
+  if (historyScreen?.classList.contains('active')) {
+    Debug.log('[main.js] History screen is active, re-rendering after deletion');
+    UIManager.updateHistoryStats();
+    UIManager.renderTransactions();
+  }
+
+  // Auto-update team details screen if visible
+  const teamDetailsScreen = document.getElementById('teamDetailsScreen');
+  if (teamDetailsScreen?.classList.contains('active')) {
+    Debug.log('[main.js] Team details screen is active, re-rendering after deletion');
+    // Get current team from app instance
+    const currentTeamId = window.__app?.currentInterventionTeamId;
+    if (currentTeamId) {
+      const transactions = DataManager.getTeamTransactions(currentTeamId);
+      UIManager.renderTeamDetails(currentTeamId, transactions);
+      Debug.log('[main.js] Team details re-rendered for team:', currentTeamId);
+    }
+  }
+});
+
+// Listen for score resets
+DataManager.addEventListener('scores:cleared', () => {
+  Debug.log('[main.js] scores:cleared event received!');
+
+  // Auto-update scoreboard if visible
+  const scoreboardScreen = document.getElementById('scoreboardScreen');
+  if (scoreboardScreen?.classList.contains('active')) {
+    Debug.log('[main.js] Scoreboard screen is active, clearing after reset');
+    // Scoreboard will be repopulated by sync:full that follows
+    const scoreTable = scoreboardScreen.querySelector('#team-scores-table tbody');
+    if (scoreTable) {
+      scoreTable.innerHTML = '';
+    }
   }
 });
 

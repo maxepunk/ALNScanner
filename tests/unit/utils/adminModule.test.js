@@ -281,62 +281,25 @@ describe('AdminModule - ES6 Exports', () => {
       });
     });
 
-    describe.skip('checkVLC', () => {
-      // NOTE: checkVLC method not yet implemented in SystemMonitor
-      it('should return connected when VLC is available', async () => {
-        const monitor = new SystemMonitor(mockConnection);
-
-        global.fetch.mockResolvedValue({
-          json: () => Promise.resolve({ connected: true })
-        });
-
-        const result = await monitor.checkVLC();
-        expect(result).toBe('connected');
-        expect(monitor.vlcHealth).toBe('connected');
-      });
-
-      it('should return disconnected when VLC is not available', async () => {
-        const monitor = new SystemMonitor(mockConnection);
-
-        global.fetch.mockResolvedValue({
-          json: () => Promise.resolve({ connected: false })
-        });
-
-        const result = await monitor.checkVLC();
-        expect(result).toBe('disconnected');
-      });
-    });
-
-    describe.skip('refresh', () => {
-      // NOTE: refresh method not yet implemented in SystemMonitor
-      it('should check both backend and VLC health', async () => {
-        const monitor = new SystemMonitor(mockConnection);
-
-        global.fetch
-          .mockResolvedValueOnce({ ok: true })
-          .mockResolvedValueOnce({
-            json: () => Promise.resolve({ connected: true })
-          });
-
-        const result = await monitor.refresh();
-        expect(result).toEqual({
-          backend: 'healthy',
-          vlc: 'connected'
-        });
-      });
-
-      it('should handle partial failures gracefully', async () => {
-        const monitor = new SystemMonitor(mockConnection);
-
-        global.fetch
-          .mockResolvedValueOnce({ ok: true })
-          .mockRejectedValueOnce(new Error('VLC error'));
-
-        const result = await monitor.refresh();
-        expect(result.backend).toBe('healthy');
-        expect(result.vlc).toBe('error');
-      });
-    });
+    // SystemMonitor checkVLC() and refresh() - DEPRECATED (removed 11/14/2025)
+    //
+    // These methods were never implemented and are unnecessary in the event-driven architecture.
+    //
+    // WHY DEPRECATED:
+    // 1. VLC health monitoring: Handled via WebSocket sync:full events in MonitoringDisplay
+    //    - See: MonitoringDisplay._handleSyncFull() (adminModule.js:963-972)
+    //    - Backend broadcasts VLC status: syncData.systemStatus.vlc
+    //    - UI updates automatically via event listeners
+    //
+    // 2. Manual refresh(): Not needed - UI auto-updates from WebSocket broadcasts
+    //    - message:received event triggers MonitoringDisplay updates
+    //    - No polling overhead, real-time updates
+    //    - Event-driven pattern is architecturally superior
+    //
+    // REPLACEMENT:
+    // - VLC status: Listen to sync:full broadcasts (real-time, no HTTP polling)
+    // - Health checks: SystemMonitor.checkHealth() for backend (HTTP fetch OK)
+    // - UI updates: Automatic via MonitoringDisplay event listeners
   });
 
   describe('AdminOperations', () => {
@@ -476,94 +439,126 @@ describe('AdminModule - ES6 Exports', () => {
     });
   });
 
-  describe.skip('MonitoringDisplay', () => {
-    // NOTE: MonitoringDisplay uses different DOM structure than these tests expect
-    // Tests need to be rewritten to match actual implementation
+  describe('MonitoringDisplay', () => {
+    // Tests updated 11/14/2025 to match actual ES6 implementation
+    // DOM structure matches index.html admin panel (session-status-container, etc.)
     let display;
+    let mockDataManager;
 
     beforeEach(() => {
-      // Mock DOM elements BEFORE creating MonitoringDisplay
+      // Mock DOM structure matching actual index.html admin panel
       document.body.innerHTML = `
-        <div id="admin-session-name"></div>
-        <div id="admin-session-status"></div>
-        <div id="admin-session-teams"></div>
+        <div id="session-status-container"></div>
         <div id="admin-current-video"></div>
         <div id="admin-queue-length"></div>
-        <div id="admin-backend-status"></div>
-        <div id="admin-vlc-status"></div>
+        <div id="orchestrator-status" class="status-dot"></div>
+        <div id="vlc-status" class="status-dot"></div>
+        <div id="admin-score-board"></div>
+        <div id="admin-transaction-log"></div>
+        <div id="device-count"></div>
+        <div id="device-list"></div>
       `;
 
-      display = new MonitoringDisplay(mockConnection);
+      mockDataManager = {
+        transactions: [],
+        scannedTokens: new Set(),
+        addTransaction: jest.fn(),
+      };
+
+      display = new MonitoringDisplay(mockConnection, mockDataManager);
     });
 
     describe('updateSessionDisplay', () => {
-      it('should update DOM with session data', () => {
+      it('should render active session with rich HTML', () => {
         const session = {
           name: 'Test Session',
           status: 'active',
-          teams: ['001', '002', '003']
+          startTime: new Date('2025-11-14T10:00:00Z').toISOString(),
+          metadata: { totalScans: 42 }
         };
 
         display.updateSessionDisplay(session);
 
-        expect(document.getElementById('admin-session-name').textContent).toBe('Test Session');
-        expect(document.getElementById('admin-session-status').textContent).toBe('active');
-        expect(document.getElementById('admin-session-teams').textContent).toBe('3');
+        const container = document.getElementById('session-status-container');
+        expect(container.innerHTML).toContain('Test Session');
+        expect(container.querySelector('.session-status.active')).toBeTruthy();
+        expect(container.innerHTML).toContain('Active');
+        expect(container.innerHTML).toContain('42'); // total scans
+        expect(container.querySelector('button[data-action="app.adminPauseSession"]')).toBeTruthy();
       });
 
-      it('should show defaults when session is null', () => {
+      it('should render empty state when session is null', () => {
         display.updateSessionDisplay(null);
 
-        expect(document.getElementById('admin-session-name').textContent).toBe(
-          'No active session'
-        );
-        expect(document.getElementById('admin-session-status').textContent).toBe('N/A');
-        expect(document.getElementById('admin-session-teams').textContent).toBe('0');
+        const container = document.getElementById('session-status-container');
+        expect(container.innerHTML).toContain('No Active Session');
+        expect(container.innerHTML).toContain('Create New Session');
+        expect(container.querySelector('button[data-action="app.adminCreateSession"]')).toBeTruthy();
       });
     });
 
     describe('updateVideoDisplay', () => {
       it('should update video status in DOM', () => {
         const videoStatus = {
-          current: 'intro.mp4',
-          queue: ['video1.mp4', 'video2.mp4']
+          status: 'playing',
+          tokenId: 'intro.mp4',
+          queueLength: 2,
+          progress: 0.45
         };
 
         display.updateVideoDisplay(videoStatus);
 
-        expect(document.getElementById('admin-current-video').textContent).toBe('intro.mp4');
-        expect(document.getElementById('admin-queue-length').textContent).toBe('2');
+        const currentVideo = document.getElementById('admin-current-video');
+        expect(currentVideo.textContent).toContain('intro.mp4');
+        expect(currentVideo.textContent).toContain('45%'); // progress
+
+        const queueLength = document.getElementById('admin-queue-length');
+        expect(queueLength.textContent).toBe('2');
+      });
+
+      it('should show idle state when no video playing', () => {
+        const videoStatus = {
+          status: 'idle',
+          tokenId: null,
+          queueLength: 0
+        };
+
+        display.updateVideoDisplay(videoStatus);
+
+        const currentVideo = document.getElementById('admin-current-video');
+        expect(currentVideo.textContent).toContain('None');
+        expect(currentVideo.textContent).toContain('idle loop');
       });
     });
 
-    describe('updateHealthDisplay', () => {
-      it('should update health status with correct styling', () => {
-        const health = {
-          backend: 'healthy',
-          vlc: 'connected'
-        };
+    describe('health status updates', () => {
+      it('should update orchestrator connection status', () => {
+        mockConnection.isConnected = true;
 
-        display.updateHealthDisplay(health);
+        display.updateSystemDisplay();
 
-        const backendElement = document.getElementById('admin-backend-status');
-        expect(backendElement.textContent).toBe('healthy');
-        expect(backendElement.className).toBe('status-ok');
-
-        const vlcElement = document.getElementById('admin-vlc-status');
-        expect(vlcElement.textContent).toBe('connected');
-        expect(vlcElement.className).toBe('status-ok');
+        const orchestratorElem = document.getElementById('orchestrator-status');
+        expect(orchestratorElem.className).toBe('status-dot connected');
       });
 
-      it('should apply error styling for unhealthy states', () => {
-        const health = {
-          backend: 'unhealthy',
-          vlc: 'error'
+      it('should show disconnected state when offline', () => {
+        mockConnection.isConnected = false;
+
+        display.updateSystemDisplay();
+
+        const orchestratorElem = document.getElementById('orchestrator-status');
+        expect(orchestratorElem.className).toBe('status-dot disconnected');
+      });
+
+      it('should update VLC status from sync:full event', () => {
+        const syncData = {
+          systemStatus: { vlc: 'connected' }
         };
 
-        display.updateHealthDisplay(health);
+        display.updateAllDisplays(syncData);
 
-        const backendElement = document.getElementById('admin-backend-status');
-        expect(backendElement.className).toBe('status-error');
+        const vlcElem = document.getElementById('vlc-status');
+        expect(vlcElem.className).toBe('status-dot connected');
       });
     });
   });

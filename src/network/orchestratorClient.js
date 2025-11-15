@@ -192,7 +192,9 @@ export class OrchestratorClient extends EventTarget {
       'sync:full',
       'transaction:result',
       'transaction:new',
+      'transaction:deleted',
       'score:updated',
+      'scores:reset',
       'video:status',
       'session:update',
       'device:connected',
@@ -208,6 +210,9 @@ export class OrchestratorClient extends EventTarget {
       this.socket.on(type, (envelope) => {
         // Extract payload from AsyncAPI envelope
         const payload = envelope.data || envelope;
+
+        // DEBUG: Log WebSocket event arrival (Phase 1 instrumentation)
+        console.log('[OrchestratorClient] WebSocket event received:', type, envelope);
 
         // Forward as generic message:received event
         this.dispatchEvent(new CustomEvent('message:received', {

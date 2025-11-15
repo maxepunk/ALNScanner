@@ -199,22 +199,22 @@
 ## File Locations (For Developers)
 
 **User Flow Logic:**
-- `/js/app/app.js` - Main coordinator
-- `/js/app/sessionModeManager.js` - Mode selection
-- `/js/app/initializationSteps.js` - Startup sequence
+- `/src/app/app.js` - Main coordinator
+- `/src/app/sessionModeManager.js` - Mode selection
+- `/src/app/initializationSteps.js` - Startup sequence
 
 **Connection & Auth:**
-- `/js/network/connectionManager.js` - JWT auth, health checks
-- `/js/network/orchestratorClient.js` - WebSocket client
+- `/src/network/connectionManager.js` - JWT auth, health checks
+- `/src/network/orchestratorClient.js` - WebSocket client
 - `/index.html` lines 1934-2051 - Connection form
 
 **Scanning:**
-- `/js/utils/nfcHandler.js` - NFC API wrapper
-- `/js/core/tokenManager.js` - Token lookup & matching
-- `/js/network/networkedQueueManager.js` - Transaction queue
+- `/src/utils/nfcHandler.js` - NFC API wrapper
+- `/src/core/tokenManager.js` - Token lookup & matching
+- `/src/network/networkedQueueManager.js` - Transaction queue
 
 **Admin Panel:**
-- `/js/utils/adminModule.js` - Session, Video, System management
+- `/src/utils/adminModule.js` - Session, Video, System management
 - `/index.html` lines 1725-1817 - Admin view HTML
 
 ## Troubleshooting Checklist

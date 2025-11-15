@@ -21,6 +21,7 @@ describe('NetworkedSession', () => {
   let mockConnectionManager;
   let mockQueueManager;
   let mockAdminController;
+  let mockDataManager;
 
   beforeEach(() => {
     // Clear all mocks
@@ -49,19 +50,25 @@ describe('NetworkedSession', () => {
       destroy: jest.fn(),
     };
 
+    mockDataManager = {
+      transactions: [],
+      scannedTokens: new Set(),
+      addTransaction: jest.fn(),
+    };
+
     // Mock constructors
     OrchestratorClient.mockImplementation(() => mockClient);
     ConnectionManager.mockImplementation(() => mockConnectionManager);
     NetworkedQueueManager.mockImplementation(() => mockQueueManager);
     AdminController.mockImplementation(() => mockAdminController);
 
-    // Create session instance
+    // Create session instance with dataManager
     session = new NetworkedSession({
       url: 'https://test.example.com:3000',
       deviceId: 'GM_TEST',
       stationName: 'Test Station',
       token: 'test-token',
-    });
+    }, mockDataManager);
   });
 
   describe('constructor', () => {
@@ -105,7 +112,7 @@ describe('NetworkedSession', () => {
         deviceId: 'GM_TEST',
         debug: console
       });
-      expect(AdminController).toHaveBeenCalledWith(mockClient);
+      expect(AdminController).toHaveBeenCalledWith(mockClient, expect.any(Object));
 
       expect(session.services).not.toBeNull();
       expect(session.services.client).toBe(mockClient);
@@ -432,7 +439,7 @@ describe('NetworkedSession', () => {
     it('should pass client to AdminController', async () => {
       await session.initialize();
 
-      expect(AdminController).toHaveBeenCalledWith(mockClient);
+      expect(AdminController).toHaveBeenCalledWith(mockClient, expect.any(Object));
     });
   });
 

@@ -1,5 +1,6 @@
 /**
  * Integration Tests - Service Wiring
+ * ES6 Module Tests
  *
  * These tests use REAL implementations of all refactored components
  * to verify they wire together correctly.
@@ -16,14 +17,41 @@
  * - AdminController
  */
 
-const NetworkedSession = require('../../js/network/NetworkedSession');
-const ConnectionManager = require('../../js/network/ConnectionManager');
-const OrchestratorClient = require('../../js/network/OrchestratorClient');
-const AdminController = require('../../js/app/AdminController');
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import NetworkedSession from '../../src/network/networkedSession.js';
+import ConnectionManager from '../../src/network/connectionManager.js';
+import OrchestratorClient from '../../src/network/orchestratorClient.js';
+import AdminController from '../../src/app/adminController.js';
+
+// Mock the adminModule to intercept SessionManager, VideoController, etc.
+jest.mock('../../src/utils/adminModule.js', () => ({
+  SessionManager: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn(),
+    pause: jest.fn(),
+    resume: jest.fn()
+  })),
+  VideoController: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn(),
+    pause: jest.fn(),
+    resume: jest.fn()
+  })),
+  SystemMonitor: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn(),
+    refresh: jest.fn()
+  })),
+  AdminOperations: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn()
+  })),
+  MonitoringDisplay: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn(),
+    updateConnectionStatus: jest.fn()
+  }))
+}));
 
 describe('Service Wiring Integration', () => {
   let session;
   let mockSocket;
+  let mockDataManager;
 
   beforeEach(() => {
     // Make refactored components available globally (for NetworkedSession._createServices)
@@ -69,12 +97,19 @@ describe('Service Wiring Integration', () => {
       destroy: jest.fn()
     }));
 
+    // Mock DataManager
+    mockDataManager = {
+      transactions: [],
+      scannedTokens: new Set(),
+      addTransaction: jest.fn(),
+    };
+
     session = new NetworkedSession({
       url: 'https://localhost:3000',
       deviceId: 'TEST_GM_INTEGRATION',
       stationName: 'Integration Test',
       token: createValidToken()
-    });
+    }, mockDataManager);
   });
 
   afterEach(async () => {
@@ -110,6 +145,9 @@ describe('Service Wiring Integration', () => {
     });
 
     it('should wire services so connected event triggers admin initialization', async () => {
+      // Import the mocked module to verify calls
+      const adminModule = await import('../../src/utils/adminModule.js');
+
       const initPromise = session.initialize();
 
       // Simulate socket connection
@@ -121,7 +159,7 @@ describe('Service Wiring Integration', () => {
       // AdminController should be initialized after connection
       const adminController = session.getService('adminController');
       expect(adminController.initialized).toBe(true);
-      expect(global.AdminModule.SessionManager).toHaveBeenCalled();
+      expect(adminModule.SessionManager).toHaveBeenCalled();
     });
 
     it('should wire services so connected event triggers queue sync', async () => {
@@ -135,7 +173,13 @@ describe('Service Wiring Integration', () => {
 
       // QueueManager should sync after connection
       const queueManager = session.getService('queueManager');
-      expect(queueManager.syncQueue).toHaveBeenCalled();
+      // Spy on syncQueue to verify it was called
+      const syncSpy = jest.spyOn(queueManager, 'syncQueue');
+
+      // Trigger connected event again to verify wiring
+      session.services.connectionManager.dispatchEvent(new Event('connected'));
+
+      expect(syncSpy).toHaveBeenCalled();
     });
 
     it('should use real ConnectionManager for token validation', async () => {
@@ -238,11 +282,14 @@ describe('Service Wiring Integration', () => {
       const disconnectedHandler = jest.fn();
       session.services.connectionManager.addEventListener('disconnected', disconnectedHandler);
 
+      // Spy on admin controller pause method
+      const pauseSpy = jest.spyOn(session.services.adminController, 'pause');
+
       // Simulate server disconnect
       mockSocket._simulateDisconnect('io server disconnect');
 
       expect(disconnectedHandler).toHaveBeenCalled();
-      expect(session.services.adminController.modules.sessionManager.pause).toHaveBeenCalled();
+      expect(pauseSpy).toHaveBeenCalled();
     });
   });
 

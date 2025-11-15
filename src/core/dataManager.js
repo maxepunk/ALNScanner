@@ -198,9 +198,11 @@ export class DataManager extends EventTarget {
       this.saveTransactions();
 
       // Emit event for UI updates (event-driven architecture)
+      this.debug?.log('[DataManager] Dispatching transaction:added event');
       this.dispatchEvent(new CustomEvent('transaction:added', {
         detail: { transaction: normalizedTx }
       }));
+      this.debug?.log('[DataManager] transaction:added event dispatched');
 
       this.debug?.log('Added transaction to DataManager', {
         tokenId: normalizedTx.tokenId,
@@ -214,28 +216,86 @@ export class DataManager extends EventTarget {
   }
 
   /**
+   * Remove transaction (event-driven pattern)
+   * Called when backend broadcasts transaction:deleted
+   * @param {string} transactionId - Backend transaction ID
+   * @returns {boolean} True if removed, false if not found
+   */
+  removeTransaction(transactionId) {
+    const index = this.transactions.findIndex(tx => tx.id === transactionId);
+
+    if (index === -1) {
+      this.debug?.log('[DataManager] Transaction not found for removal:', transactionId);
+      return false;
+    }
+
+    const removedTx = this.transactions[index];
+    this.transactions.splice(index, 1);
+
+    // Event-driven: Emit event for UI updates
+    this.debug?.log('[DataManager] Dispatching transaction:deleted event');
+    this.dispatchEvent(new CustomEvent('transaction:deleted', {
+      detail: {
+        transactionId,
+        transaction: removedTx
+      }
+    }));
+    this.debug?.log('[DataManager] transaction:deleted event dispatched');
+
+    this.debug?.log('[DataManager] Removed transaction', {
+      transactionId,
+      tokenId: removedTx.tokenId,
+      teamId: removedTx.teamId
+    });
+
+    return true;
+  }
+
+  /**
+   * Clear all backend scores (event-driven pattern)
+   * Called when scores:reset broadcast received
+   */
+  clearBackendScores() {
+    this.debug?.log('[DataManager] Clearing backend scores');
+    this.backendScores.clear();
+
+    // Event-driven: Emit event for UI updates
+    this.debug?.log('[DataManager] Dispatching scores:cleared event');
+    this.dispatchEvent(new CustomEvent('scores:cleared'));
+    this.debug?.log('[DataManager] scores:cleared event dispatched');
+  }
+
+  /**
    * Reset state for new game session
-   * Clears session-scoped state (scannedTokens, currentSession) while preserving history
-   * Called when new session starts or when clearing session
+   * Clears ALL session-scoped state including transactions (strict session boundaries)
+   * Called when session ends or new session starts
    */
   resetForNewSession(sessionId = null) {
+    // Clear ALL session-scoped state (strict session boundaries)
     this.currentSession = [];
     this.scannedTokens.clear();
+    this.transactions = [];
     this.currentSessionId = sessionId;
 
-    // Clear all scanned tokens keys (both old and mode-specific)
+    // Clear localStorage for all session data
+    localStorage.removeItem('transactions');
     localStorage.removeItem('scannedTokens'); // Legacy key
     localStorage.removeItem('standalone_scannedTokens');
     localStorage.removeItem('networked_scannedTokens');
 
-    // If sessionId provided, save it for validation on reload
+    // Session ID tracking:
+    // - sessionId provided → save it (new session starting)
+    // - sessionId null → remove it (session ended, none active)
     if (sessionId) {
       localStorage.setItem('currentSessionId', sessionId);
     } else {
       localStorage.removeItem('currentSessionId');
     }
 
-    this.debug?.log(`Reset for new session: ${sessionId || 'local'}`);
+    // Emit event for UI updates
+    this.dispatchEvent(new CustomEvent('data:cleared'));
+
+    this.debug?.log(`Reset for new session: ${sessionId || 'none'}`);
   }
 
   /**
@@ -490,8 +550,7 @@ export class DataManager extends EventTarget {
    */
   getTeamTransactions(teamId) {
     const transactions = this.transactions.filter(t =>
-      t.teamId === teamId &&
-      t.mode === 'blackmarket'
+      t.teamId === teamId
     );
 
     // Sort by group, value, then timestamp
@@ -561,8 +620,12 @@ export class DataManager extends EventTarget {
    * @param {Object} scoreData - Score data from backend
    */
   updateTeamScoreFromBackend(scoreData) {
+    // DEBUG: Log method entry (Phase 1 instrumentation)
+    console.log('[DataManager] updateTeamScoreFromBackend called:', scoreData);
+
     // Only update if we're connected to orchestrator
     if (!this.networkedSession || this.networkedSession.state !== 'connected') {
+      console.log('[DataManager] Skipping score update - not connected. networkedSession:', this.networkedSession);
       return;
     }
 
@@ -581,6 +644,8 @@ export class DataManager extends EventTarget {
       lastUpdate: scoreData.lastUpdate
     });
 
+    console.log('[DataManager] backendScores Map size:', this.backendScores.size, 'Full map:', this.backendScores);
+
     // Emit event for UI updates (event-driven architecture)
     this.dispatchEvent(new CustomEvent('team-score:updated', {
       detail: {
@@ -589,6 +654,8 @@ export class DataManager extends EventTarget {
         transactions: this.getTeamTransactions(scoreData.teamId)
       }
     }));
+
+    console.log('[DataManager] Emitted team-score:updated event');
 
     // Also update admin panel if it's active
     if (this.app?.viewController && this.app.viewController.currentView === 'admin') {
