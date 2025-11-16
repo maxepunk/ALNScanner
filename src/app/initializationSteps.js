@@ -64,14 +64,22 @@ export function loadSettings(settings) {
 }
 
 /**
- * Load DataManager transaction history and update UI
+ * Initialize DataManager (no data loading)
+ *
+ * CRITICAL: Don't load transactions from localStorage on initialization.
+ * Backend is the authoritative source for all modes:
+ * - Networked: sync:full provides ALL transactions (MonitoringDisplay.updateAllDisplays)
+ * - Standalone: loadLocalSession() restores same-day session
+ *
+ * This prevents phantom data from old sessions while ensuring complete
+ * state restoration from backend after page refresh.
  *
  * @param {Object} dataManager - DataManager instance
  * @param {Object} uiManager - UIManager instance
  */
 export function loadDataManager(dataManager, uiManager) {
-  dataManager.loadTransactions();
-  dataManager.loadScannedTokens();
+  // No data loading - sync:full will populate everything
+  // Initialize UI with empty state
   uiManager.updateHistoryBadge();
 }
 

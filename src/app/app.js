@@ -384,6 +384,27 @@ class App {
         // Standalone mode: lock immediately and proceed
         this.sessionModeManager.setMode(mode);
         this.debug.log(`Game mode locked: ${mode}`);
+
+        // CRITICAL FIX: Clear phantom data from previous sessions
+        // Prevents old transactions from appearing in fresh game
+        this.dataManager.resetForNewSession(null);
+
+        // Also clear standalone session localStorage to prevent loading old session
+        localStorage.removeItem('standaloneSession');
+
+        // Reset StandaloneDataManager to fresh state
+        if (this.standaloneDataManager) {
+          this.standaloneDataManager.sessionData = {
+            sessionId: `standalone_${Date.now()}`,
+            startTime: new Date().toISOString(),
+            transactions: [],
+            teams: {}
+          };
+          this.standaloneDataManager.scannedTokens.clear();
+        }
+
+        this.debug.log('Cleared old session data for fresh standalone game');
+
         this.uiManager.showScreen('teamEntry');
       }
     } catch (error) {

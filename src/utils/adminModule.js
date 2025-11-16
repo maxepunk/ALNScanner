@@ -428,6 +428,7 @@ export class MonitoringDisplay {
     this.connection = connection;
     this.dataManager = dataManager;  // Injected dependency for ES6 architecture
     this.devices = [];  // Local cache for device list
+    this.overtimeData = null;  // Track overtime warning state
 
     // Bind handler for cleanup
     this._messageHandler = this._handleMessage.bind(this);
@@ -512,12 +513,25 @@ export class MonitoringDisplay {
             // Session ended: clear all data, no active session
             Debug.log('[MonitoringDisplay] Session ended, clearing DataManager');
             this.dataManager.resetForNewSession(null);
+            // Clear overtime warning on session end
+            this.overtimeData = null;
           } else if (payload.status === 'active' && payload.id) {
             // New session started: clear old data, track new session ID
             Debug.log('[MonitoringDisplay] New session started, resetting with ID:', payload.id);
             this.dataManager.resetForNewSession(payload.id);
+            // Clear overtime warning on new session
+            this.overtimeData = null;
           }
         }
+        break;
+
+      case 'session:overtime':
+        Debug.log('[MonitoringDisplay] Session overtime warning received:', payload);
+        // Store overtime data
+        this.overtimeData = payload;
+        // Re-render session display to show warning
+        // Get current session from sync:full data or stored state
+        this.updateSessionDisplay(this._currentSession || payload);
         break;
 
       case 'video:status':
@@ -725,6 +739,9 @@ export class MonitoringDisplay {
       return;
     }
 
+    // Store current session for overtime warning updates
+    this._currentSession = session;
+
     // STATE: No session
     if (!session) {
       container.innerHTML = `
@@ -804,12 +821,35 @@ export class MonitoringDisplay {
     const startTime = session.startTime ? new Date(session.startTime).toLocaleString() : 'Unknown';
     const totalScans = session.metadata?.totalScans || 0;
 
+    // Build overtime warning HTML if overtime detected
+    let overtimeWarningHtml = '';
+    if (this.overtimeData) {
+      const expectedMin = this.overtimeData.expectedDuration || 120;
+      const actualMin = this.overtimeData.actualDuration || expectedMin;
+      const overtimeMin = this.overtimeData.overtimeDuration || 0;
+
+      overtimeWarningHtml = `
+        <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 24px;">⚠️</span>
+            <div style="flex: 1;">
+              <strong style="color: #856404; font-size: 14px;">Session Running Overtime</strong>
+              <p style="margin: 5px 0 0 0; color: #856404; font-size: 12px;">
+                Expected: ${expectedMin} min | Actual: ${actualMin} min | Overtime: <strong>${overtimeMin} min</strong>
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     container.innerHTML = `
       <div class="session-status active" style="background: #e8f5e9; padding: 15px; border-radius: 8px; border: 2px solid #4caf50;">
         <h4 style="margin: 0 0 10px 0; color: #2e7d32; display: flex; align-items: center; gap: 8px;">
           <span style="font-size: 20px;">✅</span>
           <span>${this.escapeHtml(session.name || 'Active Session')}</span>
         </h4>
+        ${overtimeWarningHtml}
         <div style="margin-bottom: 12px;">
           <p style="margin: 3px 0; color: #666; font-size: 13px;">Started: ${this.escapeHtml(startTime)}</p>
           <p style="margin: 3px 0; color: #666; font-size: 13px;">Total Scans: ${totalScans}</p>
@@ -1002,6 +1042,28 @@ export class MonitoringDisplay {
   updateAllDisplays(syncData) {
     if (!syncData) return;
 
+    // CRITICAL FIX: Detect session boundary changes and reset data
+    // Prevents phantom transactions from previous sessions
+    if (this.dataManager) {
+      const newSessionId = syncData.session?.id;
+      const currentSessionId = this.dataManager.currentSessionId;
+
+      if (newSessionId !== currentSessionId) {
+        // Session changed (new session started or session ended)
+        Debug.log(`[MonitoringDisplay] Session boundary detected: ${currentSessionId} → ${newSessionId}`);
+
+        if (!newSessionId) {
+          // No active session - clear all data
+          Debug.log('[MonitoringDisplay] sync:full: No active session, clearing DataManager');
+          this.dataManager.resetForNewSession(null);
+        } else if (newSessionId !== currentSessionId) {
+          // New session started - clear old data, track new session ID
+          Debug.log(`[MonitoringDisplay] sync:full: New session ${newSessionId}, resetting DataManager`);
+          this.dataManager.resetForNewSession(newSessionId);
+        }
+      }
+    }
+
     // Update session display
     if (syncData.session) {
       this.updateSessionDisplay(syncData.session);
@@ -1029,8 +1091,23 @@ export class MonitoringDisplay {
       }
     }
 
-    // Update transaction log (last 10)
+    // Update transaction log AND populate DataManager with ALL transactions
+    // CRITICAL: Backend now sends ALL transactions (not just 10) for full state restoration
+    // This populates DataManager.transactions so team details/history work after refresh
     if (syncData.recentTransactions && Array.isArray(syncData.recentTransactions)) {
+      // Populate DataManager with all transactions from sync:full
+      if (this.dataManager && syncData.session?.id) {
+        Debug.log(`[MonitoringDisplay] Populating DataManager with ${syncData.recentTransactions.length} transactions`);
+
+        // Clear existing transactions (already done in session boundary detection above)
+        // Add all transactions from backend (backend is source of truth)
+        syncData.recentTransactions.forEach(tx => {
+          // Use addTransaction to ensure proper event emission and duplicate detection
+          this.dataManager.addTransaction(tx);
+        });
+      }
+
+      // Update admin panel transaction log (last 10 for display)
       const transactionLog = document.getElementById('admin-transaction-log');
       if (transactionLog) {
         // Clear existing and add last 10 in reverse order (most recent first)
