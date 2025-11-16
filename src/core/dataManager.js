@@ -178,6 +178,9 @@ export class DataManager extends EventTarget {
       });
     }
 
+    // Calculate memoryType first (needed for isUnknown check)
+    const memoryType = transaction.memoryType || (tokenData?.SF_MemoryType) || 'UNKNOWN';
+
     // Normalize transaction format (backend sends different structure)
     const normalizedTx = {
       id: transaction.id,  // Backend transaction ID (needed for deletion)
@@ -187,13 +190,16 @@ export class DataManager extends EventTarget {
       teamId: transaction.teamId || this.app?.currentTeamId,
       rfid: transaction.tokenId || transaction.rfid,
       tokenId: transaction.tokenId || transaction.rfid,
-      memoryType: transaction.memoryType || (tokenData?.SF_MemoryType) || 'UNKNOWN',
+      memoryType: memoryType,
       group: transaction.group || tokenData?.SF_Group || 'No Group',
       // CRITICAL FIX: valueRating is 1-5, points is calculated score - don't confuse them!
       // Use valueRating if explicitly provided (even if 0), otherwise use token data
       valueRating: transaction.valueRating !== undefined ? transaction.valueRating :
                    (tokenData?.SF_ValueRating !== undefined ? tokenData.SF_ValueRating : 0),
-      isUnknown: transaction.isUnknown !== undefined ? transaction.isUnknown : !tokenData,
+      // CRITICAL FIX: Check if memoryType is valid, not just if tokenData exists
+      // Backend now sends memoryType in transactions, so tokenData may be null even for valid tokens
+      isUnknown: transaction.isUnknown !== undefined ? transaction.isUnknown :
+                 (memoryType === 'UNKNOWN'),
       // Status field with documented valid values (see JSDoc above)
       status: transaction.status || 'accepted'
       // Note: 'synced' flag removed - NetworkedQueueManager handles sync status
