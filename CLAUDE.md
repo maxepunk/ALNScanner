@@ -386,12 +386,73 @@ ALNScanner-es6-migration/
 **UI Layer ([src/ui/](src/ui/)):**
 - [uiManager.js](src/ui/uiManager.js) - Screen navigation, stats rendering, error display
 - [settings.js](src/ui/settings.js) - localStorage persistence for config
+- [ScreenUpdateManager.js](src/ui/ScreenUpdateManager.js) - Centralized event-to-screen routing (Phase 3)
 
 **Utils Layer ([src/utils/](src/utils/)):**
 - [adminModule.js](src/utils/adminModule.js) - SessionManager, VideoController, SystemMonitor (named exports)
 - [nfcHandler.js](src/utils/nfcHandler.js) - Web NFC API wrapper
 - [debug.js](src/utils/debug.js) - Debug panel and logging (singleton class)
 - [config.js](src/utils/config.js) - App constants
+
+### Event-to-Screen Routing (ScreenUpdateManager)
+
+**Phase 3 refactor**: Centralized event routing replaces scattered visibility checks.
+
+**Problem Solved:**
+- Before: Each screen needed manual `if (screen.classList.contains('active'))` checks
+- After: Declarative registration - ScreenUpdateManager handles routing automatically
+
+**Architecture:**
+```
+DataManager emits 'transaction:added'
+  → ScreenUpdateManager.onDataUpdate()
+    → Run ALL global handlers (badge, stats - regardless of screen)
+    → Check active screen ID
+    → Run screen-specific handler IF registered for this event
+```
+
+**Usage Pattern:**
+```javascript
+// 1. Global handlers: Always run (badge updates, stats, etc.)
+screenUpdateManager.registerGlobalHandler('transaction:added', () => {
+  UIManager.updateHistoryBadge();
+  UIManager.updateSessionStats();
+});
+
+// 2. Screen-specific handlers: Only run when that screen is active
+screenUpdateManager.registerScreen('history', {
+  'transaction:added': () => UIManager.renderTransactions(),
+  'transaction:deleted': () => UIManager.renderTransactions()
+});
+
+screenUpdateManager.registerScreen('scoreboard', {
+  'team-score:updated': () => UIManager.renderScoreboard()
+});
+
+// 3. Wire to data sources
+screenUpdateManager.connectToDataSource(DataManager, [
+  'transaction:added', 'transaction:deleted', 'team-score:updated'
+]);
+
+// 4. Set app context for handlers that need it
+screenUpdateManager.setAppContext(app);
+```
+
+**Adding a New Screen:**
+```javascript
+// In main.js, register the new screen's event handlers
+screenUpdateManager.registerScreen('myNewScreen', {
+  'transaction:added': (eventData, app) => {
+    // eventData: payload from the event
+    // app: App instance (for accessing currentTeamId, etc.)
+    UIManager.renderMyNewScreen();
+  }
+});
+```
+
+**Key Files:**
+- `src/ui/ScreenUpdateManager.js` - The manager class
+- `src/main.js:85-203` - Registration and wiring
 
 ## Transaction Flow
 
@@ -1282,10 +1343,14 @@ Backend broadcast (transaction:new)
     → MonitoringDisplay._handleMessage()
       → this.dataManager.addTransaction()
         → DataManager emits 'transaction:added' (CustomEvent)
-          → main.js listener checks historyScreen.active
-            → UIManager.renderTransactions()
-              → DOM updates with new transaction
+          → ScreenUpdateManager.onDataUpdate('transaction:added', data)
+            → Global handlers run (badge, stats update)
+            → Screen handler runs IF historyScreen is active
+              → UIManager.renderTransactions()
+                → DOM updates with new transaction
 ```
+
+**Phase 3 Refactor**: Event routing now goes through `ScreenUpdateManager` (see below).
 
 **Key Implementation Details:**
 
@@ -1300,21 +1365,34 @@ DataManager.on('transaction:added', handler);
 DataManager.emit('transaction:added', tx);
 ```
 
-2. **Conditional Re-rendering**
+2. **ScreenUpdateManager Pattern (Phase 3)**
 ```javascript
-// main.js:68-86
-DataManager.addEventListener('transaction:added', () => {
+// main.js - Declarative event registration via ScreenUpdateManager
+
+// Global handlers: Run on EVERY event regardless of active screen
+screenUpdateManager.registerGlobalHandler('transaction:added', () => {
   UIManager.updateHistoryBadge();
   UIManager.updateSessionStats();
+});
 
-  // CRITICAL: Only re-render if history screen is visible
-  const historyScreen = document.getElementById('historyScreen');
-  if (historyScreen?.classList.contains('active')) {
+// Screen handlers: Run ONLY when that screen is active
+screenUpdateManager.registerScreen('history', {
+  'transaction:added': () => {
     UIManager.updateHistoryStats();
     UIManager.renderTransactions();
   }
 });
+
+// Wire to data source (replaces manual addEventListener calls)
+screenUpdateManager.connectToDataSource(DataManager, [
+  'transaction:added', 'transaction:deleted', 'data:cleared', ...
+]);
 ```
+
+**Benefits:**
+- No scattered visibility checks throughout codebase
+- Adding new screens is trivial: just call `registerScreen()`
+- Global vs screen-specific concerns clearly separated
 
 3. **Mode-Aware Data Source Routing**
 ```javascript
@@ -1349,11 +1427,12 @@ _getDataSource() {
 - **File**: backend/tests/e2e/flows/07d-gm-scanner-admin-panel.test.js:689, 758
 
 ### Key Files
+- `src/ui/ScreenUpdateManager.js` - Centralized event-to-screen routing (Phase 3)
+- `src/main.js:85-203` - ScreenUpdateManager registration and wiring
 - `src/utils/adminModule.js:427` - MonitoringDisplay constructor (receives dataManager)
 - `src/app/adminController.js:26,52` - AdminController DI (receives and passes dataManager)
 - `src/network/networkedSession.js:24,155` - NetworkedSession DI (receives and passes dataManager)
 - `src/app/app.js:414-419` - NetworkedSession creation (passes this.dataManager)
-- `src/main.js:68-86` - transaction:added listener (triggers history re-render)
 - `src/ui/uiManager.js:41-61` - _getDataSource() mode routing
 - `src/ui/uiManager.js:619-670` - renderTransactions() implementation
 
