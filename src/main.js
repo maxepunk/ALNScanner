@@ -10,6 +10,11 @@
  * - Create App with dependency injection
  * - Initialize application
  * - Expose minimal window globals for HTML onclick handlers (temporary until Phase 9)
+ *
+ * Phase 3 Changes:
+ * - Introduced ScreenUpdateManager for centralized event-to-screen routing
+ * - Removed window.__app hack (app context passed via ScreenUpdateManager)
+ * - Declarative screen update registration
  */
 
 // Import core dependencies
@@ -32,12 +37,15 @@ import { App } from './app/app.js';
 import { ConnectionWizard, QueueStatusManager, setupCleanupHandlers } from './ui/connectionWizard.js';
 import { bindDOMEvents } from './utils/domEventBindings.js';
 
+// Import ScreenUpdateManager for centralized event routing (Phase 3)
+import { ScreenUpdateManager } from './ui/ScreenUpdateManager.js';
+
 /**
  * Create service instances with proper dependency injection
  *
  * Architecture: Event-Driven Coordination (no direct cross-dependencies)
  * - DataManager emits events (transaction:added, data:cleared, etc.)
- * - UIManager listens to DataManager events
+ * - ScreenUpdateManager routes events to appropriate UI updates
  * - Event wiring happens in main.js (centralized)
  */
 
@@ -64,125 +72,135 @@ const UIManager = new UIManagerClass({
   // sessionModeManager, app set later by App
 });
 
-// Wire event-driven communication: DataManager → UIManager
-DataManager.addEventListener('transaction:added', () => {
-  Debug.log('[main.js] transaction:added event received!');
+/**
+ * Create ScreenUpdateManager for centralized event-to-screen routing
+ * Replaces scattered event handlers with declarative registration
+ */
+const screenUpdateManager = new ScreenUpdateManager({
+  uiManager: UIManager,
+  dataManager: DataManager,
+  debug: Debug
+});
+
+// ============================================================================
+// GLOBAL HANDLERS - Always run regardless of active screen
+// ============================================================================
+
+// Transaction added: Update badge and stats globally
+screenUpdateManager.registerGlobalHandler('transaction:added', () => {
   UIManager.updateHistoryBadge();
   UIManager.updateSessionStats();
+});
 
-  // Auto-update history screen if visible
-  const historyScreen = document.getElementById('historyScreen');
-  if (historyScreen?.classList.contains('active')) {
-    Debug.log('[main.js] History screen is active, calling renderTransactions()');
+// Transaction deleted: Update badge and stats globally
+screenUpdateManager.registerGlobalHandler('transaction:deleted', () => {
+  UIManager.updateHistoryBadge();
+  UIManager.updateSessionStats();
+});
+
+// Data cleared: Update badge
+screenUpdateManager.registerGlobalHandler('data:cleared', () => {
+  UIManager.updateHistoryBadge();
+});
+
+// Game state updated: Update badge and stats
+screenUpdateManager.registerGlobalHandler('game-state:updated', () => {
+  UIManager.updateHistoryBadge();
+  UIManager.updateSessionStats();
+});
+
+// Standalone transaction added: Update badge and stats
+screenUpdateManager.registerGlobalHandler('standalone:transaction-added', () => {
+  UIManager.updateHistoryBadge();
+  UIManager.updateSessionStats();
+});
+
+// ============================================================================
+// SCREEN-SPECIFIC HANDLERS - Only run when that screen is active
+// ============================================================================
+
+// History screen: Re-render transactions when data changes
+screenUpdateManager.registerScreen('history', {
+  'transaction:added': () => {
+    Debug.log('[main.js] History screen active - rendering transactions');
+    UIManager.updateHistoryStats();
+    UIManager.renderTransactions();
+  },
+  'transaction:deleted': () => {
+    Debug.log('[main.js] History screen active - re-rendering after deletion');
+    UIManager.updateHistoryStats();
+    UIManager.renderTransactions();
+  },
+  'standalone:transaction-added': () => {
     UIManager.updateHistoryStats();
     UIManager.renderTransactions();
   }
+});
 
-  // Auto-update team details screen if visible
-  const teamDetailsScreen = document.getElementById('teamDetailsScreen');
-  if (teamDetailsScreen?.classList.contains('active')) {
-    Debug.log('[main.js] Team details screen is active, re-rendering after addition');
-    // Get current team from app instance
-    const currentTeamId = window.__app?.currentInterventionTeamId;
+// Team details screen: Re-render team data when transactions change
+screenUpdateManager.registerScreen('teamDetails', {
+  'transaction:added': (eventData, app) => {
+    const currentTeamId = app?.currentInterventionTeamId;
     if (currentTeamId) {
+      Debug.log(`[main.js] Team details active - re-rendering for team ${currentTeamId}`);
       const transactions = DataManager.getTeamTransactions(currentTeamId);
       UIManager.renderTeamDetails(currentTeamId, transactions);
-      Debug.log('[main.js] Team details re-rendered for team:', currentTeamId);
+    }
+  },
+  'transaction:deleted': (eventData, app) => {
+    const currentTeamId = app?.currentInterventionTeamId;
+    if (currentTeamId) {
+      Debug.log(`[main.js] Team details active - re-rendering after deletion for team ${currentTeamId}`);
+      const transactions = DataManager.getTeamTransactions(currentTeamId);
+      UIManager.renderTeamDetails(currentTeamId, transactions);
+    }
+  },
+  'team-score:updated': (eventData, app) => {
+    const { teamId, transactions } = eventData || {};
+    const currentTeamId = app?.currentInterventionTeamId;
+    if (currentTeamId && currentTeamId === teamId) {
+      Debug.log(`[main.js] Team details active - score update for team ${teamId}`);
+      UIManager.renderTeamDetails(teamId, transactions);
     }
   }
 });
 
-// Listen for transaction deletions (mirrors transaction:added pattern)
-DataManager.addEventListener('transaction:deleted', () => {
-  Debug.log('[main.js] transaction:deleted event received!');
-  UIManager.updateHistoryBadge();
-  UIManager.updateSessionStats();
-
-  // Auto-update history screen if visible
-  const historyScreen = document.getElementById('historyScreen');
-  if (historyScreen?.classList.contains('active')) {
-    Debug.log('[main.js] History screen is active, re-rendering after deletion');
-    UIManager.updateHistoryStats();
-    UIManager.renderTransactions();
-  }
-
-  // Auto-update team details screen if visible
-  const teamDetailsScreen = document.getElementById('teamDetailsScreen');
-  if (teamDetailsScreen?.classList.contains('active')) {
-    Debug.log('[main.js] Team details screen is active, re-rendering after deletion');
-    // Get current team from app instance
-    const currentTeamId = window.__app?.currentInterventionTeamId;
-    if (currentTeamId) {
-      const transactions = DataManager.getTeamTransactions(currentTeamId);
-      UIManager.renderTeamDetails(currentTeamId, transactions);
-      Debug.log('[main.js] Team details re-rendered for team:', currentTeamId);
-    }
-  }
-});
-
-// Listen for score resets
-DataManager.addEventListener('scores:cleared', () => {
-  Debug.log('[main.js] scores:cleared event received!');
-
-  // Auto-update scoreboard if visible
-  const scoreboardScreen = document.getElementById('scoreboardScreen');
-  if (scoreboardScreen?.classList.contains('active')) {
-    Debug.log('[main.js] Scoreboard screen is active, clearing after reset');
-    // Scoreboard will be repopulated by sync:full that follows
-    const scoreTable = scoreboardScreen.querySelector('#team-scores-table tbody');
+// Scoreboard screen: Re-render when scores change
+screenUpdateManager.registerScreen('scoreboard', {
+  'scores:cleared': () => {
+    Debug.log('[main.js] Scoreboard active - clearing after reset');
+    const scoreTable = document.querySelector('#scoreboardScreen #team-scores-table tbody');
     if (scoreTable) {
       scoreTable.innerHTML = '';
     }
-  }
-});
-
-DataManager.addEventListener('data:cleared', () => {
-  UIManager.updateHistoryBadge();
-});
-
-DataManager.addEventListener('game-state:updated', () => {
-  UIManager.updateHistoryBadge();
-  UIManager.updateSessionStats();
-});
-
-DataManager.addEventListener('team-score:updated', (event) => {
-  const { teamId, transactions } = event.detail;
-
-  // Update scoreboard if visible
-  if (document.getElementById('scoreboardContainer')) {
+  },
+  'team-score:updated': () => {
     UIManager.renderScoreboard();
-  }
-
-  // Update team details if viewing this team
-  const teamDetailsScreen = document.getElementById('teamDetailsScreen');
-  const app = window.__app; // Temporary access until App is created
-  if (teamDetailsScreen?.classList.contains('active') &&
-      app?.currentInterventionTeamId === teamId) {
-    UIManager.renderTeamDetails(teamId, transactions);
-    Debug.log(`Team details refreshed for team ${teamId} after score update`);
-  }
-});
-
-// Wire event-driven communication: StandaloneDataManager → UIManager
-// (Standalone mode uses different events but triggers same UI updates)
-StandaloneDataManager.addEventListener('standalone:transaction-added', () => {
-  UIManager.updateHistoryBadge();
-  UIManager.updateSessionStats();
-
-  // Auto-update history screen if visible
-  const historyScreen = document.getElementById('historyScreen');
-  if (historyScreen?.classList.contains('active')) {
-    UIManager.updateHistoryStats();
-    UIManager.renderTransactions();
-  }
-});
-
-StandaloneDataManager.addEventListener('standalone:scores-updated', () => {
-  // Update scoreboard if visible
-  if (document.getElementById('scoreboardContainer')) {
+  },
+  'standalone:scores-updated': () => {
     UIManager.renderScoreboard();
   }
 });
+
+// ============================================================================
+// CONNECT TO DATA SOURCES
+// ============================================================================
+
+// Connect ScreenUpdateManager to DataManager events
+screenUpdateManager.connectToDataSource(DataManager, [
+  'transaction:added',
+  'transaction:deleted',
+  'scores:cleared',
+  'data:cleared',
+  'game-state:updated',
+  'team-score:updated'
+]);
+
+// Connect ScreenUpdateManager to StandaloneDataManager events
+screenUpdateManager.connectToDataSource(StandaloneDataManager, [
+  'standalone:transaction-added',
+  'standalone:scores-updated'
+]);
 
 /**
  * Create App instance with dependency injection
@@ -202,8 +220,8 @@ const app = new App({
   // during mode selection (see App.selectGameMode)
 });
 
-// Make app available for event handler above (temporary until better solution)
-window.__app = app;
+// Set app context for screen handlers that need it (replaces window.__app hack)
+screenUpdateManager.setAppContext(app);
 
 /**
  * Create connection wizard and queue status manager
