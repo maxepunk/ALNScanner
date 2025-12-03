@@ -1,0 +1,412 @@
+/**
+ * ALN GM Scanner - Admin Panel Styles
+ * Session management, video control, system monitoring, modals
+ */
+
+/* ============================================
+   ADMIN SECTIONS
+   ============================================ */
+.admin-section {
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-5);
+  border: var(--border-width) solid var(--color-border);
+}
+
+.admin-section h3 {
+  margin-top: 0;
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-width-thick) solid var(--color-accent-primary);
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+}
+
+/* ============================================
+   SESSION CONTROLS
+   ============================================ */
+.session-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.session-controls .btn {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* ============================================
+   VIDEO CONTROLS
+   ============================================ */
+.video-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.video-controls .btn {
+  flex: 1;
+  min-width: 80px;
+}
+
+.video-queue {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--color-border-subtle);
+}
+
+.video-queue h4 {
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.video-queue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.video-queue-item .video-name {
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+
+.video-queue-item .video-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ============================================
+   DEBUG VIEW
+   ============================================ */
+.debug-content {
+  background: var(--color-bg-primary);
+  color: var(--color-accent-success);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-5);
+  min-height: 400px;
+  max-height: 600px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--color-border);
+}
+
+/* ============================================
+   DEBUG PANEL (Fixed position)
+   ============================================ */
+.debug-panel {
+  position: fixed;
+  bottom: var(--space-3);
+  left: var(--space-3);
+  right: var(--space-3);
+  max-height: 200px;
+  background: rgba(10, 10, 12, 0.95);
+  color: var(--color-accent-success);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--color-border);
+  overflow-y: auto;
+  z-index: var(--z-debug);
+  display: none;
+  backdrop-filter: blur(8px);
+}
+
+.debug-panel.active {
+  display: block;
+}
+
+.debug-panel pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.debug-toggle {
+  position: fixed;
+  bottom: var(--space-3);
+  right: var(--space-3);
+  width: 48px;
+  height: 48px;
+  background: var(--color-accent-primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xl);
+  cursor: pointer;
+  z-index: var(--z-debug);
+  box-shadow: var(--shadow-lg);
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.debug-toggle:hover {
+  background: #a31830;
+  transform: scale(1.05);
+}
+
+/* ============================================
+   MODALS
+   ============================================ */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: var(--z-modal);
+  inset: 0;
+  background-color: var(--color-overlay);
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  backdrop-filter: blur(4px);
+}
+
+.modal.active,
+.modal[style*="display: flex"] {
+  display: flex;
+}
+
+.modal-content {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  max-width: var(--container-sm);
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-xl);
+  border: var(--border-width) solid var(--color-border);
+  animation: modal-in var(--duration-normal) var(--ease-out);
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  margin-bottom: var(--space-5);
+  color: var(--color-accent-primary);
+  text-align: center;
+  font-size: var(--text-xl);
+}
+
+/* ============================================
+   CONNECTION WIZARD
+   ============================================ */
+#discoverySection {
+  text-align: center;
+  margin-bottom: var(--space-5);
+}
+
+#discoveryStatus {
+  margin: var(--space-3) 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+#discoveredServers {
+  margin-top: var(--space-4);
+}
+
+.server-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3);
+  margin: var(--space-2) 0;
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--color-border);
+}
+
+.server-item span {
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.server-item button {
+  background: var(--color-accent-success);
+  color: white;
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-default);
+}
+
+.server-item button:hover {
+  background: #1da34d;
+}
+
+.divider {
+  text-align: center;
+  margin: var(--space-5) 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+/* ============================================
+   FORM GROUPS (Modal forms)
+   ============================================ */
+.form-group {
+  margin-bottom: var(--space-4);
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.form-group input {
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--color-bg-tertiary);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--text-base);
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--color-accent-primary);
+  box-shadow: 0 0 0 3px rgba(196, 30, 58, 0.2);
+}
+
+.form-group input::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Station display */
+.station-display {
+  padding: var(--space-3);
+  background: var(--color-bg-tertiary);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-accent-success);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  font-family: var(--font-mono);
+  text-align: center;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.station-display .loading-text {
+  color: var(--color-text-muted);
+  font-style: italic;
+  font-weight: var(--weight-normal);
+}
+
+#connectionStatusMsg {
+  text-align: center;
+  margin: var(--space-4) 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+/* ============================================
+   PRIMARY/SECONDARY BUTTONS (Modal specific)
+   ============================================ */
+.primary-btn {
+  width: 100%;
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-accent-success);
+  color: white;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  margin-bottom: var(--space-3);
+  transition: background var(--duration-fast) var(--ease-default);
+}
+
+.primary-btn:hover {
+  background: #1da34d;
+}
+
+.secondary-btn {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.secondary-btn:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+/* ============================================
+   ERROR CONTAINER
+   ============================================ */
+.error-container {
+  position: fixed;
+  top: var(--space-5);
+  right: var(--space-5);
+  z-index: var(--z-toast);
+  width: 320px;
+}
+
+.error-message {
+  background: var(--color-accent-error);
+  color: white;
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  animation: slide-in-right var(--duration-normal) var(--ease-out);
+}
