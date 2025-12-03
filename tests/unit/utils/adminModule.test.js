@@ -1,11 +1,9 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
-import {
-  SessionManager,
-  VideoController,
-  SystemMonitor,
-  AdminOperations,
-  MonitoringDisplay
-} from '../../../src/utils/adminModule.js';
+import { SessionManager } from '../../../src/admin/SessionManager.js';
+import { VideoController } from '../../../src/admin/VideoController.js';
+import { SystemMonitor } from '../../../src/admin/SystemMonitor.js';
+import { AdminOperations } from '../../../src/admin/AdminOperations.js';
+import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
 
 /**
  * Testing Anti-Pattern Avoidance:
@@ -481,7 +479,7 @@ describe('AdminModule - ES6 Exports', () => {
 
         const container = document.getElementById('session-status-container');
         expect(container.innerHTML).toContain('Test Session');
-        expect(container.querySelector('.session-status.active')).toBeTruthy();
+        expect(container.querySelector('.session-status--active')).toBeTruthy();
         expect(container.innerHTML).toContain('Active');
         expect(container.innerHTML).toContain('42'); // total scans
         expect(container.querySelector('button[data-action="app.adminPauseSession"]')).toBeTruthy();
@@ -538,7 +536,7 @@ describe('AdminModule - ES6 Exports', () => {
         display.updateSystemDisplay();
 
         const orchestratorElem = document.getElementById('orchestrator-status');
-        expect(orchestratorElem.className).toBe('status-dot connected');
+        expect(orchestratorElem.className).toBe('status-dot status-dot--connected');
       });
 
       it('should show disconnected state when offline', () => {
@@ -547,7 +545,7 @@ describe('AdminModule - ES6 Exports', () => {
         display.updateSystemDisplay();
 
         const orchestratorElem = document.getElementById('orchestrator-status');
-        expect(orchestratorElem.className).toBe('status-dot disconnected');
+        expect(orchestratorElem.className).toBe('status-dot status-dot--disconnected');
       });
 
       it('should update VLC status from sync:full event', () => {
@@ -558,7 +556,7 @@ describe('AdminModule - ES6 Exports', () => {
         display.updateAllDisplays(syncData);
 
         const vlcElem = document.getElementById('vlc-status');
-        expect(vlcElem.className).toBe('status-dot connected');
+        expect(vlcElem.className).toBe('status-dot status-dot--connected');
       });
     });
   });

@@ -14,13 +14,11 @@
  * - Token management (ConnectionManager)
  */
 
-import {
-  SessionManager,
-  VideoController,
-  SystemMonitor,
-  AdminOperations,
-  MonitoringDisplay
-} from '../utils/adminModule.js';
+import { SessionManager } from '../admin/SessionManager.js';
+import { VideoController } from '../admin/VideoController.js';
+import { SystemMonitor } from '../admin/SystemMonitor.js';
+import { AdminOperations } from '../admin/AdminOperations.js';
+import { MonitoringDisplay } from '../admin/MonitoringDisplay.js';
 
 export class AdminController extends EventTarget {
   constructor(client, dataManager) {

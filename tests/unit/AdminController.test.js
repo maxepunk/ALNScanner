@@ -6,33 +6,52 @@
  */
 
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
-import AdminController from '../../src/app/adminController.js';
-import * as adminModule from '../../src/utils/adminModule.js';
 
-// Mock the entire adminModule
-jest.mock('../../src/utils/adminModule.js', () => ({
+// Mock each admin module individually - define factories INSIDE jest.mock()
+// to avoid hoisting issues (jest.mock is hoisted above all imports/const)
+jest.mock('../../src/admin/SessionManager.js', () => ({
   SessionManager: jest.fn().mockImplementation(() => ({
     destroy: jest.fn(),
     pause: jest.fn(),
     resume: jest.fn()
-  })),
+  }))
+}));
+
+jest.mock('../../src/admin/VideoController.js', () => ({
   VideoController: jest.fn().mockImplementation(() => ({
     destroy: jest.fn(),
     pause: jest.fn(),
     resume: jest.fn()
-  })),
+  }))
+}));
+
+jest.mock('../../src/admin/SystemMonitor.js', () => ({
   SystemMonitor: jest.fn().mockImplementation(() => ({
     destroy: jest.fn(),
     refresh: jest.fn()
-  })),
+  }))
+}));
+
+jest.mock('../../src/admin/AdminOperations.js', () => ({
   AdminOperations: jest.fn().mockImplementation(() => ({
     destroy: jest.fn()
-  })),
+  }))
+}));
+
+jest.mock('../../src/admin/MonitoringDisplay.js', () => ({
   MonitoringDisplay: jest.fn().mockImplementation(() => ({
     destroy: jest.fn(),
     updateConnectionStatus: jest.fn()
   }))
 }));
+
+// Import AFTER mocks are set up
+import AdminController from '../../src/app/adminController.js';
+import { SessionManager } from '../../src/admin/SessionManager.js';
+import { VideoController } from '../../src/admin/VideoController.js';
+import { SystemMonitor } from '../../src/admin/SystemMonitor.js';
+import { AdminOperations } from '../../src/admin/AdminOperations.js';
+import { MonitoringDisplay } from '../../src/admin/MonitoringDisplay.js';
 
 describe('AdminController - Admin Module Lifecycle', () => {
   let controller;
@@ -74,11 +93,11 @@ describe('AdminController - Admin Module Lifecycle', () => {
     it('should create all admin modules once', () => {
       controller.initialize();
 
-      expect(adminModule.SessionManager).toHaveBeenCalledWith(mockClient);
-      expect(adminModule.VideoController).toHaveBeenCalledWith(mockClient);
-      expect(adminModule.SystemMonitor).toHaveBeenCalledWith(mockClient);
-      expect(adminModule.AdminOperations).toHaveBeenCalledWith(mockClient);
-      expect(adminModule.MonitoringDisplay).toHaveBeenCalled();
+      expect(SessionManager).toHaveBeenCalledWith(mockClient);
+      expect(VideoController).toHaveBeenCalledWith(mockClient);
+      expect(SystemMonitor).toHaveBeenCalledWith(mockClient);
+      expect(AdminOperations).toHaveBeenCalledWith(mockClient);
+      expect(MonitoringDisplay).toHaveBeenCalled();
 
       expect(controller.initialized).toBe(true);
     });
@@ -99,11 +118,11 @@ describe('AdminController - Admin Module Lifecycle', () => {
       controller.initialize(); // Second call
 
       // Should only be called once
-      expect(adminModule.SessionManager).toHaveBeenCalledTimes(1);
-      expect(adminModule.VideoController).toHaveBeenCalledTimes(1);
-      expect(adminModule.SystemMonitor).toHaveBeenCalledTimes(1);
-      expect(adminModule.AdminOperations).toHaveBeenCalledTimes(1);
-      expect(adminModule.MonitoringDisplay).toHaveBeenCalledTimes(1);
+      expect(SessionManager).toHaveBeenCalledTimes(1);
+      expect(VideoController).toHaveBeenCalledTimes(1);
+      expect(SystemMonitor).toHaveBeenCalledTimes(1);
+      expect(AdminOperations).toHaveBeenCalledTimes(1);
+      expect(MonitoringDisplay).toHaveBeenCalledTimes(1);
     });
 
     it('should emit initialized event', () => {
@@ -247,7 +266,7 @@ describe('AdminController - Admin Module Lifecycle', () => {
   describe('module lifecycle coordination', () => {
     it('should initialize all modules before setting initialized flag', () => {
       let flagValue;
-      adminModule.SessionManager.mockImplementationOnce(() => {
+      SessionManager.mockImplementationOnce(() => {
         flagValue = controller.initialized;
         return { destroy: jest.fn(), pause: jest.fn(), resume: jest.fn() };
       });

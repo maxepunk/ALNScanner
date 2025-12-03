@@ -63,7 +63,8 @@ jest.mock('../../src/core/dataManager.js', () => ({
     parseGroupInfo: jest.fn(),
     normalizeGroupName: jest.fn(),
     saveTransactions: jest.fn(),
-    saveScannedTokens: jest.fn()
+    saveScannedTokens: jest.fn(),
+    resetForNewSession: jest.fn()
   }
 }));
 
@@ -73,7 +74,8 @@ jest.mock('../../src/core/standaloneDataManager.js', () => ({
     addTransaction: jest.fn(),
     getSessionStats: jest.fn(() => ({ total: 0, scanned: 0, score: 0 })),
     getTeamScore: jest.fn(() => 0),
-    getAllTeamScores: jest.fn(() => [])
+    getAllTeamScores: jest.fn(() => []),
+    scannedTokens: new Set()
   }
 }));
 
@@ -119,13 +121,56 @@ jest.mock('../../src/app/sessionModeManager.js', () => ({
   }
 }));
 
-jest.mock('../../src/network/networkedSession.js', () => ({
-  default: jest.fn().mockImplementation(() => ({
-    initialize: jest.fn().mockResolvedValue(),
-    destroy: jest.fn().mockResolvedValue(),
-    getService: jest.fn()
+// Mock admin modules (needed for AdminController import chain)
+jest.mock('../../src/admin/SessionManager.js', () => ({
+  SessionManager: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn(),
+    pause: jest.fn(),
+    resume: jest.fn()
   }))
 }));
+
+jest.mock('../../src/admin/VideoController.js', () => ({
+  VideoController: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn(),
+    pause: jest.fn(),
+    resume: jest.fn()
+  }))
+}));
+
+jest.mock('../../src/admin/SystemMonitor.js', () => ({
+  SystemMonitor: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn(),
+    refresh: jest.fn()
+  }))
+}));
+
+jest.mock('../../src/admin/AdminOperations.js', () => ({
+  AdminOperations: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn()
+  }))
+}));
+
+jest.mock('../../src/admin/MonitoringDisplay.js', () => ({
+  MonitoringDisplay: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn(),
+    updateConnectionStatus: jest.fn()
+  }))
+}));
+
+jest.mock('../../src/network/networkedSession.js', () => {
+  // Mock class that can be used with 'new'
+  const MockNetworkedSession = jest.fn().mockImplementation(function() {
+    this.initialize = jest.fn().mockResolvedValue();
+    this.destroy = jest.fn().mockResolvedValue();
+    this.getService = jest.fn();
+    this.addEventListener = jest.fn();
+  });
+  return {
+    default: MockNetworkedSession,
+    __esModule: true
+  };
+});
 
 const { App } = require('../../src/app/app.js');
 
@@ -431,7 +476,8 @@ describe('App', () => {
         throw new Error('Connection failed');
       });
 
-      await app.selectGameMode('networked');
+      // App re-throws the error after showing it, so we expect a rejection
+      await expect(app.selectGameMode('networked')).rejects.toThrow('Connection failed');
 
       expect(UIManager.showError).toHaveBeenCalledWith('Failed to set game mode: Connection failed');
     });
