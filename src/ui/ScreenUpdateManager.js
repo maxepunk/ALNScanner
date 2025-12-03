@@ -72,8 +72,13 @@ export class ScreenUpdateManager {
   /**
    * Register a global handler that runs on every event
    * regardless of which screen is active
+   *
+   * NOTE: Global handlers run in registration order. If handlers have
+   * dependencies on each other, register them in the correct sequence.
+   *
    * @param {string} eventType - Event name (e.g., 'transaction:added')
    * @param {Function} handler - Handler function(eventData)
+   *   - eventData may be undefined; use defensive destructuring if needed
    */
   registerGlobalHandler(eventType, handler) {
     if (!this.globalHandlers[eventType]) {
@@ -87,6 +92,9 @@ export class ScreenUpdateManager {
    * Register screen-specific handlers
    * @param {string} screenId - Screen identifier (without 'Screen' suffix, e.g., 'history')
    * @param {Object} handlers - Map of eventType -> handler function
+   *   Handler signature: (eventData, appContext) => void
+   *   - eventData may be undefined; use defensive destructuring: `const { prop } = eventData || {}`
+   *   - appContext is the App instance (set via setAppContext)
    * @throws {TypeError} If handlers is not a plain object
    */
   registerScreen(screenId, handlers) {
@@ -135,7 +143,7 @@ export class ScreenUpdateManager {
   onDataUpdate(eventType, eventData) {
     this.debug?.log(`[ScreenUpdateManager] ${eventType} event received`);
 
-    // Step 1: Run global handlers (always)
+    // Step 1: Run global handlers (always, in registration order)
     const globals = this.globalHandlers[eventType] || [];
     for (const handler of globals) {
       try {
