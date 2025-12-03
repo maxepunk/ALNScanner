@@ -53,6 +53,11 @@ describe('ScreenUpdateManager', () => {
       expect(screenUpdateManager.appContext).toBeNull();
     });
 
+    it('should initialize with empty connectedSources map', () => {
+      expect(screenUpdateManager.connectedSources).toBeInstanceOf(Map);
+      expect(screenUpdateManager.connectedSources.size).toBe(0);
+    });
+
     it('should store injected dependencies', () => {
       expect(screenUpdateManager.uiManager).toBe(mockUIManager);
       expect(screenUpdateManager.dataManager).toBe(mockDataManager);
@@ -120,6 +125,30 @@ describe('ScreenUpdateManager', () => {
         expect.stringContaining("Registered screen 'history' for events")
       );
     });
+
+    it('should throw TypeError if handlers is null', () => {
+      expect(() => {
+        screenUpdateManager.registerScreen('history', null);
+      }).toThrow(TypeError);
+    });
+
+    it('should throw TypeError if handlers is undefined', () => {
+      expect(() => {
+        screenUpdateManager.registerScreen('history', undefined);
+      }).toThrow(TypeError);
+    });
+
+    it('should throw TypeError if handlers is an array', () => {
+      expect(() => {
+        screenUpdateManager.registerScreen('history', [jest.fn()]);
+      }).toThrow(TypeError);
+    });
+
+    it('should throw TypeError with descriptive message', () => {
+      expect(() => {
+        screenUpdateManager.registerScreen('myScreen', 'not an object');
+      }).toThrow(/registerScreen\('myScreen'\): handlers must be an object/);
+    });
   });
 
   describe('getActiveScreenId()', () => {
@@ -143,6 +172,23 @@ describe('ScreenUpdateManager', () => {
     it('should return null if no screen is active', () => {
       document.querySelector('.screen.active').classList.remove('active');
       expect(screenUpdateManager.getActiveScreenId()).toBeNull();
+    });
+
+    it('should warn for unexpected screen ID pattern', () => {
+      // Set up DOM with non-standard screen ID
+      document.body.innerHTML = `
+        <div id="customPanel" class="screen active"></div>
+      `;
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      const result = screenUpdateManager.getActiveScreenId();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Unexpected screen ID pattern: 'customPanel'")
+      );
+      expect(result).toBe('customPanel'); // Returns as-is for best-effort
+
+      warnSpy.mockRestore();
     });
   });
 
@@ -280,6 +326,94 @@ describe('ScreenUpdateManager', () => {
 
       expect(mockDebug.log).toHaveBeenCalledWith(
         '[ScreenUpdateManager] Connected to data source for events: event1, event2'
+      );
+    });
+
+    it('should track connected sources for cleanup', () => {
+      const mockSource = new EventTarget();
+
+      screenUpdateManager.connectToDataSource(mockSource, ['test:event']);
+
+      expect(screenUpdateManager.connectedSources.has(mockSource)).toBe(true);
+      expect(screenUpdateManager.connectedSources.get(mockSource).size).toBe(1);
+    });
+  });
+
+  describe('disconnectFromDataSource()', () => {
+    it('should remove event listeners from the data source', () => {
+      const mockSource = new EventTarget();
+      const removeSpy = jest.spyOn(mockSource, 'removeEventListener');
+
+      screenUpdateManager.connectToDataSource(mockSource, ['event1', 'event2']);
+      screenUpdateManager.disconnectFromDataSource(mockSource);
+
+      expect(removeSpy).toHaveBeenCalledTimes(2);
+      expect(removeSpy).toHaveBeenCalledWith('event1', expect.any(Function));
+      expect(removeSpy).toHaveBeenCalledWith('event2', expect.any(Function));
+    });
+
+    it('should remove data source from connectedSources map', () => {
+      const mockSource = new EventTarget();
+
+      screenUpdateManager.connectToDataSource(mockSource, ['test:event']);
+      expect(screenUpdateManager.connectedSources.has(mockSource)).toBe(true);
+
+      screenUpdateManager.disconnectFromDataSource(mockSource);
+      expect(screenUpdateManager.connectedSources.has(mockSource)).toBe(false);
+    });
+
+    it('should handle disconnecting an unconnected source gracefully', () => {
+      const mockSource = new EventTarget();
+
+      // Should not throw
+      expect(() => {
+        screenUpdateManager.disconnectFromDataSource(mockSource);
+      }).not.toThrow();
+    });
+
+    it('should stop routing events after disconnect', () => {
+      const mockSource = new EventTarget();
+      const globalHandler = jest.fn();
+
+      screenUpdateManager.registerGlobalHandler('test:event', globalHandler);
+      screenUpdateManager.connectToDataSource(mockSource, ['test:event']);
+
+      // Event should be routed
+      mockSource.dispatchEvent(new CustomEvent('test:event', { detail: {} }));
+      expect(globalHandler).toHaveBeenCalledTimes(1);
+
+      // Disconnect
+      screenUpdateManager.disconnectFromDataSource(mockSource);
+
+      // Event should NOT be routed after disconnect
+      mockSource.dispatchEvent(new CustomEvent('test:event', { detail: {} }));
+      expect(globalHandler).toHaveBeenCalledTimes(1); // Still 1, not 2
+    });
+  });
+
+  describe('disconnectAll()', () => {
+    it('should disconnect from all connected data sources', () => {
+      const source1 = new EventTarget();
+      const source2 = new EventTarget();
+
+      screenUpdateManager.connectToDataSource(source1, ['event1']);
+      screenUpdateManager.connectToDataSource(source2, ['event2']);
+
+      expect(screenUpdateManager.connectedSources.size).toBe(2);
+
+      screenUpdateManager.disconnectAll();
+
+      expect(screenUpdateManager.connectedSources.size).toBe(0);
+    });
+
+    it('should log disconnect message', () => {
+      const mockSource = new EventTarget();
+      screenUpdateManager.connectToDataSource(mockSource, ['test:event']);
+
+      screenUpdateManager.disconnectAll();
+
+      expect(mockDebug.log).toHaveBeenCalledWith(
+        '[ScreenUpdateManager] Disconnected from all data sources'
       );
     });
   });

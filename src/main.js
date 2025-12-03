@@ -118,6 +118,8 @@ screenUpdateManager.registerGlobalHandler('standalone:transaction-added', () => 
 // ============================================================================
 // SCREEN-SPECIFIC HANDLERS - Only run when that screen is active
 // ============================================================================
+// NOTE: Screen handlers receive (eventData, app). Use defensive destructuring
+// when accessing eventData properties: `const { prop } = eventData || {}`
 
 // History screen: Re-render transactions when data changes
 screenUpdateManager.registerScreen('history', {
@@ -139,7 +141,8 @@ screenUpdateManager.registerScreen('history', {
 
 // Team details screen: Re-render team data when transactions change
 screenUpdateManager.registerScreen('teamDetails', {
-  'transaction:added': (eventData, app) => {
+  'transaction:added': (_eventData, app) => {
+    // _eventData unused - we fetch fresh data for current team
     const currentTeamId = app?.currentInterventionTeamId;
     if (currentTeamId) {
       Debug.log(`[main.js] Team details active - re-rendering for team ${currentTeamId}`);
@@ -147,7 +150,8 @@ screenUpdateManager.registerScreen('teamDetails', {
       UIManager.renderTeamDetails(currentTeamId, transactions);
     }
   },
-  'transaction:deleted': (eventData, app) => {
+  'transaction:deleted': (_eventData, app) => {
+    // _eventData unused - we fetch fresh data for current team
     const currentTeamId = app?.currentInterventionTeamId;
     if (currentTeamId) {
       Debug.log(`[main.js] Team details active - re-rendering after deletion for team ${currentTeamId}`);
@@ -156,6 +160,7 @@ screenUpdateManager.registerScreen('teamDetails', {
     }
   },
   'team-score:updated': (eventData, app) => {
+    // Defensive destructuring for eventData
     const { teamId, transactions } = eventData || {};
     const currentTeamId = app?.currentInterventionTeamId;
     if (currentTeamId && currentTeamId === teamId) {

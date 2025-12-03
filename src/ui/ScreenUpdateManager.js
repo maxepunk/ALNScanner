@@ -53,6 +53,10 @@ export class ScreenUpdateManager {
 
     // Screen handlers: screenId -> { eventType: handler, ... }
     this.screenHandlers = new Map();
+
+    // Track connected data sources for cleanup (hot-reload, unmount)
+    // Map<dataSource, Map<eventType, boundHandler>>
+    this.connectedSources = new Map();
   }
 
   /**
@@ -83,8 +87,15 @@ export class ScreenUpdateManager {
    * Register screen-specific handlers
    * @param {string} screenId - Screen identifier (without 'Screen' suffix, e.g., 'history')
    * @param {Object} handlers - Map of eventType -> handler function
+   * @throws {TypeError} If handlers is not a plain object
    */
   registerScreen(screenId, handlers) {
+    // Type safety: validate handlers is an object
+    if (!handlers || typeof handlers !== 'object' || Array.isArray(handlers)) {
+      throw new TypeError(
+        `[ScreenUpdateManager] registerScreen('${screenId}'): handlers must be an object, got ${typeof handlers}`
+      );
+    }
     this.screenHandlers.set(screenId, handlers);
     const eventTypes = Object.keys(handlers).join(', ');
     this.debug?.log(`[ScreenUpdateManager] Registered screen '${screenId}' for events: ${eventTypes}`);
@@ -98,8 +109,19 @@ export class ScreenUpdateManager {
     const activeScreen = document.querySelector('.screen.active');
     if (!activeScreen) return null;
 
+    const screenId = activeScreen.id;
+
+    // Validate expected pattern: screen IDs should end with 'Screen' suffix
+    if (!screenId.endsWith('Screen')) {
+      console.warn(
+        `[ScreenUpdateManager] Unexpected screen ID pattern: '${screenId}' ` +
+        `(expected 'xxxScreen' format). Screen handlers may not work correctly.`
+      );
+      return screenId; // Return as-is for best-effort handling
+    }
+
     // Convert 'historyScreen' -> 'history'
-    return activeScreen.id.replace('Screen', '');
+    return screenId.replace('Screen', '');
   }
 
   /**
@@ -151,12 +173,52 @@ export class ScreenUpdateManager {
    * @param {string[]} eventTypes - Array of event types to listen for
    */
   connectToDataSource(dataSource, eventTypes) {
+    // Initialize listener map for this source if not present
+    if (!this.connectedSources.has(dataSource)) {
+      this.connectedSources.set(dataSource, new Map());
+    }
+    const sourceListeners = this.connectedSources.get(dataSource);
+
     for (const eventType of eventTypes) {
-      dataSource.addEventListener(eventType, (event) => {
+      // Create and store bound handler for cleanup
+      const boundHandler = (event) => {
         this.onDataUpdate(eventType, event.detail);
-      });
+      };
+      sourceListeners.set(eventType, boundHandler);
+      dataSource.addEventListener(eventType, boundHandler);
     }
     this.debug?.log(`[ScreenUpdateManager] Connected to data source for events: ${eventTypes.join(', ')}`);
+  }
+
+  /**
+   * Disconnect from a data source - removes all event listeners
+   * Use for cleanup in hot-reloading scenarios or component unmount
+   * @param {EventTarget} dataSource - DataManager or StandaloneDataManager to disconnect
+   */
+  disconnectFromDataSource(dataSource) {
+    const sourceListeners = this.connectedSources.get(dataSource);
+    if (!sourceListeners) {
+      this.debug?.log('[ScreenUpdateManager] No listeners found for data source, skipping disconnect');
+      return;
+    }
+
+    for (const [eventType, handler] of sourceListeners) {
+      dataSource.removeEventListener(eventType, handler);
+    }
+
+    this.connectedSources.delete(dataSource);
+    this.debug?.log(`[ScreenUpdateManager] Disconnected from data source (${sourceListeners.size} listeners removed)`);
+  }
+
+  /**
+   * Disconnect from all data sources - full cleanup
+   * Use when tearing down the entire ScreenUpdateManager
+   */
+  disconnectAll() {
+    for (const dataSource of this.connectedSources.keys()) {
+      this.disconnectFromDataSource(dataSource);
+    }
+    this.debug?.log('[ScreenUpdateManager] Disconnected from all data sources');
   }
 }
 
