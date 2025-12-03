@@ -1,0 +1,31 @@
+/**
+ * ALN GM Scanner - Main Stylesheet
+ * Noir/tactical command center theme for crime thriller game
+ *
+ * Architecture:
+ * 1. variables.css  - Design tokens (colors, typography, spacing)
+ * 2. base.css       - Reset, typography, form defaults
+ * 3. components.css - Buttons, cards, badges, indicators
+ * 4. layout.css     - Container, grid, flexbox utilities
+ * 5. screens/       - Screen-specific styles
+ * 6. responsive.css - Mobile-first breakpoints + a11y
+ */
+
+/* Design Tokens */
+@import './variables.css';
+
+/* Foundation */
+@import './base.css';
+
+/* Reusable Components */
+@import './components.css';
+
+/* Layout System */
+@import './layout.css';
+
+/* Screen-Specific Styles */
+@import './screens/scanner.css';
+@import './screens/admin.css';
+
+/* Responsive + Accessibility */
+@import './responsive.css';

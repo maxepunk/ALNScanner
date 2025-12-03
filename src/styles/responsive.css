@@ -1,0 +1,425 @@
+/**
+ * ALN GM Scanner - Responsive Styles
+ * Mobile-first breakpoints
+ *
+ * Breakpoints:
+ * - Base: 0-479px (small phones)
+ * - sm: 480px+ (large phones)
+ * - md: 640px+ (small tablets)
+ * - lg: 768px+ (tablets, small laptops)
+ */
+
+/* ============================================
+   SMALL PHONES (< 480px) - BASE STYLES
+   Handled by base styles, these are overrides
+   ============================================ */
+
+@media (max-width: 479px) {
+  /* Tighter spacing */
+  body {
+    padding: var(--space-2);
+  }
+
+  .container {
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+  }
+
+  /* Smaller headings */
+  h1 {
+    font-size: var(--text-xl);
+  }
+
+  /* Compact numpad */
+  .numpad button {
+    height: 56px;
+    font-size: var(--text-xl);
+  }
+
+  /* Smaller team display */
+  .team-display {
+    font-size: var(--text-3xl);
+    padding: var(--space-4);
+    min-height: 64px;
+  }
+
+  /* Hide connection status text on very small screens */
+  .connection-status .status-text {
+    display: none;
+  }
+
+  .connection-status {
+    padding: var(--space-2);
+  }
+
+  /* Compact queue indicator */
+  .queue-indicator {
+    bottom: var(--space-3);
+    right: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-xs);
+  }
+
+  /* Stack header nav */
+  .header-nav {
+    width: 100%;
+  }
+
+  /* Full width buttons in groups */
+  .button-group {
+    flex-direction: column;
+  }
+
+  /* Smaller scan area */
+  .scan-area {
+    padding: var(--space-8);
+  }
+
+  .scan-icon {
+    font-size: 48px;
+  }
+
+  /* Compact transaction cards */
+  .transaction-details {
+    grid-template-columns: 1fr;
+  }
+
+  /* Token detail grid single column */
+  .token-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Scoreboard compact */
+  .scoreboard-rank {
+    font-size: var(--text-xl);
+    min-width: 36px;
+  }
+
+  .scoreboard-team {
+    font-size: var(--text-base);
+  }
+
+  .scoreboard-score {
+    font-size: var(--text-lg);
+  }
+
+  .scoreboard-tokens {
+    display: none;
+  }
+
+  /* Modal adjustments */
+  .modal-content {
+    padding: var(--space-4);
+    max-height: 90vh;
+  }
+
+  /* View tabs compact */
+  .view-tab {
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-xs);
+  }
+
+  .view-tab .tab-text {
+    display: none;
+  }
+
+  /* Statistics grid */
+  .summary-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Status grid */
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================
+   LARGE PHONES (480px+)
+   ============================================ */
+
+@media (min-width: 480px) {
+  .container {
+    max-width: var(--container-sm);
+  }
+
+  /* Show connection status text */
+  .connection-status .status-text {
+    display: inline;
+  }
+
+  /* Larger numpad */
+  .numpad button {
+    height: var(--numpad-btn-size);
+  }
+
+  /* Better spacing */
+  .scan-area {
+    padding: var(--space-10);
+  }
+}
+
+/* ============================================
+   SMALL TABLETS (640px+)
+   ============================================ */
+
+@media (min-width: 640px) {
+  body {
+    padding: var(--space-5);
+  }
+
+  .container {
+    max-width: var(--container-md);
+    padding: var(--space-6);
+  }
+
+  /* Larger typography */
+  h1 {
+    font-size: var(--text-2xl);
+  }
+
+  /* Better grid layouts */
+  .summary-stats {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .status-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Side-by-side buttons */
+  .session-controls,
+  .video-controls {
+    flex-wrap: nowrap;
+  }
+
+  /* Scoreboard full info */
+  .scoreboard-tokens {
+    display: inline;
+  }
+}
+
+/* ============================================
+   TABLETS / SMALL LAPTOPS (768px+)
+   ============================================ */
+
+@media (min-width: 768px) {
+  body {
+    padding: var(--space-6);
+  }
+
+  .container {
+    max-width: var(--container-lg);
+  }
+
+  /* Header side-by-side layout */
+  .header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .header-nav {
+    justify-content: flex-end;
+    width: auto;
+    order: 2;
+    flex-shrink: 0;
+  }
+
+  .header-content {
+    order: 1;
+    text-align: left;
+    flex-grow: 1;
+  }
+
+  /* Larger view tabs */
+  .view-tab {
+    padding: var(--space-3) var(--space-5);
+    font-size: var(--text-sm);
+  }
+
+  .view-tab .tab-text {
+    display: inline;
+  }
+
+  /* Admin two-column layout */
+  .admin-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-5);
+  }
+
+  /* Modal wider */
+  .modal-content {
+    padding: var(--space-8);
+  }
+
+  /* Filter bar stays horizontal */
+  .filter-bar {
+    flex-wrap: nowrap;
+  }
+}
+
+/* ============================================
+   LARGE SCREENS (1024px+)
+   Admin view optimized for tablets in landscape
+   ============================================ */
+
+@media (min-width: 1024px) {
+  /* This is beyond typical GM scanner use (phones/tablets)
+     but included for development/testing on desktop */
+
+  .container {
+    max-width: 900px;
+  }
+
+  /* Three-column admin grid */
+  .admin-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ============================================
+   REDUCED MOTION
+   Accessibility for users who prefer no animations
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================
+   DARK MODE PREFERENCE
+   Already dark, but ensure consistency
+   ============================================ */
+
+@media (prefers-color-scheme: light) {
+  /* Force dark theme regardless of system preference
+     (game environment is always low-light) */
+  :root {
+    color-scheme: dark;
+  }
+}
+
+/* ============================================
+   PRINT STYLES
+   For debugging/documentation purposes only
+   ============================================ */
+
+@media print {
+  body {
+    background: white;
+    color: black;
+    padding: 0;
+  }
+
+  .container {
+    max-width: 100%;
+    box-shadow: none;
+    border: 1px solid #ccc;
+  }
+
+  .nav-button,
+  .connection-status,
+  .queue-indicator,
+  .debug-panel,
+  .debug-toggle,
+  .modal {
+    display: none !important;
+  }
+
+  .transaction-card,
+  .scoreboard-entry,
+  .token-detail-card {
+    break-inside: avoid;
+  }
+}
+
+/* ============================================
+   TOUCH DEVICE OPTIMIZATIONS
+   ============================================ */
+
+@media (hover: none) and (pointer: coarse) {
+  /* Disable hover effects that don't work on touch */
+  .btn:hover,
+  .nav-button:hover,
+  .card-interactive:hover,
+  .transaction-card:hover,
+  .scoreboard-entry:hover {
+    transform: none;
+  }
+
+  /* Make touch targets more generous */
+  .btn {
+    min-height: var(--touch-target-comfortable);
+  }
+
+  .nav-button {
+    min-height: var(--touch-target-comfortable);
+    min-width: var(--touch-target-comfortable);
+  }
+}
+
+/* ============================================
+   HIGH CONTRAST MODE
+   ============================================ */
+
+@media (prefers-contrast: high) {
+  :root {
+    --color-border: #888;
+    --color-text-secondary: #bbb;
+  }
+
+  .btn,
+  .card,
+  input,
+  select {
+    border-width: 2px;
+  }
+}
+
+/* ============================================
+   LANDSCAPE PHONE OPTIMIZATIONS
+   ============================================ */
+
+@media (max-height: 500px) and (orientation: landscape) {
+  body {
+    padding: var(--space-2);
+  }
+
+  .container {
+    padding: var(--space-3);
+  }
+
+  .header {
+    margin-bottom: var(--space-3);
+  }
+
+  .scan-area {
+    padding: var(--space-4);
+  }
+
+  .scan-icon {
+    font-size: 36px;
+    margin-bottom: var(--space-2);
+  }
+
+  .numpad {
+    margin: var(--space-3) 0;
+  }
+
+  .numpad button {
+    height: 48px;
+    font-size: var(--text-lg);
+  }
+
+  .scroll-container {
+    max-height: 200px;
+  }
+}
