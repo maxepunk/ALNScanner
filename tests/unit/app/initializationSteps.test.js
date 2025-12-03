@@ -142,16 +142,11 @@ describe('InitializationSteps - ES6 Module', () => {
   });
 
   describe('loadDataManager()', () => {
-    it('should load transactions and scanned tokens', () => {
+    it('should initialize UI with empty state (sync:full will populate data)', () => {
+      // Production code no longer loads data locally - sync:full event populates everything
       loadDataManager(mockDataManager, mockUIManager);
 
-      expect(mockDataManager.loadTransactions).toHaveBeenCalledTimes(1);
-      expect(mockDataManager.loadScannedTokens).toHaveBeenCalledTimes(1);
-    });
-
-    it('should update history badge', () => {
-      loadDataManager(mockDataManager, mockUIManager);
-
+      // Only updates UI badge - no data loading calls
       expect(mockUIManager.updateHistoryBadge).toHaveBeenCalledTimes(1);
     });
   });
@@ -550,10 +545,8 @@ describe('InitializationSteps - ES6 Module', () => {
       loadSettings(mockSettings);
       expect(mockSettings.load).toHaveBeenCalledTimes(1);
 
-      // Phase 1H: Load DataManager
+      // Phase 1H: Load DataManager (sync:full will populate data)
       loadDataManager(mockDataManager, mockUIManager);
-      expect(mockDataManager.loadTransactions).toHaveBeenCalledTimes(1);
-      expect(mockDataManager.loadScannedTokens).toHaveBeenCalledTimes(1);
       expect(mockUIManager.updateHistoryBadge).toHaveBeenCalledTimes(1);
 
       // Phase 1I: Detect NFC support

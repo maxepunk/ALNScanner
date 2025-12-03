@@ -314,7 +314,7 @@ describe('DataManager - Batch 1: Core Structure', () => {
       expect(dataManager.currentSession).toEqual([]);
       expect(dataManager.scannedTokens.size).toBe(0);
       expect(dataManager.currentSessionId).toBe('new-session');
-      expect(dataManager.transactions).toHaveLength(1); // History preserved
+      expect(dataManager.transactions).toHaveLength(0); // All session data cleared (strict session boundaries)
     });
 
     it('should clear all scanned tokens keys on reset', () => {
@@ -691,7 +691,7 @@ describe('DataManager - Batch 2: Scoring & Group Completion', () => {
   });
 
   describe('getTeamTransactions', () => {
-    it('should filter by team ID and blackmarket mode', () => {
+    it('should filter by team ID', () => {
       dataManager.transactions = [
         { teamId: '001', mode: 'blackmarket', tokenId: 'token1' },
         { teamId: '002', mode: 'blackmarket', tokenId: 'token2' },
@@ -700,8 +700,10 @@ describe('DataManager - Batch 2: Scoring & Group Completion', () => {
 
       const result = dataManager.getTeamTransactions('001');
 
-      expect(result).toHaveLength(1);
-      expect(result[0].tokenId).toBe('token1');
+      // Returns all transactions for the team, regardless of mode
+      expect(result).toHaveLength(2);
+      expect(result.map(t => t.tokenId)).toContain('token1');
+      expect(result.map(t => t.tokenId)).toContain('token3');
     });
 
     it('should sort by group, then value, then timestamp', () => {

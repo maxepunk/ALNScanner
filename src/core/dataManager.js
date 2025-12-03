@@ -582,7 +582,7 @@ export class DataManager extends EventTarget {
 
     // Sort by group, value, then timestamp
     transactions.sort((a, b) => {
-      const groupCompare = a.group.localeCompare(b.group);
+      const groupCompare = (a.group || '').localeCompare(b.group || '');
       if (groupCompare !== 0) return groupCompare;
 
       const valueCompare = (b.valueRating || 0) - (a.valueRating || 0);
