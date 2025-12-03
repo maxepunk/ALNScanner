@@ -410,6 +410,9 @@ class App {
     } catch (error) {
       console.error('Failed to set game mode:', error);
       this.uiManager.showError(`Failed to set game mode: ${error.message}`);
+
+      // Re-throw so caller (ConnectionWizard) can display error in modal
+      throw error;
     }
   }
 

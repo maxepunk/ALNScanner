@@ -1476,6 +1476,27 @@
             border-color: #4CAF50;
         }
 
+        .station-display {
+            padding: 10px;
+            background-color: #2a2a2a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #4CAF50;
+            font-size: 14px;
+            font-weight: 600;
+            text-align: center;
+            min-height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .station-display .loading-text {
+            color: #888;
+            font-style: italic;
+            font-weight: normal;
+        }
+
         #connectionStatus {
             text-align: center;
             margin: 15px 0;
@@ -1521,7 +1542,9 @@
 
                 <div class="form-group">
                     <label>Station Name:</label>
-                    <input type="text" id="stationName" placeholder="GM Station 1">
+                    <div id="stationNameDisplay" class="station-display" data-device-id="">
+                        <span class="loading-text">Select a server first...</span>
+                    </div>
                 </div>
 
                 <div class="form-group">

@@ -31,6 +31,9 @@ export class ConnectionWizard {
     if (connectionForm) {
       connectionForm.addEventListener('submit', this.handleConnectionSubmit);
     }
+
+    // Setup debounced server URL handler for manual entry
+    this._setupServerUrlHandler();
   }
 
   /**
@@ -149,17 +152,123 @@ export class ConnectionWizard {
   }
 
   /**
+   * Setup debounced handler for server URL manual entry
+   * Queries /api/state to auto-assign station name when URL is entered
+   * @private
+   */
+  _setupServerUrlHandler() {
+    const serverUrlInput = document.getElementById('serverUrl');
+    if (!serverUrlInput) return;
+
+    let debounceTimer;
+    const DEBOUNCE_MS = 500;
+
+    serverUrlInput.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        const url = serverUrlInput.value.trim();
+        if (url) {
+          // Normalize URL (add protocol if missing)
+          let normalizedUrl = url;
+          if (!normalizedUrl.match(/^https?:\/\//i)) {
+            normalizedUrl = `http://${normalizedUrl}`;
+          }
+          this.assignStationName(normalizedUrl);
+        }
+      }, DEBOUNCE_MS);
+    });
+  }
+
+  /**
+   * Query orchestrator for existing devices and assign next available station name
+   * @param {string} serverUrl - The orchestrator URL
+   * @private
+   */
+  async assignStationName(serverUrl) {
+    const stationNameDisplay = document.getElementById('stationNameDisplay');
+    if (!stationNameDisplay) return; // Graceful fallback if HTML not updated yet
+
+    try {
+      // Query /api/state (no auth required)
+      const response = await fetch(`${serverUrl}/api/state`, {
+        method: 'GET',
+        mode: 'cors',
+        signal: AbortSignal.timeout(3000)
+      });
+
+      if (!response.ok) {
+        throw new Error('Server unreachable');
+      }
+
+      const state = await response.json();
+      const devices = state.devices || [];
+
+      // Extract existing GM device IDs
+      const existingIds = devices
+        .filter(d => d.type === 'gm')
+        .map(d => d.deviceId);
+
+      // Find next available station ID
+      const nextStationId = this._findNextStationId(existingIds);
+
+      // Update display
+      stationNameDisplay.textContent = nextStationId;
+      stationNameDisplay.dataset.deviceId = nextStationId;
+
+      console.log(`[ConnectionWizard] Auto-assigned station name: ${nextStationId}`);
+    } catch (error) {
+      // Fallback to localStorage counter on error
+      console.warn(`[ConnectionWizard] Failed to query /api/state, using localStorage fallback:`, error.message);
+
+      const stationNum = localStorage.getItem('lastStationNum') || '1';
+      const fallbackId = `GM_Station_${stationNum}`;
+
+      if (stationNameDisplay) {
+        stationNameDisplay.textContent = fallbackId;
+        stationNameDisplay.dataset.deviceId = fallbackId;
+      }
+    }
+  }
+
+  /**
+   * Find next available station ID using gap-filling algorithm
+   * @param {string[]} existingIds - Array of existing device IDs (e.g., ["GM_Station_1", "GM_Station_3"])
+   * @returns {string} Next available station ID (e.g., "GM_Station_2")
+   * @private
+   */
+  _findNextStationId(existingIds) {
+    // Extract numbers from GM_Station_N pattern
+    const stationNumbers = existingIds
+      .filter(id => id && id.startsWith('GM_Station_'))
+      .map(id => {
+        const match = id.match(/GM_Station_(\d+)$/);
+        return match ? parseInt(match[1], 10) : null;
+      })
+      .filter(num => num !== null)
+      .sort((a, b) => a - b);
+
+    // Find first missing number starting from 1
+    let nextNum = 1;
+    for (const num of stationNumbers) {
+      if (num === nextNum) {
+        nextNum++;
+      } else if (num > nextNum) {
+        break; // Found a gap
+      }
+    }
+
+    return `GM_Station_${nextNum}`;
+  }
+
+  /**
    * Select discovered server and pre-fill connection form
    */
   selectServer(url) {
     document.getElementById('serverUrl').value = url;
     document.getElementById('discoveryStatus').textContent = '✅ Server selected';
 
-    // Generate station name if empty
-    if (!document.getElementById('stationName').value) {
-      const stationNum = localStorage.getItem('lastStationNum') || '1';
-      document.getElementById('stationName').value = `GM Station ${stationNum}`;
-    }
+    // Auto-assign station name by querying /api/state
+    this.assignStationName(url);
   }
 
   /**
@@ -169,12 +278,15 @@ export class ConnectionWizard {
     event.preventDefault();
 
     const serverUrl = document.getElementById('serverUrl').value;
-    const stationName = document.getElementById('stationName').value;
     const password = document.getElementById('gmPassword').value;
     const statusDiv = document.getElementById('connectionStatusMsg');
 
+    // Read device ID from display element's dataset (not input field)
+    const stationNameDisplay = document.getElementById('stationNameDisplay');
+    const deviceId = stationNameDisplay ? stationNameDisplay.dataset.deviceId : null;
+
     // Validate inputs
-    if (!serverUrl || !stationName || !password) {
+    if (!serverUrl || !deviceId || !password) {
       statusDiv.textContent = '⚠️ Please fill in all fields';
       statusDiv.style.color = '#ff9800';
       return;
@@ -220,18 +332,18 @@ export class ConnectionWizard {
       // 3. Save configuration to localStorage
       localStorage.setItem('aln_orchestrator_url', normalizedUrl);
       localStorage.setItem('aln_auth_token', token);
-      localStorage.setItem('aln_station_name', stationName);
+      localStorage.setItem('aln_station_name', deviceId);
 
-      // Set device ID in Settings
+      // Set device ID in Settings (deviceId is already in correct format: GM_Station_N)
       const settings = this.app.settings;
-      settings.deviceId = stationName.replace(/\s+/g, '_');
-      settings.stationName = stationName;
+      settings.deviceId = deviceId;
+      settings.stationName = deviceId;
       settings.save();
 
-      // Handle station number
-      const match = stationName.match(/\d+$/);
+      // Update localStorage counter for next session
+      const match = deviceId.match(/GM_Station_(\d+)$/);
       if (match) {
-        const nextNum = parseInt(match[0]) + 1;
+        const nextNum = parseInt(match[1], 10) + 1;
         localStorage.setItem('lastStationNum', nextNum.toString());
       }
 
@@ -296,11 +408,18 @@ export class ConnectionWizard {
     const connectionManager = this.app.networkedSession?.services?.connectionManager;
     if (connectionManager && connectionManager.url) {
       document.getElementById('serverUrl').value = connectionManager.url;
+
+      // Trigger station name assignment
+      this.assignStationName(connectionManager.url);
     }
 
-    // Pre-fill station name if we have one
+    // Pre-fill station name display if we have one
     if (connectionManager && connectionManager.stationName) {
-      document.getElementById('stationName').value = connectionManager.stationName;
+      const stationNameDisplay = document.getElementById('stationNameDisplay');
+      if (stationNameDisplay) {
+        stationNameDisplay.textContent = connectionManager.stationName;
+        stationNameDisplay.dataset.deviceId = connectionManager.stationName;
+      }
     }
   }
 }
