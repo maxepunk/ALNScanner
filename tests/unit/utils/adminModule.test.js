@@ -4,6 +4,7 @@ import { VideoController } from '../../../src/admin/VideoController.js';
 import { SystemMonitor } from '../../../src/admin/SystemMonitor.js';
 import { AdminOperations } from '../../../src/admin/AdminOperations.js';
 import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
+import { DisplayController } from '../../../src/admin/DisplayController.js';
 
 /**
  * Testing Anti-Pattern Avoidance:
@@ -236,6 +237,76 @@ describe('AdminModule - ES6 Exports', () => {
         await expect(controller.reorderQueue(0, 2)).resolves.toEqual({ success: true });
       });
     });
+
+  });
+
+  describe('DisplayController', () => {
+    it('should send display:idle-loop command via sendCommand', async () => {
+      const controller = new DisplayController(mockConnection);
+
+      setTimeout(() => {
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'gm:command:ack', payload: { success: true, mode: 'IDLE_LOOP' } }
+        }));
+      }, 10);
+
+      const result = await controller.setIdleLoop();
+      expect(result.success).toBe(true);
+      expect(result.mode).toBe('IDLE_LOOP');
+    });
+
+    it('should send display:scoreboard command via sendCommand', async () => {
+      const controller = new DisplayController(mockConnection);
+
+      setTimeout(() => {
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'gm:command:ack', payload: { success: true, mode: 'SCOREBOARD' } }
+        }));
+      }, 10);
+
+      const result = await controller.setScoreboard();
+      expect(result.success).toBe(true);
+      expect(result.mode).toBe('SCOREBOARD');
+    });
+
+    it('should send display:toggle command via sendCommand', async () => {
+      const controller = new DisplayController(mockConnection);
+
+      setTimeout(() => {
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'gm:command:ack', payload: { success: true, mode: 'SCOREBOARD' } }
+        }));
+      }, 10);
+
+      const result = await controller.toggleDisplayMode();
+      expect(result.success).toBe(true);
+    });
+
+    it('should send display:status command and return status', async () => {
+      const controller = new DisplayController(mockConnection);
+      const statusPayload = {
+        success: true,
+        currentMode: 'IDLE_LOOP',
+        previousMode: 'IDLE_LOOP',
+        pendingVideo: null
+      };
+
+      setTimeout(() => {
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'gm:command:ack', payload: statusPayload }
+        }));
+      }, 10);
+
+      const result = await controller.getDisplayStatus();
+      expect(result.currentMode).toBe('IDLE_LOOP');
+      expect(result.pendingVideo).toBeNull();
+    });
+
+    it('should timeout after 5 seconds without acknowledgment', async () => {
+      const controller = new DisplayController(mockConnection);
+      // Don't dispatch any event - simulate timeout
+      await expect(controller.setIdleLoop()).rejects.toThrow('display:idle-loop timeout');
+    }, 6000);
   });
 
   describe('SystemMonitor', () => {
@@ -557,6 +628,84 @@ describe('AdminModule - ES6 Exports', () => {
 
         const vlcElem = document.getElementById('vlc-status');
         expect(vlcElem.className).toBe('status-dot status-dot--connected');
+      });
+    });
+
+    describe('display mode event handling', () => {
+      beforeEach(() => {
+        // Add required DOM elements for display status
+        document.body.innerHTML += `
+          <span id="now-showing-value">Idle Loop</span>
+          <span id="now-showing-icon">🔄</span>
+          <div id="returns-to-container" style="display: none;">
+            Returns to: <span id="returns-to-mode">Idle Loop</span>
+          </div>
+          <button id="btn-idle-loop" class="btn-toggle"></button>
+          <button id="btn-scoreboard" class="btn-toggle"></button>
+          <span id="pending-queue-count">0</span>
+        `;
+      });
+
+      it('should update Now Showing to Scoreboard when display:mode event received', () => {
+        // Simulate display:mode event
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'display:mode', payload: { mode: 'SCOREBOARD', changedBy: 'gm1' } }
+        }));
+
+        expect(document.getElementById('now-showing-value').textContent).toBe('Scoreboard');
+        expect(document.getElementById('now-showing-icon').textContent).toBe('🏆');
+        expect(document.getElementById('btn-scoreboard').classList.contains('active')).toBe(true);
+        expect(document.getElementById('btn-idle-loop').classList.contains('active')).toBe(false);
+      });
+
+      it('should update Now Showing to Idle Loop when display:mode event received', () => {
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'display:mode', payload: { mode: 'IDLE_LOOP', changedBy: 'gm1' } }
+        }));
+
+        expect(document.getElementById('now-showing-value').textContent).toBe('Idle Loop');
+        expect(document.getElementById('now-showing-icon').textContent).toBe('🔄');
+        expect(document.getElementById('btn-idle-loop').classList.contains('active')).toBe(true);
+      });
+
+      it('should show video info and Returns To when video:status playing', () => {
+        // First set idle mode to SCOREBOARD
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'display:mode', payload: { mode: 'SCOREBOARD' } }
+        }));
+
+        // Then video starts playing
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: {
+            type: 'video:status',
+            payload: { status: 'playing', tokenId: 'jaw001', queueLength: 2 }
+          }
+        }));
+
+        expect(document.getElementById('now-showing-value').textContent).toBe('jaw001.mp4');
+        expect(document.getElementById('now-showing-icon').textContent).toBe('▶️');
+        expect(document.getElementById('returns-to-container').style.display).toBe('block');
+        expect(document.getElementById('returns-to-mode').textContent).toBe('Scoreboard');
+        expect(document.getElementById('pending-queue-count').textContent).toBe('2');
+      });
+
+      it('should restore idle mode display when video:status idle', () => {
+        // Set to scoreboard mode
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'display:mode', payload: { mode: 'SCOREBOARD' } }
+        }));
+
+        // Video plays then goes idle
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'video:status', payload: { status: 'playing', tokenId: 'test' } }
+        }));
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'video:status', payload: { status: 'idle', queueLength: 0 } }
+        }));
+
+        expect(document.getElementById('now-showing-value').textContent).toBe('Scoreboard');
+        expect(document.getElementById('now-showing-icon').textContent).toBe('🏆');
+        expect(document.getElementById('returns-to-container').style.display).toBe('none');
       });
     });
   });

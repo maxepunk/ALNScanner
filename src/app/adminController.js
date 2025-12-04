@@ -16,6 +16,7 @@
 
 import { SessionManager } from '../admin/SessionManager.js';
 import { VideoController } from '../admin/VideoController.js';
+import { DisplayController } from '../admin/DisplayController.js';
 import { SystemMonitor } from '../admin/SystemMonitor.js';
 import { AdminOperations } from '../admin/AdminOperations.js';
 import { MonitoringDisplay } from '../admin/MonitoringDisplay.js';
@@ -45,6 +46,7 @@ export class AdminController extends EventTarget {
     this.modules = {
       sessionManager: new SessionManager(this.client),
       videoController: new VideoController(this.client),
+      displayController: new DisplayController(this.client),
       systemMonitor: new SystemMonitor(this.client),
       adminOperations: new AdminOperations(this.client),
       monitoringDisplay: new MonitoringDisplay(this.client, this.dataManager)

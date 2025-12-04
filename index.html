@@ -375,7 +375,35 @@
             <!-- Video Controls Section -->
             <section class="admin-section">
                 <h3>Video Controls</h3>
-                <div id="video-info" class="info-row">
+
+                <!-- Phase 4.2: Unified "Now Showing" display -->
+                <div class="display-status">
+                    <div class="display-status__now-showing">
+                        <span class="display-status__label">Now Showing:</span>
+                        <span class="display-status__value" id="now-showing-value">Idle Loop</span>
+                        <span class="display-status__icon" id="now-showing-icon">🔄</span>
+                    </div>
+                    <div class="display-status__queue">
+                        Queue: <span id="pending-queue-count">0</span> pending
+                    </div>
+                </div>
+
+                <!-- Phase 4.2: "Returns to" indicator (hidden when no video playing) -->
+                <div class="display-status__returns-to" id="returns-to-container" style="display: none;">
+                    Returns to: <span id="returns-to-mode">Idle Loop</span> when complete
+                </div>
+
+                <!-- Phase 4.2: Idle Mode Toggle -->
+                <div class="idle-mode-toggle">
+                    <span class="idle-mode-toggle__label">Idle Mode:</span>
+                    <div class="idle-mode-toggle__buttons">
+                        <button class="btn btn-toggle active" id="btn-idle-loop" data-action="app.adminSetIdleLoop">🔄 Idle Loop</button>
+                        <button class="btn btn-toggle" id="btn-scoreboard" data-action="app.adminSetScoreboard">🏆 Scoreboard</button>
+                    </div>
+                </div>
+
+                <!-- Legacy display info (kept for backwards compatibility) -->
+                <div id="video-info" class="info-row" style="display: none;">
                     <span>Current: <span id="admin-current-video">None</span></span>
                     <span>Queue: <span id="admin-queue-length">0</span></span>
                 </div>

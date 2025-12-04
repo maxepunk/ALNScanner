@@ -32,6 +32,10 @@ export class MonitoringDisplay {
     this.overtimeData = null;
     this._currentSession = null;
 
+    // Display mode state (Phase 4.2)
+    this.isVideoPlaying = false;
+    this.currentIdleMode = 'IDLE_LOOP';
+
     // Bind handler for cleanup
     this._messageHandler = this._handleMessage.bind(this);
     this.connection.addEventListener('message:received', this._messageHandler);
@@ -87,6 +91,10 @@ export class MonitoringDisplay {
         this.updateVideoDisplay(payload);
         break;
 
+      case 'display:mode':
+        this._handleDisplayMode(payload);
+        break;
+
       case 'video:progress':
         this.updateVideoProgress(payload);
         break;
@@ -113,6 +121,17 @@ export class MonitoringDisplay {
 
       case 'sync:full':
         this.updateAllDisplays(payload);
+        break;
+
+      case 'gm:command:ack':
+        // Fallback: If display:mode event is missed, update UI based on ACK
+        if (payload.success && payload.action) {
+          if (payload.action === 'display:scoreboard') {
+            this._handleDisplayMode({ mode: 'SCOREBOARD' });
+          } else if (payload.action === 'display:idle-loop') {
+            this._handleDisplayMode({ mode: 'IDLE_LOOP' });
+          }
+        }
         break;
     }
   }
@@ -212,6 +231,42 @@ export class MonitoringDisplay {
       const txElement = transactionLog.querySelector(`[data-transaction-id="${payload.transactionId}"]`);
       if (txElement) txElement.remove();
     }
+  }
+
+  /**
+   * Handle display:mode event (Phase 4.2)
+   * Updates "Now Showing" display and idle mode toggle buttons
+   * @private
+   */
+  _handleDisplayMode(payload) {
+    if (!payload?.mode) return;
+
+    const nowShowingValue = document.getElementById('now-showing-value');
+    const nowShowingIcon = document.getElementById('now-showing-icon');
+    const returnsToContainer = document.getElementById('returns-to-container');
+    const btnIdleLoop = document.getElementById('btn-idle-loop');
+    const btnScoreboard = document.getElementById('btn-scoreboard');
+
+    // Update toggle button states
+    btnIdleLoop?.classList.toggle('active', payload.mode === 'IDLE_LOOP');
+    btnScoreboard?.classList.toggle('active', payload.mode === 'SCOREBOARD');
+
+    // Store current idle mode for "returns to" display
+    this.currentIdleMode = payload.mode;
+
+    // Update display if no video playing
+    if (!this.isVideoPlaying) {
+      if (payload.mode === 'IDLE_LOOP') {
+        if (nowShowingValue) nowShowingValue.textContent = 'Idle Loop';
+        if (nowShowingIcon) nowShowingIcon.textContent = '🔄';
+      } else if (payload.mode === 'SCOREBOARD') {
+        if (nowShowingValue) nowShowingValue.textContent = 'Scoreboard';
+        if (nowShowingIcon) nowShowingIcon.textContent = '🏆';
+      }
+      if (returnsToContainer) returnsToContainer.style.display = 'none';
+    }
+
+    Debug.log(`[MonitoringDisplay] Display mode updated: ${payload.mode}`);
   }
 
   // ============================================
@@ -483,12 +538,20 @@ export class MonitoringDisplay {
 
   /**
    * Update video display status
+   * Also updates "Now Showing" display for Phase 4.2 integration
    */
   updateVideoDisplay(videoStatus) {
     if (!videoStatus) return;
 
     const currentVideoElem = document.getElementById('admin-current-video');
     const queueLengthElem = document.getElementById('admin-queue-length');
+
+    // Phase 4.2: Integrated display status elements
+    const nowShowingValue = document.getElementById('now-showing-value');
+    const nowShowingIcon = document.getElementById('now-showing-icon');
+    const returnsToContainer = document.getElementById('returns-to-container');
+    const returnsToMode = document.getElementById('returns-to-mode');
+    const pendingQueueCount = document.getElementById('pending-queue-count');
 
     if (currentVideoElem) {
       if (videoStatus.status === 'playing' && videoStatus.tokenId) {
@@ -501,6 +564,33 @@ export class MonitoringDisplay {
 
     if (queueLengthElem) {
       queueLengthElem.textContent = String(videoStatus.queueLength || 0);
+    }
+
+    // Phase 4.2: Update integrated display status
+    if (pendingQueueCount) {
+      pendingQueueCount.textContent = String(videoStatus.queueLength || 0);
+    }
+
+    if (videoStatus.status === 'playing' && videoStatus.tokenId) {
+      // Video is playing - update "Now Showing" to show video
+      this.isVideoPlaying = true;
+      if (nowShowingValue) nowShowingValue.textContent = `${videoStatus.tokenId}.mp4`;
+      if (nowShowingIcon) nowShowingIcon.textContent = '▶️';
+      if (returnsToContainer) returnsToContainer.style.display = 'block';
+      if (returnsToMode) {
+        returnsToMode.textContent = this.currentIdleMode === 'SCOREBOARD' ? 'Scoreboard' : 'Idle Loop';
+      }
+    } else if (videoStatus.status === 'idle') {
+      // Video ended - restore idle mode display
+      this.isVideoPlaying = false;
+      if (this.currentIdleMode === 'SCOREBOARD') {
+        if (nowShowingValue) nowShowingValue.textContent = 'Scoreboard';
+        if (nowShowingIcon) nowShowingIcon.textContent = '🏆';
+      } else {
+        if (nowShowingValue) nowShowingValue.textContent = 'Idle Loop';
+        if (nowShowingIcon) nowShowingIcon.textContent = '🔄';
+      }
+      if (returnsToContainer) returnsToContainer.style.display = 'none';
     }
   }
 

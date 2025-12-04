@@ -180,6 +180,7 @@ export class OrchestratorClient extends EventTarget {
     });
 
     // Forward all AsyncAPI message types
+
     this._setupMessageHandlers();
   }
 
@@ -197,9 +198,11 @@ export class OrchestratorClient extends EventTarget {
       'scores:reset',
       'video:status',
       'session:update',
+      'session:overtime',
       'device:connected',
       'device:disconnected',
       'group:completed',
+      'display:mode',  // Phase 4.2: Display control events
       'gm:command:ack',
       'offline:queue:processed',
       'batch:ack',
@@ -211,8 +214,7 @@ export class OrchestratorClient extends EventTarget {
         // Extract payload from AsyncAPI envelope
         const payload = envelope.data || envelope;
 
-        // DEBUG: Log WebSocket event arrival (Phase 1 instrumentation)
-        console.log('[OrchestratorClient] WebSocket event received:', type, envelope);
+
 
         // Forward as generic message:received event
         this.dispatchEvent(new CustomEvent('message:received', {

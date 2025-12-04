@@ -104,8 +104,23 @@ class App {
     // Register service worker for PWA functionality (Phase 1J)
     await this.initializationSteps.registerServiceWorker(navigator, this.uiManager);
 
-    // Connection restoration logic (Phase 1C)
-    const screenDecision = this.initializationSteps.determineInitialScreen(this.sessionModeManager);
+    // Connection restoration logic with full state validation (Phase 1C + Phase 4.1)
+    // Use validateAndDetermineInitialScreen for networked mode validation:
+    // - Validates JWT token expiration
+    // - Validates orchestrator reachability
+    // - Validates session exists
+    // If any validation fails, clears stale state and shows mode selection
+    const screenDecision = await this.initializationSteps.validateAndDetermineInitialScreen(this.sessionModeManager);
+
+    // Log validation result if present
+    if (screenDecision.validationResult) {
+      if (screenDecision.validationResult.valid) {
+        this.debug.log('[App] State validation passed - proceeding with auto-connect');
+      } else {
+        this.debug.log(`[App] State validation failed: ${screenDecision.validationResult.reason}`);
+      }
+    }
+
     await this.initializationSteps.applyInitialScreenDecision(
       screenDecision,
       this.sessionModeManager,
@@ -113,9 +128,6 @@ class App {
       this.showConnectionWizard,
       this._initializeNetworkedMode.bind(this)
     );
-
-    // Wire event listeners for networked session
-    this._wireNetworkedSessionEvents();
   }
 
   /**
@@ -124,9 +136,14 @@ class App {
    * @private
    */
   _wireNetworkedSessionEvents() {
+    if (!this.networkedSession) {
+      this.debug.log('Cannot wire networked session events: session is null');
+      return;
+    }
+
     // Listen for session:ready from NetworkedSession
     // Services are provided via event.detail.services (per Architecture Refactoring 2025-11)
-    window.addEventListener('session:ready', (event) => {
+    this.networkedSession.addEventListener('session:ready', (event) => {
       this.debug.log('NetworkedSession ready - initializing admin modules');
 
       // Event-driven: Receive services from event detail, not window lookup
@@ -141,7 +158,7 @@ class App {
     });
 
     // Listen for auth:required from NetworkedSession
-    window.addEventListener('auth:required', () => {
+    this.networkedSession.addEventListener('auth:required', () => {
       this.debug.log('Authentication required - showing connection wizard');
       if (this.showConnectionWizard) {
         this.showConnectionWizard();
@@ -261,6 +278,7 @@ class App {
         this.adminInstances = {
           sessionManager: adminController.getModule('sessionManager'),
           videoController: adminController.getModule('videoController'),
+          displayController: adminController.getModule('displayController'),
           systemMonitor: adminController.getModule('systemMonitor'),
           adminOps: adminController.getModule('adminOperations'),
           monitoring: adminController.getModule('monitoringDisplay')
@@ -444,6 +462,9 @@ class App {
 
       // Attempt connection
       try {
+        // Wire event listeners BEFORE initializing (so we catch session:ready)
+        this._wireNetworkedSessionEvents();
+
         await this.networkedSession.initialize();
         this.debug.log('NetworkedSession initialized - session:ready will fire');
 
@@ -452,9 +473,6 @@ class App {
         // before updating backendScores (see dataManager.js:570)
         this.dataManager.networkedSession = this.networkedSession;
         this.debug.log('DataManager.networkedSession injected for score update validation');
-
-        // session:ready event will trigger admin module initialization
-        // via _wireNetworkedSessionEvents listener
 
         // Close connection wizard modal (if open) and show team entry screen
         // Per Architecture Refactoring 2025-11: App manages UI transitions after NetworkedSession ready
@@ -1109,6 +1127,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     }
   }
 
+  // ============================================
   async adminAddVideoToQueue() {
     if (!this.viewController.adminInstances?.videoController) {
       alert('Video controls not available.');
@@ -1381,6 +1400,60 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     } catch (error) {
       console.error('Failed to delete transaction (networked):', error);
       this.uiManager.showError(`Failed to delete transaction: ${error.message}`);
+    }
+  }
+
+  // ========== Admin Display Control (Phase 4.2) ==========
+
+  /**
+   * Set display to Idle Loop mode
+   * Called by data-action="app.adminSetIdleLoop" from admin panel button
+   */
+  async adminSetIdleLoop() {
+    if (!this.sessionModeManager?.isNetworked()) {
+      this.debug.log('Display control only available in networked mode');
+      return;
+    }
+
+    const displayController = this.viewController?.adminInstances?.displayController;
+    if (!displayController) {
+      this.debug.log('DisplayController not available - admin modules not initialized');
+      this.uiManager.showError('Admin functions not available. Please ensure connection is established.');
+      return;
+    }
+
+    try {
+      const result = await displayController.setIdleLoop();
+      this.debug.log(`Display mode set to Idle Loop: ${JSON.stringify(result)}`);
+    } catch (error) {
+      console.error('Failed to set display mode:', error);
+      this.uiManager.showError(`Failed to set display mode: ${error.message}`);
+    }
+  }
+
+  /**
+   * Set display to Scoreboard mode
+   * Called by data-action="app.adminSetScoreboard" from admin panel button
+   */
+  async adminSetScoreboard() {
+    if (!this.sessionModeManager?.isNetworked()) {
+      this.debug.log('Display control only available in networked mode');
+      return;
+    }
+
+    const displayController = this.viewController?.adminInstances?.displayController;
+    if (!displayController) {
+      this.debug.log('DisplayController not available - admin modules not initialized');
+      this.uiManager.showError('Admin functions not available. Please ensure connection is established.');
+      return;
+    }
+
+    try {
+      const result = await displayController.setScoreboard();
+      this.debug.log(`Display mode set to Scoreboard: ${JSON.stringify(result)}`);
+    } catch (error) {
+      console.error('Failed to set display mode:', error);
+      this.uiManager.showError(`Failed to set display mode: ${error.message}`);
     }
   }
 

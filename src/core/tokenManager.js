@@ -57,72 +57,10 @@ class TokenManagerClass {
       return true;
     } catch (error) {
       Debug.log(`Token database error: ${error.message}`, true);
-      Debug.log('Loading demo data as fallback');
-      this.loadDemoData();
+      // CRITICAL: Fail hard if database cannot be loaded.
+      // Do NOT load demo data.
       return false;
     }
-  }
-
-  /**
-   * Load demo data for testing without external file
-   */
-  loadDemoData() {
-    this.database = {
-      // Server Logs group (x5) - only 2 tokens, incomplete
-      "a1b2c3d4": {
-        "SF_RFID": "a1b2c3d4",
-        "SF_ValueRating": 3,
-        "SF_MemoryType": "Technical",
-        "SF_Group": "Server Logs (x5)"
-      },
-      "deed3456": {
-        "SF_RFID": "deed3456",
-        "SF_ValueRating": 2,
-        "SF_MemoryType": "Technical",
-        "SF_Group": "Server Logs (x5)"
-      },
-
-      // Marcus' Memories (x1) - only 1 token
-      "deadbeef": {
-        "SF_RFID": "deadbeef",
-        "SF_ValueRating": 2,
-        "SF_MemoryType": "Personal",
-        "SF_Group": "Marcus' Memories (x1)"
-      },
-
-      // Government Files (x3) - complete set of 3
-      "cafe1234": {
-        "SF_RFID": "cafe1234",
-        "SF_ValueRating": 5,
-        "SF_MemoryType": "Business",
-        "SF_Group": "Government Files (x3)"
-      },
-      "babe2468": {
-        "SF_RFID": "babe2468",
-        "SF_ValueRating": 1,
-        "SF_MemoryType": "Personal",
-        "SF_Group": "Government Files (x3)"
-      },
-      "feed5678": {
-        "SF_RFID": "feed5678",
-        "SF_ValueRating": 4,
-        "SF_MemoryType": "Business",
-        "SF_Group": "Government Files (x3)"
-      },
-
-      // Test case: inconsistent naming
-      "test1234": {
-        "SF_RFID": "test1234",
-        "SF_ValueRating": 5,
-        "SF_MemoryType": "Technical",
-        "SF_Group": "government files (x3)"  // lowercase variation
-      }
-    };
-    Debug.log('Loaded demo token data');
-
-    // Build group inventory for demo data
-    this.groupInventory = this.buildGroupInventory();
-    this.logGroupStats();
   }
 
   /**
@@ -171,8 +109,8 @@ class TokenManagerClass {
 
       // Update display name if this one is "better"
       if (groupInfo.name.length > groups[normalizedName].displayName.length ||
-          (groupInfo.name.length === groups[normalizedName].displayName.length &&
-           groupInfo.name > groups[normalizedName].displayName)) {
+        (groupInfo.name.length === groups[normalizedName].displayName.length &&
+          groupInfo.name > groups[normalizedName].displayName)) {
         groups[normalizedName].displayName = groupInfo.name;
       }
     });

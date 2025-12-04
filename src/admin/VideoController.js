@@ -82,6 +82,8 @@ export class VideoController {
     return sendCommand(this.connection, 'video:queue:clear', {});
   }
 
+
+
   /**
    * Cleanup (no persistent listeners)
    */

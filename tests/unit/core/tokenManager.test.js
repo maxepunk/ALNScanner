@@ -61,40 +61,21 @@ describe('TokenManager - ES6 Module', () => {
       expect(TokenManager.database).toEqual(mockTokens);
     });
 
-    it('should load demo data if both paths fail', async () => {
+    it('should return false and leave database empty when both paths fail', async () => {
+      // Current design: "CRITICAL: Fail hard if database cannot be loaded. Do NOT load demo data."
       global.fetch.mockResolvedValue({ ok: false });
 
       const result = await TokenManager.loadDatabase();
 
+      // Database loading failed - returns false, database stays empty
       expect(result).toBe(false);
-      expect(Object.keys(TokenManager.database).length).toBeGreaterThan(0);
-      expect(TokenManager.database['deadbeef']).toBeDefined();
+      expect(Object.keys(TokenManager.database).length).toBe(0);
     });
   });
 
-  describe('loadDemoData', () => {
-    it('should load predefined demo tokens', () => {
-      TokenManager.loadDemoData();
-
-      expect(TokenManager.database['a1b2c3d4']).toBeDefined();
-      expect(TokenManager.database['deadbeef']).toBeDefined();
-      expect(TokenManager.database['cafe1234']).toBeDefined();
-      expect(TokenManager.groupInventory).toBeDefined();
-    });
-
-    it('should build group inventory from demo data', () => {
-      TokenManager.loadDemoData();
-
-      const groups = Object.values(TokenManager.groupInventory);
-      expect(groups.length).toBeGreaterThan(0);
-
-      // Server Logs group should have 2 tokens
-      const serverLogs = groups.find(g => g.displayName.includes('Server Logs'));
-      expect(serverLogs).toBeDefined();
-      expect(serverLogs.tokens.size).toBe(2);
-      expect(serverLogs.multiplier).toBe(5);
-    });
-  });
+  // NOTE: loadDemoData was removed as a design decision.
+  // Scanner now fails hard if tokens.json cannot be loaded.
+  // This ensures proper token data is always available for game sessions.
 
   describe('buildGroupInventory', () => {
     beforeEach(() => {

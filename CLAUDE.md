@@ -296,7 +296,7 @@ if (DataManager.isTokenScanned(tokenId)) {
 
 **Project Structure:**
 ```
-ALNScanner-es6-migration/
+ALNScanner/
 ├── src/                    # ES6 modules (source code)
 │   ├── main.js            # Entry point - orchestrates initialization
 │   ├── app/               # Application layer
@@ -304,6 +304,13 @@ ALNScanner-es6-migration/
 │   │   ├── AdminController.js
 │   │   ├── SessionModeManager.js
 │   │   └── initializationSteps.js
+│   ├── admin/             # Admin panel modules (Phase 2/3 refactor)
+│   │   ├── AdminOperations.js
+│   │   ├── MonitoringDisplay.js
+│   │   ├── SessionManager.js
+│   │   ├── SystemMonitor.js
+│   │   ├── VideoController.js
+│   │   └── utils/
 │   ├── core/              # Core business logic
 │   │   ├── dataManager.js
 │   │   └── tokenManager.js
@@ -314,14 +321,17 @@ ALNScanner-es6-migration/
 │   │   └── networkedQueueManager.js
 │   ├── ui/                # UI management
 │   │   ├── uiManager.js
-│   │   └── settings.js
+│   │   ├── settings.js
+│   │   ├── ScreenUpdateManager.js  # Phase 3: Centralized event routing
+│   │   └── connectionWizard.js
+│   ├── styles/            # CSS architecture (Phase 1 refactor)
 │   └── utils/             # Utilities
 │       ├── config.js
 │       ├── debug.js
-│       ├── nfcHandler.js
-│       └── adminModule.js
+│       ├── domEventBindings.js
+│       └── nfcHandler.js
 ├── tests/
-│   ├── unit/              # Jest unit tests (598 tests)
+│   ├── unit/              # Jest unit tests
 │   └── e2e/               # Playwright E2E tests
 ├── dist/                  # Build output (gitignored)
 ├── index.html             # Minimal HTML - loads single module script
@@ -387,12 +397,20 @@ ALNScanner-es6-migration/
 - [uiManager.js](src/ui/uiManager.js) - Screen navigation, stats rendering, error display
 - [settings.js](src/ui/settings.js) - localStorage persistence for config
 - [ScreenUpdateManager.js](src/ui/ScreenUpdateManager.js) - Centralized event-to-screen routing (Phase 3)
+- [connectionWizard.js](src/ui/connectionWizard.js) - Network auth flow UI
+
+**Admin Layer ([src/admin/](src/admin/)) - Phase 2/3 Refactor:**
+- [MonitoringDisplay.js](src/admin/MonitoringDisplay.js) - Transaction history, real-time updates
+- [SessionManager.js](src/admin/SessionManager.js) - Session create/pause/resume/end
+- [VideoController.js](src/admin/VideoController.js) - Video queue management
+- [SystemMonitor.js](src/admin/SystemMonitor.js) - Health checks, system status
+- [AdminOperations.js](src/admin/AdminOperations.js) - Admin action coordination
 
 **Utils Layer ([src/utils/](src/utils/)):**
-- [adminModule.js](src/utils/adminModule.js) - SessionManager, VideoController, SystemMonitor (named exports)
 - [nfcHandler.js](src/utils/nfcHandler.js) - Web NFC API wrapper
 - [debug.js](src/utils/debug.js) - Debug panel and logging (singleton class)
 - [config.js](src/utils/config.js) - App constants
+- [domEventBindings.js](src/utils/domEventBindings.js) - Event delegation for data-action buttons
 
 ### Event-to-Screen Routing (ScreenUpdateManager)
 
@@ -599,7 +617,7 @@ Handles various RFID formats:
 
 ## Admin Panel (Networked Mode Only)
 
-### SessionManager (adminModule.js:12-146)
+### SessionManager (src/admin/SessionManager.js)
 
 **WebSocket Commands (NOT HTTP):**
 ```javascript
@@ -1412,7 +1430,7 @@ _getDataSource() {
 - **Symptom**: Transactions appear only after closing/reopening history screen
 - **Cause**: MonitoringDisplay accessing `window.DataManager` (undefined)
 - **Fix**: Verify DI chain passes dataManager through all layers
-- **Files**: adminModule.js:427, adminController.js:52, networkedSession.js:155, app.js:419
+- **Files**: `src/admin/MonitoringDisplay.js`, `src/app/adminController.js`, `src/network/networkedSession.js`, `src/app/app.js`
 
 **Problem: "Cannot read property 'transactions' of undefined"**
 - **Symptom**: Browser console error when accessing DataManager
@@ -1428,13 +1446,12 @@ _getDataSource() {
 
 ### Key Files
 - `src/ui/ScreenUpdateManager.js` - Centralized event-to-screen routing (Phase 3)
-- `src/main.js:85-203` - ScreenUpdateManager registration and wiring
-- `src/utils/adminModule.js:427` - MonitoringDisplay constructor (receives dataManager)
-- `src/app/adminController.js:26,52` - AdminController DI (receives and passes dataManager)
-- `src/network/networkedSession.js:24,155` - NetworkedSession DI (receives and passes dataManager)
-- `src/app/app.js:414-419` - NetworkedSession creation (passes this.dataManager)
-- `src/ui/uiManager.js:41-61` - _getDataSource() mode routing
-- `src/ui/uiManager.js:619-670` - renderTransactions() implementation
+- `src/main.js` - ScreenUpdateManager registration and wiring
+- `src/admin/MonitoringDisplay.js` - Transaction history, receives dataManager via DI
+- `src/app/adminController.js` - AdminController DI (receives and passes dataManager)
+- `src/network/networkedSession.js` - NetworkedSession DI (receives and passes dataManager)
+- `src/app/app.js` - NetworkedSession creation (passes this.dataManager)
+- `src/ui/uiManager.js` - _getDataSource() mode routing, renderTransactions()
 
 ### Testing Notes
 **E2E Test Pattern:**
