@@ -538,6 +538,7 @@ screenUpdateManager.registerScreen('myNewScreen', {
 
 **Client → Server:**
 - `transaction:submit` - Submit token scan (queued via NetworkedQueueManager)
+  - **REQUIRED**: `deviceType: 'gm'` field for duplicate detection logic
 - `gm:command` - Admin actions (session, video, system)
 
 **Server → Client (Broadcasts):**
