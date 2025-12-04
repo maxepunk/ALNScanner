@@ -8,7 +8,7 @@
  * Phase 0: Show loading screen
  * Phase 1A: Token Database Loading
  * Phase 1B: URL Parameter Mode Override
- * Phase 1C: Connection Restoration Logic
+ * Phase 1C: Connection Restoration Logic (with State Validation)
  * Phase 1D: Initialize UIManager
  * Phase 1E: Create SessionModeManager
  * Phase 1F: Initialize view controller
@@ -19,6 +19,7 @@
  */
 
 import Debug from '../utils/debug.js';
+import stateValidationService from '../services/StateValidationService.js';
 
 /**
  * Initialize UIManager
@@ -186,6 +187,9 @@ export function applyURLModeOverride(locationSearch, settings) {
  * Determine initial screen based on connection restoration logic
  * Pure function - no side effects, only decision logic
  *
+ * NOTE: For networked mode, use validateAndDetermineInitialScreen() instead
+ * to perform full state validation (token + orchestrator + session).
+ *
  * @param {Object} sessionModeManager - SessionModeManager instance
  * @returns {Object} Decision object with {screen, action, savedMode}
  */
@@ -220,6 +224,58 @@ export function determineInitialScreen(sessionModeManager) {
 }
 
 /**
+ * Validate system state and determine initial screen for networked mode
+ * Async version that performs full validation before deciding action.
+ *
+ * Phase 4.1 enhancement: Validates orchestrator + session in addition to token.
+ * If any validation fails, clears stale state and shows mode selection screen.
+ *
+ * @param {Object} sessionModeManager - SessionModeManager instance
+ * @returns {Promise<Object>} Decision object with {screen, action, savedMode, validationResult}
+ */
+export async function validateAndDetermineInitialScreen(sessionModeManager) {
+  const savedMode = sessionModeManager.restoreMode();
+
+  // Case 1: No saved mode (first-time user)
+  if (!savedMode) {
+    return { screen: 'gameModeScreen', action: null, savedMode: null, validationResult: null };
+  }
+
+  // Case 2: Standalone mode - no validation needed
+  if (savedMode === 'standalone') {
+    return { screen: 'teamEntry', action: 'initStandalone', savedMode, validationResult: null };
+  }
+
+  // Case 3: Networked mode - perform full validation
+  if (savedMode === 'networked') {
+    const orchestratorUrl = localStorage.getItem('aln_orchestrator_url');
+
+    // Validate full system state: token + orchestrator + session
+    Debug.log('[InitSteps] Performing full state validation for networked mode...');
+    const validationResult = await stateValidationService.validateAll(orchestratorUrl);
+
+    if (validationResult.valid) {
+      // All validations passed - try auto-connect
+      Debug.log('[InitSteps] Validation passed - attempting auto-connect');
+      return { screen: 'loading', action: 'autoConnect', savedMode, validationResult };
+    } else {
+      // Validation failed - clear stale state and show wizard
+      Debug.log(`[InitSteps] Validation failed: ${validationResult.reason}`);
+      stateValidationService.clearStaleState();
+      return {
+        screen: 'gameModeScreen',
+        action: 'clearModeAndShowWizard',
+        savedMode,
+        validationResult
+      };
+    }
+  }
+
+  // Fallback
+  return { screen: 'gameModeScreen', action: null, savedMode: null, validationResult: null };
+}
+
+/**
  * Check if JWT token is valid (not expired, with 1-minute buffer)
  * @param {string} token - JWT token string
  * @returns {boolean} True if valid
@@ -231,9 +287,15 @@ function isTokenValid(token) {
     if (parts.length !== 3) return false;
 
     // Use atob for browser, Buffer for Node.js
-    const decode = typeof atob !== 'undefined'
-      ? (str) => atob(str)
-      : (str) => Buffer.from(str, 'base64').toString();
+    let decode;
+    if (typeof atob !== 'undefined') {
+      decode = (str) => atob(str);
+    } else if (typeof Buffer !== 'undefined') {
+      decode = (str) => Buffer.from(str, 'base64').toString();
+    } else {
+      // Fallback or fail if neither is available
+      return false;
+    }
 
     const payload = JSON.parse(decode(parts[1]));
     const expiry = payload.exp;
@@ -243,6 +305,7 @@ function isTokenValid(token) {
     const buffer = 60; // 1-minute safety buffer
     return (expiry - buffer) > now;
   } catch (error) {
+    console.error('Token validation error:', error);
     return false;
   }
 }
@@ -330,6 +393,7 @@ export default {
   loadTokenDatabase,
   applyURLModeOverride,
   determineInitialScreen,
+  validateAndDetermineInitialScreen,
   applyInitialScreenDecision,
   showLoadingScreen
 };
