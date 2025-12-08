@@ -168,14 +168,20 @@ export class MonitoringDisplay {
     this.updateSessionDisplay(payload);
 
     // Handle session lifecycle transitions
+    // CRITICAL: Only reset DataManager when session ID actually CHANGES
+    // Previously this reset on every session:update, wiping transactions
     if (this.dataManager) {
+      const newSessionId = payload.id;
+      const currentSessionId = this.dataManager.currentSessionId;
+
       if (payload.status === 'ended') {
         Debug.log('[MonitoringDisplay] Session ended, clearing DataManager');
         this.dataManager.resetForNewSession(null);
         this.overtimeData = null;
-      } else if (payload.status === 'active' && payload.id) {
-        Debug.log('[MonitoringDisplay] New session started, resetting with ID:', payload.id);
-        this.dataManager.resetForNewSession(payload.id);
+      } else if (payload.status === 'active' && newSessionId && newSessionId !== currentSessionId) {
+        // Only reset when session ID actually changes (new session started)
+        Debug.log('[MonitoringDisplay] Session boundary change:', currentSessionId, '→', newSessionId);
+        this.dataManager.resetForNewSession(newSessionId);
         this.overtimeData = null;
       }
     }
