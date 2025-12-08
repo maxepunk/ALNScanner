@@ -168,16 +168,36 @@ describe('DataManager - Batch 1: Core Structure', () => {
   });
 
   describe('scanned tokens tracking', () => {
-    it('should load scanned tokens from mode-specific key', () => {
-      const testTokens = ['token1', 'token2', 'token3'];
-      localStorage.setItem('standalone_scannedTokens', JSON.stringify(testTokens));
+    it('should set scanned tokens from server state', () => {
+      const serverTokens = ['token1', 'token2', 'token3'];
 
-      dataManager.loadScannedTokens();
+      dataManager.setScannedTokensFromServer(serverTokens);
 
       expect(dataManager.scannedTokens.size).toBe(3);
       expect(dataManager.scannedTokens.has('token1')).toBe(true);
       expect(dataManager.scannedTokens.has('token2')).toBe(true);
       expect(dataManager.scannedTokens.has('token3')).toBe(true);
+    });
+
+    it('should replace existing scanned tokens when setting from server', () => {
+      dataManager.scannedTokens.add('oldToken');
+
+      dataManager.setScannedTokensFromServer(['newToken1', 'newToken2']);
+
+      expect(dataManager.scannedTokens.size).toBe(2);
+      expect(dataManager.scannedTokens.has('oldToken')).toBe(false);
+      expect(dataManager.scannedTokens.has('newToken1')).toBe(true);
+    });
+
+    it('should handle invalid input to setScannedTokensFromServer', () => {
+      dataManager.scannedTokens.add('existingToken');
+
+      dataManager.setScannedTokensFromServer(null);
+      dataManager.setScannedTokensFromServer(undefined);
+      dataManager.setScannedTokensFromServer('not-an-array');
+
+      // Should not change existing state on invalid input
+      expect(dataManager.scannedTokens.has('existingToken')).toBe(true);
     });
 
     it('should save scanned tokens to mode-specific key', () => {

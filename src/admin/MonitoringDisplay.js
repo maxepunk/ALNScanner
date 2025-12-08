@@ -719,6 +719,12 @@ export class MonitoringDisplay {
           this.dataManager.resetForNewSession(newSessionId);
         }
       }
+
+      // Restore scanned tokens from server state (handles reconnection)
+      // Server is source of truth - always sync after any potential reset
+      if (syncData.deviceScannedTokens) {
+        this.dataManager.setScannedTokensFromServer(syncData.deviceScannedTokens);
+      }
     }
 
     // Update session

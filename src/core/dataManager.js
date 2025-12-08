@@ -69,27 +69,18 @@ export class DataManager extends EventTarget {
   }
 
   /**
-   * Load scanned tokens registry from localStorage
-   * Uses mode-specific key to prevent data leak between modes
+   * Set scanned tokens from server state (networked mode only)
+   * Server is source of truth - this replaces any local state
+   * Called on sync:full to restore duplicate detection state after reconnect
+   * @param {string[]} serverTokens - Array of token IDs from deviceScannedTokens
    */
-  loadScannedTokens() {
-    try {
-      const key = this.getScannedTokensKey();
-      const stored = localStorage.getItem(key);
-      const storedSessionId = localStorage.getItem('currentSessionId');
-
-      // Load current session ID if available (networked mode)
-      // In standalone mode, this will be null and scannedTokens will be session-local
-      this.currentSessionId = storedSessionId;
-
-      if (stored) {
-        this.scannedTokens = new Set(JSON.parse(stored));
-        this.debug?.log(`Loaded ${this.scannedTokens.size} scanned tokens from ${key} for session ${storedSessionId || 'local'}`);
-      }
-    } catch (e) {
-      this.debug?.log('Error loading scanned tokens', true);
-      this.scannedTokens = new Set();
+  setScannedTokensFromServer(serverTokens) {
+    if (!Array.isArray(serverTokens)) {
+      this.debug?.log('[DataManager] setScannedTokensFromServer: invalid input (not array)', true);
+      return;
     }
+    this.scannedTokens = new Set(serverTokens);
+    this.debug?.log(`[DataManager] Synced ${serverTokens.length} scanned tokens from server`);
   }
 
   /**
