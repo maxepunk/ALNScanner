@@ -363,7 +363,7 @@ ALNScanner/
 - `loadingScreen` - Initial app load
 - `gameModeScreen` - Networked vs Standalone selection
 - `settingsScreen` - Device ID, mode toggle, data management
-- `teamEntryScreen` - Numeric keypad (6-digit team ID)
+- `teamEntryScreen` - Team selection (Dropdown or Text Input)
 - `scanScreen` - NFC interface + stats
 - `resultScreen` - Transaction outcome
 - `historyScreen` - Transaction log
