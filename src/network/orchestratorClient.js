@@ -120,6 +120,54 @@ export class OrchestratorClient extends EventTarget {
   }
 
   /**
+   * Send gm:command and wait for acknowledgment
+   * Follows AsyncAPI contract for admin commands
+   *
+   * @param {string} action - Command action (e.g., 'session:addTeam')
+   * @param {Object} payload - Command payload
+   * @param {number} timeout - Timeout in ms (default 5000)
+   * @returns {Promise<{success: boolean, message: string}>}
+   * @throws {Error} If socket not connected or command times out
+   */
+  async sendCommand(action, payload = {}, timeout = 5000) {
+    if (!this.socket?.connected) {
+      throw new Error('Socket not connected');
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error(`Command ${action} timed out`));
+      }, timeout);
+
+      const handler = (envelope) => {
+        const data = envelope.data || envelope;
+        if (data.action === action) {
+          cleanup();
+          resolve({
+            success: data.success,
+            message: data.message || ''
+          });
+        }
+      };
+
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        this.socket.off('gm:command:ack', handler);
+      };
+
+      this.socket.on('gm:command:ack', handler);
+
+      // Send with proper gm:command envelope (NOT raw action name)
+      this.socket.emit('gm:command', {
+        event: 'gm:command',
+        data: { action, payload },
+        timestamp: new Date().toISOString()
+      });
+    });
+  }
+
+  /**
    * Disconnect from orchestrator
    * @returns {Promise<void>}
    * @emits socket:disconnected - Disconnection complete

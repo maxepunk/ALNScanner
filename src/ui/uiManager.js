@@ -150,13 +150,13 @@ class UIManager {
     // Track previous screen for back navigation
     const current = document.querySelector('.screen.active');
     if (current && current.id !== 'historyScreen' &&
-        current.id !== 'scoreboardScreen' &&
-        current.id !== 'teamDetailsScreen' &&
-        current.id !== 'gameModeScreen' &&
-        current.id !== 'loadingScreen' &&
-        screenName !== 'history' &&
-        screenName !== 'scoreboard' &&
-        screenName !== 'teamDetails') {
+      current.id !== 'scoreboardScreen' &&
+      current.id !== 'teamDetailsScreen' &&
+      current.id !== 'gameModeScreen' &&
+      current.id !== 'loadingScreen' &&
+      screenName !== 'history' &&
+      screenName !== 'scoreboard' &&
+      screenName !== 'teamDetails') {
       this.previousScreen = current.id.replace('Screen', '');
     }
 
@@ -170,6 +170,11 @@ class UIManager {
     // Show requested screen
     if (this.screens[screenName]) {
       this.screens[screenName].classList.add('active');
+    }
+
+    // Screen-specific initialization callbacks
+    if (screenName === 'teamEntry' && this.app?.initTeamEntryUI) {
+      this.app.initTeamEntryUI();
     }
   }
 

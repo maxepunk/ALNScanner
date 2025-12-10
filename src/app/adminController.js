@@ -22,10 +22,11 @@ import { AdminOperations } from '../admin/AdminOperations.js';
 import { MonitoringDisplay } from '../admin/MonitoringDisplay.js';
 
 export class AdminController extends EventTarget {
-  constructor(client, dataManager) {
+  constructor(client, dataManager, teamRegistry = null) {
     super();
     this.client = client; // OrchestratorClient reference for admin modules to use
     this.dataManager = dataManager; // DataManager reference for MonitoringDisplay
+    this.teamRegistry = teamRegistry; // TeamRegistry for team dropdown sync
     this.modules = null;
     this.initialized = false;
   }
@@ -49,7 +50,7 @@ export class AdminController extends EventTarget {
       displayController: new DisplayController(this.client),
       systemMonitor: new SystemMonitor(this.client),
       adminOperations: new AdminOperations(this.client),
-      monitoringDisplay: new MonitoringDisplay(this.client, this.dataManager)
+      monitoringDisplay: new MonitoringDisplay(this.client, this.dataManager, this.teamRegistry)
     };
 
     this.initialized = true;
@@ -101,6 +102,9 @@ export class AdminController extends EventTarget {
     }
     if (this.modules.videoController?.resume) {
       this.modules.videoController.resume();
+    }
+    if (this.modules.monitoringDisplay?.resume) {
+      this.modules.monitoringDisplay.resume();
     }
   }
 

@@ -405,53 +405,82 @@ describe('App', () => {
   });
 
   describe('Team Entry', () => {
-    it('should append numbers to team ID', () => {
-      const UIManager = require('../../src/ui/uiManager.js').default;
-
-      app.appendNumber('1');
-      app.appendNumber('2');
-      app.appendNumber('3');
-
-      expect(app.currentTeamId).toBe('123');
-      expect(UIManager.updateTeamDisplay).toHaveBeenCalledTimes(3);
+    beforeEach(() => {
+      // Set up DOM elements for team entry UI
+      document.body.innerHTML = `
+        <select id="teamSelect"></select>
+        <div class="team-select-container"></div>
+        <div class="standalone-team-container" style="display: none;">
+          <input type="text" id="standaloneTeamName" />
+        </div>
+        <button id="showAddTeamBtn"></button>
+        <div id="addTeamInputContainer" style="display: none;">
+          <input type="text" id="newTeamNameInput" />
+        </div>
+        <span id="currentTeam"></span>
+      `;
     });
 
-    it('should respect max team ID length', () => {
-      app.appendNumber('1');
-      app.appendNumber('2');
-      app.appendNumber('3');
-      app.appendNumber('4');
-      app.appendNumber('5');
-      app.appendNumber('6');
-      app.appendNumber('7'); // Should be ignored
+    it('should initialize team entry UI for standalone mode', () => {
+      // Setup standalone mode
+      app.sessionModeManager = { isStandalone: () => true, isNetworked: () => false };
 
-      expect(app.currentTeamId).toBe('123456');
+      app.initTeamEntryUI();
+
+      const standaloneContainer = document.querySelector('.standalone-team-container');
+      const selectContainer = document.querySelector('.team-select-container');
+      expect(standaloneContainer.style.display).toBe('block');
+      expect(selectContainer.style.display).toBe('none');
     });
 
-    it('should clear team ID', () => {
-      const UIManager = require('../../src/ui/uiManager.js').default;
-      app.currentTeamId = '123';
+    it('should initialize team entry UI for networked mode', () => {
+      // Setup networked mode with mock teamRegistry
+      app.sessionModeManager = { isStandalone: () => false, isNetworked: () => true };
+      app.teamRegistry = {
+        populateDropdown: jest.fn(),
+        addEventListener: jest.fn()
+      };
 
-      app.clearTeamId();
+      app.initTeamEntryUI();
 
-      expect(app.currentTeamId).toBe('');
-      expect(UIManager.updateTeamDisplay).toHaveBeenCalledWith('');
+      const standaloneContainer = document.querySelector('.standalone-team-container');
+      const selectContainer = document.querySelector('.team-select-container');
+      expect(selectContainer.style.display).toBe('block');
+      expect(standaloneContainer.style.display).toBe('none');
+      expect(app.teamRegistry.populateDropdown).toHaveBeenCalled();
     });
 
     it('should confirm team ID and show scan screen', () => {
       const UIManager = require('../../src/ui/uiManager.js').default;
-      app.currentTeamId = '123';
+      app.sessionModeManager = { isStandalone: () => true, isNetworked: () => false };
+
+      // Mock standaloneDataManager with sessionData
+      app.standaloneDataManager = {
+        sessionData: { teams: {} },
+        addTransaction: jest.fn(),
+        saveLocalSession: jest.fn()
+      };
+
+      // Set team via standalone input
+      document.getElementById('standaloneTeamName').value = 'Test Team';
 
       app.confirmTeamId();
 
-      expect(document.getElementById('currentTeam').textContent).toBe('123');
+      expect(app.currentTeamId).toBe('Test Team');
+      expect(document.getElementById('currentTeam').textContent).toBe('Test Team');
       expect(UIManager.updateSessionStats).toHaveBeenCalled();
       expect(UIManager.showScreen).toHaveBeenCalledWith('scan');
     });
 
     it('should not confirm empty team ID', () => {
       const UIManager = require('../../src/ui/uiManager.js').default;
-      app.currentTeamId = '';
+      app.sessionModeManager = { isStandalone: () => true, isNetworked: () => false };
+      app.standaloneDataManager = {
+        sessionData: { teams: {} },
+        addTransaction: jest.fn(),
+        saveLocalSession: jest.fn()
+      };
+      document.getElementById('standaloneTeamName').value = '';
 
       app.confirmTeamId();
 

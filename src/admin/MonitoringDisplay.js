@@ -24,10 +24,12 @@ export class MonitoringDisplay {
   /**
    * @param {Object} connection - OrchestratorClient instance (EventTarget)
    * @param {Object} dataManager - DataManager instance for cross-view data sync
+   * @param {Object} teamRegistry - TeamRegistry instance for team dropdown sync (optional)
    */
-  constructor(connection, dataManager) {
-    this.connection = connection;
+  constructor(client, dataManager, teamRegistry = null) {
+    this.client = client;
     this.dataManager = dataManager;
+    this.teamRegistry = teamRegistry;
     this.devices = [];
     this.overtimeData = null;
     this._currentSession = null;
@@ -38,7 +40,7 @@ export class MonitoringDisplay {
 
     // Bind handler for cleanup
     this._messageHandler = this._handleMessage.bind(this);
-    this.connection.addEventListener('message:received', this._messageHandler);
+    this.client.addEventListener('message:received', this._messageHandler);
 
     // Load available videos for manual queue dropdown
     this.loadAvailableVideos();
@@ -51,9 +53,21 @@ export class MonitoringDisplay {
    * Request initial state from backend
    * @private
    */
+  _sendMessage(type, payload) {
+    if (this.client?.socket?.connected) {
+      this.client.socket.emit(type, payload);
+    } else {
+      console.warn('[MonitoringDisplay] Cannot send message - disconnected');
+    }
+  }
+
+  /**
+   * Request initial state from backend
+   * @private
+   */
   _requestInitialState() {
-    if (this.connection?.socket?.connected) {
-      this.connection.socket.emit('sync:request');
+    if (this.client?.socket?.connected) {
+      this.client.socket.emit('sync:request');
       console.log('[MonitoringDisplay] Requested initial state via sync:request');
     } else {
       console.warn('[MonitoringDisplay] Cannot request state - socket not connected');
@@ -167,6 +181,11 @@ export class MonitoringDisplay {
   _handleSessionUpdate(payload) {
     this.updateSessionDisplay(payload);
 
+    // Update TeamRegistry with latest teams from session (enables cross-GM team sync)
+    if (this.teamRegistry) {
+      this.teamRegistry.populateFromSession(payload);
+    }
+
     // Handle session lifecycle transitions
     // CRITICAL: Only reset DataManager when session ID actually CHANGES
     // Previously this reset on every session:update, wiping transactions
@@ -178,13 +197,34 @@ export class MonitoringDisplay {
         Debug.log('[MonitoringDisplay] Session ended, clearing DataManager');
         this.dataManager.resetForNewSession(null);
         this.overtimeData = null;
+        this._clearAdminPanelDisplays();
       } else if (payload.status === 'active' && newSessionId && newSessionId !== currentSessionId) {
         // Only reset when session ID actually changes (new session started)
         Debug.log('[MonitoringDisplay] Session boundary change:', currentSessionId, '→', newSessionId);
         this.dataManager.resetForNewSession(newSessionId);
         this.overtimeData = null;
+        // Request fresh state from server to populate UI with new session data
+        this._requestInitialState();
       }
     }
+  }
+
+  /**
+   * Clear admin panel displays (transaction log, score board)
+   * Called when session ends to ensure no stale data shown
+   * @private
+   */
+  _clearAdminPanelDisplays() {
+    const transactionLog = document.getElementById('admin-transaction-log');
+    if (transactionLog) transactionLog.innerHTML = '';
+
+    const scoreBoard = document.getElementById('admin-score-board');
+    if (scoreBoard) {
+      const tbody = scoreBoard.querySelector('tbody');
+      if (tbody) tbody.innerHTML = '';
+    }
+
+    Debug.log('[MonitoringDisplay] Admin panel displays cleared');
   }
 
   _handleSessionOvertime(payload) {
@@ -658,7 +698,7 @@ export class MonitoringDisplay {
    */
   async loadAvailableVideos() {
     try {
-      const baseUrl = this.connection?.config?.url || 'http://localhost:3000';
+      const baseUrl = this.client?.config?.url || 'http://localhost:3000';
       const response = await fetch(`${baseUrl}/api/tokens`);
       const data = await response.json();
 
@@ -685,11 +725,11 @@ export class MonitoringDisplay {
    * Update system status display
    */
   updateSystemDisplay() {
-    if (!this.connection) return;
+    if (!this.client) return;
 
     const orchestratorElem = document.getElementById('orchestrator-status');
     if (orchestratorElem) {
-      const status = this.connection.isConnected ? 'connected' : 'disconnected';
+      const status = this.client.isConnected ? 'connected' : 'disconnected';
       orchestratorElem.className = `status-dot status-dot--${status}`;
       orchestratorElem.title = status;
     }
@@ -729,6 +769,11 @@ export class MonitoringDisplay {
 
     // Update session
     this.updateSessionDisplay(syncData.session || null);
+
+    // Update TeamRegistry from session data (enables cross-GM team sync on connect)
+    if (syncData.session && this.teamRegistry) {
+      this.teamRegistry.populateFromSession(syncData.session);
+    }
 
     // Update video
     if (syncData.videoStatus) {
@@ -787,6 +832,7 @@ export class MonitoringDisplay {
    * Manually refresh all displays from cached data
    */
   refreshAllDisplays() {
+    Debug.log('[MonitoringDisplay] refreshAllDisplays called');
     if (this.dataManager) {
       // Refresh score display
       if (this.dataManager.backendScores?.size > 0) {
@@ -805,6 +851,10 @@ export class MonitoringDisplay {
       }
     }
 
+    // Refresh session display
+    Debug.log(`[MonitoringDisplay] Refreshing session display. Current session: ${this._currentSession ? this._currentSession.id : 'null'}`);
+    this.updateSessionDisplay(this._currentSession);
+
     // Refresh device list
     if (this.devices?.length > 0) {
       this.updateDeviceList(this.devices);
@@ -812,6 +862,14 @@ export class MonitoringDisplay {
 
     this.updateSystemDisplay();
     this.loadAvailableVideos();
+  }
+
+  /**
+   * Resume monitoring (socket reconnected)
+   */
+  resume() {
+    console.log('[MonitoringDisplay] Resuming monitoring...');
+    this._requestInitialState();
   }
 
   // ============================================
@@ -850,8 +908,8 @@ export class MonitoringDisplay {
    * Cleanup event listeners
    */
   destroy() {
-    if (this.connection && this._messageHandler) {
-      this.connection.removeEventListener('message:received', this._messageHandler);
+    if (this.client && this._messageHandler) {
+      this.client.removeEventListener('message:received', this._messageHandler);
     }
   }
 }

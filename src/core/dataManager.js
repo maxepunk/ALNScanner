@@ -6,6 +6,12 @@
  * Critical: Mode-specific storage prevents data leaks between networked/standalone modes.
  */
 
+import {
+  SCORING_CONFIG,
+  parseGroupInfo as sharedParseGroupInfo,
+  normalizeGroupName as sharedNormalizeGroupName,
+  calculateTokenValue as sharedCalculateTokenValue
+} from './scoring.js';
 export class DataManager extends EventTarget {
   constructor({ tokenManager, settings, debug, app, sessionModeManager, networkedSession } = {}) {
     super();
@@ -25,22 +31,8 @@ export class DataManager extends EventTarget {
     this.backendScores = new Map();  // Store scores from orchestrator
     this.currentSessionId = null;  // Track current session for duplicate detection scope
 
-    // Scoring configuration for Black Market mode
-    this.SCORING_CONFIG = {
-      BASE_VALUES: {
-        1: 100,
-        2: 500,
-        3: 1000,
-        4: 5000,
-        5: 10000
-      },
-      TYPE_MULTIPLIERS: {
-        'Personal': 1,
-        'Business': 3,
-        'Technical': 5,
-        'UNKNOWN': 0
-      }
-    };
+    // Scoring configuration from shared module
+    this.SCORING_CONFIG = SCORING_CONFIG;
   }
 
   /**
@@ -186,11 +178,11 @@ export class DataManager extends EventTarget {
       // CRITICAL FIX: valueRating is 1-5, points is calculated score - don't confuse them!
       // Use valueRating if explicitly provided (even if 0), otherwise use token data
       valueRating: transaction.valueRating !== undefined ? transaction.valueRating :
-                   (tokenData?.SF_ValueRating !== undefined ? tokenData.SF_ValueRating : 0),
+        (tokenData?.SF_ValueRating !== undefined ? tokenData.SF_ValueRating : 0),
       // CRITICAL FIX: Check if memoryType is valid, not just if tokenData exists
       // Backend now sends memoryType in transactions, so tokenData may be null even for valid tokens
       isUnknown: transaction.isUnknown !== undefined ? transaction.isUnknown :
-                 (memoryType === 'UNKNOWN'),
+        (memoryType === 'UNKNOWN'),
       // Status field with documented valid values (see JSDoc above)
       status: transaction.status || 'accepted'
       // Note: 'synced' flag removed - NetworkedQueueManager handles sync status
@@ -294,6 +286,7 @@ export class DataManager extends EventTarget {
     this.scannedTokens.clear();
     this.transactions = [];
     this.currentSessionId = sessionId;
+    this.backendScores.clear();  // Clear networked mode scores
 
     // Clear localStorage for all session data
     localStorage.removeItem('transactions');
@@ -330,29 +323,7 @@ export class DataManager extends EventTarget {
    * @returns {Object} Parsed group info
    */
   parseGroupInfo(groupName) {
-    if (!groupName) {
-      return { name: 'Unknown', multiplier: 1 };
-    }
-
-    // Trim input first to handle leading/trailing whitespace
-    const trimmed = groupName.trim();
-
-    // Match pattern: "Group Name (xN)"
-    const match = trimmed.match(/^(.+?)\s*\(x(\d+)\)$/i);
-
-    if (match) {
-      const name = match[1].trim();
-      const multiplier = parseInt(match[2]) || 1;
-
-      if (multiplier < 1) {
-        this.debug?.log(`Invalid multiplier ${multiplier} for "${name}", using 1`, true);
-        return { name, multiplier: 1 };
-      }
-
-      return { name, multiplier };
-    }
-
-    return { name: trimmed, multiplier: 1 };
+    return sharedParseGroupInfo(groupName);
   }
 
   /**
@@ -361,13 +332,7 @@ export class DataManager extends EventTarget {
    * @returns {string} Normalized name
    */
   normalizeGroupName(name) {
-    if (!name) return '';
-
-    return name
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, ' ')
-      .replace(/['\u2018\u2019]/g, "'");  // Normalize curly apostrophes to straight
+    return sharedNormalizeGroupName(name);
   }
 
   /**
@@ -400,12 +365,7 @@ export class DataManager extends EventTarget {
    * @returns {number} Token value
    */
   calculateTokenValue(transaction) {
-    if (transaction.isUnknown) return 0;
-
-    const baseValue = this.SCORING_CONFIG.BASE_VALUES[transaction.valueRating] || 0;
-    const multiplier = this.SCORING_CONFIG.TYPE_MULTIPLIERS[transaction.memoryType] || 1;
-
-    return baseValue * multiplier;
+    return sharedCalculateTokenValue(transaction);
   }
 
   /**

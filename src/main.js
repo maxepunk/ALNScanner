@@ -26,6 +26,7 @@ import Settings from './ui/settings.js';
 import TokenManager from './core/tokenManager.js';
 import { DataManager as DataManagerClass } from './core/dataManager.js';
 import { StandaloneDataManager as StandaloneDataManagerClass } from './core/standaloneDataManager.js';
+import { TeamRegistry as TeamRegistryClass } from './core/teamRegistry.js';
 import NFCHandler from './utils/nfcHandler.js';
 import CONFIG from './utils/config.js';
 import InitializationSteps from './app/initializationSteps.js';
@@ -62,6 +63,9 @@ const StandaloneDataManager = new StandaloneDataManagerClass({
   tokenManager: TokenManager,
   debug: Debug
 });
+
+// Create TeamRegistry for unified team management (networked + standalone)
+const TeamRegistry = new TeamRegistryClass();
 
 // Create UIManager with both DataManager and StandaloneDataManager
 // UIManager will route to appropriate manager based on session mode
@@ -109,11 +113,6 @@ screenUpdateManager.registerGlobalHandler('game-state:updated', () => {
   UIManager.updateSessionStats();
 });
 
-// Standalone transaction added: Update badge and stats
-screenUpdateManager.registerGlobalHandler('standalone:transaction-added', () => {
-  UIManager.updateHistoryBadge();
-  UIManager.updateSessionStats();
-});
 
 // ============================================================================
 // SCREEN-SPECIFIC HANDLERS - Only run when that screen is active
@@ -130,10 +129,6 @@ screenUpdateManager.registerScreen('history', {
   },
   'transaction:deleted': () => {
     Debug.log('[main.js] History screen active - re-rendering after deletion');
-    UIManager.updateHistoryStats();
-    UIManager.renderTransactions();
-  },
-  'standalone:transaction-added': () => {
     UIManager.updateHistoryStats();
     UIManager.renderTransactions();
   }
@@ -181,9 +176,6 @@ screenUpdateManager.registerScreen('scoreboard', {
   },
   'team-score:updated': () => {
     UIManager.renderScoreboard();
-  },
-  'standalone:scores-updated': () => {
-    UIManager.renderScoreboard();
   }
 });
 
@@ -201,10 +193,10 @@ screenUpdateManager.connectToDataSource(DataManager, [
   'team-score:updated'
 ]);
 
-// Connect ScreenUpdateManager to StandaloneDataManager events
+// Connect ScreenUpdateManager to StandaloneDataManager events (now unified)
 screenUpdateManager.connectToDataSource(StandaloneDataManager, [
-  'standalone:transaction-added',
-  'standalone:scores-updated'
+  'transaction:added',
+  'team-score:updated'
 ]);
 
 /**
@@ -218,6 +210,7 @@ const app = new App({
   tokenManager: TokenManager,
   dataManager: DataManager,
   standaloneDataManager: StandaloneDataManager,
+  teamRegistry: TeamRegistry,
   nfcHandler: NFCHandler,
   config: CONFIG,
   initializationSteps: InitializationSteps

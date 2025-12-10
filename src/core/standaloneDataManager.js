@@ -4,14 +4,20 @@
  * Handles permanent local storage when operating without orchestrator
  * ES6 Module - Event-Driven Architecture
  *
- * Emits events:
- * - 'standalone:transaction-added' - After transaction added to session
- * - 'standalone:scores-updated' - After team scores recalculated
+ * Emits events (unified with DataManager for mode parity):
+ * - 'transaction:added' - After transaction added to session
+ * - 'transaction:deleted' - After transaction removed from session
+ * - 'team-score:updated' - After team scores recalculated
  * - 'standalone:group-completed' - When team completes a token group
  * - 'standalone:session-saved' - After session saved to localStorage
  * - 'standalone:session-loaded' - After session loaded from localStorage
  */
 
+import {
+  SCORING_CONFIG,
+  parseGroupInfo as sharedParseGroupInfo,
+  calculateTokenValue as sharedCalculateTokenValue
+} from './scoring.js';
 class StandaloneDataManager extends EventTarget {
   /**
    * Create StandaloneDataManager instance
@@ -38,22 +44,8 @@ class StandaloneDataManager extends EventTarget {
     // Track scanned tokens for duplicate detection (same as DataManager)
     this.scannedTokens = new Set();
 
-    // Scoring configuration for Black Market mode (same as DataManager)
-    this.SCORING_CONFIG = {
-      BASE_VALUES: {
-        1: 100,
-        2: 500,
-        3: 1000,
-        4: 5000,
-        5: 10000
-      },
-      TYPE_MULTIPLIERS: {
-        'Personal': 1,
-        'Business': 3,
-        'Technical': 5,
-        'UNKNOWN': 0
-      }
-    };
+    // Scoring configuration from shared module
+    this.SCORING_CONFIG = SCORING_CONFIG;
 
     // Load any previous incomplete session
     this.loadLocalSession();
@@ -88,8 +80,8 @@ class StandaloneDataManager extends EventTarget {
     // This ensures the calculated scores are persisted along with transaction data
     this.saveLocalSession();
 
-    // Emit event for listeners
-    this.dispatchEvent(new CustomEvent('standalone:transaction-added', {
+    // Emit event for listeners (unified event name for mode parity)
+    this.dispatchEvent(new CustomEvent('transaction:added', {
       detail: {
         transaction,
         sessionId: this.sessionData.sessionId,
@@ -279,8 +271,8 @@ class StandaloneDataManager extends EventTarget {
       completedGroups: team.completedGroups
     });
 
-    // Emit event for UI updates (listeners handle updates)
-    this.dispatchEvent(new CustomEvent('standalone:scores-updated', {
+    // Emit event for UI updates (unified event name for mode parity)
+    this.dispatchEvent(new CustomEvent('team-score:updated', {
       detail: {
         teamId,
         teamScores: this.getTeamScores(),
@@ -394,26 +386,7 @@ class StandaloneDataManager extends EventTarget {
    * @returns {Object} Parsed group info
    */
   parseGroupInfo(groupName) {
-    if (!groupName) {
-      return { name: 'Unknown', multiplier: 1 };
-    }
-
-    const trimmed = groupName.trim();
-    const match = trimmed.match(/^(.+?)\s*\(x(\d+)\)$/i);
-
-    if (match) {
-      const name = match[1].trim();
-      const multiplier = parseInt(match[2]) || 1;
-
-      if (multiplier < 1) {
-        console.warn(`Invalid multiplier ${multiplier} for "${name}", using 1`);
-        return { name, multiplier: 1 };
-      }
-
-      return { name, multiplier };
-    }
-
-    return { name: trimmed, multiplier: 1 };
+    return sharedParseGroupInfo(groupName);
   }
 
   /**
@@ -422,12 +395,7 @@ class StandaloneDataManager extends EventTarget {
    * @returns {number} Token value
    */
   calculateTokenValue(transaction) {
-    if (transaction.isUnknown) return 0;
-
-    const baseValue = this.SCORING_CONFIG.BASE_VALUES[transaction.valueRating] || 0;
-    const multiplier = this.SCORING_CONFIG.TYPE_MULTIPLIERS[transaction.memoryType] || 1;
-
-    return baseValue * multiplier;
+    return sharedCalculateTokenValue(transaction);
   }
 
   /**

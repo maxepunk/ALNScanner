@@ -112,7 +112,8 @@ describe('NetworkedSession', () => {
         deviceId: 'GM_TEST',
         debug: console
       });
-      expect(AdminController).toHaveBeenCalledWith(mockClient, expect.any(Object));
+      // AdminController receives client, dataManager, and teamRegistry (null for tests)
+      expect(AdminController).toHaveBeenCalledWith(mockClient, expect.any(Object), null);
 
       expect(session.services).not.toBeNull();
       expect(session.services.client).toBe(mockClient);
@@ -439,7 +440,8 @@ describe('NetworkedSession', () => {
     it('should pass client to AdminController', async () => {
       await session.initialize();
 
-      expect(AdminController).toHaveBeenCalledWith(mockClient, expect.any(Object));
+      // AdminController receives client, dataManager, and teamRegistry (null for tests)
+      expect(AdminController).toHaveBeenCalledWith(mockClient, expect.any(Object), null);
     });
   });
 
