@@ -171,6 +171,7 @@ export class MonitoringDisplay {
   }
 
   _handleSessionUpdate(payload) {
+    // Update session display UI
     this.updateSessionDisplay(payload);
 
     // Update TeamRegistry with latest teams from session (enables cross-GM team sync)
@@ -178,26 +179,16 @@ export class MonitoringDisplay {
       this.teamRegistry.populateFromSession(payload);
     }
 
-    // Handle session lifecycle transitions
-    // CRITICAL: Only reset DataManager when session ID actually CHANGES
-    // Previously this reset on every session:update, wiping transactions
-    if (this.dataManager) {
-      const newSessionId = payload.id;
-      const currentSessionId = this.dataManager.currentSessionId;
-
-      if (payload.status === 'ended') {
-        Debug.log('[MonitoringDisplay] Session ended, clearing DataManager');
-        this.dataManager.resetForNewSession(null);
-        this.overtimeData = null;
-        this._clearAdminPanelDisplays();
-      } else if (payload.status === 'active' && newSessionId && newSessionId !== currentSessionId) {
-        // Only reset when session ID actually changes (new session started)
-        Debug.log('[MonitoringDisplay] Session boundary change:', currentSessionId, '→', newSessionId);
-        this.dataManager.resetForNewSession(newSessionId);
-        this.overtimeData = null;
-        // Request fresh state from server to populate UI with new session data
-        this._requestInitialState();
-      }
+    // Handle UI-specific session lifecycle transitions
+    // NOTE: DataManager state updates (resetForNewSession) are handled by NetworkedSession global listener
+    if (payload.status === 'ended') {
+      Debug.log('[MonitoringDisplay] Session ended, clearing admin panel displays');
+      this.overtimeData = null;
+      this._clearAdminPanelDisplays();
+    } else if (payload.status === 'active') {
+      // Request fresh state from server to populate UI with new session data
+      this.overtimeData = null;
+      this._requestInitialState();
     }
   }
 
@@ -684,33 +675,13 @@ export class MonitoringDisplay {
 
   /**
    * Initialize all displays from sync:full event
+   * NOTE: DataManager state updates (resetForNewSession, setScannedTokensFromServer)
+   * are handled by NetworkedSession global listener
    */
   updateAllDisplays(syncData) {
     if (!syncData) return;
 
-    // Detect session boundary changes
-    if (this.dataManager) {
-      const newSessionId = syncData.session?.id;
-      const currentSessionId = this.dataManager.currentSessionId;
-
-      if (newSessionId !== currentSessionId) {
-        Debug.log(`[MonitoringDisplay] Session boundary: ${currentSessionId} → ${newSessionId}`);
-
-        if (!newSessionId) {
-          this.dataManager.resetForNewSession(null);
-        } else {
-          this.dataManager.resetForNewSession(newSessionId);
-        }
-      }
-
-      // Restore scanned tokens from server state (handles reconnection)
-      // Server is source of truth - always sync after any potential reset
-      if (syncData.deviceScannedTokens) {
-        this.dataManager.setScannedTokensFromServer(syncData.deviceScannedTokens);
-      }
-    }
-
-    // Update session
+    // Update session display (UI only)
     this.updateSessionDisplay(syncData.session || null);
 
     // Update TeamRegistry from session data (enables cross-GM team sync on connect)

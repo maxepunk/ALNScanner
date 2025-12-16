@@ -178,6 +178,10 @@ screenUpdateManager.registerContainer('scoreboardContainer', {
   'scores:cleared': (eventData, container) => {
     Debug.log('[main.js] Clearing scoreboardContainer');
     container.innerHTML = '';
+  },
+  'data:cleared': (eventData, container) => {
+    Debug.log('[main.js] Session reset - clearing scoreboardContainer');
+    container.innerHTML = '';
   }
 });
 
@@ -188,6 +192,10 @@ screenUpdateManager.registerContainer('admin-score-board', {
   },
   'scores:cleared': (eventData, container) => {
     Debug.log('[main.js] Clearing admin-score-board');
+    container.innerHTML = '';
+  },
+  'data:cleared': (eventData, container) => {
+    Debug.log('[main.js] Session reset - clearing admin-score-board');
     container.innerHTML = '';
   }
 });
