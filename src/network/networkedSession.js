@@ -214,6 +214,11 @@ export class NetworkedSession extends EventTarget {
           if (payload.recentTransactions) {
             payload.recentTransactions.forEach(tx => this.dataManager.addTransaction(tx));
           }
+
+          // Sync player scans from server (Game Activity feature)
+          if (payload.playerScans) {
+            this.dataManager.setPlayerScansFromServer(payload.playerScans);
+          }
           break;
 
         case 'session:update':
@@ -239,6 +244,11 @@ export class NetworkedSession extends EventTarget {
 
         case 'scores:reset':
           this.dataManager.clearBackendScores();
+          break;
+
+        case 'player:scan':
+          // Player scanner activity - forward to DataManager for Game Activity tracking
+          this.dataManager.handlePlayerScan(payload);
           break;
       }
     };

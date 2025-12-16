@@ -1402,4 +1402,342 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
       expect(manager.isTokenScanned(tokenId)).toBe(true);
     });
   });
+
+  describe('Player Scan Tracking (Game Activity)', () => {
+    it('should initialize with empty playerScans array', () => {
+      expect(dataManager.playerScans).toEqual([]);
+    });
+
+    it('should handle player scan event', () => {
+      const eventListener = jest.fn();
+      dataManager.addEventListener('player-scan:added', eventListener);
+
+      const payload = {
+        scanId: '550e8400-e29b-41d4-a716-446655440000',
+        tokenId: 'jaw001',
+        deviceId: 'PLAYER_001',
+        timestamp: '2025-12-16T10:30:00Z',
+        memoryType: 'Personal',
+        videoQueued: true,
+        tokenData: { SF_MemoryType: 'Personal', SF_ValueRating: 4 }
+      };
+
+      dataManager.handlePlayerScan(payload);
+
+      expect(dataManager.playerScans).toHaveLength(1);
+      expect(dataManager.playerScans[0].id).toBe(payload.scanId);
+      expect(dataManager.playerScans[0].tokenId).toBe('jaw001');
+      expect(dataManager.playerScans[0].deviceId).toBe('PLAYER_001');
+      expect(eventListener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip duplicate player scans by scanId', () => {
+      const payload = {
+        scanId: '550e8400-e29b-41d4-a716-446655440000',
+        tokenId: 'jaw001',
+        deviceId: 'PLAYER_001',
+        timestamp: '2025-12-16T10:30:00Z'
+      };
+
+      dataManager.handlePlayerScan(payload);
+      dataManager.handlePlayerScan(payload); // Duplicate
+
+      expect(dataManager.playerScans).toHaveLength(1);
+    });
+
+    it('should return player scans via getter', () => {
+      const payload = {
+        scanId: 'scan-123',
+        tokenId: 'token1',
+        deviceId: 'player-001',
+        timestamp: new Date().toISOString()
+      };
+
+      dataManager.handlePlayerScan(payload);
+
+      const scans = dataManager.getPlayerScans();
+      expect(scans).toHaveLength(1);
+      expect(scans[0].tokenId).toBe('token1');
+    });
+
+    it('should set player scans from server (sync:full)', () => {
+      const eventListener = jest.fn();
+      dataManager.addEventListener('player-scans:synced', eventListener);
+
+      const serverScans = [
+        { id: 'scan-1', tokenId: 'token1', deviceId: 'player-001', timestamp: '2025-12-16T10:00:00Z' },
+        { id: 'scan-2', tokenId: 'token2', deviceId: 'player-002', timestamp: '2025-12-16T10:05:00Z' }
+      ];
+
+      dataManager.setPlayerScansFromServer(serverScans);
+
+      expect(dataManager.playerScans).toEqual(serverScans);
+      expect(eventListener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reject invalid input to setPlayerScansFromServer', () => {
+      dataManager.playerScans = [{ id: 'existing' }];
+
+      dataManager.setPlayerScansFromServer(null);
+      dataManager.setPlayerScansFromServer('not-an-array');
+
+      // Should not change existing state
+      expect(dataManager.playerScans).toHaveLength(1);
+    });
+
+    it('should clear playerScans on resetForNewSession', () => {
+      dataManager.playerScans = [{ id: 'scan-1', tokenId: 'token1' }];
+
+      dataManager.resetForNewSession('new-session-id');
+
+      expect(dataManager.playerScans).toEqual([]);
+    });
+  });
+
+  describe('Game Activity (getGameActivity)', () => {
+    it('should return empty activity when no scans or transactions', () => {
+      const activity = dataManager.getGameActivity();
+
+      expect(activity.tokens).toEqual([]);
+      expect(activity.stats).toEqual({
+        totalTokens: 0,
+        available: 0,
+        claimed: 0,
+        claimedWithoutDiscovery: 0,
+        totalPlayerScans: 0
+      });
+    });
+
+    it('should track player discovery (available status)', () => {
+      dataManager.handlePlayerScan({
+        scanId: 'scan-1',
+        tokenId: 'token1',
+        deviceId: 'player-001',
+        timestamp: '2025-12-16T10:00:00Z',
+        tokenData: { SF_MemoryType: 'Personal' }
+      });
+
+      const activity = dataManager.getGameActivity();
+
+      expect(activity.tokens).toHaveLength(1);
+      expect(activity.tokens[0].tokenId).toBe('token1');
+      expect(activity.tokens[0].status).toBe('available');
+      expect(activity.tokens[0].discoveredByPlayers).toBe(true);
+      expect(activity.tokens[0].events).toHaveLength(1);
+      expect(activity.tokens[0].events[0].type).toBe('discovery');
+      expect(activity.stats.available).toBe(1);
+      expect(activity.stats.claimed).toBe(0);
+    });
+
+    it('should track multiple scans of same token', () => {
+      dataManager.handlePlayerScan({
+        scanId: 'scan-1',
+        tokenId: 'token1',
+        deviceId: 'player-001',
+        timestamp: '2025-12-16T10:00:00Z'
+      });
+      dataManager.handlePlayerScan({
+        scanId: 'scan-2',
+        tokenId: 'token1',
+        deviceId: 'player-002',
+        timestamp: '2025-12-16T10:05:00Z'
+      });
+
+      const activity = dataManager.getGameActivity();
+
+      expect(activity.tokens).toHaveLength(1);
+      expect(activity.tokens[0].events).toHaveLength(2);
+      expect(activity.tokens[0].events[0].type).toBe('discovery');
+      expect(activity.tokens[0].events[1].type).toBe('scan');
+      expect(activity.stats.totalPlayerScans).toBe(2);
+    });
+
+    it('should track GM claim after player discovery', () => {
+      // Player discovers first
+      dataManager.handlePlayerScan({
+        scanId: 'scan-1',
+        tokenId: 'token1',
+        deviceId: 'player-001',
+        timestamp: '2025-12-16T10:00:00Z',
+        tokenData: { SF_MemoryType: 'Personal', SF_ValueRating: 3 }
+      });
+
+      // GM claims
+      dataManager.transactions.push({
+        id: 'tx-1',
+        tokenId: 'token1',
+        teamId: 'Team Alpha',
+        mode: 'blackmarket',
+        timestamp: '2025-12-16T10:05:00Z',
+        status: 'accepted',
+        memoryType: 'Personal',
+        valueRating: 3
+      });
+
+      const activity = dataManager.getGameActivity();
+
+      expect(activity.tokens).toHaveLength(1);
+      expect(activity.tokens[0].status).toBe('claimed');
+      expect(activity.tokens[0].discoveredByPlayers).toBe(true);
+      expect(activity.tokens[0].events).toHaveLength(2);
+      expect(activity.tokens[0].events[0].type).toBe('discovery');
+      expect(activity.tokens[0].events[1].type).toBe('claim');
+      expect(activity.tokens[0].events[1].teamId).toBe('Team Alpha');
+      expect(activity.stats.claimed).toBe(1);
+      expect(activity.stats.available).toBe(0);
+    });
+
+    it('should flag GM-only claims (not discovered by players)', () => {
+      // GM claims directly without player scan
+      dataManager.transactions.push({
+        id: 'tx-1',
+        tokenId: 'token1',
+        teamId: 'Team Alpha',
+        mode: 'blackmarket',
+        timestamp: '2025-12-16T10:05:00Z',
+        status: 'accepted',
+        memoryType: 'Technical',
+        valueRating: 5
+      });
+
+      const activity = dataManager.getGameActivity();
+
+      expect(activity.tokens).toHaveLength(1);
+      expect(activity.tokens[0].status).toBe('claimed');
+      expect(activity.tokens[0].discoveredByPlayers).toBe(false);
+      expect(activity.tokens[0].events).toHaveLength(1);
+      expect(activity.tokens[0].events[0].type).toBe('claim');
+      expect(activity.stats.claimedWithoutDiscovery).toBe(1);
+    });
+
+    it('should include detective mode summary in claim event', () => {
+      dataManager.transactions.push({
+        id: 'tx-1',
+        tokenId: 'token1',
+        teamId: 'Team Beta',
+        mode: 'detective',
+        timestamp: '2025-12-16T10:05:00Z',
+        status: 'accepted',
+        summary: 'Encrypted server logs revealing unauthorized access...',
+        memoryType: 'Personal',
+        valueRating: 3
+      });
+
+      const activity = dataManager.getGameActivity();
+
+      expect(activity.tokens[0].events[0].type).toBe('claim');
+      expect(activity.tokens[0].events[0].mode).toBe('detective');
+      expect(activity.tokens[0].events[0].summary).toBe('Encrypted server logs revealing unauthorized access...');
+    });
+
+    it('should NOT include summary for blackmarket claims', () => {
+      dataManager.transactions.push({
+        id: 'tx-1',
+        tokenId: 'token1',
+        teamId: 'Team Alpha',
+        mode: 'blackmarket',
+        timestamp: '2025-12-16T10:05:00Z',
+        status: 'accepted',
+        summary: 'Should not appear',
+        memoryType: 'Personal',
+        valueRating: 3
+      });
+
+      const activity = dataManager.getGameActivity();
+
+      expect(activity.tokens[0].events[0].summary).toBeNull();
+    });
+
+    it('should sort events by timestamp within each token', () => {
+      // Add events in wrong order
+      dataManager.transactions.push({
+        id: 'tx-1',
+        tokenId: 'token1',
+        teamId: 'Team Alpha',
+        mode: 'blackmarket',
+        timestamp: '2025-12-16T10:10:00Z',
+        status: 'accepted',
+        memoryType: 'Personal',
+        valueRating: 3
+      });
+
+      dataManager.handlePlayerScan({
+        scanId: 'scan-1',
+        tokenId: 'token1',
+        deviceId: 'player-001',
+        timestamp: '2025-12-16T10:00:00Z'
+      });
+
+      const activity = dataManager.getGameActivity();
+
+      // Events should be sorted: discovery (10:00) before claim (10:10)
+      expect(activity.tokens[0].events[0].type).toBe('discovery');
+      expect(activity.tokens[0].events[1].type).toBe('claim');
+    });
+
+    it('should skip non-accepted transactions', () => {
+      dataManager.transactions.push({
+        id: 'tx-1',
+        tokenId: 'token1',
+        teamId: 'Team Alpha',
+        mode: 'blackmarket',
+        timestamp: '2025-12-16T10:05:00Z',
+        status: 'duplicate',  // Not accepted
+        memoryType: 'Personal',
+        valueRating: 3
+      });
+
+      const activity = dataManager.getGameActivity();
+
+      expect(activity.tokens).toHaveLength(0);
+    });
+
+    it('should handle multiple tokens with different statuses', () => {
+      // Token 1: Player discovered only
+      dataManager.handlePlayerScan({
+        scanId: 'scan-1',
+        tokenId: 'token1',
+        deviceId: 'player-001',
+        timestamp: '2025-12-16T10:00:00Z'
+      });
+
+      // Token 2: Player discovered + GM claimed
+      dataManager.handlePlayerScan({
+        scanId: 'scan-2',
+        tokenId: 'token2',
+        deviceId: 'player-002',
+        timestamp: '2025-12-16T10:01:00Z'
+      });
+      dataManager.transactions.push({
+        id: 'tx-1',
+        tokenId: 'token2',
+        teamId: 'Team Alpha',
+        mode: 'blackmarket',
+        timestamp: '2025-12-16T10:10:00Z',
+        status: 'accepted',
+        memoryType: 'Business',
+        valueRating: 4
+      });
+
+      // Token 3: GM claimed without discovery
+      dataManager.transactions.push({
+        id: 'tx-2',
+        tokenId: 'token3',
+        teamId: 'Team Beta',
+        mode: 'blackmarket',
+        timestamp: '2025-12-16T10:15:00Z',
+        status: 'accepted',
+        memoryType: 'Technical',
+        valueRating: 5
+      });
+
+      const activity = dataManager.getGameActivity();
+
+      expect(activity.stats.totalTokens).toBe(3);
+      expect(activity.stats.available).toBe(1);  // token1
+      expect(activity.stats.claimed).toBe(2);     // token2, token3
+      expect(activity.stats.claimedWithoutDiscovery).toBe(1);  // token3
+      expect(activity.stats.totalPlayerScans).toBe(2);
+    });
+  });
 });

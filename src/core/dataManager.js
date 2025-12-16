@@ -30,6 +30,7 @@ export class DataManager extends EventTarget {
     this.scannedTokens = new Set();
     this.backendScores = new Map();  // Store scores from orchestrator
     this.currentSessionId = null;  // Track current session for duplicate detection scope
+    this.playerScans = [];  // Player scanner activity (discovery events)
 
     // Scoring configuration from shared module
     this.SCORING_CONFIG = SCORING_CONFIG;
@@ -285,6 +286,7 @@ export class DataManager extends EventTarget {
     this.currentSession = [];
     this.scannedTokens.clear();
     this.transactions = [];
+    this.playerScans = [];  // Clear player scan activity
     this.currentSessionId = sessionId;
     this.backendScores.clear();  // Clear networked mode scores
 
@@ -628,6 +630,187 @@ export class DataManager extends EventTarget {
     }));
 
     this.debug?.log(`Score updated from backend for team ${scoreData.teamId}: $${scoreData.currentScore}`);
+  }
+
+  /**
+   * Handle player scan event from WebSocket broadcast
+   * Player scans track token discoveries (no scoring, just activity tracking)
+   * @param {Object} payload - Player scan event payload
+   * @param {string} payload.scanId - UUID of persisted scan record
+   * @param {string} payload.tokenId - Token that was scanned
+   * @param {string} payload.deviceId - Player scanner device ID
+   * @param {string} payload.timestamp - When scan occurred
+   * @param {string} [payload.memoryType] - Token memory type
+   * @param {boolean} [payload.videoQueued] - Whether video was queued
+   * @param {Object} [payload.tokenData] - Token metadata
+   */
+  handlePlayerScan(payload) {
+    // Check for duplicate scan (by scanId)
+    const exists = this.playerScans.some(scan => scan.id === payload.scanId);
+    if (exists) {
+      this.debug?.log('[DataManager] Skipping duplicate player scan', payload.scanId);
+      return;
+    }
+
+    const playerScan = {
+      id: payload.scanId,
+      tokenId: payload.tokenId,
+      deviceId: payload.deviceId,
+      timestamp: payload.timestamp,
+      memoryType: payload.memoryType || null,
+      videoQueued: payload.videoQueued || false,
+      tokenData: payload.tokenData || null
+    };
+
+    this.playerScans.push(playerScan);
+
+    // Emit event for UI updates (event-driven architecture)
+    this.debug?.log('[DataManager] Dispatching player-scan:added event');
+    this.dispatchEvent(new CustomEvent('player-scan:added', {
+      detail: { playerScan }
+    }));
+
+    this.debug?.log('[DataManager] Player scan added', {
+      scanId: payload.scanId,
+      tokenId: payload.tokenId,
+      deviceId: payload.deviceId
+    });
+  }
+
+  /**
+   * Get player scans array
+   * @returns {Array} All player scan records
+   */
+  getPlayerScans() {
+    return this.playerScans;
+  }
+
+  /**
+   * Set player scans from sync:full payload
+   * Called on reconnect to restore player scan state
+   * @param {Array} playerScans - Array of player scan records from server
+   */
+  setPlayerScansFromServer(playerScans) {
+    if (!Array.isArray(playerScans)) {
+      this.debug?.log('[DataManager] setPlayerScansFromServer: invalid input (not array)', true);
+      return;
+    }
+    this.playerScans = playerScans;
+    this.debug?.log(`[DataManager] Synced ${playerScans.length} player scans from server`);
+
+    // Emit event for UI updates
+    this.dispatchEvent(new CustomEvent('player-scans:synced', {
+      detail: { playerScans }
+    }));
+  }
+
+  /**
+   * Get unified game activity - merges player scans and GM transactions
+   * Returns token-centric lifecycle view with full event timeline
+   *
+   * Token lifecycle paths:
+   * - Path A: Player discovers → More scans → GM claims (normal flow)
+   * - Path B: GM claims directly (no player discovery)
+   * - Path C: Player discovers → Never claimed (still available)
+   *
+   * @returns {Object} { tokens: Array, stats: Object }
+   */
+  getGameActivity() {
+    const tokenMap = new Map();
+
+    // Process player scans - preserve EACH scan as an event
+    this.playerScans.forEach((scan) => {
+      if (!tokenMap.has(scan.tokenId)) {
+        // First scan for this token = discovery event
+        tokenMap.set(scan.tokenId, {
+          tokenId: scan.tokenId,
+          tokenData: scan.tokenData || {},
+          events: [{
+            type: 'discovery',  // First scan = discovery
+            timestamp: scan.timestamp,
+            deviceId: scan.deviceId
+          }],
+          status: 'available',
+          discoveredByPlayers: true
+        });
+      } else {
+        // Subsequent scans preserved individually
+        tokenMap.get(scan.tokenId).events.push({
+          type: 'scan',
+          timestamp: scan.timestamp,
+          deviceId: scan.deviceId
+        });
+      }
+    });
+
+    // Process transactions (GM claims) - include full details
+    this.transactions.forEach(tx => {
+      // Skip non-accepted transactions
+      if (tx.status && tx.status !== 'accepted') {
+        return;
+      }
+
+      let activity = tokenMap.get(tx.tokenId);
+
+      if (!activity) {
+        // GM claimed without player discovery - create token entry
+        // Look up token data from tokenManager if available
+        const tokenData = this.tokenManager?.findToken(tx.tokenId);
+        activity = {
+          tokenId: tx.tokenId,
+          tokenData: tokenData ? {
+            SF_MemoryType: tokenData.SF_MemoryType,
+            SF_ValueRating: tokenData.SF_ValueRating,
+            SF_Group: tokenData.SF_Group || null
+          } : {
+            SF_MemoryType: tx.memoryType,
+            SF_ValueRating: tx.valueRating
+          },
+          events: [],
+          status: 'claimed',
+          discoveredByPlayers: false  // Flag: GM-only claim
+        };
+        tokenMap.set(tx.tokenId, activity);
+      }
+
+      // Calculate points for this transaction
+      const points = this.calculateTokenValue(tx);
+
+      // Add claim event with full details
+      activity.events.push({
+        type: 'claim',
+        timestamp: tx.timestamp,
+        mode: tx.mode,
+        teamId: tx.teamId,
+        points: points,
+        groupProgress: tx.groupBonusInfo ? {
+          name: tx.groupBonusInfo.groupName,
+          found: tx.groupBonusInfo.found,
+          total: tx.groupBonusInfo.total
+        } : null,
+        // Include summary for detective mode (exposed evidence)
+        summary: tx.mode === 'detective' ? (tx.summary || tx.tokenData?.summary || null) : null
+      });
+      activity.status = 'claimed';
+    });
+
+    // Sort events within each token by timestamp
+    tokenMap.forEach(activity => {
+      activity.events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    });
+
+    const tokens = Array.from(tokenMap.values());
+
+    // Calculate stats
+    const stats = {
+      totalTokens: tokens.length,
+      available: tokens.filter(t => t.status === 'available').length,
+      claimed: tokens.filter(t => t.status === 'claimed').length,
+      claimedWithoutDiscovery: tokens.filter(t => t.status === 'claimed' && !t.discoveredByPlayers).length,
+      totalPlayerScans: this.playerScans.length
+    };
+
+    return { tokens, stats };
   }
 
   /**
