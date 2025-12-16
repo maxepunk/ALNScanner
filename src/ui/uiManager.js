@@ -296,18 +296,20 @@ class UIManager {
 
   /**
    * Render scoreboard
+   * @param {HTMLElement|null} container - Optional container element. Defaults to #scoreboardContainer
    */
-  renderScoreboard() {
+  renderScoreboard(container = null) {
     const dataSource = this._getDataSource();
     if (!dataSource || !this.app) return;
 
-    const container = document.getElementById('scoreboardContainer');
-    if (!container) return;
+    // Use provided container or default to scoreboardContainer
+    const targetContainer = container || document.getElementById('scoreboardContainer');
+    if (!targetContainer) return;
 
     const teamScores = dataSource.getTeamScores();
 
     if (teamScores.length === 0) {
-      container.innerHTML = `
+      targetContainer.innerHTML = `
         <div class="empty-state">
           <h3>No Teams Yet</h3>
           <p>Teams will appear here after scanning tokens</p>
@@ -321,7 +323,7 @@ class UIManager {
       '<div class="score-source" style="text-align: center; margin: 10px 0; padding: 10px; background: rgba(103,126,234,0.1); border-radius: 8px; font-size: 14px;">🔗 Live from Orchestrator</div>' :
       '<div class="score-source" style="text-align: center; margin: 10px 0; padding: 10px; background: rgba(255,152,0,0.1); border-radius: 8px; font-size: 14px;">📱 Local Calculation</div>';
 
-    container.innerHTML = scoreSource + teamScores.map((team, index) => {
+    targetContainer.innerHTML = scoreSource + teamScores.map((team, index) => {
       const rank = index + 1;
       const rankClass = rank <= 3 ? `rank-${rank}` : '';
       const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
