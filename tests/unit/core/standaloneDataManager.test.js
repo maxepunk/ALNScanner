@@ -89,7 +89,7 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
       expect(manager.sessionData.transactions.length).toBe(1);
     });
 
-    it('should emit standalone:transaction-added event', (done) => {
+    it('should emit transaction:added event', (done) => {
       const transaction = {
         tokenId: 'token1',
         teamId: '001',
@@ -98,7 +98,7 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
         timestamp: new Date().toISOString()
       };
 
-      manager.addEventListener('standalone:transaction-added', (event) => {
+      manager.addEventListener('transaction:added', (event) => {
         expect(event.detail.transaction).toEqual(transaction);
         expect(event.detail.sessionId).toBe(manager.sessionData.sessionId);
         expect(event.detail.totalTransactions).toBe(1);
@@ -210,7 +210,7 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
       expect(manager.sessionData.teams['001'].lastScanTime).toBe(timestamp);
     });
 
-    it('should emit standalone:scores-updated event', (done) => {
+    it('should emit team-score:updated event', (done) => {
       const transaction = {
         tokenId: 'token1',
         teamId: '001',
@@ -219,7 +219,7 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
         timestamp: new Date().toISOString()
       };
 
-      manager.addEventListener('standalone:scores-updated', (event) => {
+      manager.addEventListener('team-score:updated', (event) => {
         expect(event.detail.teamId).toBe('001');
         expect(event.detail.teamScores).toEqual(expect.arrayContaining([
           expect.objectContaining({ teamId: '001', score: 1000 })
@@ -519,8 +519,8 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
     it('should emit multiple events during transaction processing', () => {
       const events = [];
 
-      manager.addEventListener('standalone:transaction-added', () => events.push('transaction-added'));
-      manager.addEventListener('standalone:scores-updated', () => events.push('scores-updated'));
+      manager.addEventListener('transaction:added', () => events.push('transaction-added'));
+      manager.addEventListener('team-score:updated', () => events.push('scores-updated'));
       manager.addEventListener('standalone:session-saved', () => events.push('session-saved'));
 
       manager.addTransaction({
@@ -540,11 +540,11 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
       let listener1Called = false;
       let listener2Called = false;
 
-      manager.addEventListener('standalone:transaction-added', () => {
+      manager.addEventListener('transaction:added', () => {
         listener1Called = true;
       });
 
-      manager.addEventListener('standalone:transaction-added', () => {
+      manager.addEventListener('transaction:added', () => {
         listener2Called = true;
         expect(listener1Called).toBe(true);
         done();
