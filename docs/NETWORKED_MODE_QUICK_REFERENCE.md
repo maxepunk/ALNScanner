@@ -48,12 +48,16 @@
 - All auto-recovered with exponential backoff (max 5 retries)
 
 ## Team Entry Screen (Step 4)
-**Action:** Enter numeric team ID via keypad
-- Click 1, 2, 3... to enter digits (max 10 digits)
-- Click CLEAR to reset
-- Click ENTER to confirm
 
-**Display:** Large number shows as entered: `_` → `1` → `12` → `123`
+**Networked Mode:**
+- Dropdown selector shows existing teams from session
+- "Add Team" button creates new team if needed
+- Select team from dropdown → Click confirm
+
+**Standalone Mode:**
+- Text input field (`#standaloneTeamName`)
+- Enter team name (any string)
+- Click CLEAR to reset, ENTER to confirm
 
 **On Enter:** Team Entry transitions to Scan Screen
 
@@ -227,7 +231,7 @@
 - [ ] Health check passes (3s timeout)
 - [ ] Password correct (HTTP auth succeeds)
 - [ ] WebSocket handshake succeeds
-- [ ] Team Entry screen shows with numeric keypad
+- [ ] Team Entry screen shows (dropdown for networked, text input for standalone)
 - [ ] Team ID entered and confirmed
 - [ ] Scan Screen shows "Team XXX Ready"
 - [ ] NFC tap or manual entry works

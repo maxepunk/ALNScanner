@@ -400,6 +400,7 @@ ALNScanner/
 
 **UI Layer ([src/ui/](src/ui/)):**
 - [uiManager.js](src/ui/uiManager.js) - Screen navigation, stats rendering, error display
+  - `renderScoreboard(container?)` - Parameterized: defaults to `#scoreboardContainer`, accepts any container
 - [settings.js](src/ui/settings.js) - localStorage persistence for config
 - [ScreenUpdateManager.js](src/ui/ScreenUpdateManager.js) - Centralized event-to-screen routing (Phase 3)
 - [connectionWizard.js](src/ui/connectionWizard.js) - Network auth flow UI
@@ -472,6 +473,25 @@ screenUpdateManager.registerScreen('myNewScreen', {
   }
 });
 ```
+
+**Container Handlers (DOM elements that update regardless of screen):**
+```javascript
+// Container handlers run for ANY matching container present in DOM
+// Unlike screen handlers, these don't check for .active class
+screenUpdateManager.registerContainer('admin-score-board', {
+  'team-score:updated': (eventData, container) => {
+    UIManager.renderScoreboard(container);
+  }
+});
+```
+
+**Difference: Screen vs Container Handlers:**
+- `registerScreen()`: Only runs when that screen has `.active` class
+- `registerContainer()`: Runs for any container present in DOM (e.g., both scoreboards)
+
+**Current Containers:**
+- `scoreboardContainer` - Main scoreboard screen (scanner-view)
+- `admin-score-board` - Admin panel inline scoreboard (admin-view)
 
 **Key Files:**
 - `src/ui/ScreenUpdateManager.js` - The manager class
@@ -625,13 +645,19 @@ Handles various RFID formats:
 
 ### SessionManager (src/admin/SessionManager.js)
 
-**WebSocket Commands (NOT HTTP):**
+**Session Creation:**
+Sessions start with an empty teams array. Teams are created dynamically during gameplay:
 ```javascript
-// Create session
+// Create session (teams array typically empty - teams added dynamically)
 socket.emit('gm:command', {
     event: 'gm:command',
-    data: { action: 'session:create', payload: { name, teams } },
+    data: { action: 'session:create', payload: { name, teams: [] } },
     timestamp: new Date().toISOString()
+});
+
+// Add team mid-game (via team entry UI)
+socket.emit('gm:command', {
+    data: { action: 'session:addTeam', payload: { teamId: 'TeamName' } }
 });
 
 // Pause/Resume/End
