@@ -30,6 +30,8 @@ describe('NetworkedSession', () => {
     // Setup mock implementations
     mockClient = {
       destroy: jest.fn(),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
     };
 
     mockConnectionManager = {
@@ -468,6 +470,116 @@ describe('NetworkedSession', () => {
             }),
           },
         })
+      );
+    });
+  });
+
+  describe('global WebSocket event handlers', () => {
+    let messageHandler;
+
+    beforeEach(async () => {
+      // Add addEventListener mock to client
+      mockClient.addEventListener = jest.fn();
+      mockClient.removeEventListener = jest.fn();
+
+      // Add required dataManager methods for WebSocket event handling
+      mockDataManager.updateTeamScoreFromBackend = jest.fn();
+      mockDataManager.addTransaction = jest.fn();
+      mockDataManager.removeTransaction = jest.fn();
+      mockDataManager.clearBackendScores = jest.fn();
+
+      await session.initialize();
+
+      // Get the message:received handler that was registered on client
+      const messageCall = mockClient.addEventListener.mock.calls.find(
+        (call) => call[0] === 'message:received'
+      );
+      messageHandler = messageCall ? messageCall[1] : null;
+    });
+
+    it('should register message:received handler on client', () => {
+      expect(mockClient.addEventListener).toHaveBeenCalledWith(
+        'message:received',
+        expect.any(Function)
+      );
+      expect(messageHandler).toBeDefined();
+    });
+
+    it('should update DataManager on score:updated event', () => {
+      const scorePayload = {
+        teamId: '001',
+        currentScore: 5000,
+        tokensScanned: 3
+      };
+
+      messageHandler({ detail: { type: 'score:updated', payload: scorePayload } });
+
+      expect(mockDataManager.updateTeamScoreFromBackend).toHaveBeenCalledWith(scorePayload);
+    });
+
+    it('should update DataManager on sync:full event with scores', () => {
+      const scores = [
+        { teamId: '001', currentScore: 5000 },
+        { teamId: '002', currentScore: 3000 }
+      ];
+
+      messageHandler({ detail: { type: 'sync:full', payload: { scores } } });
+
+      expect(mockDataManager.updateTeamScoreFromBackend).toHaveBeenCalledTimes(2);
+      expect(mockDataManager.updateTeamScoreFromBackend).toHaveBeenCalledWith(scores[0]);
+      expect(mockDataManager.updateTeamScoreFromBackend).toHaveBeenCalledWith(scores[1]);
+    });
+
+    it('should update DataManager on sync:full event with transactions', () => {
+      const recentTransactions = [
+        { id: 'tx1', tokenId: 'token1' },
+        { id: 'tx2', tokenId: 'token2' }
+      ];
+
+      messageHandler({ detail: { type: 'sync:full', payload: { recentTransactions } } });
+
+      expect(mockDataManager.addTransaction).toHaveBeenCalledTimes(2);
+      expect(mockDataManager.addTransaction).toHaveBeenCalledWith(recentTransactions[0]);
+      expect(mockDataManager.addTransaction).toHaveBeenCalledWith(recentTransactions[1]);
+    });
+
+    it('should add transaction on transaction:new event', () => {
+      const transaction = { id: 'tx1', tokenId: 'token1', teamId: '001' };
+
+      messageHandler({ detail: { type: 'transaction:new', payload: { transaction } } });
+
+      expect(mockDataManager.addTransaction).toHaveBeenCalledWith(transaction);
+    });
+
+    it('should remove transaction on transaction:deleted event', () => {
+      const transactionId = 'tx-to-delete';
+
+      messageHandler({ detail: { type: 'transaction:deleted', payload: { transactionId } } });
+
+      expect(mockDataManager.removeTransaction).toHaveBeenCalledWith(transactionId);
+    });
+
+    it('should clear scores on scores:reset event', () => {
+      messageHandler({ detail: { type: 'scores:reset', payload: {} } });
+
+      expect(mockDataManager.clearBackendScores).toHaveBeenCalled();
+    });
+
+    it('should not call dataManager methods for unhandled event types', () => {
+      messageHandler({ detail: { type: 'video:status', payload: { status: 'playing' } } });
+
+      expect(mockDataManager.updateTeamScoreFromBackend).not.toHaveBeenCalled();
+      expect(mockDataManager.addTransaction).not.toHaveBeenCalled();
+      expect(mockDataManager.removeTransaction).not.toHaveBeenCalled();
+      expect(mockDataManager.clearBackendScores).not.toHaveBeenCalled();
+    });
+
+    it('should remove message handler on destroy()', async () => {
+      await session.destroy();
+
+      expect(mockClient.removeEventListener).toHaveBeenCalledWith(
+        'message:received',
+        expect.any(Function)
       );
     });
   });

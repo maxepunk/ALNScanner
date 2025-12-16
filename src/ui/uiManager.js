@@ -176,6 +176,9 @@ class UIManager {
     if (screenName === 'teamEntry' && this.app?.initTeamEntryUI) {
       this.app.initTeamEntryUI();
     }
+    if (screenName === 'scoreboard') {
+      this.renderScoreboard();
+    }
   }
 
   /**

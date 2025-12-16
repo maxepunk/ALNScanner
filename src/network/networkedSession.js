@@ -116,6 +116,10 @@ export class NetworkedSession extends EventTarget {
     }
 
     if (this.services.client) {
+      // Remove message handler first
+      if (this._messageHandler) {
+        this.services.client.removeEventListener('message:received', this._messageHandler);
+      }
       this.services.client.destroy();
     }
 
@@ -184,10 +188,44 @@ export class NetworkedSession extends EventTarget {
       this.dispatchEvent(new CustomEvent('auth:required'));
     };
 
+    // Global WebSocket → DataManager event handler
+    // Updates state for ALL WebSocket events, regardless of active screen/view
+    this._messageHandler = (event) => {
+      const { type, payload } = event.detail;
+
+      switch (type) {
+        case 'score:updated':
+          this.dataManager.updateTeamScoreFromBackend(payload);
+          break;
+        case 'sync:full':
+          if (payload.scores) {
+            payload.scores.forEach(s => this.dataManager.updateTeamScoreFromBackend(s));
+          }
+          if (payload.recentTransactions) {
+            payload.recentTransactions.forEach(tx => this.dataManager.addTransaction(tx));
+          }
+          break;
+        case 'transaction:new':
+          if (payload.transaction) {
+            this.dataManager.addTransaction(payload.transaction);
+          }
+          break;
+        case 'transaction:deleted':
+          if (payload.transactionId) {
+            this.dataManager.removeTransaction(payload.transactionId);
+          }
+          break;
+        case 'scores:reset':
+          this.dataManager.clearBackendScores();
+          break;
+      }
+    };
+
     // Wire events
     this.services.connectionManager.addEventListener('connected', this._connectedHandler);
     this.services.connectionManager.addEventListener('disconnected', this._disconnectedHandler);
     this.services.connectionManager.addEventListener('auth:required', this._authRequiredHandler);
+    this.services.client.addEventListener('message:received', this._messageHandler);
   }
 
   /**
