@@ -54,6 +54,10 @@ export class ScreenUpdateManager {
     // Screen handlers: screenId -> { eventType: handler, ... }
     this.screenHandlers = new Map();
 
+    // Container handlers: containerId -> { eventType: handler, ... }
+    // Always run if container element exists in DOM (regardless of active screen)
+    this.containerHandlers = {};
+
     // Track connected data sources for cleanup (hot-reload, unmount)
     // Map<dataSource, Map<eventType, boundHandler>>
     this.connectedSources = new Map();
@@ -110,6 +114,21 @@ export class ScreenUpdateManager {
   }
 
   /**
+   * Register container-specific handlers
+   * Container handlers run for ANY container that exists in DOM, regardless of active screen.
+   * Use for UI elements that should update globally (scoreboards, transaction logs, etc.)
+   *
+   * @param {string} containerId - DOM element ID (e.g., 'scoreboardContainer', 'admin-score-board')
+   * @param {Object} handlers - Map of eventType -> handler function
+   *   Handler signature: (eventData, containerElement) => void
+   */
+  registerContainer(containerId, handlers) {
+    this.containerHandlers[containerId] = handlers;
+    const eventTypes = Object.keys(handlers).join(', ');
+    this.debug?.log(`[ScreenUpdateManager] Registered container '${containerId}' for events: ${eventTypes}`);
+  }
+
+  /**
    * Get the currently active screen ID
    * @returns {string|null} Screen ID without 'Screen' suffix, or null
    */
@@ -135,7 +154,8 @@ export class ScreenUpdateManager {
   /**
    * Handle a data update event
    * 1. Run all global handlers for this event type
-   * 2. If active screen has a handler for this event, run it
+   * 2. Run container handlers for any container that exists in DOM
+   * 3. If active screen has a handler for this event, run it
    *
    * @param {string} eventType - Event name (e.g., 'transaction:added')
    * @param {*} eventData - Event payload (from CustomEvent.detail)
@@ -153,7 +173,19 @@ export class ScreenUpdateManager {
       }
     }
 
-    // Step 2: Run screen-specific handler (if active)
+    // Step 2: Run container handlers (for any container that exists in DOM)
+    for (const [containerId, handlers] of Object.entries(this.containerHandlers)) {
+      const container = document.getElementById(containerId);
+      if (container && handlers[eventType]) {
+        try {
+          handlers[eventType](eventData, container);
+        } catch (error) {
+          console.error(`[ScreenUpdateManager] Container handler error for ${containerId}/${eventType}:`, error);
+        }
+      }
+    }
+
+    // Step 3: Run screen-specific handler (if active)
     const activeScreenId = this.getActiveScreenId();
     if (!activeScreenId) {
       this.debug?.log('[ScreenUpdateManager] No active screen, skipping screen handler');

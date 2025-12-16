@@ -418,6 +418,141 @@ describe('ScreenUpdateManager', () => {
     });
   });
 
+  describe('container handlers', () => {
+    beforeEach(() => {
+      document.body.innerHTML = '';
+    });
+
+    afterEach(() => {
+      document.body.innerHTML = '';
+    });
+
+    it('should initialize with empty containerHandlers object', () => {
+      expect(screenUpdateManager.containerHandlers).toEqual({});
+    });
+
+    it('should register container handlers', () => {
+      const handler = jest.fn();
+      screenUpdateManager.registerContainer('scoreboardContainer', {
+        'team-score:updated': handler
+      });
+
+      expect(screenUpdateManager.containerHandlers['scoreboardContainer']).toBeDefined();
+      expect(screenUpdateManager.containerHandlers['scoreboardContainer']['team-score:updated']).toBe(handler);
+    });
+
+    it('should call container handler if element exists in DOM', () => {
+      document.body.innerHTML = '<div id="scoreboardContainer"></div>';
+      const handler = jest.fn();
+
+      screenUpdateManager.registerContainer('scoreboardContainer', {
+        'team-score:updated': handler
+      });
+
+      screenUpdateManager.onDataUpdate('team-score:updated', { teamId: '001' });
+
+      expect(handler).toHaveBeenCalled();
+    });
+
+    it('should NOT call container handler if element missing from DOM', () => {
+      // Don't add element to DOM
+      const handler = jest.fn();
+
+      screenUpdateManager.registerContainer('missingElement', {
+        'team-score:updated': handler
+      });
+
+      screenUpdateManager.onDataUpdate('team-score:updated', { teamId: '001' });
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('should pass event data and container element to handler', () => {
+      document.body.innerHTML = '<div id="testContainer"></div>';
+      const handler = jest.fn();
+
+      screenUpdateManager.registerContainer('testContainer', {
+        'test:event': handler
+      });
+
+      screenUpdateManager.onDataUpdate('test:event', { data: 'test' });
+
+      expect(handler).toHaveBeenCalledWith(
+        { data: 'test' },
+        document.getElementById('testContainer')
+      );
+    });
+
+    it('should call multiple container handlers for same event', () => {
+      document.body.innerHTML = `
+        <div id="scoreboardContainer"></div>
+        <div id="admin-score-board"></div>
+      `;
+      const handler1 = jest.fn();
+      const handler2 = jest.fn();
+
+      screenUpdateManager.registerContainer('scoreboardContainer', {
+        'team-score:updated': handler1
+      });
+      screenUpdateManager.registerContainer('admin-score-board', {
+        'team-score:updated': handler2
+      });
+
+      screenUpdateManager.onDataUpdate('team-score:updated', { teamId: '001' });
+
+      expect(handler1).toHaveBeenCalled();
+      expect(handler2).toHaveBeenCalled();
+    });
+
+    it('should handle errors in container handlers gracefully', () => {
+      document.body.innerHTML = '<div id="errorContainer"></div>';
+      const errorHandler = jest.fn().mockImplementation(() => {
+        throw new Error('Container handler error');
+      });
+      const goodHandler = jest.fn();
+
+      screenUpdateManager.registerContainer('errorContainer', {
+        'test:event': errorHandler
+      });
+      screenUpdateManager.registerGlobalHandler('test:event', goodHandler);
+
+      // Should not throw
+      expect(() => {
+        screenUpdateManager.onDataUpdate('test:event', {});
+      }).not.toThrow();
+
+      // Global handler should still run
+      expect(goodHandler).toHaveBeenCalled();
+    });
+
+    it('should log registration', () => {
+      screenUpdateManager.registerContainer('testContainer', {
+        'event1': jest.fn(),
+        'event2': jest.fn()
+      });
+
+      expect(mockDebug.log).toHaveBeenCalledWith(
+        expect.stringContaining("Registered container 'testContainer'")
+      );
+    });
+
+    it('should run container handlers AFTER global handlers', () => {
+      document.body.innerHTML = '<div id="testContainer"></div>';
+      const callOrder = [];
+
+      screenUpdateManager.registerGlobalHandler('test:event', () => {
+        callOrder.push('global');
+      });
+      screenUpdateManager.registerContainer('testContainer', {
+        'test:event': () => callOrder.push('container')
+      });
+
+      screenUpdateManager.onDataUpdate('test:event', {});
+
+      expect(callOrder).toEqual(['global', 'container']);
+    });
+  });
+
   describe('integration: full event flow', () => {
     beforeEach(() => {
       document.body.innerHTML = `
