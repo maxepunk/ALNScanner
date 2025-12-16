@@ -31,12 +31,10 @@ test.describe('Diagnostic - Step by step', () => {
     await standaloneBtn.click();
     await page.waitForSelector('#teamEntryScreen.active', { timeout: 5000 });
 
-    // Enter team
-    await page.click('button[data-action="app.appendNumber"][data-arg="1"]');
-    await page.click('button[data-action="app.appendNumber"][data-arg="2"]');
-    await page.click('button[data-action="app.appendNumber"][data-arg="3"]');
+    // Enter team (text input for standalone mode)
+    await page.locator('#standaloneTeamName').fill('123');
 
-    const teamDisplay = await page.locator('#teamDisplay').textContent();
+    const teamDisplay = await page.locator('#standaloneTeamName').inputValue();
     console.log(`Team display: "${teamDisplay}"`);
 
     // Confirm
@@ -66,10 +64,8 @@ test.describe('Diagnostic - Step by step', () => {
     await standaloneBtn.click();
     await page.waitForSelector('#teamEntryScreen.active', { timeout: 5000 });
 
-    // Enter team
-    await page.click('button[data-action="app.appendNumber"][data-arg="1"]');
-    await page.click('button[data-action="app.appendNumber"][data-arg="2"]');
-    await page.click('button[data-action="app.appendNumber"][data-arg="3"]');
+    // Enter team (text input for standalone mode)
+    await page.locator('#standaloneTeamName').fill('123');
     await page.click('button[data-action="app.confirmTeamId"]');
     await page.waitForSelector('#scanScreen.active', { timeout: 5000 });
 

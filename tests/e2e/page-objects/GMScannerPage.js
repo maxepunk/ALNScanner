@@ -36,10 +36,9 @@ class GMScannerPage {
     this.standaloneBtn = page.locator('button[data-action="app.selectGameMode"][data-arg="standalone"]');
     this.networkedBtn = page.locator('button[data-action="app.selectGameMode"][data-arg="networked"]');
 
-    // Team entry elements
-    this.teamDisplay = page.locator('#teamDisplay');
+    // Team entry elements (standalone mode uses text input)
+    this.teamNameInput = page.locator('#standaloneTeamName');
     this.confirmTeamBtn = page.locator('button[data-action="app.confirmTeamId"]');
-    this.clearTeamBtn = page.locator('button[data-action="app.clearTeamId"]');
 
     // Scan screen elements
     this.currentTeam = page.locator('#currentTeam');
@@ -97,14 +96,11 @@ class GMScannerPage {
   }
 
   /**
-   * Enter team ID using numpad
-   * @param {string} teamId - Team ID (e.g., "123")
+   * Enter team name using text input (standalone mode)
+   * @param {string} teamName - Team name (e.g., "001" or "Team Alpha")
    */
-  async enterTeam(teamId) {
-    for (const digit of teamId) {
-      const button = this.page.locator(`button[data-action="app.appendNumber"][data-arg="${digit}"]`);
-      await button.click();
-    }
+  async enterTeam(teamName) {
+    await this.teamNameInput.fill(teamName);
   }
 
   /**
@@ -116,18 +112,18 @@ class GMScannerPage {
   }
 
   /**
-   * Clear team ID
+   * Clear team name input
    */
   async clearTeam() {
-    await this.clearTeamBtn.click();
+    await this.teamNameInput.clear();
   }
 
   /**
-   * Get current team display value
+   * Get current team name input value
    * @returns {Promise<string>}
    */
   async getTeamDisplay() {
-    return await this.teamDisplay.textContent();
+    return await this.teamNameInput.inputValue();
   }
 
   /**

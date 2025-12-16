@@ -215,10 +215,8 @@ test.describe('Phase 2: Admin Module Validation', () => {
       await page.locator('button[data-action="app.selectGameMode"][data-arg="standalone"]').click();
       await expect(page.locator('#teamEntryScreen.active')).toBeVisible({ timeout: 5000 });
 
-      // Enter team ID
-      for (const digit of '001') {
-        await page.locator(`button[data-action="app.appendNumber"][data-arg="${digit}"]`).click();
-      }
+      // Enter team name (text input for standalone mode)
+      await page.locator('#standaloneTeamName').fill('001');
       await page.locator('button[data-action="app.confirmTeamId"]').click();
 
       // Should be on scan screen

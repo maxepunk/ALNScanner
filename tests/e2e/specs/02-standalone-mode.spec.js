@@ -167,10 +167,10 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     let teamDisplay = await scanner.getTeamDisplay();
     expect(teamDisplay).toBe('999');
 
-    // Clear team ID
+    // Clear team name
     await scanner.clearTeam();
     teamDisplay = await scanner.getTeamDisplay();
-    expect(teamDisplay).toBe('_');
+    expect(teamDisplay).toBe('');
   });
 
   test('should prevent confirming empty team ID', async () => {
@@ -184,7 +184,7 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
 
     // Team display should show empty
     const teamDisplay = await scanner.getTeamDisplay();
-    expect(teamDisplay).toBe('_');
+    expect(teamDisplay).toBe('');
   });
 
   test('should persist settings across page reload', async ({ page }) => {
@@ -227,9 +227,9 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     // Should return to team entry screen
     await expect(scanner.teamEntryScreen).toBeVisible();
 
-    // Team display should be empty (cleared)
+    // Team name should be preserved (UX improvement - allows continuing with same team)
     const teamDisplay = await scanner.getTeamDisplay();
-    expect(teamDisplay).toBe('_');
+    expect(teamDisplay).toBe('555');
   });
 
   test('should allow finishing team after scan', async () => {
