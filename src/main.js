@@ -165,17 +165,30 @@ screenUpdateManager.registerScreen('teamDetails', {
   }
 });
 
-// Scoreboard screen: Re-render when scores change
-screenUpdateManager.registerScreen('scoreboard', {
-  'scores:cleared': () => {
-    Debug.log('[main.js] Scoreboard active - clearing after reset');
-    const scoreTable = document.querySelector('#scoreboardScreen #team-scores-table tbody');
-    if (scoreTable) {
-      scoreTable.innerHTML = '';
-    }
+// ============================================================================
+// CONTAINER HANDLERS (run for ANY container present in DOM, regardless of screen)
+// ============================================================================
+
+// Scoreboard containers - update ALL scoreboards when scores change
+screenUpdateManager.registerContainer('scoreboardContainer', {
+  'team-score:updated': (eventData, container) => {
+    Debug.log('[main.js] Updating scoreboardContainer');
+    UIManager.renderScoreboard(container);
   },
-  'team-score:updated': () => {
-    UIManager.renderScoreboard();
+  'scores:cleared': (eventData, container) => {
+    Debug.log('[main.js] Clearing scoreboardContainer');
+    container.innerHTML = '';
+  }
+});
+
+screenUpdateManager.registerContainer('admin-score-board', {
+  'team-score:updated': (eventData, container) => {
+    Debug.log('[main.js] Updating admin-score-board');
+    UIManager.renderScoreboard(container);
+  },
+  'scores:cleared': (eventData, container) => {
+    Debug.log('[main.js] Clearing admin-score-board');
+    container.innerHTML = '';
   }
 });
 
