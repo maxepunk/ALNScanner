@@ -157,25 +157,17 @@ export class MonitoringDisplay {
   _handleTransactionNew(payload) {
     if (payload?.transaction) {
       Debug.log('[MonitoringDisplay] Calling updateTransactionDisplay');
-
-      // Add to DataManager for scanner view history
-      if (this.dataManager) {
-        this.dataManager.addTransaction(payload.transaction);
-      }
-
-      // Update admin panel transaction log
+      // NOTE: DataManager state update is handled by NetworkedSession global listener
+      // This method only updates admin panel UI
       this.updateTransactionDisplay(payload.transaction);
     }
   }
 
   _handleScoreUpdated(payload) {
-    Debug.log('[MonitoringDisplay] Calling updateScoreDisplay');
-
-    // Update DataManager cache BEFORE displaying
-    if (this.dataManager && payload) {
-      this.dataManager.updateTeamScoreFromBackend(payload);
-    }
-    this.updateScoreDisplay(payload);
+    Debug.log('[MonitoringDisplay] Score updated event received');
+    // NOTE: DataManager state update is handled by NetworkedSession global listener
+    // NOTE: Scoreboard UI updates are handled by container handlers in ScreenUpdateManager
+    // This method is now a no-op for score display (UI handled elsewhere)
   }
 
   _handleSessionUpdate(payload) {
@@ -251,27 +243,16 @@ export class MonitoringDisplay {
 
   _handleScoresReset() {
     Debug.log('[MonitoringDisplay] Scores reset broadcast received');
-
-    if (this.dataManager) {
-      this.dataManager.clearBackendScores();
-    }
-
-    // Clear admin panel score board
-    const scoreBoard = document.getElementById('admin-score-board');
-    if (scoreBoard) {
-      const tbody = scoreBoard.querySelector('tbody');
-      if (tbody) tbody.innerHTML = '';
-    }
+    // NOTE: DataManager state update is handled by NetworkedSession global listener
+    // NOTE: Scoreboard UI updates are handled by container handlers in ScreenUpdateManager
+    // Admin panel clearing is handled by container handler 'scores:cleared' event
   }
 
   _handleTransactionDeleted(payload) {
     Debug.log('[MonitoringDisplay] Transaction deleted:', payload?.transactionId);
+    // NOTE: DataManager state update is handled by NetworkedSession global listener
 
-    if (this.dataManager && payload?.transactionId) {
-      this.dataManager.removeTransaction(payload.transactionId);
-    }
-
-    // Remove from admin panel transaction log
+    // Remove from admin panel transaction log (UI-only update)
     const transactionLog = document.getElementById('admin-transaction-log');
     if (transactionLog && payload?.transactionId) {
       const txElement = transactionLog.querySelector(`[data-transaction-id="${payload.transactionId}"]`);
@@ -384,49 +365,11 @@ export class MonitoringDisplay {
     }
   }
 
-  /**
-   * Update score board display
-   */
-  updateScoreDisplay(scoreData) {
-    Debug.log('[MonitoringDisplay] updateScoreDisplay called');
-
-    if (!scoreData) {
-      Debug.log('[MonitoringDisplay] updateScoreDisplay: no scoreData provided', true);
-      return;
-    }
-
-    const scoreBoard = document.getElementById('admin-score-board');
-    if (!scoreBoard) {
-      Debug.log('[MonitoringDisplay] updateScoreDisplay: #admin-score-board not found', true);
-      return;
-    }
-
-    // Build score table from DataManager.backendScores
-    if (this.dataManager?.backendScores) {
-      Debug.log(`[MonitoringDisplay] DataManager.backendScores size: ${this.dataManager.backendScores.size}`);
-
-      let html = '<table class="score-table"><tr><th>Team</th><th>Tokens</th><th>Score</th></tr>';
-
-      this.dataManager.backendScores.forEach((teamScore, teamId) => {
-        const tokensScanned = teamScore.tokensScanned || 0;
-        const currentScore = teamScore.currentScore || 0;
-
-        html += `<tr>
-          <td class="team-link" data-action="app.showTeamDetails" data-arg="${teamId}">
-            ${teamId}
-          </td>
-          <td>${tokensScanned}</td>
-          <td>${currentScore.toLocaleString()}</td>
-        </tr>`;
-      });
-
-      html += '</table>';
-      scoreBoard.innerHTML = html;
-      Debug.log('[MonitoringDisplay] Updated #admin-score-board');
-    } else {
-      Debug.log('[MonitoringDisplay] DataManager.backendScores not available', true);
-    }
-  }
+  // NOTE: updateScoreDisplay() has been removed
+  // Scoreboard updates are now handled by:
+  // 1. NetworkedSession global listener updates DataManager.backendScores
+  // 2. DataManager emits 'team-score:updated'
+  // 3. ScreenUpdateManager container handlers render to #admin-score-board
 
   /**
    * Update session display with rich status UI
@@ -780,28 +723,13 @@ export class MonitoringDisplay {
       this.updateVideoDisplay(syncData.videoStatus);
     }
 
-    // Update scores
-    if (syncData.scores && Array.isArray(syncData.scores)) {
-      syncData.scores.forEach(scoreData => {
-        if (this.dataManager) {
-          this.dataManager.updateTeamScoreFromBackend(scoreData);
-        }
-      });
+    // NOTE: Score state updates are handled by NetworkedSession global listener
+    // NOTE: Scoreboard UI updates are handled by container handlers in ScreenUpdateManager
 
-      if (syncData.scores.length > 0) {
-        this.updateScoreDisplay(syncData.scores[0]);
-      }
-    }
-
-    // Update transactions
+    // Update transactions - UI only (state handled by NetworkedSession)
     if (syncData.recentTransactions && Array.isArray(syncData.recentTransactions)) {
-      if (this.dataManager && syncData.session?.id) {
-        Debug.log(`[MonitoringDisplay] Populating DataManager with ${syncData.recentTransactions.length} transactions`);
-        syncData.recentTransactions.forEach(tx => {
-          this.dataManager.addTransaction(tx);
-        });
-      }
-
+      // NOTE: DataManager.addTransaction is handled by NetworkedSession global listener
+      // Here we only update the admin panel UI
       const transactionLog = document.getElementById('admin-transaction-log');
       if (transactionLog) {
         transactionLog.innerHTML = '';
@@ -834,11 +762,8 @@ export class MonitoringDisplay {
   refreshAllDisplays() {
     Debug.log('[MonitoringDisplay] refreshAllDisplays called');
     if (this.dataManager) {
-      // Refresh score display
-      if (this.dataManager.backendScores?.size > 0) {
-        const firstScore = Array.from(this.dataManager.backendScores.values())[0];
-        this.updateScoreDisplay(firstScore);
-      }
+      // NOTE: Score display refresh is handled by ScreenUpdateManager container handlers
+      // The container handler will render #admin-score-board when 'team-score:updated' events fire
 
       // Refresh transaction log
       if (this.dataManager.transactions?.length > 0) {

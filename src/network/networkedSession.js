@@ -197,7 +197,17 @@ export class NetworkedSession extends EventTarget {
         case 'score:updated':
           this.dataManager.updateTeamScoreFromBackend(payload);
           break;
+
         case 'sync:full':
+          // Session boundary detection (DRY: same logic as session:update)
+          this._handleSessionBoundary(payload.session?.id);
+
+          // Restore scanned tokens from server state (handles reconnection)
+          if (payload.deviceScannedTokens) {
+            this.dataManager.setScannedTokensFromServer(payload.deviceScannedTokens);
+          }
+
+          // Sync scores and transactions
           if (payload.scores) {
             payload.scores.forEach(s => this.dataManager.updateTeamScoreFromBackend(s));
           }
@@ -205,16 +215,28 @@ export class NetworkedSession extends EventTarget {
             payload.recentTransactions.forEach(tx => this.dataManager.addTransaction(tx));
           }
           break;
+
+        case 'session:update':
+          // Session lifecycle: detect boundary changes
+          if (payload.status === 'ended') {
+            this.dataManager.resetForNewSession(null);
+          } else {
+            this._handleSessionBoundary(payload.id);
+          }
+          break;
+
         case 'transaction:new':
           if (payload.transaction) {
             this.dataManager.addTransaction(payload.transaction);
           }
           break;
+
         case 'transaction:deleted':
           if (payload.transactionId) {
             this.dataManager.removeTransaction(payload.transactionId);
           }
           break;
+
         case 'scores:reset':
           this.dataManager.clearBackendScores();
           break;
@@ -226,6 +248,21 @@ export class NetworkedSession extends EventTarget {
     this.services.connectionManager.addEventListener('disconnected', this._disconnectedHandler);
     this.services.connectionManager.addEventListener('auth:required', this._authRequiredHandler);
     this.services.client.addEventListener('message:received', this._messageHandler);
+  }
+
+  /**
+   * Handle session boundary detection (DRY helper)
+   * Resets DataManager only when session ID actually changes
+   * @param {string|null} newSessionId - New session ID from server
+   * @private
+   */
+  _handleSessionBoundary(newSessionId) {
+    const currentSessionId = this.dataManager.currentSessionId;
+
+    // Only reset when session ID actually changes (new session started)
+    if (newSessionId && newSessionId !== currentSessionId) {
+      this.dataManager.resetForNewSession(newSessionId);
+    }
   }
 
   /**

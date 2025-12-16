@@ -582,5 +582,90 @@ describe('NetworkedSession', () => {
         expect.any(Function)
       );
     });
+
+    describe('session:update handling', () => {
+      beforeEach(() => {
+        mockDataManager.currentSessionId = 'old-session-123';
+        mockDataManager.resetForNewSession = jest.fn();
+      });
+
+      it('should call resetForNewSession(null) when session ends', () => {
+        const payload = { id: 'old-session-123', status: 'ended' };
+
+        messageHandler({ detail: { type: 'session:update', payload } });
+
+        expect(mockDataManager.resetForNewSession).toHaveBeenCalledWith(null);
+      });
+
+      it('should call resetForNewSession with new ID when session changes', () => {
+        const payload = { id: 'new-session-456', status: 'active' };
+
+        messageHandler({ detail: { type: 'session:update', payload } });
+
+        expect(mockDataManager.resetForNewSession).toHaveBeenCalledWith('new-session-456');
+      });
+
+      it('should NOT call resetForNewSession when same session updates', () => {
+        const payload = { id: 'old-session-123', status: 'active' };
+
+        messageHandler({ detail: { type: 'session:update', payload } });
+
+        expect(mockDataManager.resetForNewSession).not.toHaveBeenCalled();
+      });
+
+      it('should NOT call resetForNewSession when session pauses', () => {
+        const payload = { id: 'old-session-123', status: 'paused' };
+
+        messageHandler({ detail: { type: 'session:update', payload } });
+
+        expect(mockDataManager.resetForNewSession).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('sync:full session boundary handling', () => {
+      beforeEach(() => {
+        mockDataManager.currentSessionId = 'old-session-123';
+        mockDataManager.resetForNewSession = jest.fn();
+        mockDataManager.setScannedTokensFromServer = jest.fn();
+      });
+
+      it('should call resetForNewSession when sync:full has different session ID', () => {
+        const payload = {
+          session: { id: 'new-session-456' },
+          scores: [],
+          recentTransactions: []
+        };
+
+        messageHandler({ detail: { type: 'sync:full', payload } });
+
+        expect(mockDataManager.resetForNewSession).toHaveBeenCalledWith('new-session-456');
+      });
+
+      it('should NOT call resetForNewSession when sync:full has same session ID', () => {
+        const payload = {
+          session: { id: 'old-session-123' },
+          scores: [],
+          recentTransactions: []
+        };
+
+        messageHandler({ detail: { type: 'sync:full', payload } });
+
+        expect(mockDataManager.resetForNewSession).not.toHaveBeenCalled();
+      });
+
+      it('should call setScannedTokensFromServer when deviceScannedTokens present', () => {
+        const deviceScannedTokens = ['token1', 'token2'];
+        const payload = {
+          session: { id: 'old-session-123' },
+          deviceScannedTokens,
+          scores: [],
+          recentTransactions: []
+        };
+
+        messageHandler({ detail: { type: 'sync:full', payload } });
+
+        expect(mockDataManager.setScannedTokensFromServer).toHaveBeenCalledWith(deviceScannedTokens);
+      });
+    });
   });
 });
