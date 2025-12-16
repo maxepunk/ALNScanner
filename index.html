@@ -298,15 +298,8 @@
                 </div>
             </div>
             
-            <div class="filter-bar">
-                <input type="text" id="searchFilter" placeholder="Search..." onkeyup="UIManager.filterTransactions()">
-                <select id="modeFilter" onchange="UIManager.filterTransactions()">
-                    <option value="">All Modes</option>
-                    <option value="detective">Detective Only</option>
-                    <option value="blackmarket">Black Market Only</option>
-                </select>
-            </div>
-            
+            <!-- Filter controls now rendered inside historyContainer by renderGameActivity() -->
+
             <div id="historyContainer" class="history-container">
                 <div class="empty-state">
                     <h3>No Transactions Yet</h3>

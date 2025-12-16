@@ -254,7 +254,8 @@ export class OrchestratorClient extends EventTarget {
       'gm:command:ack',
       'offline:queue:processed',
       'batch:ack',
-      'error'
+      'error',
+      'player:scan'  // Phase 3: Unified Game Activity - player scan broadcasts
     ];
 
     messageTypes.forEach(type => {

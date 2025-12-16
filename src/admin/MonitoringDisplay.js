@@ -156,10 +156,10 @@ export class MonitoringDisplay {
 
   _handleTransactionNew(payload) {
     if (payload?.transaction) {
-      Debug.log('[MonitoringDisplay] Calling updateTransactionDisplay');
+      Debug.log('[MonitoringDisplay] transaction:new received (UI updates via ScreenUpdateManager)');
       // NOTE: DataManager state update is handled by NetworkedSession global listener
-      // This method only updates admin panel UI
-      this.updateTransactionDisplay(payload.transaction);
+      // NOTE: Game Activity UI updates are handled by ScreenUpdateManager container handlers
+      // This method is now a no-op - the transaction:added event from DataManager triggers UI updates
     }
   }
 
@@ -193,13 +193,13 @@ export class MonitoringDisplay {
   }
 
   /**
-   * Clear admin panel displays (transaction log, score board)
+   * Clear admin panel displays (game activity, score board)
    * Called when session ends to ensure no stale data shown
    * @private
    */
   _clearAdminPanelDisplays() {
-    const transactionLog = document.getElementById('admin-transaction-log');
-    if (transactionLog) transactionLog.innerHTML = '';
+    const gameActivity = document.getElementById('admin-game-activity');
+    if (gameActivity) gameActivity.innerHTML = '';
 
     const scoreBoard = document.getElementById('admin-score-board');
     if (scoreBoard) scoreBoard.innerHTML = '';
@@ -726,23 +726,12 @@ export class MonitoringDisplay {
 
   /**
    * Manually refresh all displays from cached data
+   * NOTE: Game Activity is now rendered by app.updateAdminPanel() which calls
+   * UIManager.renderGameActivity() for the #admin-game-activity container.
+   * Score display is handled by ScreenUpdateManager container handlers.
    */
   refreshAllDisplays() {
     Debug.log('[MonitoringDisplay] refreshAllDisplays called');
-    if (this.dataManager) {
-      // NOTE: Score display refresh is handled by ScreenUpdateManager container handlers
-      // The container handler will render #admin-score-board when 'team-score:updated' events fire
-
-      // Refresh transaction log
-      if (this.dataManager.transactions?.length > 0) {
-        const transactionLog = document.getElementById('admin-transaction-log');
-        if (transactionLog) {
-          transactionLog.innerHTML = '';
-          const recent = this.dataManager.transactions.slice(-10).reverse();
-          recent.forEach(tx => this.updateTransactionDisplay(tx));
-        }
-      }
-    }
 
     // Refresh session display
     Debug.log(`[MonitoringDisplay] Refreshing session display. Current session: ${this._currentSession ? this._currentSession.id : 'null'}`);

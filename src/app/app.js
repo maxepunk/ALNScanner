@@ -960,7 +960,11 @@ class App {
 
   showHistory() {
     this.uiManager.updateHistoryStats();
-    this.uiManager.renderTransactions();
+    // Use unified Game Activity renderer (same as admin panel)
+    const historyContainer = document.getElementById('historyContainer');
+    if (historyContainer) {
+      this.uiManager.renderGameActivity(historyContainer, { showSummary: true, showFilters: true });
+    }
     this.uiManager.showScreen('history');
   }
 
@@ -1316,68 +1320,54 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
   // ========== Admin Panel Display Updates ==========
 
   updateAdminPanel() {
-    // In networked mode, delegate to MonitoringDisplay
+    // In networked mode, delegate to MonitoringDisplay for session/device/video status
     if (this.viewController?.adminInstances?.monitoring) {
       this.viewController.adminInstances.monitoring.refreshAllDisplays();
-      return;
     }
 
-    // Fallback for standalone mode (no WebSocket connection)
-    // Calculate scores from local transactions
-    const scoreBoard = document.getElementById('admin-score-board');
-    if (scoreBoard) {
-      const teams = {};
-      this.dataManager.transactions.forEach(tx => {
-        if (!teams[tx.teamId]) {
-          teams[tx.teamId] = {
-            score: 0,
-            count: 0
-          };
-        }
-        teams[tx.teamId].count++;
-        // Use each transaction's mode, not the current setting
-        if (tx.mode === 'blackmarket') {
-          const score = this.dataManager.calculateTokenValue(tx);
-          teams[tx.teamId].score += score;
-        }
-      });
-
-      // Display scores
-      let html = '<table class="score-table"><tr><th>Team</th><th>Tokens</th><th>Score</th></tr>';
-      Object.keys(teams).forEach(teamId => {
-        html += `<tr>
-          <td style="cursor: pointer; color: #007bff; text-decoration: underline;"
-              data-action="app.showTeamDetails" data-arg="${teamId}">
-            ${teamId}
-          </td>
-          <td>${teams[teamId].count}</td>
-          <td>${teams[teamId].score.toLocaleString()}</td>
-        </tr>`;
-      });
-      html += '</table>';
-      scoreBoard.innerHTML = html;
+    // Render Game Activity (unified display for both modes)
+    // This replaces the old transaction log with the new token lifecycle view
+    const gameActivityContainer = document.getElementById('admin-game-activity');
+    if (gameActivityContainer) {
+      this.uiManager.renderGameActivity(gameActivityContainer, { showSummary: true, showFilters: true });
     }
 
-    // Update transaction log
-    const transactionLog = document.getElementById('admin-transaction-log');
-    if (transactionLog && this.dataManager.transactions) {
-      const recentTransactions = this.dataManager.transactions.slice(-10).reverse();
-      let html = '<div class="transaction-list">';
-      recentTransactions.forEach(tx => {
-        // P2.2.4: Add duplicate marker
-        const isDuplicate = tx.status === 'duplicate';
-        const duplicateClass = isDuplicate ? ' duplicate' : '';
-        const duplicateBadge = isDuplicate ? ' <span class="duplicate-badge-small">DUP</span>' : '';
+    // Fallback scoreboard for standalone mode (no WebSocket connection)
+    // In networked mode, scores are rendered by ScreenUpdateManager container handlers
+    if (!this.viewController?.adminInstances?.monitoring) {
+      const scoreBoard = document.getElementById('admin-score-board');
+      if (scoreBoard) {
+        const teams = {};
+        this.dataManager.transactions.forEach(tx => {
+          if (!teams[tx.teamId]) {
+            teams[tx.teamId] = {
+              score: 0,
+              count: 0
+            };
+          }
+          teams[tx.teamId].count++;
+          // Use each transaction's mode, not the current setting
+          if (tx.mode === 'blackmarket') {
+            const score = this.dataManager.calculateTokenValue(tx);
+            teams[tx.teamId].score += score;
+          }
+        });
 
-        html += `<div class="transaction-item${duplicateClass}">
-          <span class="tx-time">${new Date(tx.timestamp).toLocaleTimeString()}</span>
-          <span class="tx-team">${tx.teamId}</span>
-          <span class="tx-token">${tx.tokenId || tx.rfid}${duplicateBadge}</span>
-          <span class="tx-type">${tx.memoryType || 'UNKNOWN'}</span>
-        </div>`;
-      });
-      html += '</div>';
-      transactionLog.innerHTML = html;
+        // Display scores
+        let html = '<table class="score-table"><tr><th>Team</th><th>Tokens</th><th>Score</th></tr>';
+        Object.keys(teams).forEach(teamId => {
+          html += `<tr>
+            <td style="cursor: pointer; color: #007bff; text-decoration: underline;"
+                data-action="app.showTeamDetails" data-arg="${teamId}">
+              ${teamId}
+            </td>
+            <td>${teams[teamId].count}</td>
+            <td>${teams[teamId].score.toLocaleString()}</td>
+          </tr>`;
+        });
+        html += '</table>';
+        scoreBoard.innerHTML = html;
+      }
     }
   }
 

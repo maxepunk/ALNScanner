@@ -19,6 +19,7 @@ jest.mock('../../src/ui/uiManager.js', () => ({
     updateModeDisplay: jest.fn(),
     updateHistoryStats: jest.fn(),
     renderTransactions: jest.fn(),
+    renderGameActivity: jest.fn(),
     renderScoreboard: jest.fn(),
     renderTeamDetails: jest.fn(),
     showToast: jest.fn(),
@@ -727,14 +728,28 @@ describe('App', () => {
   });
 
   describe('History Management', () => {
-    it('should show history screen', () => {
+    it('should show history screen with game activity', () => {
       const UIManager = require('../../src/ui/uiManager.js').default;
+
+      // Mock the historyContainer element
+      const mockContainer = document.createElement('div');
+      mockContainer.id = 'historyContainer';
+      jest.spyOn(document, 'getElementById').mockImplementation((id) => {
+        if (id === 'historyContainer') return mockContainer;
+        return null;
+      });
 
       app.showHistory();
 
       expect(UIManager.updateHistoryStats).toHaveBeenCalled();
-      expect(UIManager.renderTransactions).toHaveBeenCalled();
+      expect(UIManager.renderGameActivity).toHaveBeenCalledWith(
+        mockContainer,
+        { showSummary: true, showFilters: true }
+      );
       expect(UIManager.showScreen).toHaveBeenCalledWith('history');
+
+      // Restore mock
+      document.getElementById.mockRestore();
     });
 
     it('should close history and return to previous screen', () => {
