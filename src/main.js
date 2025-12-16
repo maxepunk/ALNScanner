@@ -169,7 +169,9 @@ screenUpdateManager.registerScreen('teamDetails', {
 // CONTAINER HANDLERS (run for ANY container present in DOM, regardless of screen)
 // ============================================================================
 
-// Scoreboard containers - update ALL scoreboards when scores change
+// Scoreboard containers - both use UIManager.renderScoreboard() for consistent rendering
+// scoreboardContainer: Full scoreboard screen (scanner-view)
+// admin-score-board: Admin panel inline scoreboard (admin-view)
 screenUpdateManager.registerContainer('scoreboardContainer', {
   'team-score:updated': (eventData, container) => {
     Debug.log('[main.js] Updating scoreboardContainer');

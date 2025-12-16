@@ -49,10 +49,10 @@ export class SessionManager {
   /**
    * Create a new game session
    * @param {string} name - Session name (e.g., "Friday Night Game")
-   * @param {string[]} [teams=['001', '002', '003']] - Team IDs
+   * @param {string[]} [teams=[]] - Initial team IDs (teams are typically added dynamically)
    * @returns {Promise<Object>} Session creation response
    */
-  async createSession(name, teams = ['001', '002', '003']) {
+  async createSession(name, teams = []) {
     return sendCommand(this.connection, 'session:create', { name, teams });
   }
 

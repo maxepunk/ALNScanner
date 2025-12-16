@@ -202,10 +202,7 @@ export class MonitoringDisplay {
     if (transactionLog) transactionLog.innerHTML = '';
 
     const scoreBoard = document.getElementById('admin-score-board');
-    if (scoreBoard) {
-      const tbody = scoreBoard.querySelector('tbody');
-      if (tbody) tbody.innerHTML = '';
-    }
+    if (scoreBoard) scoreBoard.innerHTML = '';
 
     Debug.log('[MonitoringDisplay] Admin panel displays cleared');
   }
