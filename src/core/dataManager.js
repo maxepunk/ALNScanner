@@ -595,18 +595,13 @@ export class DataManager extends EventTarget {
 
   /**
    * Update team score from backend broadcast
+   *
+   * SRP: DataManager stores data and emits events. Connection state validation
+   * is NetworkedSession's responsibility - if we receive this call, we're connected.
+   *
    * @param {Object} scoreData - Score data from backend
    */
   updateTeamScoreFromBackend(scoreData) {
-    // DEBUG: Log method entry (Phase 1 instrumentation)
-    console.log('[DataManager] updateTeamScoreFromBackend called:', scoreData);
-
-    // Only update if we're connected to orchestrator
-    if (!this.networkedSession || this.networkedSession.state !== 'connected') {
-      console.log('[DataManager] Skipping score update - not connected. networkedSession:', this.networkedSession);
-      return;
-    }
-
     // Store backend scores for display
     if (!this.backendScores) {
       this.backendScores = new Map();
@@ -622,9 +617,8 @@ export class DataManager extends EventTarget {
       lastUpdate: scoreData.lastUpdate
     });
 
-    console.log('[DataManager] backendScores Map size:', this.backendScores.size, 'Full map:', this.backendScores);
-
     // Emit event for UI updates (event-driven architecture)
+    // ScreenUpdateManager listens and triggers container handlers
     this.dispatchEvent(new CustomEvent('team-score:updated', {
       detail: {
         teamId: scoreData.teamId,
@@ -633,23 +627,20 @@ export class DataManager extends EventTarget {
       }
     }));
 
-    console.log('[DataManager] Emitted team-score:updated event');
-
-    // Also update admin panel if it's active
-    if (this.app?.viewController && this.app.viewController.currentView === 'admin') {
-      this.app.updateAdminPanel();
-    }
-
     this.debug?.log(`Score updated from backend for team ${scoreData.teamId}: $${scoreData.currentScore}`);
   }
 
   /**
    * Get all team scores for scoreboard
+   *
+   * SRP: DataManager returns data. Connection state is NetworkedSession's responsibility.
+   * If we have backend scores, use them - we received them from somewhere (the backend).
+   *
    * @returns {Array} Sorted team scores
    */
   getTeamScores() {
-    // If connected and have backend scores, use those as source of truth
-    if (this.networkedSession?.state === 'connected' && this.backendScores?.size > 0) {
+    // If we have backend scores, use them as source of truth
+    if (this.backendScores?.size > 0) {
       const scores = Array.from(this.backendScores.entries()).map(([teamId, score]) => ({
         teamId,
         score: score.currentScore,
