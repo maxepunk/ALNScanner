@@ -489,11 +489,11 @@
                 <button class="btn btn-danger" data-action="app.adminResetScores">Reset All Scores</button>
             </section>
 
-            <!-- Transaction Log Section -->
+            <!-- Game Activity Section (replaces Transaction Log) -->
             <section class="admin-section">
-                <h3>Recent Transactions</h3>
-                <div id="admin-transaction-log" class="transaction-log">
-                    <!-- Transactions will be populated here -->
+                <h3>Game Activity</h3>
+                <div id="admin-game-activity" class="game-activity-container">
+                    <!-- Rendered by UIManager.renderGameActivity() via ScreenUpdateManager -->
                 </div>
                 <button class="btn btn-secondary" data-action="app.viewFullHistory" style="margin-right: 10px;">
                     View Full History

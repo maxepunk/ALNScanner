@@ -120,17 +120,30 @@ screenUpdateManager.registerGlobalHandler('game-state:updated', () => {
 // NOTE: Screen handlers receive (eventData, app). Use defensive destructuring
 // when accessing eventData properties: `const { prop } = eventData || {}`
 
-// History screen: Re-render transactions when data changes
+// History screen: Re-render game activity when data changes
 screenUpdateManager.registerScreen('history', {
   'transaction:added': () => {
-    Debug.log('[main.js] History screen active - rendering transactions');
+    Debug.log('[main.js] History screen active - rendering game activity');
     UIManager.updateHistoryStats();
-    UIManager.renderTransactions();
+    const historyContainer = document.getElementById('historyContainer');
+    if (historyContainer) {
+      UIManager.renderGameActivity(historyContainer, { showSummary: true, showFilters: true });
+    }
   },
   'transaction:deleted': () => {
     Debug.log('[main.js] History screen active - re-rendering after deletion');
     UIManager.updateHistoryStats();
-    UIManager.renderTransactions();
+    const historyContainer = document.getElementById('historyContainer');
+    if (historyContainer) {
+      UIManager.renderGameActivity(historyContainer, { showSummary: true, showFilters: true });
+    }
+  },
+  'player-scan:added': () => {
+    Debug.log('[main.js] History screen active - rendering game activity (player scan)');
+    const historyContainer = document.getElementById('historyContainer');
+    if (historyContainer) {
+      UIManager.renderGameActivity(historyContainer, { showSummary: true, showFilters: true });
+    }
   }
 });
 
@@ -202,6 +215,26 @@ screenUpdateManager.registerContainer('admin-score-board', {
   }
 });
 
+// Game Activity container (admin panel) - unified token lifecycle display
+screenUpdateManager.registerContainer('admin-game-activity', {
+  'transaction:added': (eventData, container) => {
+    Debug.log('[main.js] Updating admin-game-activity (transaction added)');
+    UIManager.renderGameActivity(container, { showSummary: true, showFilters: true });
+  },
+  'transaction:deleted': (eventData, container) => {
+    Debug.log('[main.js] Updating admin-game-activity (transaction deleted)');
+    UIManager.renderGameActivity(container, { showSummary: true, showFilters: true });
+  },
+  'player-scan:added': (eventData, container) => {
+    Debug.log('[main.js] Updating admin-game-activity (player scan)');
+    UIManager.renderGameActivity(container, { showSummary: true, showFilters: true });
+  },
+  'data:cleared': (eventData, container) => {
+    Debug.log('[main.js] Session reset - clearing admin-game-activity');
+    container.innerHTML = '';
+  }
+});
+
 // ============================================================================
 // CONNECT TO DATA SOURCES
 // ============================================================================
@@ -213,7 +246,8 @@ screenUpdateManager.connectToDataSource(DataManager, [
   'scores:cleared',
   'data:cleared',
   'game-state:updated',
-  'team-score:updated'
+  'team-score:updated',
+  'player-scan:added'  // Game Activity: token lifecycle tracking
 ]);
 
 // Connect ScreenUpdateManager to StandaloneDataManager events (now unified)

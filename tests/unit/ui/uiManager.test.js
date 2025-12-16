@@ -623,6 +623,292 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
     });
   });
 
+  describe('Game Activity Rendering', () => {
+    beforeEach(() => {
+      uiManager.init();
+      // Add container for game activity
+      const gameActivityContainer = document.createElement('div');
+      gameActivityContainer.id = 'admin-game-activity';
+      document.body.appendChild(gameActivityContainer);
+    });
+
+    afterEach(() => {
+      const container = document.getElementById('admin-game-activity');
+      if (container) container.remove();
+    });
+
+    it('should render empty state when no game activity', () => {
+      mockDataManager.getGameActivity = jest.fn(() => ({
+        tokens: [],
+        stats: {
+          totalTokens: 0,
+          available: 0,
+          claimed: 0,
+          claimedWithoutDiscovery: 0,
+          totalPlayerScans: 0
+        }
+      }));
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      expect(container.innerHTML).toContain('No token activity yet');
+    });
+
+    it('should render activity summary with stats', () => {
+      mockDataManager.getGameActivity = jest.fn(() => ({
+        tokens: [
+          {
+            tokenId: 'token1',
+            tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 3 },
+            events: [{ type: 'discovery', timestamp: '2025-11-11T10:00:00Z', deviceId: 'player-001' }],
+            status: 'available',
+            discoveredByPlayers: true
+          }
+        ],
+        stats: {
+          totalTokens: 1,
+          available: 1,
+          claimed: 0,
+          claimedWithoutDiscovery: 0,
+          totalPlayerScans: 1
+        }
+      }));
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container, { showSummary: true });
+
+      expect(container.innerHTML).toContain('activity-summary');
+      expect(container.innerHTML).toContain('1 tokens');
+      expect(container.innerHTML).toContain('1 available');
+      expect(container.innerHTML).toContain('0 claimed');
+    });
+
+    it('should render available token cards', () => {
+      mockDataManager.getGameActivity = jest.fn(() => ({
+        tokens: [
+          {
+            tokenId: 'mem007',
+            tokenData: { SF_MemoryType: 'Business', SF_ValueRating: 3 },
+            events: [
+              { type: 'discovery', timestamp: '2025-11-11T09:30:00Z', deviceId: 'player-002' },
+              { type: 'scan', timestamp: '2025-11-11T09:45:00Z', deviceId: 'player-001' }
+            ],
+            status: 'available',
+            discoveredByPlayers: true
+          }
+        ],
+        stats: { totalTokens: 1, available: 1, claimed: 0, claimedWithoutDiscovery: 0, totalPlayerScans: 2 }
+      }));
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      expect(container.innerHTML).toContain('mem007');
+      expect(container.innerHTML).toContain('AVAILABLE');
+      expect(container.innerHTML).toContain('Business');
+      expect(container.innerHTML).toContain('Discovered');
+    });
+
+    it('should render claimed token cards with team info', () => {
+      mockDataManager.getGameActivity = jest.fn(() => ({
+        tokens: [
+          {
+            tokenId: 'jaw001',
+            tokenData: { SF_MemoryType: 'Personal', SF_ValueRating: 4 },
+            events: [
+              { type: 'discovery', timestamp: '2025-11-11T10:15:00Z', deviceId: 'player-001' },
+              { type: 'claim', timestamp: '2025-11-11T10:25:00Z', mode: 'blackmarket', teamId: 'Alpha', points: 5000, groupProgress: { name: 'Server Logs', found: 2, total: 5 } }
+            ],
+            status: 'claimed',
+            discoveredByPlayers: true
+          }
+        ],
+        stats: { totalTokens: 1, available: 0, claimed: 1, claimedWithoutDiscovery: 0, totalPlayerScans: 1 }
+      }));
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      expect(container.innerHTML).toContain('jaw001');
+      expect(container.innerHTML).toContain('CLAIMED');
+      expect(container.innerHTML).toContain('Alpha');
+      expect(container.innerHTML).toContain('5,000');
+      expect(container.innerHTML).toContain('Black Market');
+    });
+
+    it('should show warning for GM-only claims (no player discovery)', () => {
+      mockDataManager.getGameActivity = jest.fn(() => ({
+        tokens: [
+          {
+            tokenId: 'sec042',
+            tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 5 },
+            events: [
+              { type: 'claim', timestamp: '2025-11-11T10:45:00Z', mode: 'blackmarket', teamId: 'Beta', points: 50000, groupProgress: null }
+            ],
+            status: 'claimed',
+            discoveredByPlayers: false
+          }
+        ],
+        stats: { totalTokens: 1, available: 0, claimed: 1, claimedWithoutDiscovery: 1, totalPlayerScans: 0 }
+      }));
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container, { showSummary: true });
+
+      expect(container.innerHTML).toContain('Not discovered by players');
+      expect(container.innerHTML).toContain('1 GM-only');
+    });
+
+    it('should render detective mode claims with summary', () => {
+      mockDataManager.getGameActivity = jest.fn(() => ({
+        tokens: [
+          {
+            tokenId: 'doc019',
+            tokenData: { SF_MemoryType: 'Personal', SF_ValueRating: 2 },
+            events: [
+              { type: 'discovery', timestamp: '2025-11-11T11:00:00Z', deviceId: 'player-003' },
+              { type: 'claim', timestamp: '2025-11-11T11:15:00Z', mode: 'detective', teamId: 'Gamma', points: 0, groupProgress: null, summary: 'Encrypted server logs revealing unauthorized access' }
+            ],
+            status: 'claimed',
+            discoveredByPlayers: true
+          }
+        ],
+        stats: { totalTokens: 1, available: 0, claimed: 1, claimedWithoutDiscovery: 0, totalPlayerScans: 1 }
+      }));
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      expect(container.innerHTML).toContain('Detective');
+      expect(container.innerHTML).toContain('Encrypted server logs');
+    });
+
+    it('should render filter controls when showFilters is true', () => {
+      mockDataManager.getGameActivity = jest.fn(() => ({
+        tokens: [],
+        stats: { totalTokens: 0, available: 0, claimed: 0, claimedWithoutDiscovery: 0, totalPlayerScans: 0 }
+      }));
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container, { showFilters: true });
+
+      expect(container.innerHTML).toContain('activitySearch');
+      expect(container.innerHTML).toContain('activityFilter');
+    });
+
+    it('should not render summary when showSummary is false', () => {
+      mockDataManager.getGameActivity = jest.fn(() => ({
+        tokens: [],
+        stats: { totalTokens: 0, available: 0, claimed: 0, claimedWithoutDiscovery: 0, totalPlayerScans: 0 }
+      }));
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container, { showSummary: false });
+
+      expect(container.innerHTML).not.toContain('activity-summary');
+    });
+
+    it('should handle missing container gracefully', () => {
+      expect(() => uiManager.renderGameActivity(null)).not.toThrow();
+    });
+
+    it('should handle missing getGameActivity method gracefully', () => {
+      delete mockDataManager.getGameActivity;
+
+      const container = document.getElementById('admin-game-activity');
+      expect(() => uiManager.renderGameActivity(container)).not.toThrow();
+    });
+
+    it('should render group progress info on claims', () => {
+      mockDataManager.getGameActivity = jest.fn(() => ({
+        tokens: [
+          {
+            tokenId: 'grp001',
+            tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 4 },
+            events: [
+              { type: 'discovery', timestamp: '2025-11-11T10:00:00Z', deviceId: 'player-001' },
+              { type: 'claim', timestamp: '2025-11-11T10:30:00Z', mode: 'blackmarket', teamId: 'Delta', points: 20000, groupProgress: { name: 'Server Logs', found: 3, total: 5 } }
+            ],
+            status: 'claimed',
+            discoveredByPlayers: true
+          }
+        ],
+        stats: { totalTokens: 1, available: 0, claimed: 1, claimedWithoutDiscovery: 0, totalPlayerScans: 1 }
+      }));
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      expect(container.innerHTML).toContain('Server Logs');
+      expect(container.innerHTML).toContain('3/5');
+    });
+  });
+
+  describe('Utility Methods - escapeHtml', () => {
+    beforeEach(() => {
+      uiManager.init();
+    });
+
+    it('should escape HTML special characters', () => {
+      const result = uiManager.escapeHtml('<script>alert("xss")</script>');
+      // DOM-based escaping
+      expect(result).toContain('&lt;');
+      expect(result).toContain('&gt;');
+      expect(result).not.toContain('<script');
+    });
+
+    it('should escape ampersands', () => {
+      const result = uiManager.escapeHtml('foo & bar');
+      expect(result).toBe('foo &amp; bar');
+    });
+
+    it('should handle null/undefined', () => {
+      expect(uiManager.escapeHtml(null)).toBe('');
+      expect(uiManager.escapeHtml(undefined)).toBe('');
+    });
+
+    it('should handle empty string', () => {
+      expect(uiManager.escapeHtml('')).toBe('');
+    });
+
+    it('should handle plain text without escaping', () => {
+      const result = uiManager.escapeHtml('Hello World');
+      expect(result).toBe('Hello World');
+    });
+  });
+
+  describe('Utility Methods - _formatTime', () => {
+    beforeEach(() => {
+      uiManager.init();
+    });
+
+    it('should format ISO timestamp to time string', () => {
+      // Note: actual time depends on local timezone and locale
+      const result = uiManager._formatTime('2025-11-11T10:30:00Z');
+      // Should return a time string with hours and minutes (format varies by locale)
+      expect(result).toBeTruthy();
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('should handle invalid timestamp', () => {
+      const result = uiManager._formatTime('invalid');
+      // Returns "Invalid Date" from toLocaleTimeString
+      expect(result).toContain('Invalid');
+    });
+
+    it('should handle null timestamp', () => {
+      const result = uiManager._formatTime(null);
+      expect(result).toBe('');
+    });
+
+    it('should handle undefined timestamp', () => {
+      const result = uiManager._formatTime(undefined);
+      expect(result).toBe('');
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should handle missing dependencies gracefully', () => {
       const managerNoDeps = new UIManager();

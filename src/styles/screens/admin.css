@@ -707,3 +707,252 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ========================================
+   GAME ACTIVITY - Unified Token Lifecycle
+   ======================================== */
+
+/* Activity Summary Bar */
+.activity-summary {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.activity-summary .stat {
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
+}
+
+.activity-summary .stat.available { color: var(--color-accent-success); }
+.activity-summary .stat.claimed { color: var(--color-text-secondary); }
+.activity-summary .stat.warning { color: #f59e0b; }
+
+/* Filter Controls */
+.activity-filters {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.activity-filters .search-input {
+  flex: 1;
+  min-width: 150px;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.activity-filters .filter-select {
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+/* Token Card Grid */
+.activity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+/* Token Card - Base Structure */
+.activity-grid .token-card {
+  background: var(--color-bg-secondary);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  border-left: 4px solid var(--color-accent-success);
+}
+
+.activity-grid .token-card.claimed {
+  border-left-color: var(--color-text-muted);
+}
+
+/* Header: Token ID + Type Badge */
+.token-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.token-card .token-id {
+  font-weight: var(--weight-bold);
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+}
+
+.token-card .token-type {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+/* Type-specific colors */
+.token-card .token-type.type-personal { background: #dbeafe; color: #1e40af; }
+.token-card .token-type.type-business { background: #dcfce7; color: #166534; }
+.token-card .token-type.type-technical { background: #fef3c7; color: #92400e; }
+.token-card .token-type.type-unknown { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+
+.token-card__rating {
+  color: #f59e0b;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+/* Status Bar - Quick-glance current state */
+.token-card__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-3);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
+}
+
+.token-card__status.status-available {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--color-accent-success);
+}
+
+.token-card__status.status-claimed {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+}
+
+.token-card__status .points {
+  margin-left: auto;
+  color: #f59e0b;
+  font-weight: var(--weight-bold);
+}
+
+/* Timeline - Event History */
+.token-card__timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Base event styles */
+.token-card__timeline .event {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  padding: var(--space-2);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+/* Event type borders */
+.token-card__timeline .event.discovery { border-left: 2px solid var(--color-accent-success); }
+.token-card__timeline .event.scan { border-left: 2px solid var(--color-text-muted); }
+.token-card__timeline .event.claim.blackmarket { border-left: 2px solid #f59e0b; }
+.token-card__timeline .event.claim.detective { border-left: 2px solid #3b82f6; }
+.token-card__timeline .event.warning { border-left: 2px solid #ef4444; background: rgba(239, 68, 68, 0.1); }
+
+/* Event components */
+.token-card__timeline .icon { font-size: var(--text-base); flex-shrink: 0; }
+.token-card__timeline .label { font-weight: var(--weight-medium); }
+.token-card__timeline .device { color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--text-xs); }
+.token-card__timeline .time { color: var(--color-text-muted); margin-left: auto; }
+.token-card__timeline .team { color: var(--color-accent-primary); font-weight: var(--weight-semibold); }
+.token-card__timeline .points { color: #f59e0b; font-weight: var(--weight-bold); }
+
+/* Group progress indicator */
+.token-card__timeline .group-progress {
+  width: 100%;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-1);
+}
+
+/* Detective mode - exposed summary */
+.token-card__timeline .exposed-summary {
+  width: 100%;
+  font-size: var(--text-xs);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-1);
+}
+
+.token-card__timeline .exposed-summary .summary-label {
+  color: #3b82f6;
+  font-weight: var(--weight-semibold);
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.token-card__timeline .exposed-summary .summary-text {
+  color: var(--color-text-secondary);
+  font-style: italic;
+  line-height: 1.4;
+  display: block;
+}
+
+/* Available status badge */
+.token-card__timeline .status-badge {
+  background: var(--color-accent-success);
+  color: white;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+
+.token-card__timeline .event.status-available {
+  justify-content: center;
+  background: transparent;
+  border: 1px dashed var(--color-accent-success);
+}
+
+/* Expandable Timeline - Collapse Logic */
+/* Collapsed state: hide additional scans */
+.token-card__timeline[data-expanded="false"] .event.collapsible {
+  display: none;
+}
+
+/* Expanded state: show all */
+.token-card__timeline[data-expanded="true"] .event.collapsible {
+  display: flex;
+}
+
+/* Toggle button */
+.token-card .timeline-toggle {
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.token-card .timeline-toggle:hover {
+  background: var(--color-bg-tertiary);
+}
+
+/* Toggle text visibility based on expand state */
+.token-card__timeline[data-expanded="false"] ~ .timeline-toggle .collapse-text { display: none; }
+.token-card__timeline[data-expanded="true"] ~ .timeline-toggle .expand-text { display: none; }

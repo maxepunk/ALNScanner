@@ -828,6 +828,277 @@ class UIManager {
 
     this.showScreen('result');
   }
+
+  /**
+   * Escape HTML to prevent XSS
+   * @param {string} text - Text to escape
+   * @returns {string} Escaped text
+   */
+  escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  /**
+   * Format timestamp to time string (HH:MM)
+   * @param {string} timestamp - ISO timestamp
+   * @returns {string} Formatted time
+   */
+  _formatTime(timestamp) {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  /**
+   * Unified game activity renderer - used by BOTH admin panel AND historyScreen
+   * @param {HTMLElement} container - Target container
+   * @param {Object} options - Rendering options
+   * @param {boolean} options.showSummary - Show stats bar (default: true)
+   * @param {boolean} options.showFilters - Show search/filter controls (default: true)
+   * @param {string} options.defaultFilter - 'all' | 'available' | 'claimed'
+   */
+  renderGameActivity(container, options = {}) {
+    if (!container) return;
+
+    const { showSummary = true, showFilters = true } = options;
+    const dataSource = this._getDataSource();
+    if (!dataSource) return;
+
+    // Check if getGameActivity exists (only on DataManager, not StandaloneDataManager)
+    if (typeof dataSource.getGameActivity !== 'function') {
+      // Fall back to transactions for standalone mode
+      container.innerHTML = `
+        <div class="empty-state">
+          <h3>Game Activity</h3>
+          <p>Available in networked mode only</p>
+        </div>
+      `;
+      return;
+    }
+
+    const { tokens, stats } = dataSource.getGameActivity();
+
+    let html = '';
+
+    // Summary bar - includes GM-only claims for observability
+    if (showSummary) {
+      html += `
+        <div class="activity-summary">
+          <span class="stat">${stats.totalTokens} tokens</span>
+          <span class="stat available">${stats.available} available</span>
+          <span class="stat claimed">${stats.claimed} claimed</span>
+          ${stats.claimedWithoutDiscovery > 0 ? `
+            <span class="stat warning" title="Tokens claimed by GM without player discovery">
+              ${stats.claimedWithoutDiscovery} GM-only
+            </span>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    // Filter controls
+    if (showFilters) {
+      html += `
+        <div class="activity-filters">
+          <input type="text" id="activitySearch" placeholder="Search tokens..." class="search-input">
+          <select id="activityFilter" class="filter-select">
+            <option value="all">All Tokens</option>
+            <option value="available">Available Only</option>
+            <option value="claimed">Claimed Only</option>
+          </select>
+        </div>
+      `;
+    }
+
+    // Token cards - sorted by MOST RECENT activity (not just discovery)
+    html += '<div class="activity-grid">';
+
+    if (tokens.length === 0) {
+      html += '<div class="empty-state">No token activity yet</div>';
+    } else {
+      // Sort by most recent event per token (last event timestamp)
+      const getLatestTimestamp = (token) => {
+        if (!token.events || !token.events.length) return 0;
+        return new Date(token.events[token.events.length - 1].timestamp);
+      };
+
+      tokens
+        .sort((a, b) => getLatestTimestamp(b) - getLatestTimestamp(a))
+        .forEach(token => {
+          html += this._renderActivityTokenCard(token);
+        });
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+
+    // Attach filter handlers
+    this._attachActivityFilterHandlers(container);
+  }
+
+  /**
+   * Render a single token card for game activity
+   * @param {Object} token - Token activity data
+   * @returns {string} HTML string
+   */
+  _renderActivityTokenCard(token) {
+    const { tokenId, tokenData, events, status, discoveredByPlayers } = token;
+    const memoryType = tokenData?.SF_MemoryType || 'Unknown';
+    const rating = tokenData?.SF_ValueRating || 0;
+
+    // Count scan events for collapse logic
+    const scanEvents = events.filter(e => e.type === 'scan');
+    const hasMultipleScans = scanEvents.length > 0;
+    const claimEvent = events.find(e => e.type === 'claim');
+
+    return `
+      <div class="token-card ${status}" data-token-id="${tokenId}">
+        <!-- Header: Token ID + Type + Rating -->
+        <div class="token-card__header">
+          <span class="token-id">${this.escapeHtml(tokenId)}</span>
+          <span class="token-type type-${memoryType.toLowerCase()}">${memoryType}</span>
+        </div>
+        <div class="token-card__rating">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</div>
+
+        <!-- Status Bar: Quick-glance current state -->
+        <div class="token-card__status status-${status}">
+          ${status === 'claimed'
+            ? `● CLAIMED by ${this.escapeHtml(claimEvent?.teamId || 'Unknown')}
+               ${claimEvent?.mode === 'blackmarket' ? `<span class="points">$${(claimEvent?.points || 0).toLocaleString()}</span>` : ''}`
+            : '○ AVAILABLE'}
+        </div>
+
+        <!-- Timeline: Full event history (expandable) -->
+        <div class="token-card__timeline ${hasMultipleScans ? 'expandable' : ''}"
+             data-expanded="false">
+
+          ${!discoveredByPlayers && status === 'claimed' ? `
+            <div class="event warning">
+              <span class="icon">⚠️</span>
+              <span class="label">Not discovered by players</span>
+            </div>
+          ` : ''}
+
+          ${events.map((event, idx) => this._renderTimelineEvent(event, idx, events.length)).join('')}
+
+          ${status === 'available' ? `
+            <div class="event status-available">
+              <span class="status-badge">AWAITING CLAIM</span>
+            </div>
+          ` : ''}
+        </div>
+
+        ${hasMultipleScans ? `
+          <button class="timeline-toggle" onclick="this.parentElement.querySelector('.token-card__timeline').dataset.expanded =
+            this.parentElement.querySelector('.token-card__timeline').dataset.expanded === 'true' ? 'false' : 'true'">
+            <span class="expand-text">Show ${scanEvents.length} more scans</span>
+            <span class="collapse-text">Collapse</span>
+          </button>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  /**
+   * Render a single timeline event
+   * @param {Object} event - Event data
+   * @param {number} index - Event index
+   * @param {number} totalEvents - Total events count
+   * @returns {string} HTML string
+   */
+  _renderTimelineEvent(event, index, totalEvents) {
+    const time = this._formatTime(event.timestamp);
+
+    switch (event.type) {
+      case 'discovery':
+        return `
+          <div class="event discovery">
+            <span class="icon">👁</span>
+            <span class="label">Discovered</span>
+            <span class="device">${this.escapeHtml(event.deviceId)}</span>
+            <span class="time">${time}</span>
+          </div>
+        `;
+
+      case 'scan':
+        // Additional scans - collapsible by default
+        return `
+          <div class="event scan collapsible">
+            <span class="icon">👁</span>
+            <span class="label">Scanned</span>
+            <span class="device">${this.escapeHtml(event.deviceId)}</span>
+            <span class="time">${time}</span>
+          </div>
+        `;
+
+      case 'claim':
+        return `
+          <div class="event claim ${event.mode}">
+            <span class="icon">${event.mode === 'blackmarket' ? '💰' : '🔍'}</span>
+            <span class="label">${event.mode === 'blackmarket' ? 'Black Market' : 'Detective'}</span>
+            <span class="team">${this.escapeHtml(event.teamId)}</span>
+            <span class="time">${time}</span>
+            ${event.mode === 'blackmarket' ? `<span class="points">$${(event.points || 0).toLocaleString()}</span>` : ''}
+            ${event.groupProgress ? `
+              <div class="group-progress">
+                ${this.escapeHtml(event.groupProgress.name)} (${event.groupProgress.found}/${event.groupProgress.total})
+              </div>
+            ` : ''}
+            ${event.mode === 'detective' && event.summary ? `
+              <div class="exposed-summary">
+                <span class="summary-label">Exposed:</span>
+                <span class="summary-text">${this.escapeHtml(event.summary)}</span>
+              </div>
+            ` : ''}
+          </div>
+        `;
+
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Attach filter handlers for game activity
+   * @param {HTMLElement} container - Container element
+   */
+  _attachActivityFilterHandlers(container) {
+    const searchInput = container.querySelector('#activitySearch');
+    const filterSelect = container.querySelector('#activityFilter');
+
+    if (searchInput) {
+      searchInput.addEventListener('input', () => this._filterGameActivity(container));
+    }
+    if (filterSelect) {
+      filterSelect.addEventListener('change', () => this._filterGameActivity(container));
+    }
+  }
+
+  /**
+   * Filter game activity based on search and filter
+   * @param {HTMLElement} container - Container element
+   */
+  _filterGameActivity(container) {
+    const searchInput = container.querySelector('#activitySearch');
+    const filterSelect = container.querySelector('#activityFilter');
+    const cards = container.querySelectorAll('.token-card');
+
+    const searchTerm = searchInput?.value?.toLowerCase() || '';
+    const filterValue = filterSelect?.value || 'all';
+
+    cards.forEach(card => {
+      const tokenId = card.dataset.tokenId?.toLowerCase() || '';
+      const status = card.classList.contains('claimed') ? 'claimed' : 'available';
+
+      const matchesSearch = !searchTerm || tokenId.includes(searchTerm);
+      const matchesFilter = filterValue === 'all' || status === filterValue;
+
+      card.style.display = matchesSearch && matchesFilter ? 'block' : 'none';
+    });
+  }
 }
 
 // Export class (not pre-created instance)
