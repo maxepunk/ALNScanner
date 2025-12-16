@@ -843,7 +843,10 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
       expect(stored.bonusPoints).toBe(20000);
     });
 
-    it('should not update when disconnected', () => {
+    it('should always store score (SRP: connection state is caller responsibility)', () => {
+      // SRP Architecture: DataManager stores data and emits events.
+      // Connection state validation is NetworkedSession's responsibility.
+      // If updateTeamScoreFromBackend is called, we store regardless of state.
       mockNetworkedSession.state = 'disconnected';
 
       const scoreData = {
@@ -853,7 +856,9 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
 
       dataManager.updateTeamScoreFromBackend(scoreData);
 
-      expect(dataManager.backendScores.size).toBe(0);
+      // Should store even when disconnected - caller controls when this is called
+      expect(dataManager.backendScores.size).toBe(1);
+      expect(dataManager.backendScores.get('001').currentScore).toBe(50000);
     });
 
     it('should emit team-score:updated event', () => {
@@ -878,7 +883,12 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
       expect(eventListener).toHaveBeenCalled(); // DataManager emits events, doesn't call UI directly
     });
 
-    it('should update admin panel if in admin view', () => {
+    it('should emit event for admin panel updates (SRP: event-driven architecture)', () => {
+      // SRP Architecture: DataManager emits events, ScreenUpdateManager handles UI.
+      // Test verifies event is emitted; ScreenUpdateManager tests verify UI updates.
+      const eventListener = jest.fn();
+      dataManager.addEventListener('team-score:updated', eventListener);
+
       mockApp.viewController.currentView = 'admin';
 
       const scoreData = {
@@ -892,7 +902,16 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
 
       dataManager.updateTeamScoreFromBackend(scoreData);
 
-      expect(mockApp.updateAdminPanel).toHaveBeenCalled();
+      // DataManager emits event - ScreenUpdateManager handles actual UI update
+      expect(eventListener).toHaveBeenCalled();
+      expect(eventListener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: expect.objectContaining({
+            teamId: '001',
+            scoreData: expect.objectContaining({ currentScore: 50000 })
+          })
+        })
+      );
     });
 
     it('should emit event with transaction data', () => {
