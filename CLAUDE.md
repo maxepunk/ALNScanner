@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2025-12-08
+Last verified: 2025-12-16
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -237,32 +237,30 @@ localStorage.setItem('aln_auth_token', createValidToken());
 
 ### Scoring System (Black Market Mode Only)
 
-**Base Values (dataManager.js:32-38):**
+**Scoring Configuration (scoring.js:15-29):**
 ```javascript
-BASE_VALUES: {
-    1: 100,      // 1-star token = $100
-    2: 500,      // 2-star = $500
-    3: 1000,     // 3-star = $1,000
-    4: 5000,     // 4-star = $5,000
-    5: 10000     // 5-star = $10,000
-}
-```
-
-**Type Multipliers (dataManager.js:39-44):**
-```javascript
-TYPE_MULTIPLIERS: {
-    'Personal': 1,    // 1x (baseline)
-    'Business': 3,    // 3x
-    'Technical': 5,   // 5x
-    'UNKNOWN': 0      // 0x (no points)
-}
+export const SCORING_CONFIG = {
+    BASE_VALUES: {
+        1: 10000,    // 1-star token = $10,000
+        2: 25000,    // 2-star = $25,000
+        3: 50000,    // 3-star = $50,000
+        4: 75000,    // 4-star = $75,000
+        5: 150000    // 5-star = $150,000
+    },
+    TYPE_MULTIPLIERS: {
+        'Personal': 1,    // 1x (baseline)
+        'Business': 3,    // 3x
+        'Technical': 5,   // 5x
+        'UNKNOWN': 0      // 0x (no points)
+    }
+};
 ```
 
 **Token Score Formula:**
 ```
 tokenScore = BASE_VALUES[valueRating] × TYPE_MULTIPLIERS[memoryType]
 
-Example: 5-star Technical token = $10,000 × 5 = $50,000
+Example: 5-star Technical token = $150,000 × 5 = $750,000
 ```
 
 **Group Completion Bonuses:**
@@ -272,7 +270,7 @@ Example: 5-star Technical token = $10,000 × 5 = $50,000
   - Bonus = (5 - 1) × $15,000 = $60,000
   - Total = $15,000 + $60,000 = $75,000
 
-**Group Completion Rules (dataManager.js:593-615):**
+**Group Completion Rules (dataManager.js:418-471):**
 - Groups must have 2+ tokens
 - Group multiplier must be > 1x
 - Team must collect ALL tokens in group
@@ -389,7 +387,8 @@ ALNScanner/
 - [AdminController.js](src/app/AdminController.js) - Admin module lifecycle management
 
 **Core Layer ([src/core/](src/core/)):**
-- [dataManager.js](src/core/dataManager.js) - Transaction storage, scoring, group completion (both modes)
+- [scoring.js](src/core/scoring.js) - Centralized scoring config (SCORING_CONFIG) and utilities
+- [dataManager.js](src/core/dataManager.js) - Transaction storage, group completion (both modes)
 - [tokenManager.js](src/core/tokenManager.js) - Token database loading, fuzzy matching, group inventory
 
 **Network Layer ([src/network/](src/network/)):**
@@ -406,7 +405,7 @@ ALNScanner/
 - [connectionWizard.js](src/ui/connectionWizard.js) - Network auth flow UI
 
 **Admin Layer ([src/admin/](src/admin/)) - Phase 2/3 Refactor:**
-- [MonitoringDisplay.js](src/admin/MonitoringDisplay.js) - Transaction history, real-time updates
+- [MonitoringDisplay.js](src/admin/MonitoringDisplay.js) - Game Activity display (player discoveries + GM transactions)
 - [SessionManager.js](src/admin/SessionManager.js) - Session create/pause/resume/end
 - [VideoController.js](src/admin/VideoController.js) - Video queue management
 - [SystemMonitor.js](src/admin/SystemMonitor.js) - Health checks, system status
@@ -546,7 +545,7 @@ screenUpdateManager.registerContainer('admin-score-board', {
 - `GET /api/tokens` - Fetch token database (ESP32 scanner use)
 
 **Player Scanner:**
-- `POST /api/scan` - Submit scan (fire-and-forget)
+- `POST /api/scan` - Submit scan (persisted to session.playerScans, broadcast to GMs)
 
 **Session Query:**
 - `GET /api/session` - Get current session (read-only)
@@ -567,8 +566,9 @@ screenUpdateManager.registerContainer('admin-score-board', {
 - `gm:command` - Admin actions (session, video, system)
 
 **Server → Client (Broadcasts):**
-- `sync:full` - Complete state snapshot (auto-sent on connect)
-- `transaction:new` - New transaction processed
+- `sync:full` - Complete state snapshot (auto-sent on connect, includes playerScans)
+- `transaction:new` - New GM transaction processed
+- `player:scan` - Player scanner activity (persisted to session.playerScans)
 - `session:update` - Session lifecycle changes
 - `video:status` - Video playback state
 - `score:updated` - Team score changed

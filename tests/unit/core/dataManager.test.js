@@ -1,9 +1,16 @@
 /**
  * DataManager Tests - Batch 1: Core Structure
  * Testing: Transaction storage, scanned tokens, basic methods
+ *
+ * DRY PRINCIPLE: Expected scores are calculated using production scoring logic
+ * from scoring.js to ensure tests stay in sync when scoring config changes.
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { SCORING_CONFIG, calculateTokenValue } from '../../../src/core/scoring.js';
+
+// Helper to calculate expected score for test assertions (DRY)
+const calcScore = (valueRating, memoryType) => calculateTokenValue({ valueRating, memoryType, isUnknown: false });
 
 describe('DataManager - Batch 1: Core Structure', () => {
   let DataManager;
@@ -92,7 +99,7 @@ describe('DataManager - Batch 1: Core Structure', () => {
 
     it('should have scoring configuration', () => {
       expect(dataManager.SCORING_CONFIG).toBeDefined();
-      expect(dataManager.SCORING_CONFIG.BASE_VALUES[5]).toBe(10000);
+      expect(dataManager.SCORING_CONFIG.BASE_VALUES[5]).toBe(150000);
       expect(dataManager.SCORING_CONFIG.TYPE_MULTIPLIERS['Technical']).toBe(5);
     });
   });
@@ -496,12 +503,14 @@ describe('DataManager - Batch 2: Scoring & Group Completion', () => {
 
       const result = dataManager.calculateTeamScoreWithBonuses('001');
 
-      // 5-star Personal (1x) = 10000 × 1 = 10000
-      // 3-star Technical (5x) = 1000 × 5 = 5000
-      // Total = 15000
-      expect(result.baseScore).toBe(15000);
+      // DRY: Calculate expected scores using production scoring logic
+      const expected5StarPersonal = calcScore(5, 'Personal');
+      const expected3StarTechnical = calcScore(3, 'Technical');
+      const expectedTotal = expected5StarPersonal + expected3StarTechnical;
+
+      expect(result.baseScore).toBe(expectedTotal);
       expect(result.bonusScore).toBe(0);
-      expect(result.totalScore).toBe(15000);
+      expect(result.totalScore).toBe(expectedTotal);
       expect(result.completedGroups).toBe(0);
     });
 
@@ -522,14 +531,17 @@ describe('DataManager - Batch 2: Scoring & Group Completion', () => {
 
       const result = dataManager.calculateTeamScoreWithBonuses('001');
 
-      // Base: (5-star Technical 5x = 50000) + (4-star Technical 5x = 25000) = 75000
+      // DRY: Calculate expected scores using production scoring logic
+      const token1Base = calcScore(5, 'Technical');
+      const token2Base = calcScore(4, 'Technical');
+      const expectedBaseScore = token1Base + token2Base;
       // Bonus: Each token gets (multiplier - 1) × base = 4 × base
-      // Token1 bonus: 50000 × 4 = 200000
-      // Token2 bonus: 25000 × 4 = 100000
-      // Total bonus: 300000
-      expect(result.baseScore).toBe(75000);
-      expect(result.bonusScore).toBe(300000);
-      expect(result.totalScore).toBe(375000);
+      const expectedBonusScore = (token1Base * 4) + (token2Base * 4);
+      const expectedTotalScore = expectedBaseScore + expectedBonusScore;
+
+      expect(result.baseScore).toBe(expectedBaseScore);
+      expect(result.bonusScore).toBe(expectedBonusScore);
+      expect(result.totalScore).toBe(expectedTotalScore);
       expect(result.completedGroups).toBe(1);
     });
 
@@ -549,7 +561,8 @@ describe('DataManager - Batch 2: Scoring & Group Completion', () => {
 
       const result = dataManager.calculateTeamScoreWithBonuses('001');
 
-      expect(result.baseScore).toBe(50000);
+      const expectedBaseScore = calcScore(5, 'Technical');
+      expect(result.baseScore).toBe(expectedBaseScore);
       expect(result.bonusScore).toBe(0);  // No bonus - incomplete
       expect(result.completedGroups).toBe(0);
     });
@@ -564,7 +577,8 @@ describe('DataManager - Batch 2: Scoring & Group Completion', () => {
 
       const result = dataManager.calculateTeamScoreWithBonuses('001');
 
-      expect(result.baseScore).toBe(1000); // Only 3-star Personal
+      const expectedBaseScore = calcScore(3, 'Personal'); // Only 3-star Personal (unknown token = 0)
+      expect(result.baseScore).toBe(expectedBaseScore);
     });
 
     it('should filter by team ID', () => {
@@ -577,7 +591,8 @@ describe('DataManager - Batch 2: Scoring & Group Completion', () => {
 
       const result = dataManager.calculateTeamScoreWithBonuses('001');
 
-      expect(result.baseScore).toBe(10000); // Only team 001's token
+      const expectedBaseScore = calcScore(5, 'Personal'); // Only team 001's token
+      expect(result.baseScore).toBe(expectedBaseScore);
     });
 
     it('should include groupBreakdown for completed groups', () => {
@@ -596,11 +611,17 @@ describe('DataManager - Batch 2: Scoring & Group Completion', () => {
 
       const result = dataManager.calculateTeamScoreWithBonuses('001');
 
+      // DRY: Calculate expected scores using production scoring logic
+      const token1Base = calcScore(5, 'Technical');
+      const token2Base = calcScore(4, 'Technical');
+      const expectedBaseValue = token1Base + token2Base;
+      const expectedBonusValue = (token1Base * 4) + (token2Base * 4);
+
       expect(result.groupBreakdown['Server Logs']).toBeDefined();
       expect(result.groupBreakdown['Server Logs'].tokens).toBe(2);
       expect(result.groupBreakdown['Server Logs'].multiplier).toBe(5);
-      expect(result.groupBreakdown['Server Logs'].baseValue).toBe(75000);
-      expect(result.groupBreakdown['Server Logs'].bonusValue).toBe(300000);
+      expect(result.groupBreakdown['Server Logs'].baseValue).toBe(expectedBaseValue);
+      expect(result.groupBreakdown['Server Logs'].bonusValue).toBe(expectedBonusValue);
     });
   });
 
@@ -705,7 +726,8 @@ describe('DataManager - Batch 2: Scoring & Group Completion', () => {
 
       const result = dataManager.getGlobalStats();
 
-      expect(result.blackMarketScore).toBe(10000);  // 5-star Personal 1x
+      const expectedBlackMarketScore = calcScore(5, 'Personal'); // 5-star Personal 1x
+      expect(result.blackMarketScore).toBe(expectedBlackMarketScore);
       expect(result.detectiveValue).toBe(3);  // Just star rating
     });
   });
@@ -1020,9 +1042,13 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
 
       const result = dataManager.calculateLocalTeamScores();
 
+      // DRY: Calculate expected scores using production scoring logic
+      const expected5StarPersonal = calcScore(5, 'Personal');
+      const expected4StarTechnical = calcScore(4, 'Technical');
+
       expect(result).toHaveLength(2);
-      expect(result[0].score).toBe(25000); // 4-star Technical 5x (sorted by score)
-      expect(result[1].score).toBe(10000); // 5-star Personal 1x
+      expect(result[0].score).toBe(expected4StarTechnical); // 4-star Technical 5x (sorted by score)
+      expect(result[1].score).toBe(expected5StarPersonal); // 5-star Personal 1x
     });
 
     it('should include transaction arrays', () => {
@@ -1095,8 +1121,14 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
 
       const result = dataManager.getEnhancedTeamTransactions('001');
 
-      expect(result.completedGroups[0].totalBaseValue).toBe(75000); // 50000 + 25000
-      expect(result.completedGroups[0].bonusValue).toBe(300000); // 4x each token's base
+      // DRY: Calculate expected scores using production scoring logic
+      const token1Base = calcScore(5, 'Technical');
+      const token2Base = calcScore(4, 'Technical');
+      const expectedTotalBaseValue = token1Base + token2Base;
+      const expectedBonusValue = (token1Base * 4) + (token2Base * 4);
+
+      expect(result.completedGroups[0].totalBaseValue).toBe(expectedTotalBaseValue);
+      expect(result.completedGroups[0].bonusValue).toBe(expectedBonusValue); // 4x each token's base
     });
   });
 

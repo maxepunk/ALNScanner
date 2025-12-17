@@ -140,7 +140,7 @@ All modules in `src/utils/` converted to ES6:
 - getGlobalStats() - Aggregate statistics
 
 **Business Logic Validated:**
-- Base values: 1★=$100, 2★=$500, 3★=$1k, 4★=$5k, 5★=$10k
+- Base values: 1★=$10k, 2★=$25k, 3★=$50k, 4★=$75k, 5★=$150k
 - Type multipliers: Personal=1x, Business=3x, Technical=5x
 - Group bonuses: (multiplier - 1) × baseValue per token
 - Only groups with 2+ tokens and multiplier > 1 eligible
