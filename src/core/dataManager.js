@@ -722,9 +722,15 @@ export class DataManager extends EventTarget {
     this.playerScans.forEach((scan) => {
       if (!tokenMap.has(scan.tokenId)) {
         // First scan for this token = discovery event
+        const tokenData = scan.tokenData || {};
         tokenMap.set(scan.tokenId, {
           tokenId: scan.tokenId,
-          tokenData: scan.tokenData || {},
+          tokenData: tokenData,
+          // Calculate potential value for all tokens (what it's worth if claimed)
+          potentialValue: this.calculateTokenValue({
+            valueRating: tokenData.SF_ValueRating,
+            memoryType: tokenData.SF_MemoryType
+          }),
           events: [{
             type: 'discovery',  // First scan = discovery
             timestamp: scan.timestamp,
@@ -755,17 +761,25 @@ export class DataManager extends EventTarget {
       if (!activity) {
         // GM claimed without player discovery - create token entry
         // Look up token data from tokenManager if available
-        const tokenData = this.tokenManager?.findToken(tx.tokenId);
+        const lookedUpToken = this.tokenManager?.findToken(tx.tokenId);
+        const tokenData = lookedUpToken ? {
+          SF_MemoryType: lookedUpToken.SF_MemoryType,
+          SF_ValueRating: lookedUpToken.SF_ValueRating,
+          SF_Group: lookedUpToken.SF_Group || null,
+          summary: lookedUpToken.summary || null  // Include summary for all tokens
+        } : {
+          SF_MemoryType: tx.memoryType,
+          SF_ValueRating: tx.valueRating,
+          summary: tx.tokenData?.summary || null
+        };
         activity = {
           tokenId: tx.tokenId,
-          tokenData: tokenData ? {
-            SF_MemoryType: tokenData.SF_MemoryType,
-            SF_ValueRating: tokenData.SF_ValueRating,
-            SF_Group: tokenData.SF_Group || null
-          } : {
-            SF_MemoryType: tx.memoryType,
-            SF_ValueRating: tx.valueRating
-          },
+          tokenData: tokenData,
+          // Calculate potential value for all tokens
+          potentialValue: this.calculateTokenValue({
+            valueRating: tokenData.SF_ValueRating,
+            memoryType: tokenData.SF_MemoryType
+          }),
           events: [],
           status: 'claimed',
           discoveredByPlayers: false  // Flag: GM-only claim
@@ -788,8 +802,8 @@ export class DataManager extends EventTarget {
           found: tx.groupBonusInfo.found,
           total: tx.groupBonusInfo.total
         } : null,
-        // Include summary for detective mode (exposed evidence)
-        summary: tx.mode === 'detective' ? (tx.summary || tx.tokenData?.summary || null) : null
+        // Include summary for all claim modes (not just detective)
+        summary: tx.summary || tx.tokenData?.summary || activity.tokenData?.summary || null
       });
       activity.status = 'claimed';
     });

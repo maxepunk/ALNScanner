@@ -945,7 +945,7 @@ class UIManager {
    * @returns {string} HTML string
    */
   _renderActivityTokenCard(token) {
-    const { tokenId, tokenData, events, status, discoveredByPlayers } = token;
+    const { tokenId, tokenData, events, status, discoveredByPlayers, potentialValue } = token;
     const memoryType = tokenData?.SF_MemoryType || 'Unknown';
     const rating = tokenData?.SF_ValueRating || 0;
 
@@ -953,6 +953,22 @@ class UIManager {
     const scanEvents = events.filter(e => e.type === 'scan');
     const hasMultipleScans = scanEvents.length > 0;
     const claimEvent = events.find(e => e.type === 'claim');
+
+    // Generate status bar content based on state
+    let statusContent;
+    if (status === 'claimed' && claimEvent?.mode === 'blackmarket') {
+      // Black Market: Show earned value
+      statusContent = `<span class="status-icon">💰</span> SOLD to ${this.escapeHtml(claimEvent?.teamId || 'Unknown')}
+        <span class="points">$${(claimEvent?.points || 0).toLocaleString()}</span>`;
+    } else if (status === 'claimed' && claimEvent?.mode === 'detective') {
+      // Detective: Show what they gave up
+      statusContent = `<span class="status-icon">🔍</span> EXPOSED by ${this.escapeHtml(claimEvent?.teamId || 'Unknown')}
+        <span class="points potential">Worth: $${(potentialValue || 0).toLocaleString()}</span>`;
+    } else {
+      // Available: Show potential value
+      statusContent = `○ AVAILABLE
+        <span class="points potential">Worth: $${(potentialValue || 0).toLocaleString()}</span>`;
+    }
 
     return `
       <div class="token-card ${status}" data-token-id="${tokenId}">
@@ -963,13 +979,17 @@ class UIManager {
         </div>
         <div class="token-card__rating">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</div>
 
-        <!-- Status Bar: Quick-glance current state -->
-        <div class="token-card__status status-${status}">
-          ${status === 'claimed'
-            ? `● CLAIMED by ${this.escapeHtml(claimEvent?.teamId || 'Unknown')}
-               ${claimEvent?.mode === 'blackmarket' ? `<span class="points">$${(claimEvent?.points || 0).toLocaleString()}</span>` : ''}`
-            : '○ AVAILABLE'}
+        <!-- Status Bar: Quick-glance current state with mode-specific styling -->
+        <div class="token-card__status status-${status} ${claimEvent?.mode || ''}">
+          ${statusContent}
         </div>
+
+        ${tokenData?.summary ? `
+          <div class="token-card__summary">
+            <button class="summary-toggle" onclick="this.parentElement.classList.toggle('expanded')">Intel</button>
+            <div class="summary-content">${this.escapeHtml(tokenData.summary)}</div>
+          </div>
+        ` : ''}
 
         <!-- Timeline: Full event history (expandable) -->
         <div class="token-card__timeline ${hasMultipleScans ? 'expandable' : ''}"
@@ -1041,15 +1061,15 @@ class UIManager {
             <span class="label">${event.mode === 'blackmarket' ? 'Black Market' : 'Detective'}</span>
             <span class="team">${this.escapeHtml(event.teamId)}</span>
             <span class="time">${time}</span>
-            ${event.mode === 'blackmarket' ? `<span class="points">$${(event.points || 0).toLocaleString()}</span>` : ''}
+            <span class="points">$${(event.points || 0).toLocaleString()}</span>
             ${event.groupProgress ? `
               <div class="group-progress">
                 ${this.escapeHtml(event.groupProgress.name)} (${event.groupProgress.found}/${event.groupProgress.total})
               </div>
             ` : ''}
-            ${event.mode === 'detective' && event.summary ? `
+            ${event.summary ? `
               <div class="exposed-summary">
-                <span class="summary-label">Exposed:</span>
+                <span class="summary-label">Intel:</span>
                 <span class="summary-text">${this.escapeHtml(event.summary)}</span>
               </div>
             ` : ''}

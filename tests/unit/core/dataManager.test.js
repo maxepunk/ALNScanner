@@ -1662,7 +1662,7 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
       expect(activity.tokens[0].events[0].summary).toBe('Encrypted server logs revealing unauthorized access...');
     });
 
-    it('should NOT include summary for blackmarket claims', () => {
+    it('should include summary for ALL claim modes (including blackmarket)', () => {
       dataManager.transactions.push({
         id: 'tx-1',
         tokenId: 'token1',
@@ -1670,14 +1670,15 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
         mode: 'blackmarket',
         timestamp: '2025-12-16T10:05:00Z',
         status: 'accepted',
-        summary: 'Should not appear',
+        summary: 'Important intel for GM visibility',
         memoryType: 'Personal',
         valueRating: 3
       });
 
       const activity = dataManager.getGameActivity();
 
-      expect(activity.tokens[0].events[0].summary).toBeNull();
+      // Summary is now included for all claim modes
+      expect(activity.tokens[0].events[0].summary).toBe('Important intel for GM visibility');
     });
 
     it('should sort events by timestamp within each token', () => {
@@ -1770,6 +1771,83 @@ describe('DataManager - Batch 3: Network & Mode-Specific Behavior', () => {
       expect(activity.stats.claimed).toBe(2);     // token2, token3
       expect(activity.stats.claimedWithoutDiscovery).toBe(1);  // token3
       expect(activity.stats.totalPlayerScans).toBe(2);
+    });
+
+    it('should include potentialValue for all tokens', () => {
+      dataManager.playerScans.push({
+        tokenId: 'token1',
+        deviceId: 'device1',
+        timestamp: '2025-12-16T10:00:00Z',
+        tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 5 }
+      });
+
+      const activity = dataManager.getGameActivity();
+
+      // Technical 5-star = $150,000 × 5 = $750,000
+      expect(activity.tokens[0].potentialValue).toBe(750000);
+    });
+
+    it('should calculate potentialValue for GM-only claims', () => {
+      dataManager.transactions.push({
+        tokenId: 'token1',
+        teamId: 'Team1',
+        mode: 'blackmarket',
+        timestamp: '2025-12-16T10:00:00Z',
+        status: 'accepted',
+        memoryType: 'Business',
+        valueRating: 3
+      });
+
+      const activity = dataManager.getGameActivity();
+
+      // Business 3-star = $50,000 × 3 = $150,000
+      expect(activity.tokens[0].potentialValue).toBe(150000);
+    });
+
+    it('should include summary from tokenData for all tokens', () => {
+      dataManager.playerScans.push({
+        tokenId: 'token1',
+        deviceId: 'device1',
+        timestamp: '2025-12-16T10:00:00Z',
+        tokenData: {
+          SF_MemoryType: 'Personal',
+          SF_ValueRating: 3,
+          summary: 'Important evidence text'
+        }
+      });
+
+      const activity = dataManager.getGameActivity();
+      expect(activity.tokens[0].tokenData.summary).toBe('Important evidence text');
+    });
+
+    it('should include summary in claim events for all modes', () => {
+      dataManager.playerScans.push({
+        tokenId: 'token1',
+        deviceId: 'device1',
+        timestamp: '2025-12-16T10:00:00Z',
+        tokenData: {
+          SF_MemoryType: 'Personal',
+          SF_ValueRating: 3,
+          summary: 'Secret intel'
+        }
+      });
+
+      // Black Market claim should also get summary
+      dataManager.transactions.push({
+        tokenId: 'token1',
+        teamId: 'Team1',
+        mode: 'blackmarket',
+        timestamp: '2025-12-16T10:10:00Z',
+        status: 'accepted',
+        memoryType: 'Personal',
+        valueRating: 3
+      });
+
+      const activity = dataManager.getGameActivity();
+      const claimEvent = activity.tokens[0].events.find(e => e.type === 'claim');
+
+      // Summary should be included even for Black Market claims
+      expect(claimEvent.summary).toBe('Secret intel');
     });
   });
 });

@@ -684,12 +684,13 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       expect(container.innerHTML).toContain('0 claimed');
     });
 
-    it('should render available token cards', () => {
+    it('should render available token cards with potential value', () => {
       mockDataManager.getGameActivity = jest.fn(() => ({
         tokens: [
           {
             tokenId: 'mem007',
             tokenData: { SF_MemoryType: 'Business', SF_ValueRating: 3 },
+            potentialValue: 150000,  // Business 3-star = $50,000 × 3
             events: [
               { type: 'discovery', timestamp: '2025-11-11T09:30:00Z', deviceId: 'player-002' },
               { type: 'scan', timestamp: '2025-11-11T09:45:00Z', deviceId: 'player-001' }
@@ -706,19 +707,22 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
 
       expect(container.innerHTML).toContain('mem007');
       expect(container.innerHTML).toContain('AVAILABLE');
+      expect(container.innerHTML).toContain('Worth:');
+      expect(container.innerHTML).toContain('$150,000');
       expect(container.innerHTML).toContain('Business');
       expect(container.innerHTML).toContain('Discovered');
     });
 
-    it('should render claimed token cards with team info', () => {
+    it('should render Black Market claims with SOLD text and earned value', () => {
       mockDataManager.getGameActivity = jest.fn(() => ({
         tokens: [
           {
             tokenId: 'jaw001',
             tokenData: { SF_MemoryType: 'Personal', SF_ValueRating: 4 },
+            potentialValue: 75000,  // Personal 4-star = $75,000 × 1
             events: [
               { type: 'discovery', timestamp: '2025-11-11T10:15:00Z', deviceId: 'player-001' },
-              { type: 'claim', timestamp: '2025-11-11T10:25:00Z', mode: 'blackmarket', teamId: 'Alpha', points: 5000, groupProgress: { name: 'Server Logs', found: 2, total: 5 } }
+              { type: 'claim', timestamp: '2025-11-11T10:25:00Z', mode: 'blackmarket', teamId: 'Alpha', points: 75000, groupProgress: { name: 'Server Logs', found: 2, total: 5 } }
             ],
             status: 'claimed',
             discoveredByPlayers: true
@@ -731,10 +735,11 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       uiManager.renderGameActivity(container);
 
       expect(container.innerHTML).toContain('jaw001');
-      expect(container.innerHTML).toContain('CLAIMED');
+      expect(container.innerHTML).toContain('SOLD to');
       expect(container.innerHTML).toContain('Alpha');
-      expect(container.innerHTML).toContain('5,000');
+      expect(container.innerHTML).toContain('$75,000');
       expect(container.innerHTML).toContain('Black Market');
+      expect(container.innerHTML).toContain('blackmarket');  // CSS class
     });
 
     it('should show warning for GM-only claims (no player discovery)', () => {
@@ -743,8 +748,9 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
           {
             tokenId: 'sec042',
             tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 5 },
+            potentialValue: 750000,  // Technical 5-star = $150,000 × 5
             events: [
-              { type: 'claim', timestamp: '2025-11-11T10:45:00Z', mode: 'blackmarket', teamId: 'Beta', points: 50000, groupProgress: null }
+              { type: 'claim', timestamp: '2025-11-11T10:45:00Z', mode: 'blackmarket', teamId: 'Beta', points: 750000, groupProgress: null }
             ],
             status: 'claimed',
             discoveredByPlayers: false
@@ -760,15 +766,16 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       expect(container.innerHTML).toContain('1 GM-only');
     });
 
-    it('should render detective mode claims with summary', () => {
+    it('should render Detective claims with EXPOSED text and potential value', () => {
       mockDataManager.getGameActivity = jest.fn(() => ({
         tokens: [
           {
             tokenId: 'doc019',
-            tokenData: { SF_MemoryType: 'Personal', SF_ValueRating: 2 },
+            tokenData: { SF_MemoryType: 'Personal', SF_ValueRating: 2, summary: 'Token summary text' },
+            potentialValue: 25000,  // Personal 2-star = $25,000 × 1
             events: [
               { type: 'discovery', timestamp: '2025-11-11T11:00:00Z', deviceId: 'player-003' },
-              { type: 'claim', timestamp: '2025-11-11T11:15:00Z', mode: 'detective', teamId: 'Gamma', points: 0, groupProgress: null, summary: 'Encrypted server logs revealing unauthorized access' }
+              { type: 'claim', timestamp: '2025-11-11T11:15:00Z', mode: 'detective', teamId: 'Gamma', points: 25000, groupProgress: null, summary: 'Encrypted server logs revealing unauthorized access' }
             ],
             status: 'claimed',
             discoveredByPlayers: true
@@ -780,7 +787,12 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       const container = document.getElementById('admin-game-activity');
       uiManager.renderGameActivity(container);
 
+      expect(container.innerHTML).toContain('EXPOSED by');
+      expect(container.innerHTML).toContain('Gamma');
+      expect(container.innerHTML).toContain('Worth:');
+      expect(container.innerHTML).toContain('$25,000');
       expect(container.innerHTML).toContain('Detective');
+      expect(container.innerHTML).toContain('detective');  // CSS class
       expect(container.innerHTML).toContain('Encrypted server logs');
     });
 
@@ -826,9 +838,10 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
           {
             tokenId: 'grp001',
             tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 4 },
+            potentialValue: 375000,  // Technical 4-star = $75,000 × 5
             events: [
               { type: 'discovery', timestamp: '2025-11-11T10:00:00Z', deviceId: 'player-001' },
-              { type: 'claim', timestamp: '2025-11-11T10:30:00Z', mode: 'blackmarket', teamId: 'Delta', points: 20000, groupProgress: { name: 'Server Logs', found: 3, total: 5 } }
+              { type: 'claim', timestamp: '2025-11-11T10:30:00Z', mode: 'blackmarket', teamId: 'Delta', points: 375000, groupProgress: { name: 'Server Logs', found: 3, total: 5 } }
             ],
             status: 'claimed',
             discoveredByPlayers: true
@@ -842,6 +855,52 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
 
       expect(container.innerHTML).toContain('Server Logs');
       expect(container.innerHTML).toContain('3/5');
+    });
+
+    it('should render Intel toggle for tokens with summary', () => {
+      mockDataManager.getGameActivity = jest.fn(() => ({
+        tokens: [
+          {
+            tokenId: 'tok004',
+            tokenData: { SF_MemoryType: 'Personal', SF_ValueRating: 2, summary: 'Secret details about the case' },
+            potentialValue: 25000,
+            events: [{ type: 'discovery', deviceId: 'dev1', timestamp: '2025-12-16T10:00:00Z' }],
+            status: 'available',
+            discoveredByPlayers: true
+          }
+        ],
+        stats: { totalTokens: 1, available: 1, claimed: 0, claimedWithoutDiscovery: 0, totalPlayerScans: 1 }
+      }));
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      expect(container.innerHTML).toContain('Intel');
+      expect(container.innerHTML).toContain('summary-toggle');
+      expect(container.innerHTML).toContain('summary-content');
+      expect(container.innerHTML).toContain('Secret details about the case');
+    });
+
+    it('should not render Intel toggle for tokens without summary', () => {
+      mockDataManager.getGameActivity = jest.fn(() => ({
+        tokens: [
+          {
+            tokenId: 'tok005',
+            tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 3 },  // No summary
+            potentialValue: 250000,
+            events: [{ type: 'discovery', deviceId: 'dev1', timestamp: '2025-12-16T10:00:00Z' }],
+            status: 'available',
+            discoveredByPlayers: true
+          }
+        ],
+        stats: { totalTokens: 1, available: 1, claimed: 0, claimedWithoutDiscovery: 0, totalPlayerScans: 1 }
+      }));
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      expect(container.innerHTML).not.toContain('Intel');
+      expect(container.innerHTML).not.toContain('summary-toggle');
     });
   });
 
