@@ -141,7 +141,8 @@ export class UnifiedDataManager extends EventTarget {
       'scores:cleared',
       'data:cleared',
       'game-state:updated',
-      'player-scan:added'
+      'player-scan:added',
+      'session:updated'
     ];
 
     const listeners = [];

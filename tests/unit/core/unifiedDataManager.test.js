@@ -256,6 +256,41 @@ describe('UnifiedDataManager', () => {
     });
   });
 
+  describe('event forwarding', () => {
+    beforeEach(async () => {
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
+      manager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+      await manager.initializeStandaloneMode();
+    });
+
+    it('should forward session:updated events from strategy', (done) => {
+      // Register listener BEFORE triggering action
+      manager.addEventListener('session:updated', (event) => {
+        expect(event.detail).toBeDefined();
+        expect(event.detail.session).toBeDefined();
+        expect(event.detail.session.status).toBe('paused');
+        done();
+      });
+
+      // Create a session first, then pause it to trigger session:updated
+      manager.createSession('Test Session', []).then(() => {
+        manager.pauseSession();
+      });
+    });
+
+    it('should include session:updated in wired events list', () => {
+      // Verify the events array includes session:updated by checking listeners
+      const strategy = manager._localStrategy;
+      const listeners = manager._strategyListeners.get(strategy);
+
+      const eventNames = listeners.map(l => l.eventName);
+      expect(eventNames).toContain('session:updated');
+    });
+  });
+
   describe('advanced methods', () => {
     beforeEach(async () => {
       mockSessionModeManager.isStandalone.mockReturnValue(true);
