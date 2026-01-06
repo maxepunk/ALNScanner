@@ -31,10 +31,10 @@ test.describe('Diagnostic - Step by step', () => {
     await standaloneBtn.click();
     await page.waitForSelector('#teamEntryScreen.active', { timeout: 5000 });
 
-    // Enter team (text input for standalone mode)
-    await page.locator('#standaloneTeamName').fill('123');
+    // Enter team (unified text input)
+    await page.locator('#teamNameInput').fill('123');
 
-    const teamDisplay = await page.locator('#standaloneTeamName').inputValue();
+    const teamDisplay = await page.locator('#teamNameInput').inputValue();
     console.log(`Team display: "${teamDisplay}"`);
 
     // Confirm
@@ -64,8 +64,8 @@ test.describe('Diagnostic - Step by step', () => {
     await standaloneBtn.click();
     await page.waitForSelector('#teamEntryScreen.active', { timeout: 5000 });
 
-    // Enter team (text input for standalone mode)
-    await page.locator('#standaloneTeamName').fill('123');
+    // Enter team (unified text input)
+    await page.locator('#teamNameInput').fill('123');
     await page.click('button[data-action="app.confirmTeamId"]');
     await page.waitForSelector('#scanScreen.active', { timeout: 5000 });
 

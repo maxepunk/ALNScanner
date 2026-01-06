@@ -78,8 +78,8 @@ test.describe('ALNScanner Smoke Tests', () => {
     await page.locator('button[data-action="app.selectGameMode"][data-arg="standalone"]').click();
     await waitForElement(page, '#teamEntryScreen.active');
 
-    // Enter a team name using text input (standalone mode)
-    await page.locator('#standaloneTeamName').fill('001');
+    // Enter a team name using unified text input
+    await page.locator('#teamNameInput').fill('001');
     await page.locator('button[data-action="app.confirmTeamId"]').click();
 
     // Should reach scan screen (proves app initialized with token data)

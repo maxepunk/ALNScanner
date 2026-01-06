@@ -97,8 +97,8 @@ test.describe('Browser Integration - ES6 Module Loading', () => {
     const teamEntryScreen = await page.locator('#teamEntryScreen.active');
     await expect(teamEntryScreen).toBeVisible();
 
-    // Verify text input is functional (standalone mode uses text input)
-    const teamNameInput = await page.locator('#standaloneTeamName');
+    // Verify unified text input is visible
+    const teamNameInput = await page.locator('#teamNameInput');
     await expect(teamNameInput).toBeVisible();
   });
 });
