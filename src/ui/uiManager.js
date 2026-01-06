@@ -628,38 +628,6 @@ class UIManager {
   }
 
   /**
-   * Filter transactions based on search criteria
-   */
-  filterTransactions() {
-    const dataSource = this._getDataSource();
-    if (!dataSource) return;
-
-    const searchEl = document.getElementById('searchFilter');
-    const modeEl = document.getElementById('modeFilter');
-
-    if (!searchEl || !modeEl) return;
-
-    const search = searchEl.value.toLowerCase();
-    const mode = modeEl.value;
-
-    let filtered = dataSource.transactions.filter(t => {
-      const matchesSearch = !search ||
-        t.rfid.toLowerCase().includes(search) ||
-        t.teamId.toLowerCase().includes(search) ||
-        t.memoryType.toLowerCase().includes(search) ||
-        t.group.toLowerCase().includes(search);
-
-      const matchesMode = !mode || t.mode === mode;
-
-      return matchesSearch && matchesMode;
-    });
-
-    filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-    this.renderTransactions(filtered);
-  }
-
-  /**
    * Show notification for group completion (from backend event)
    * @param {Object} data - Group completion data
    */
