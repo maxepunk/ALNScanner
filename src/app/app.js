@@ -334,159 +334,87 @@ class App {
   // ========== Team Entry ==========
 
   /**
-   * Initialize team entry UI based on session mode
-   * Shows appropriate elements (dropdown vs text input)
-   * Called when transitioning to team entry screen
+   * Initialize team entry UI
+   * UNIFIED: No mode branching - TeamRegistry handles mode differences
    */
   initTeamEntryUI() {
-    const teamSelect = document.getElementById('teamSelect');
-    const standaloneContainer = document.querySelector('.standalone-team-container');
-    const teamSelectContainer = document.querySelector('.team-select-container');
-    const showAddTeamBtn = document.getElementById('showAddTeamBtn');
-    const addTeamContainer = document.getElementById('addTeamInputContainer');
-    const standaloneInput = document.getElementById('standaloneTeamName');
+    const teamInput = document.getElementById('teamNameInput');
+    const teamList = document.getElementById('teamList');
+    const listLabel = document.getElementById('teamListLabel');
 
-    const isStandalone = this.sessionModeManager?.isStandalone();
-
-    if (isStandalone) {
-      // Standalone mode: Show text input, hide dropdown
-      if (teamSelectContainer) teamSelectContainer.style.display = 'none';
-      if (standaloneContainer) standaloneContainer.style.display = 'block';
-      if (showAddTeamBtn) showAddTeamBtn.style.display = 'none';
-      if (addTeamContainer) addTeamContainer.style.display = 'none';
-
-      // Focus the input
-      if (standaloneInput) standaloneInput.focus();
-    } else {
-      // Networked mode: Show dropdown, hide standalone input
-      if (teamSelectContainer) teamSelectContainer.style.display = 'block';
-      if (standaloneContainer) standaloneContainer.style.display = 'none';
-      if (showAddTeamBtn) showAddTeamBtn.style.display = 'block';
-      if (addTeamContainer) addTeamContainer.style.display = 'none';
-
-      // Populate dropdown from TeamRegistry
-      if (teamSelect && this.teamRegistry) {
-        this.teamRegistry.populateDropdown(teamSelect);
-      }
-
-      // Listen for team updates from other GMs (add once, not repeatedly)
-      if (this.teamRegistry && !this._teamsUpdatedListenerAdded) {
-        this._teamsUpdatedListenerAdded = true;
-        this.teamRegistry.addEventListener('teams:updated', () => {
-          const currentTeamSelect = document.getElementById('teamSelect');
-          if (currentTeamSelect && !this.sessionModeManager?.isStandalone()) {
-            // Preserve current selection when repopulating
-            const currentValue = currentTeamSelect.value;
-            this.teamRegistry.populateDropdown(currentTeamSelect, { selectedTeamId: currentValue });
-          }
-        });
-      }
+    // Label adapts to mode (TeamRegistry encapsulates this)
+    if (listLabel && this.teamRegistry) {
+      listLabel.textContent = this.teamRegistry.getTeamListLabel();
     }
 
-    // Wire up "Add New Team" toggle
-    if (showAddTeamBtn && addTeamContainer) {
-      showAddTeamBtn.onclick = () => {
-        addTeamContainer.style.display = addTeamContainer.style.display === 'none' ? 'flex' : 'none';
-        const newTeamInput = document.getElementById('newTeamNameInput');
-        if (newTeamInput && addTeamContainer.style.display === 'flex') {
-          newTeamInput.focus();
-        }
-      };
+    // Render team list with click handler
+    if (this.teamRegistry && teamList) {
+      this._renderTeamList(teamList);
+    }
+
+    // Focus input
+    if (teamInput) {
+      teamInput.value = '';
+      teamInput.focus();
+    }
+
+    // Wire teams:updated listener (once)
+    if (this.teamRegistry && !this._teamsListenerAdded) {
+      this._teamsListenerAdded = true;
+      this.teamRegistry.addEventListener('teams:updated', () => {
+        const list = document.getElementById('teamList');
+        if (list) this._renderTeamList(list);
+      });
     }
   }
 
   /**
-   * Create and select a new team (networked mode)
-   * Sends session:addTeam to backend and selects the new team
+   * Render clickable team list from TeamRegistry
+   * @param {HTMLElement} container - Team list container element
+   * @private
    */
-  async createAndSelectTeam() {
-    const newTeamInput = document.getElementById('newTeamNameInput');
-    const teamName = newTeamInput?.value?.trim();
+  _renderTeamList(container) {
+    container.innerHTML = '';
+    const teams = this.teamRegistry.getTeamsForDisplay();
+
+    teams.forEach(teamName => {
+      const item = document.createElement('div');
+      item.className = 'team-list-item';
+      item.textContent = teamName;
+      item.setAttribute('role', 'option');
+      item.addEventListener('click', () => {
+        document.getElementById('teamNameInput').value = teamName;
+        this.confirmTeamId(); // Auto-proceed when clicking existing team
+      });
+      container.appendChild(item);
+    });
+  }
+
+  /**
+   * Confirm team selection and proceed to scan screen
+   * UNIFIED: Reads from single input, TeamRegistry handles mode-specific logic
+   */
+  async confirmTeamId() {
+    const teamInput = document.getElementById('teamNameInput');
+    const teamName = teamInput?.value?.trim();
 
     if (!teamName) {
       this.uiManager.showError('Please enter a team name');
       return;
     }
 
-    // No client-side validation - server handles it, GM types what they want
-
-    if (this.sessionModeManager?.isNetworked() && this.networkedSession) {
-      try {
-        const client = this.networkedSession.getService('client');
-        if (!client) {
-          this.uiManager.showError('Not connected to server');
-          return;
-        }
-
-        // FIXED: Use sendCommand (waits for ack) with gm:command event type
-        const response = await client.sendCommand('session:addTeam', { teamId: teamName });
-
-        if (!response.success) {
-          this.uiManager.showError(`Failed to create team: ${response.message}`);
-          return;
-        }
-
-        // ONLY after backend confirms, update local state
-        if (this.teamRegistry) {
-          this.teamRegistry.addTeam(teamName);
-        }
-
-        this.currentTeamId = teamName;
-        const teamSelect = document.getElementById('teamSelect');
-        if (teamSelect && this.teamRegistry) {
-          this.teamRegistry.populateDropdown(teamSelect, { selectedTeamId: teamName });
-        }
-
-        // Clear input and hide container
-        if (newTeamInput) newTeamInput.value = '';
-        const addTeamContainer = document.getElementById('addTeamInputContainer');
-        if (addTeamContainer) addTeamContainer.style.display = 'none';
-
-        this.uiManager.showToast(`Team "${teamName}" created`, 'success', 2000);
-      } catch (error) {
-        this.uiManager.showError(`Failed to create team: ${error.message}`);
-      }
-    } else {
-      // Standalone mode: just set the team name
-      this.currentTeamId = teamName;
-      this.uiManager.showToast(`Team "${teamName}" set`, 'success', 2000);
-    }
-  }
-
-  /**
-   * Confirm team selection and proceed to scan screen
-   * Reads from dropdown (networked) or text input (standalone)
-   */
-  async confirmTeamId() {
-    const isStandalone = this.sessionModeManager?.isStandalone();
-    let teamName = '';
-
-    if (isStandalone) {
-      // Read from text input
-      const standaloneInput = document.getElementById('standaloneTeamName');
-      teamName = standaloneInput?.value?.trim() || '';
-    } else {
-      // Read from dropdown
-      const teamSelect = document.getElementById('teamSelect');
-      teamName = teamSelect?.value || '';
-    }
-
-    if (!teamName) {
-      this.uiManager.showError('Please select or enter a team name');
+    // TeamRegistry handles mode-specific behavior (localStorage vs backend)
+    const result = await this.teamRegistry.selectTeam(teamName);
+    if (!result.success) {
+      this.uiManager.showError(result.error || 'Failed to select team');
       return;
     }
 
     this.currentTeamId = teamName;
 
-    const currentTeamElement = document.getElementById('currentTeam');
-    if (currentTeamElement) {
-      currentTeamElement.textContent = this.currentTeamId;
-    }
+    const currentTeamEl = document.getElementById('currentTeam');
+    if (currentTeamEl) currentTeamEl.textContent = teamName;
 
-    // Note: Team will be created automatically when first transaction is added
-    // UnifiedDataManager's strategy (LocalStorage/NetworkedStorage) handles team creation
-
-    // Update stats and proceed to scan screen
     this.uiManager.updateSessionStats();
     this.uiManager.showScreen('scan');
 
@@ -558,6 +486,11 @@ class App {
           this.uiManager.renderSessionStatus(sessionContainer);
         }
 
+        // Wire TeamRegistry for unified API (standalone)
+        if (this.teamRegistry) {
+          this.teamRegistry.sessionModeManager = this.sessionModeManager;
+        }
+
         // Initialize team entry UI
         this.initTeamEntryUI();
 
@@ -622,6 +555,14 @@ class App {
         if (client?.socket && this.dataManager._networkedStrategy) {
           this.dataManager._networkedStrategy.socket = client.socket;
           this.debug.log('NetworkedStorage socket reference updated');
+        }
+
+        // Wire TeamRegistry for unified API (networked)
+        if (this.teamRegistry) {
+          this.teamRegistry.sessionModeManager = this.sessionModeManager;
+          if (client) {
+            this.teamRegistry.orchestratorClient = client;
+          }
         }
 
         // Close connection wizard modal (if open) and show team entry screen

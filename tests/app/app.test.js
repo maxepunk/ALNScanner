@@ -421,17 +421,11 @@ describe('App', () => {
 
   describe('Team Entry', () => {
     beforeEach(() => {
-      // Set up DOM elements for team entry UI
+      // Set up DOM elements for team entry UI - UNIFIED structure
       document.body.innerHTML = `
-        <select id="teamSelect"></select>
-        <div class="team-select-container"></div>
-        <div class="standalone-team-container" style="display: none;">
-          <input type="text" id="standaloneTeamName" />
-        </div>
-        <button id="showAddTeamBtn"></button>
-        <div id="addTeamInputContainer" style="display: none;">
-          <input type="text" id="newTeamNameInput" />
-        </div>
+        <input type="text" id="teamNameInput" />
+        <label id="teamListLabel"></label>
+        <div id="teamList"></div>
         <span id="currentTeam"></span>
       `;
     });
@@ -439,67 +433,72 @@ describe('App', () => {
     it('should initialize team entry UI for standalone mode', () => {
       // Setup standalone mode
       app.sessionModeManager = { isStandalone: () => true, isNetworked: () => false };
+      app.teamRegistry = {
+        getTeamListLabel: jest.fn(() => 'Recent Teams:'),
+        getTeamsForDisplay: jest.fn(() => []),
+        addEventListener: jest.fn()
+      };
 
       app.initTeamEntryUI();
 
-      const standaloneContainer = document.querySelector('.standalone-team-container');
-      const selectContainer = document.querySelector('.team-select-container');
-      expect(standaloneContainer.style.display).toBe('block');
-      expect(selectContainer.style.display).toBe('none');
+      // Verify label is set from TeamRegistry
+      expect(document.getElementById('teamListLabel').textContent).toBe('Recent Teams:');
+      expect(app.teamRegistry.getTeamsForDisplay).toHaveBeenCalled();
     });
 
     it('should initialize team entry UI for networked mode', () => {
       // Setup networked mode with mock teamRegistry
       app.sessionModeManager = { isStandalone: () => false, isNetworked: () => true };
       app.teamRegistry = {
-        populateDropdown: jest.fn(),
+        getTeamListLabel: jest.fn(() => 'Session Teams:'),
+        getTeamsForDisplay: jest.fn(() => ['Team Alpha', 'Team Beta']),
         addEventListener: jest.fn()
       };
 
       app.initTeamEntryUI();
 
-      const standaloneContainer = document.querySelector('.standalone-team-container');
-      const selectContainer = document.querySelector('.team-select-container');
-      expect(selectContainer.style.display).toBe('block');
-      expect(standaloneContainer.style.display).toBe('none');
-      expect(app.teamRegistry.populateDropdown).toHaveBeenCalled();
+      // Verify label is set from TeamRegistry
+      expect(document.getElementById('teamListLabel').textContent).toBe('Session Teams:');
+      expect(app.teamRegistry.getTeamsForDisplay).toHaveBeenCalled();
+
+      // Verify teams are rendered
+      const teamList = document.getElementById('teamList');
+      expect(teamList.children.length).toBe(2);
     });
 
     it('should confirm team ID and show scan screen', async () => {
       const UIManager = require('../../src/ui/uiManager.js').default;
       app.sessionModeManager = { isStandalone: () => true, isNetworked: () => false };
 
-      // Mock standaloneDataManager with sessionData
-      app.standaloneDataManager = {
-        sessionData: { teams: {} },
-        addTransaction: jest.fn(),
-        saveLocalSession: jest.fn()
+      // Mock teamRegistry with selectTeam
+      app.teamRegistry = {
+        selectTeam: jest.fn().mockResolvedValue({ success: true })
       };
 
-      // Set team via standalone input
-      document.getElementById('standaloneTeamName').value = 'Test Team';
+      // Set team via unified input
+      document.getElementById('teamNameInput').value = 'Test Team';
 
       // confirmTeamId is now async (auto-starts NFC scanning)
       await app.confirmTeamId();
 
+      expect(app.teamRegistry.selectTeam).toHaveBeenCalledWith('Test Team');
       expect(app.currentTeamId).toBe('Test Team');
       expect(document.getElementById('currentTeam').textContent).toBe('Test Team');
       expect(UIManager.updateSessionStats).toHaveBeenCalled();
       expect(UIManager.showScreen).toHaveBeenCalledWith('scan');
     });
 
-    it('should not confirm empty team ID', () => {
+    it('should not confirm empty team ID', async () => {
       const UIManager = require('../../src/ui/uiManager.js').default;
       app.sessionModeManager = { isStandalone: () => true, isNetworked: () => false };
-      app.standaloneDataManager = {
-        sessionData: { teams: {} },
-        addTransaction: jest.fn(),
-        saveLocalSession: jest.fn()
+      app.teamRegistry = {
+        selectTeam: jest.fn()
       };
-      document.getElementById('standaloneTeamName').value = '';
+      document.getElementById('teamNameInput').value = '';
 
-      app.confirmTeamId();
+      await app.confirmTeamId();
 
+      expect(app.teamRegistry.selectTeam).not.toHaveBeenCalled();
       expect(UIManager.showScreen).not.toHaveBeenCalled();
     });
   });
