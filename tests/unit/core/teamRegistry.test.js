@@ -130,6 +130,15 @@ describe('TeamRegistry', () => {
         expect(result.success).toBe(false);
         expect(result.error).toBe('Not connected');
       });
+
+      it('should return error if sendCommand throws exception', async () => {
+        mockOrchestratorClient.sendCommand.mockRejectedValue(new Error('Network timeout'));
+
+        const result = await registry.selectTeam('Team Alpha');
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Network timeout');
+      });
     });
   });
 
