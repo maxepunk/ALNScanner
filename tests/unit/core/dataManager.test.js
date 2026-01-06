@@ -728,7 +728,8 @@ describe('DataManager - Batch 2: Scoring & Group Completion', () => {
 
       const expectedBlackMarketScore = calcScore(5, 'Personal'); // 5-star Personal 1x
       expect(result.blackMarketScore).toBe(expectedBlackMarketScore);
-      expect(result.detectiveValue).toBe(3);  // Just star rating
+      // detectiveValue removed - detective mode has no scoring
+      expect(result.detectiveValue).toBeUndefined();
     });
   });
 
