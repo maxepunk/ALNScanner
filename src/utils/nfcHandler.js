@@ -82,19 +82,20 @@ class NFCHandlerClass {
    * Uses Web NFC API's built-in NDEF parsing
    * @param {NDEFMessage} message - NFC message
    * @param {string} serialNumber - Tag serial number
-   * @returns {Object} Token ID and metadata
+   * @returns {Object} Token ID and metadata, or error object
    */
   extractTokenId(message, serialNumber) {
     Debug.log('═══ NFC TAG DETECTED ═══');
     Debug.log(`Serial: ${serialNumber}`);
     Debug.log(`Records: ${message.records?.length || 0}`);
 
-    // No records? Use serial number as fallback
+    // No records? Return error instead of serial fallback
     if (!message.records || message.records.length === 0) {
-      Debug.log('No NDEF records, using serial');
+      Debug.log('No NDEF records found - returning error');
       return {
-        id: serialNumber,
-        source: 'serial-fallback',
+        id: null,
+        source: 'error',
+        error: 'no-ndef-records',
         raw: serialNumber
       };
     }
@@ -143,11 +144,12 @@ class NFCHandlerClass {
       }
     }
 
-    // Fallback to serial if no readable records
-    Debug.log('No readable records, using serial');
+    // No readable records? Return error instead of serial fallback
+    Debug.log('No readable records found - returning error');
     return {
-      id: serialNumber,
-      source: 'serial-fallback',
+      id: null,
+      source: 'error',
+      error: 'unreadable-records',
       raw: serialNumber
     };
   }

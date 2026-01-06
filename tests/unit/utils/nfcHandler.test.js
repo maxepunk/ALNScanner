@@ -32,15 +32,23 @@ describe('NFCHandler - ES6 Module', () => {
   });
 
   describe('extractTokenId', () => {
-    it('should use serial number when no records', () => {
+    it('should return error when records is undefined', () => {
+      const message = {}; // No records property
+      const result = NFCHandler.extractTokenId(message, 'serial123');
+      expect(result.source).toBe('error');
+      expect(result.error).toBe('no-ndef-records');
+    });
+
+    it('should return error when no records (not serial fallback)', () => {
       const message = { records: [] };
       const serialNumber = 'abc123';
 
       const result = NFCHandler.extractTokenId(message, serialNumber);
 
       expect(result).toEqual({
-        id: 'abc123',
-        source: 'serial-fallback',
+        id: null,
+        source: 'error',
+        error: 'no-ndef-records',
         raw: 'abc123'
       });
     });
@@ -76,7 +84,7 @@ describe('NFCHandler - ES6 Module', () => {
       expect(result.source).toBe('url-record');
     });
 
-    it('should fallback to serial when records are unreadable', () => {
+    it('should return error when records are unreadable (not serial fallback)', () => {
       const message = {
         records: [{
           recordType: 'unknown',
@@ -86,8 +94,27 @@ describe('NFCHandler - ES6 Module', () => {
 
       const result = NFCHandler.extractTokenId(message, 'fallback789');
 
-      expect(result.id).toBe('fallback789');
-      expect(result.source).toBe('serial-fallback');
+      expect(result).toEqual({
+        id: null,
+        source: 'error',
+        error: 'unreadable-records',
+        raw: 'fallback789'
+      });
+    });
+
+    it('should extract generic data when decodable', () => {
+      const genericData = new TextEncoder().encode('generic-token');
+      const message = {
+        records: [{
+          recordType: 'custom',
+          data: genericData
+        }]
+      };
+
+      const result = NFCHandler.extractTokenId(message, 'serial');
+
+      expect(result.id).toBe('generic-token');
+      expect(result.source).toBe('generic-decode');
     });
   });
 
