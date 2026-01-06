@@ -18,6 +18,7 @@ import {
   parseGroupInfo as sharedParseGroupInfo,
   calculateTokenValue as sharedCalculateTokenValue
 } from './scoring.js';
+import { DataManagerUtils } from './dataManagerUtils.js';
 class StandaloneDataManager extends EventTarget {
   /**
    * Create StandaloneDataManager instance
@@ -115,7 +116,7 @@ class StandaloneDataManager extends EventTarget {
       tx => (tx.tokenId || tx.rfid) === tokenId
     );
     if (!tokenStillExists && tokenId) {
-      this.scannedTokens.delete(tokenId);
+      this.unmarkTokenAsScanned(tokenId);
       this.debug?.log(`Token ${tokenId} removed from scannedTokens - can be rescanned`);
     }
 
@@ -168,7 +169,7 @@ class StandaloneDataManager extends EventTarget {
    * @returns {boolean} True if token already scanned
    */
   isTokenScanned(tokenId) {
-    return this.scannedTokens.has(tokenId);
+    return DataManagerUtils.isTokenScanned(this.scannedTokens, tokenId);
   }
 
   /**
@@ -176,7 +177,16 @@ class StandaloneDataManager extends EventTarget {
    * @param {string} tokenId - Token ID to mark
    */
   markTokenAsScanned(tokenId) {
-    this.scannedTokens.add(tokenId);
+    DataManagerUtils.markTokenAsScanned(this.scannedTokens, tokenId);
+  }
+
+  /**
+   * Unmark token as scanned (allows re-scanning after deletion)
+   * @param {string} tokenId - Token ID to unmark
+   * @returns {boolean} True if token was removed from Set
+   */
+  unmarkTokenAsScanned(tokenId) {
+    return DataManagerUtils.unmarkTokenAsScanned(this.scannedTokens, tokenId);
   }
 
   /**
@@ -477,6 +487,83 @@ class StandaloneDataManager extends EventTarget {
         adjustment: adjustment
       }
     }));
+  }
+
+  /**
+   * Get unified game activity - matches DataManager.getGameActivity() API
+   * Returns token-centric lifecycle view with full event timeline
+   *
+   * Note: In standalone mode, there are no player scans (no backend)
+   * so all tokens will have discoveredByPlayers: false
+   *
+   * @returns {Object} { tokens: Array, stats: Object }
+   */
+  getGameActivity() {
+    const tokenMap = new Map();
+
+    // Process transactions (GM claims only in standalone mode)
+    this.sessionData.transactions.forEach(tx => {
+      let activity = tokenMap.get(tx.tokenId);
+
+      if (!activity) {
+        // Create token entry from transaction
+        const lookedUpToken = this.tokenManager?.findToken(tx.tokenId);
+        const tokenData = lookedUpToken ? {
+          SF_MemoryType: lookedUpToken.SF_MemoryType,
+          SF_ValueRating: lookedUpToken.SF_ValueRating,
+          SF_Group: lookedUpToken.SF_Group || null,
+          summary: lookedUpToken.summary || null
+        } : {
+          SF_MemoryType: tx.memoryType,
+          SF_ValueRating: tx.valueRating,
+          summary: tx.tokenData?.summary || null
+        };
+        activity = {
+          tokenId: tx.tokenId,
+          tokenData: tokenData,
+          potentialValue: this.calculateTokenValue({
+            valueRating: tokenData.SF_ValueRating,
+            memoryType: tokenData.SF_MemoryType
+          }),
+          events: [],
+          status: 'claimed',
+          discoveredByPlayers: false  // No player scans in standalone mode
+        };
+        tokenMap.set(tx.tokenId, activity);
+      }
+
+      // Use stored points if available, otherwise calculate
+      const points = tx.points ?? this.calculateTokenValue(tx);
+
+      // Add claim event with full details
+      activity.events.push({
+        type: 'claim',
+        timestamp: tx.timestamp,
+        mode: tx.mode,
+        teamId: tx.teamId,
+        points: points,
+        summary: tx.summary || tx.tokenData?.summary || activity.tokenData?.summary || null
+      });
+      activity.status = 'claimed';
+    });
+
+    // Sort events within each token by timestamp
+    tokenMap.forEach(activity => {
+      activity.events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    });
+
+    const tokens = Array.from(tokenMap.values());
+
+    // Calculate stats
+    const stats = {
+      totalTokens: tokens.length,
+      available: tokens.filter(t => t.status === 'available').length,
+      claimed: tokens.filter(t => t.status === 'claimed').length,
+      claimedWithoutDiscovery: tokens.filter(t => t.status === 'claimed' && !t.discoveredByPlayers).length,
+      totalPlayerScans: 0  // No player scans in standalone mode
+    };
+
+    return { tokens, stats };
   }
 
   /**

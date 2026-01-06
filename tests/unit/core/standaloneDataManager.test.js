@@ -763,4 +763,162 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
       expect(adjustment.reason).toBe('Manual GM adjustment');
     });
   });
+
+  describe('getGameActivity (API Parity with DataManager)', () => {
+    let manager;
+
+    beforeEach(() => {
+      localStorage.clear();
+      manager = new StandaloneDataManager({ tokenManager: null });
+    });
+
+    it('should return empty activity when no transactions', () => {
+      const activity = manager.getGameActivity();
+
+      expect(activity.tokens).toEqual([]);
+      expect(activity.stats.totalTokens).toBe(0);
+      expect(activity.stats.available).toBe(0);
+      expect(activity.stats.claimed).toBe(0);
+      expect(activity.stats.claimedWithoutDiscovery).toBe(0);
+      expect(activity.stats.totalPlayerScans).toBe(0);
+    });
+
+    it('should track GM claims (no player scans in standalone mode)', () => {
+      manager.addTransaction({
+        id: 'tx_001',
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'blackmarket',
+        points: 50000,
+        valueRating: 3,
+        memoryType: 'Personal',
+        timestamp: '2025-01-05T10:00:00Z'
+      });
+
+      const activity = manager.getGameActivity();
+
+      expect(activity.tokens).toHaveLength(1);
+      expect(activity.tokens[0].tokenId).toBe('token1');
+      expect(activity.tokens[0].status).toBe('claimed');
+      expect(activity.tokens[0].discoveredByPlayers).toBe(false); // No player scans in standalone
+      expect(activity.tokens[0].events).toHaveLength(1);
+      expect(activity.tokens[0].events[0].type).toBe('claim');
+      expect(activity.tokens[0].events[0].teamId).toBe('001');
+    });
+
+    it('should calculate potentialValue for tokens', () => {
+      manager.addTransaction({
+        id: 'tx_001',
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'blackmarket',
+        points: 250000,
+        valueRating: 3,
+        memoryType: 'Technical',
+        timestamp: '2025-01-05T10:00:00Z'
+      });
+
+      const activity = manager.getGameActivity();
+
+      // 3-star Technical = 50000 * 5 = 250000
+      expect(activity.tokens[0].potentialValue).toBe(250000);
+    });
+
+    it('should include points in claim events', () => {
+      manager.addTransaction({
+        id: 'tx_001',
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'blackmarket',
+        points: 150000,
+        valueRating: 5,
+        memoryType: 'Personal',
+        timestamp: '2025-01-05T10:00:00Z'
+      });
+
+      const activity = manager.getGameActivity();
+      const claim = activity.tokens[0].events[0];
+
+      expect(claim.points).toBe(150000);
+      expect(claim.mode).toBe('blackmarket');
+    });
+
+    it('should handle multiple tokens with claims', () => {
+      manager.addTransaction({
+        id: 'tx_001',
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'blackmarket',
+        points: 10000,
+        valueRating: 1,
+        memoryType: 'Personal',
+        timestamp: '2025-01-05T09:00:00Z'
+      });
+      manager.addTransaction({
+        id: 'tx_002',
+        tokenId: 'token2',
+        teamId: '002',
+        mode: 'blackmarket',
+        points: 25000,
+        valueRating: 2,
+        memoryType: 'Personal',
+        timestamp: '2025-01-05T10:00:00Z'
+      });
+
+      const activity = manager.getGameActivity();
+
+      expect(activity.tokens).toHaveLength(2);
+      expect(activity.stats.totalTokens).toBe(2);
+      expect(activity.stats.claimed).toBe(2);
+      expect(activity.stats.claimedWithoutDiscovery).toBe(2); // All without player discovery in standalone
+    });
+
+    it('should sort events by timestamp', () => {
+      // Add same token twice (different teams) - edge case
+      manager.sessionData.transactions.push({
+        id: 'tx_001',
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'blackmarket',
+        points: 10000,
+        valueRating: 1,
+        memoryType: 'Personal',
+        timestamp: '2025-01-05T11:00:00Z'
+      });
+      manager.sessionData.transactions.push({
+        id: 'tx_002',
+        tokenId: 'token1',
+        teamId: '002',
+        mode: 'detective',
+        points: 0,
+        timestamp: '2025-01-05T09:00:00Z'
+      });
+
+      const activity = manager.getGameActivity();
+      const events = activity.tokens[0].events;
+
+      // Earlier timestamp should come first
+      expect(events[0].timestamp).toBe('2025-01-05T09:00:00Z');
+      expect(events[1].timestamp).toBe('2025-01-05T11:00:00Z');
+    });
+
+    it('should include summary in claim events', () => {
+      manager.addTransaction({
+        id: 'tx_001',
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'detective',
+        summary: 'This is a test summary',
+        points: 0,
+        valueRating: 2,
+        memoryType: 'Business',
+        timestamp: '2025-01-05T10:00:00Z'
+      });
+
+      const activity = manager.getGameActivity();
+      const claim = activity.tokens[0].events[0];
+
+      expect(claim.summary).toBe('This is a test summary');
+    });
+  });
 });
