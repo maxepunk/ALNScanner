@@ -489,20 +489,16 @@ class StandaloneDataManager extends EventTarget {
     const known = this.sessionData.transactions.filter(t => !t.isUnknown);
 
     const blackMarketTransactions = known.filter(t => t.mode === 'blackmarket');
-    const detectiveTransactions = known.filter(t => t.mode === 'detective');
 
     const blackMarketScore = blackMarketTransactions.reduce((sum, t) => {
       return sum + this.calculateTokenValue(t);
     }, 0);
 
-    const detectiveValue = detectiveTransactions.reduce((sum, t) => {
-      return sum + (t.valueRating || 0);
-    }, 0);
-
-    const totalValue = detectiveValue + Math.floor(blackMarketScore / 1000);
+    // totalValue derived from blackMarketScore only - detective mode has no scoring
+    const totalValue = Math.floor(blackMarketScore / 1000);
     const avgValue = known.length > 0 ? (totalValue / known.length).toFixed(1) : 0;
 
-    return { total, teams, totalValue, avgValue, blackMarketScore, detectiveValue };
+    return { total, teams, totalValue, avgValue, blackMarketScore };
   }
 
   /**
