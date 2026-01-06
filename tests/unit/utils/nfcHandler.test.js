@@ -121,4 +121,17 @@ describe('NFCHandler - ES6 Module', () => {
       expect(NFCHandler.isScanning).toBe(false);
     });
   });
+
+  describe('debouncing', () => {
+    beforeEach(() => {
+      NFCHandler.lastRead = null;
+      NFCHandler.debounceMs = 2000;
+    });
+
+    it('should have debouncing state initialized', () => {
+      const handler = new NFCHandlerClass();
+      expect(handler.lastRead).toBe(null);
+      expect(handler.debounceMs).toBe(2000);
+    });
+  });
 });

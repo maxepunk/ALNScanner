@@ -10,6 +10,8 @@ class NFCHandlerClass {
   constructor() {
     this.reader = null;
     this.isScanning = false;
+    this.lastRead = null;       // { id: string, timestamp: number }
+    this.debounceMs = 2000;     // Ignore same tag within 2 seconds
   }
 
   /**
