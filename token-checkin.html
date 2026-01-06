@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>ALN Token Check-In</title>
+    <meta name="theme-color" content="#22c55e">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="shared/aln-tools.css">
+    <style>
+        /* ==================== CHECK-IN SPECIFIC STYLES ==================== */
+
+        /* Green accent for check-in tool */
+        .header-icon {
+            background: linear-gradient(135deg, var(--success), #15803d);
+            box-shadow: 0 4px 20px var(--success-glow);
+        }
+
+        /* Progress bar */
+        .progress-container {
+            margin-bottom: 16px;
+        }
+        .progress-stats {
+            display: flex;
+            justify-content: space-between;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+        }
+        .progress-collected {
+            color: var(--success);
+            font-weight: 600;
+        }
+        .progress-missing {
+            color: var(--text-muted);
+        }
+        .progress-bar {
+            height: 8px;
+            background: var(--bg-input);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: var(--success);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        .progress-timestamp {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+
+        /* Scan overlay */
+        .scan-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-deep);
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+        }
+        .scan-overlay.active { display: flex; }
+
+        .scan-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+        }
+        .scan-count {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+        }
+        .scan-count strong { color: var(--success); }
+
+        .scan-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px 24px;
+            text-align: center;
+        }
+
+        .scan-prompt {
+            font-family: var(--font-mono);
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+        }
+
+        .scan-visual {
+            width: 160px; height: 160px;
+            border: 3px solid var(--success);
+            border-radius: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 64px;
+            margin-bottom: 30px;
+            animation: scan-pulse 2s ease-in-out infinite;
+        }
+        @keyframes scan-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 var(--success-glow); }
+            50% { box-shadow: 0 0 0 20px transparent; }
+        }
+
+        .scan-visual.success {
+            border-color: var(--success);
+            animation: none;
+            background: var(--success-glow);
+        }
+        .scan-visual.warning {
+            border-color: var(--warning);
+            animation: none;
+        }
+        .scan-visual.already {
+            border-color: var(--text-muted);
+            animation: none;
+        }
+
+        .scan-feedback {
+            font-family: var(--font-mono);
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            min-height: 2em;
+        }
+        .scan-feedback.success { color: var(--success); }
+        .scan-feedback.warning { color: var(--warning); }
+        .scan-feedback.already { color: var(--text-muted); }
+
+        .scan-message {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            min-height: 1.5em;
+        }
+
+        .scan-footer {
+            padding: 16px 20px;
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border);
+        }
+
+        /* Action buttons row */
+        .action-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        .action-row .btn { flex: 1; }
+
+        /* Green primary button for check-in */
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+        .btn-success:active:not(:disabled) { transform: scale(0.98); }
+
+        /* Warning button */
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="header-icon">📋</div>
+            <h1>ALN Token Check-In</h1>
+            <div class="env-badge" id="envBadge">LOCAL</div>
+        </header>
+
+        <!-- NFC Warning -->
+        <div class="nfc-warning" id="nfcWarning" style="display: none;">
+            Web NFC not supported. Use Chrome on Android.
+        </div>
+
+        <!-- Config Panel -->
+        <section class="panel">
+            <div class="panel-header">Configuration</div>
+            <div class="panel-body">
+                <div class="form-row">
+                    <label class="form-label">Environment</label>
+                    <select id="environment">
+                        <option value="local">Local — tokens.json (default)</option>
+                        <option value="dev">Dev — raspberrypi.local</option>
+                        <option value="prod">Prod — aln-orchestrator.local</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="btn-row">
+                        <button class="btn btn-secondary" id="loadTokens">📂 Load Tokens</button>
+                    </div>
+                </div>
+                <div class="status-bar" id="loadStatus">
+                    <span class="status-dot"></span>
+                    <span>No tokens loaded</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Progress Panel -->
+        <section class="panel" id="progressPanel" style="display: none;">
+            <div class="panel-header">Collection Progress</div>
+            <div class="panel-body">
+                <div class="progress-container">
+                    <div class="progress-stats">
+                        <span class="progress-collected" id="progressCollected">0 collected</span>
+                        <span class="progress-missing" id="progressMissing">0 missing</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-timestamp" id="progressTimestamp"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Token List -->
+        <section class="panel" id="tokensPanel" style="display: none;">
+            <div class="panel-header">Tokens</div>
+            <div class="panel-body">
+                <div class="token-list-header">
+                    <span class="token-count" id="tokenCount">0 tokens</span>
+                    <div class="token-filters">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="collected">Collected</button>
+                        <button class="filter-btn" data-filter="missing">Missing</button>
+                    </div>
+                </div>
+                <div class="token-list" id="tokenList">
+                    <div class="empty-state">Load tokens to begin</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Actions -->
+        <div class="action-row" id="actionRow" style="display: none;">
+            <button class="btn btn-success" id="startScanBtn">
+                📡 Start Scanning
+            </button>
+        </div>
+        <div class="action-row" id="secondaryActions" style="display: none;">
+            <button class="btn btn-secondary" id="writeMissingBtn">
+                🏷️ Write Missing
+            </button>
+            <button class="btn btn-secondary" id="clearAllBtn">
+                🗑️ Clear All
+            </button>
+        </div>
+    </div>
+
+    <!-- Scan Mode Overlay -->
+    <div class="scan-overlay" id="scanOverlay">
+        <div class="scan-header">
+            <div class="scan-count">
+                <strong id="scanSessionCount">0</strong> scanned this session
+            </div>
+            <button class="btn btn-secondary btn-sm" id="stopScanBtn">Done</button>
+        </div>
+
+        <div class="scan-main">
+            <div class="scan-prompt">Tap token to check in</div>
+            <div class="scan-visual" id="scanVisual">📱</div>
+            <div class="scan-feedback" id="scanFeedback"></div>
+            <div class="scan-message" id="scanMessage"></div>
+        </div>
+
+        <div class="scan-footer">
+            <div class="progress-stats">
+                <span class="progress-collected" id="scanProgressCollected">0 collected</span>
+                <span class="progress-missing" id="scanProgressMissing">0 missing</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="scanProgressFill" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clear Confirmation Modal -->
+    <div class="modal-backdrop" id="clearModal">
+        <div class="modal">
+            <div class="modal-header">Clear All Check-Ins?</div>
+            <div class="modal-body">
+                This will reset all collected tokens. This action cannot be undone.
+            </div>
+            <div class="modal-footer">
+                <div class="btn-row">
+                    <button class="btn btn-secondary btn-sm" id="clearCancel">Cancel</button>
+                    <button class="btn btn-primary btn-sm" id="clearConfirm">Clear All</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import {
+            getEnvironment,
+            loadTokens,
+            checkNFCSupport,
+            startContinuousScan,
+            setStatusBar,
+            $,
+            buildURLWithParams,
+            formatRelativeTime
+        } from './shared/aln-tools.js';
+
+        // ==================== STATE ====================
+        const STORAGE_KEY = 'aln_token_checkin';
+
+        const state = {
+            tokens: {},
+            collected: new Set(),
+            filter: 'all',
+            scanning: false,
+            scanAbort: null,
+            sessionScans: 0,
+            lastUpdated: null
+        };
+
+        const getEnv = () => getEnvironment($('environment'), null);
+
+        // ==================== PERSISTENCE ====================
+        function loadCheckinState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    state.collected = new Set(data.collected || []);
+                    state.lastUpdated = data.lastUpdated || null;
+                }
+            } catch (e) {
+                console.error('Failed to load check-in state:', e);
+                state.collected = new Set();
+            }
+        }
+
+        function saveCheckinState() {
+            try {
+                const data = {
+                    version: '1.0',
+                    lastUpdated: new Date().toISOString(),
+                    collected: [...state.collected]
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                state.lastUpdated = data.lastUpdated;
+            } catch (e) {
+                console.error('Failed to save check-in state:', e);
+            }
+        }
+
+        // ==================== ENVIRONMENT ====================
+        $('environment').addEventListener('change', () => {
+            $('envBadge').textContent = getEnv().name;
+        });
+
+        // ==================== LOAD TOKENS ====================
+        $('loadTokens').addEventListener('click', async () => {
+            setStatusBar($('loadStatus'), 'Loading...', 'loading');
+            try {
+                const env = getEnv();
+                console.log('Loading tokens from:', env.tokensUrl);
+                state.tokens = await loadTokens(env);
+
+                // Load saved check-in state
+                loadCheckinState();
+
+                // Filter out any collected tokens that no longer exist
+                state.collected = new Set(
+                    [...state.collected].filter(id => id in state.tokens)
+                );
+
+                setStatusBar($('loadStatus'), `${Object.keys(state.tokens).length} tokens loaded`, 'success');
+
+                // Show UI panels
+                $('progressPanel').style.display = 'block';
+                $('tokensPanel').style.display = 'block';
+                $('actionRow').style.display = 'flex';
+                $('secondaryActions').style.display = 'flex';
+
+                updateProgress();
+                renderList();
+            } catch (e) {
+                console.error('Load error:', e);
+                setStatusBar($('loadStatus'), `Error: ${e.message}`, 'error');
+            }
+        });
+
+        // ==================== PROGRESS ====================
+        function updateProgress() {
+            const total = Object.keys(state.tokens).length;
+            const collected = state.collected.size;
+            const missing = total - collected;
+            const percent = total > 0 ? (collected / total) * 100 : 0;
+
+            // Main progress
+            $('progressCollected').textContent = `${collected} collected`;
+            $('progressMissing').textContent = `${missing} missing`;
+            $('progressFill').style.width = `${percent}%`;
+
+            // Timestamp
+            if (state.lastUpdated) {
+                $('progressTimestamp').textContent = `Last updated: ${formatRelativeTime(state.lastUpdated)}`;
+            } else {
+                $('progressTimestamp').textContent = '';
+            }
+
+            // Scan overlay progress
+            $('scanProgressCollected').textContent = `${collected} collected`;
+            $('scanProgressMissing').textContent = `${missing} missing`;
+            $('scanProgressFill').style.width = `${percent}%`;
+
+            // Update buttons
+            $('writeMissingBtn').disabled = missing === 0;
+            $('writeMissingBtn').textContent = missing > 0
+                ? `🏷️ Write ${missing} Missing`
+                : '🏷️ Write Missing';
+        }
+
+        // ==================== TOKEN LIST ====================
+        function renderList() {
+            const list = $('tokenList');
+            let ids = Object.keys(state.tokens).sort();
+
+            if (state.filter === 'collected') ids = ids.filter(id => state.collected.has(id));
+            if (state.filter === 'missing') ids = ids.filter(id => !state.collected.has(id));
+
+            if (ids.length === 0) {
+                const emptyMsg = state.filter === 'collected'
+                    ? 'No tokens collected yet'
+                    : state.filter === 'missing'
+                    ? 'All tokens collected!'
+                    : 'No tokens loaded';
+                list.innerHTML = `<div class="empty-state">${emptyMsg}</div>`;
+                updateCount();
+                return;
+            }
+
+            list.innerHTML = ids.map(id => {
+                const isCollected = state.collected.has(id);
+                let cls = 'token-item';
+                if (isCollected) cls += ' collected';
+                return `
+                    <div class="${cls}" data-id="${id}">
+                        <div class="token-check">${isCollected ? '✓' : ''}</div>
+                        <span class="token-id">${id}</span>
+                        ${isCollected ? '<span class="token-badge">Collected</span>' : ''}
+                    </div>
+                `;
+            }).join('');
+
+            // Manual toggle on click
+            list.querySelectorAll('.token-item').forEach(el => {
+                el.addEventListener('click', () => toggleToken(el.dataset.id));
+            });
+
+            updateCount();
+        }
+
+        function toggleToken(id) {
+            if (state.collected.has(id)) {
+                state.collected.delete(id);
+            } else {
+                state.collected.add(id);
+            }
+            saveCheckinState();
+            updateProgress();
+            renderList();
+        }
+
+        function updateCount() {
+            const total = Object.keys(state.tokens).length;
+            const collected = state.collected.size;
+            $('tokenCount').textContent = `${collected}/${total} tokens`;
+        }
+
+        // Filters
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                state.filter = btn.dataset.filter;
+                renderList();
+            });
+        });
+
+        // ==================== SCAN MODE ====================
+        $('startScanBtn').addEventListener('click', startScanning);
+        $('stopScanBtn').addEventListener('click', stopScanning);
+
+        async function startScanning() {
+            if (!checkNFCSupport()) {
+                alert('Web NFC not supported');
+                return;
+            }
+
+            state.scanning = true;
+            state.sessionScans = 0;
+            $('scanSessionCount').textContent = '0';
+            $('scanOverlay').classList.add('active');
+            resetScanFeedback();
+
+            try {
+                const { abort } = await startContinuousScan(
+                    (records) => handleScan(records),
+                    (error) => {
+                        console.error('Scan error:', error);
+                        showScanFeedback('Error', error.message, 'warning');
+                    }
+                );
+                state.scanAbort = abort;
+            } catch (e) {
+                console.error('Failed to start scanning:', e);
+                showScanFeedback('Error', e.message, 'warning');
+            }
+        }
+
+        function stopScanning() {
+            state.scanning = false;
+            if (state.scanAbort) {
+                state.scanAbort();
+                state.scanAbort = null;
+            }
+            $('scanOverlay').classList.remove('active');
+            renderList();
+        }
+
+        function handleScan(records) {
+            const textRecord = records.find(r => r.type === 'text');
+            if (!textRecord) {
+                showScanFeedback('Invalid', 'No text record found', 'warning');
+                return;
+            }
+
+            const tokenId = textRecord.data;
+
+            if (!(tokenId in state.tokens)) {
+                showScanFeedback(tokenId, 'Unknown token', 'warning');
+                return;
+            }
+
+            if (state.collected.has(tokenId)) {
+                showScanFeedback(tokenId, 'Already collected', 'already');
+                return;
+            }
+
+            // New collection!
+            state.collected.add(tokenId);
+            state.sessionScans++;
+            saveCheckinState();
+            updateProgress();
+            $('scanSessionCount').textContent = state.sessionScans;
+
+            showScanFeedback(tokenId, 'Collected!', 'success');
+        }
+
+        function showScanFeedback(title, message, type) {
+            $('scanFeedback').textContent = title;
+            $('scanFeedback').className = `scan-feedback ${type}`;
+            $('scanMessage').textContent = message;
+            $('scanVisual').className = `scan-visual ${type}`;
+
+            // Reset after delay
+            setTimeout(() => {
+                if (state.scanning) {
+                    resetScanFeedback();
+                }
+            }, 2000);
+        }
+
+        function resetScanFeedback() {
+            $('scanFeedback').textContent = '';
+            $('scanFeedback').className = 'scan-feedback';
+            $('scanMessage').textContent = '';
+            $('scanVisual').className = 'scan-visual';
+        }
+
+        // ==================== WRITE MISSING INTEGRATION ====================
+        $('writeMissingBtn').addEventListener('click', () => {
+            const missing = Object.keys(state.tokens).filter(id => !state.collected.has(id));
+            if (missing.length === 0) return;
+
+            const url = buildURLWithParams('tag-writer.html', {
+                preselect: missing.join(',')
+            });
+            window.location.href = url;
+        });
+
+        // ==================== CLEAR ALL ====================
+        $('clearAllBtn').addEventListener('click', () => {
+            $('clearModal').classList.add('active');
+        });
+
+        $('clearCancel').addEventListener('click', () => {
+            $('clearModal').classList.remove('active');
+        });
+
+        $('clearConfirm').addEventListener('click', () => {
+            state.collected.clear();
+            state.lastUpdated = null;
+            localStorage.removeItem(STORAGE_KEY);
+            $('clearModal').classList.remove('active');
+            updateProgress();
+            renderList();
+        });
+
+        // ==================== INIT ====================
+        if (!checkNFCSupport()) {
+            $('nfcWarning').style.display = 'block';
+            $('startScanBtn').disabled = true;
+            console.warn('Web NFC not supported');
+        }
+    </script>
+</body>
+</html>

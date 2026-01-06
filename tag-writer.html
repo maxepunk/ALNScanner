@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>ALN Tag Writer</title>
+    <meta name="theme-color" content="#dc2626">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="shared/aln-tools.css">
+    <style>
+        /* ==================== WRITE MODE (tag-writer specific) ==================== */
+        .write-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-deep);
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+        }
+        .write-overlay.active { display: flex; }
+
+        .write-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+        }
+        .write-progress {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+        }
+        .write-progress strong { color: var(--accent); }
+
+        .write-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px 24px;
+            text-align: center;
+        }
+
+        .write-token {
+            font-family: var(--font-mono);
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 8px;
+            text-shadow: 0 0 40px var(--accent-glow);
+        }
+        .write-phase {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+            min-height: 1.5em;
+        }
+
+        .write-visual {
+            width: 140px; height: 140px;
+            border: 3px solid var(--border);
+            border-radius: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 56px;
+            margin-bottom: 30px;
+            position: relative;
+            transition: all 0.3s;
+        }
+        .write-visual.writing {
+            border-color: var(--accent);
+            animation: write-pulse 1.5s ease-in-out infinite;
+        }
+        .write-visual.verifying {
+            border-color: var(--warning);
+        }
+        .write-visual.success {
+            border-color: var(--success);
+            animation: none;
+        }
+        .write-visual.error {
+            border-color: var(--error);
+            animation: none;
+        }
+        @keyframes write-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+            50% { box-shadow: 0 0 0 20px transparent; }
+        }
+
+        /* Verification result */
+        .verify-result {
+            width: 100%;
+            max-width: 320px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px;
+            text-align: left;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            margin-bottom: 20px;
+        }
+        .verify-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .verify-row:last-child { border-bottom: none; }
+        .verify-icon { flex-shrink: 0; }
+        .verify-icon.ok { color: var(--success); }
+        .verify-icon.fail { color: var(--error); }
+        .verify-label { color: var(--text-muted); flex-shrink: 0; width: 50px; }
+        .verify-value {
+            flex: 1;
+            word-break: break-all;
+            color: var(--text-primary);
+        }
+
+        .write-footer {
+            padding: 16px 20px;
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border);
+        }
+        .write-footer .btn-row { gap: 10px; }
+
+        /* Token item written state (tag-writer uses 'written' class) */
+        .token-item.written { background: var(--success-glow); }
+        .token-item.written .token-check { background: var(--success); border-color: var(--success); color: white; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="header-icon">🏷️</div>
+            <h1>ALN Tag Writer</h1>
+            <div class="env-badge" id="envBadge">LOCAL</div>
+        </header>
+
+        <!-- NFC Warning (shown if not supported) -->
+        <div class="nfc-warning" id="nfcWarning" style="display: none;">
+            Web NFC not supported. Use Chrome on Android.
+        </div>
+
+        <!-- Config Panel -->
+        <section class="panel">
+            <div class="panel-header">Configuration</div>
+            <div class="panel-body">
+                <div class="form-row">
+                    <label class="form-label">Environment</label>
+                    <select id="environment">
+                        <option value="local">Local — tokens.json (default)</option>
+                        <option value="dev">Dev — raspberrypi.local</option>
+                        <option value="prod">Prod — aln-orchestrator.local</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label class="form-label">Custom URL (optional)</label>
+                    <input type="text" id="customUrl" placeholder="https://custom-host:3000/player-scanner/">
+                </div>
+                <div class="form-row">
+                    <div class="btn-row">
+                        <button class="btn btn-secondary" id="loadTokens">📂 Load Tokens</button>
+                    </div>
+                </div>
+                <div class="status-bar" id="loadStatus">
+                    <span class="status-dot"></span>
+                    <span>No tokens loaded</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Token Selection -->
+        <section class="panel">
+            <div class="panel-header">Tokens</div>
+            <div class="panel-body">
+                <div class="token-list-header">
+                    <span class="token-count" id="tokenCount">0 tokens</span>
+                    <div class="token-filters">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="unwritten">Todo</button>
+                        <button class="filter-btn" data-filter="written">Done</button>
+                    </div>
+                </div>
+                <div class="token-list" id="tokenList">
+                    <div class="empty-state">Load tokens to begin</div>
+                </div>
+                <div class="btn-row" style="margin-top: 12px;">
+                    <button class="btn btn-secondary btn-sm" id="selectAllBtn">Select All</button>
+                    <button class="btn btn-secondary btn-sm" id="selectNoneBtn">Select None</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Action -->
+        <button class="btn btn-primary" id="startBtn" disabled>
+            ▶️ Start Writing
+        </button>
+    </div>
+
+    <!-- Write Mode Overlay -->
+    <div class="write-overlay" id="writeOverlay">
+        <div class="write-header">
+            <div class="write-progress">
+                <strong id="currentNum">1</strong> / <span id="totalNum">0</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="cancelBtn">Cancel</button>
+        </div>
+
+        <div class="write-main">
+            <div class="write-token" id="writeToken">---</div>
+            <div class="write-phase" id="writePhase">Initializing...</div>
+            <div class="write-visual" id="writeVisual">📱</div>
+
+            <div class="verify-result" id="verifyResult" style="display: none;">
+                <div class="verify-row">
+                    <span class="verify-icon" id="vText">○</span>
+                    <span class="verify-label">Text:</span>
+                    <span class="verify-value" id="vTextVal">—</span>
+                </div>
+                <div class="verify-row">
+                    <span class="verify-icon" id="vUrl">○</span>
+                    <span class="verify-label">URL:</span>
+                    <span class="verify-value" id="vUrlVal">—</span>
+                </div>
+                <div class="verify-row">
+                    <span class="verify-icon" id="vOrder">○</span>
+                    <span class="verify-label">Order:</span>
+                    <span class="verify-value" id="vOrderVal">—</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="write-footer">
+            <div class="btn-row">
+                <button class="btn btn-secondary" id="retryBtn" style="display: none;">🔄 Retry</button>
+                <button class="btn btn-secondary" id="skipBtn">⏭️ Skip</button>
+                <button class="btn btn-primary" id="nextBtn" style="display: none;">Next →</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import {
+            getEnvironment,
+            loadTokens,
+            checkNFCSupport,
+            readNFCTag,
+            writeNFCTag,
+            setStatusBar,
+            $,
+            getURLParam,
+            sleep
+        } from './shared/aln-tools.js';
+
+        // ==================== STATE ====================
+        const state = {
+            tokens: {},
+            selected: new Set(),
+            written: new Set(),
+            queue: [],
+            queueIndex: 0,
+            running: false,
+            filter: 'all'
+        };
+
+        const getEnv = () => getEnvironment($('environment'), $('customUrl'));
+
+        // ==================== ENVIRONMENT ====================
+        $('environment').addEventListener('change', () => {
+            $('envBadge').textContent = getEnv().name;
+            $('customUrl').value = '';
+        });
+
+        $('customUrl').addEventListener('input', () => {
+            const customUrl = $('customUrl').value.trim();
+            $('envBadge').textContent = customUrl ? 'CUSTOM' : getEnv().name;
+        });
+
+        // ==================== LOAD TOKENS ====================
+        $('loadTokens').addEventListener('click', async () => {
+            setStatusBar($('loadStatus'), 'Loading...', 'loading');
+            try {
+                const env = getEnv();
+                console.log('Loading tokens from:', env.tokensUrl);
+                state.tokens = await loadTokens(env);
+
+                // Handle preselect URL parameter
+                const preselect = getURLParam('preselect');
+                if (preselect) {
+                    const preselectedIds = preselect.split(',').filter(id => id in state.tokens);
+                    state.selected = new Set(preselectedIds);
+                } else {
+                    state.selected = new Set(Object.keys(state.tokens));
+                }
+
+                setStatusBar($('loadStatus'), `${Object.keys(state.tokens).length} tokens loaded`, 'success');
+                renderList();
+                updateStartBtn();
+            } catch (e) {
+                console.error('Load error:', e);
+                setStatusBar($('loadStatus'), `Error: ${e.message}`, 'error');
+            }
+        });
+
+        // ==================== TOKEN LIST ====================
+        function renderList() {
+            const list = $('tokenList');
+            let ids = Object.keys(state.tokens).sort();
+
+            if (state.filter === 'unwritten') ids = ids.filter(id => !state.written.has(id));
+            if (state.filter === 'written') ids = ids.filter(id => state.written.has(id));
+
+            if (ids.length === 0) {
+                list.innerHTML = '<div class="empty-state">No tokens match filter</div>';
+                updateCount();
+                return;
+            }
+
+            list.innerHTML = ids.map(id => {
+                const sel = state.selected.has(id);
+                const done = state.written.has(id);
+                let cls = 'token-item';
+                if (sel) cls += ' selected';
+                if (done) cls += ' written';
+                return `
+                    <div class="${cls}" data-id="${id}">
+                        <div class="token-check">${done ? '✓' : sel ? '✓' : ''}</div>
+                        <span class="token-id">${id}</span>
+                        ${done ? '<span class="token-badge">Done</span>' : ''}
+                    </div>
+                `;
+            }).join('');
+
+            list.querySelectorAll('.token-item').forEach(el => {
+                el.addEventListener('click', () => toggleToken(el.dataset.id));
+            });
+
+            updateCount();
+        }
+
+        function toggleToken(id) {
+            if (state.selected.has(id)) state.selected.delete(id);
+            else state.selected.add(id);
+            renderList();
+            updateStartBtn();
+        }
+
+        function updateCount() {
+            const total = Object.keys(state.tokens).length;
+            const sel = state.selected.size;
+            const done = state.written.size;
+            $('tokenCount').textContent = `${sel} selected, ${done} written`;
+        }
+
+        function updateStartBtn() {
+            const pending = [...state.selected].filter(id => !state.written.has(id));
+            $('startBtn').disabled = pending.length === 0;
+            $('startBtn').textContent = pending.length > 0
+                ? `▶️ Write ${pending.length} Tag${pending.length > 1 ? 's' : ''}`
+                : '▶️ Start Writing';
+        }
+
+        // Select All / Select None
+        $('selectAllBtn').addEventListener('click', () => {
+            state.selected = new Set(Object.keys(state.tokens));
+            renderList();
+            updateStartBtn();
+        });
+
+        $('selectNoneBtn').addEventListener('click', () => {
+            state.selected.clear();
+            renderList();
+            updateStartBtn();
+        });
+
+        // Filters
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                state.filter = btn.dataset.filter;
+                renderList();
+            });
+        });
+
+        // ==================== WRITE MODE ====================
+        $('startBtn').addEventListener('click', startWriting);
+        $('cancelBtn').addEventListener('click', stopWriting);
+        $('skipBtn').addEventListener('click', () => advanceQueue());
+        $('retryBtn').addEventListener('click', () => processCurrentTag());
+        $('nextBtn').addEventListener('click', () => advanceQueue());
+
+        function startWriting() {
+            state.queue = [...state.selected].filter(id => !state.written.has(id)).sort();
+            if (state.queue.length === 0) return;
+
+            state.queueIndex = 0;
+            state.running = true;
+            $('writeOverlay').classList.add('active');
+            $('totalNum').textContent = state.queue.length;
+
+            processCurrentTag();
+        }
+
+        function stopWriting() {
+            state.running = false;
+            $('writeOverlay').classList.remove('active');
+            renderList();
+            updateStartBtn();
+        }
+
+        function advanceQueue() {
+            state.queueIndex++;
+            if (state.queueIndex >= state.queue.length) {
+                stopWriting();
+                return;
+            }
+            processCurrentTag();
+        }
+
+        async function processCurrentTag() {
+            if (!state.running) return;
+
+            const tokenId = state.queue[state.queueIndex];
+            $('currentNum').textContent = state.queueIndex + 1;
+            $('writeToken').textContent = tokenId;
+
+            // Reset UI
+            $('verifyResult').style.display = 'none';
+            $('retryBtn').style.display = 'none';
+            $('nextBtn').style.display = 'none';
+            $('skipBtn').style.display = 'block';
+
+            // Phase 1: Write
+            setPhase('writing', 'Place tag to write...');
+
+            try {
+                const url = `${getEnv().baseUrl}?token=${tokenId}`;
+                console.log('Writing tag:', { tokenId, url });
+                await writeNFCTag(tokenId, url);
+
+                // Phase 2: Verify
+                setPhase('verifying', 'Written! Verifying...');
+                await sleep(300);
+
+                const result = await readNFCTag();
+                const verified = showVerifyResult(tokenId, result);
+
+                if (verified) {
+                    // Phase 3: Success
+                    setPhase('success', 'Verified! Remove tag.');
+                    state.written.add(tokenId);
+                    $('skipBtn').style.display = 'none';
+                    $('nextBtn').style.display = 'block';
+                } else {
+                    // Verification failed
+                    setPhase('error', 'Verification failed!');
+                    $('retryBtn').style.display = 'block';
+                }
+
+            } catch (err) {
+                console.error('Write/verify error:', err);
+                setPhase('error', `Error: ${err.message}`);
+                $('retryBtn').style.display = 'block';
+            }
+        }
+
+        function setPhase(visual, text) {
+            $('writeVisual').className = `write-visual ${visual}`;
+            $('writePhase').textContent = text;
+        }
+
+        function showVerifyResult(expectedToken, records) {
+            const text = records.find(r => r.type === 'text');
+            const url = records.find(r => r.type === 'url');
+            const orderOk = records[0]?.type === 'text';
+            const textOk = text?.data === expectedToken;
+            const urlOk = url?.data.includes(`token=${expectedToken}`);
+
+            $('vText').textContent = textOk ? '✓' : '✗';
+            $('vText').className = `verify-icon ${textOk ? 'ok' : 'fail'}`;
+            $('vTextVal').textContent = text?.data || '(missing)';
+
+            $('vUrl').textContent = urlOk ? '✓' : '✗';
+            $('vUrl').className = `verify-icon ${urlOk ? 'ok' : 'fail'}`;
+            $('vUrlVal').textContent = url?.data || '(missing)';
+
+            $('vOrder').textContent = orderOk ? '✓' : '✗';
+            $('vOrder').className = `verify-icon ${orderOk ? 'ok' : 'fail'}`;
+            $('vOrderVal').textContent = orderOk ? 'Text first (correct)' : 'Text should be first!';
+
+            $('verifyResult').style.display = 'block';
+
+            return textOk && urlOk && orderOk;
+        }
+
+        // ==================== INIT ====================
+        if (!checkNFCSupport()) {
+            $('nfcWarning').style.display = 'block';
+            $('startBtn').disabled = true;
+            console.warn('Web NFC not supported');
+        }
+
+        // Auto-load tokens if preselect parameter is present
+        if (getURLParam('preselect')) {
+            $('loadTokens').click();
+        }
+    </script>
+</body>
+</html>

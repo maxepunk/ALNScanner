@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "baseValues": {
+    "1": 10000,
+    "2": 25000,
+    "3": 50000,
+    "4": 75000,
+    "5": 150000
+  },
+  "typeMultipliers": {
+    "Personal": 1,
+    "Business": 3,
+    "Technical": 5,
+    "UNKNOWN": 0
+  }
+}
