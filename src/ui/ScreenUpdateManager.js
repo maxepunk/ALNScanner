@@ -23,7 +23,7 @@
  *   });
  *
  *   manager.registerScreen('history', {
- *     'transaction:added': () => uiManager.renderTransactions()
+ *     'transaction:added': () => uiManager.renderGameActivity(container)
  *   });
  *
  *   // Wire to DataManager

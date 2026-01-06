@@ -444,8 +444,8 @@ screenUpdateManager.registerGlobalHandler('transaction:added', () => {
 
 // 2. Screen-specific handlers: Only run when that screen is active
 screenUpdateManager.registerScreen('history', {
-  'transaction:added': () => UIManager.renderTransactions(),
-  'transaction:deleted': () => UIManager.renderTransactions()
+  'transaction:added': () => UIManager.renderGameActivity(container),
+  'transaction:deleted': () => UIManager.renderGameActivity(container)
 });
 
 screenUpdateManager.registerScreen('scoreboard', {

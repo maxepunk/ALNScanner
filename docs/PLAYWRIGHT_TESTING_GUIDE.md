@@ -254,11 +254,11 @@ manager.addEventListener('transaction:added', handler);  // Missed event!
 // ✅ CORRECT - Only re-render if history screen active
 const historyScreen = document.getElementById('historyScreen');
 if (historyScreen?.classList.contains('active')) {
-  UIManager.renderTransactions();
+  UIManager.renderGameActivity(container);
 }
 
 // ❌ WRONG - Renders even when screen hidden
-UIManager.renderTransactions();  // Wastes cycles, doesn't update visible UI
+UIManager.renderGameActivity(container);  // Wastes cycles, doesn't update visible UI
 ```
 
 ### 4. Mode-Specific Features - Verify mode before testing
@@ -441,7 +441,7 @@ Backend broadcast (transaction:new)
           → ScreenUpdateManager.onDataUpdate('transaction:added', data)
             → Global handlers run (badge, stats update)
             → Screen handler runs IF historyScreen is active
-              → UIManager.renderTransactions()
+              → UIManager.renderGameActivity(container)
                 → DOM updates with new transaction
 ```
 
@@ -472,7 +472,7 @@ screenUpdateManager.registerGlobalHandler('transaction:added', () => {
 screenUpdateManager.registerScreen('history', {
   'transaction:added': () => {
     UIManager.updateHistoryStats();
-    UIManager.renderTransactions();
+    UIManager.renderGameActivity(container);
   }
 });
 
@@ -526,7 +526,7 @@ _getDataSource() {
 - `src/app/adminController.js` - AdminController DI (receives and passes dataManager)
 - `src/network/networkedSession.js` - NetworkedSession DI (receives and passes dataManager)
 - `src/app/app.js` - NetworkedSession creation (passes this.dataManager)
-- `src/ui/uiManager.js` - _getDataSource() mode routing, renderTransactions()
+- `src/ui/uiManager.js` - _getDataSource() mode routing, renderGameActivity()
 
 ### Admin Panel E2E Test Pattern
 ```javascript
