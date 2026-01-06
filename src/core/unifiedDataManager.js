@@ -146,4 +146,105 @@ export class UnifiedDataManager extends EventTarget {
       this.debug.log(`[UnifiedDataManager] ${message}`);
     }
   }
+
+  // ============================================================================
+  // DELEGATED OPERATIONS - Core IStorageStrategy methods
+  // ============================================================================
+
+  /**
+   * Add a transaction
+   * @param {Object} transaction - Transaction data
+   * @returns {Promise<Object>} Transaction result
+   */
+  async addTransaction(transaction) {
+    this._requireActiveStrategy();
+    return this._activeStrategy.addTransaction(transaction);
+  }
+
+  /**
+   * Remove a transaction
+   * @param {string} transactionId - Transaction ID
+   * @returns {Promise<Object>} Result
+   */
+  async removeTransaction(transactionId) {
+    this._requireActiveStrategy();
+    return this._activeStrategy.removeTransaction(transactionId);
+  }
+
+  /**
+   * Get all transactions
+   * @returns {Array} Transactions
+   */
+  getTransactions() {
+    this._requireActiveStrategy();
+    return this._activeStrategy.getTransactions();
+  }
+
+  /**
+   * Get team scores
+   * @returns {Array} Team scores sorted by score descending
+   */
+  getTeamScores() {
+    this._requireActiveStrategy();
+    return this._activeStrategy.getTeamScores();
+  }
+
+  /**
+   * Adjust team score
+   * @param {string} teamId - Team ID
+   * @param {number} delta - Score adjustment
+   * @param {string} reason - Reason for adjustment
+   * @returns {Promise<Object>} Result
+   */
+  async adjustTeamScore(teamId, delta, reason) {
+    this._requireActiveStrategy();
+    return this._activeStrategy.adjustTeamScore(teamId, delta, reason);
+  }
+
+  /**
+   * Get game activity
+   * @returns {Object} { tokens, stats }
+   */
+  getGameActivity() {
+    this._requireActiveStrategy();
+    return this._activeStrategy.getGameActivity();
+  }
+
+  /**
+   * Get current session info
+   * @returns {Object|null}
+   */
+  getCurrentSession() {
+    return this._activeStrategy?.getCurrentSession() ?? null;
+  }
+
+  /**
+   * Create a new session
+   * @param {string} name - Session name
+   * @param {Array} teams - Initial teams
+   * @returns {Promise<Object>}
+   */
+  async createSession(name, teams) {
+    this._requireActiveStrategy();
+    return this._activeStrategy.createSession(name, teams);
+  }
+
+  /**
+   * End current session
+   * @returns {Promise<void>}
+   */
+  async endSession() {
+    this._requireActiveStrategy();
+    return this._activeStrategy.endSession();
+  }
+
+  /**
+   * Ensure active strategy exists
+   * @private
+   */
+  _requireActiveStrategy() {
+    if (!this._activeStrategy) {
+      throw new Error('UnifiedDataManager: No active strategy. Call initializeStandaloneMode() or initializeNetworkedMode() first.');
+    }
+  }
 }

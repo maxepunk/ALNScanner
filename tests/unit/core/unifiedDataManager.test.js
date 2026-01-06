@@ -76,4 +76,73 @@ describe('UnifiedDataManager', () => {
       expect(manager.getActiveStrategyType()).toBeNull();
     });
   });
+
+  describe('delegated operations', () => {
+    beforeEach(async () => {
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
+      manager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+      await manager.initializeStandaloneMode();
+    });
+
+    it('should delegate addTransaction to strategy', async () => {
+      const transaction = {
+        id: 'tx-1',
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'blackmarket',
+        points: 50000,
+        valueRating: 3,
+        memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      };
+
+      const result = await manager.addTransaction(transaction);
+
+      expect(result.success).toBe(true);
+      expect(manager.getTransactions()).toHaveLength(1);
+    });
+
+    it('should delegate getTeamScores to strategy', async () => {
+      await manager.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: 'Alpha',
+        mode: 'blackmarket', points: 50000,
+        valueRating: 3, memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      });
+
+      const scores = manager.getTeamScores();
+
+      expect(scores).toHaveLength(1);
+      expect(scores[0].teamId).toBe('Alpha');
+      expect(scores[0].score).toBe(50000);
+    });
+
+    it('should delegate removeTransaction to strategy', async () => {
+      await manager.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 50000,
+        valueRating: 3, memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      });
+
+      const result = await manager.removeTransaction('tx-1');
+
+      expect(result.success).toBe(true);
+      expect(manager.getTransactions()).toHaveLength(0);
+    });
+
+    it('should throw if operation called before initialization', async () => {
+      const uninitializedManager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+
+      expect(() => uninitializedManager.getTransactions()).toThrow(
+        'UnifiedDataManager: No active strategy'
+      );
+    });
+  });
 });
