@@ -150,6 +150,35 @@ class UIManager {
     if (screenName === 'scoreboard') {
       this.renderScoreboard();
     }
+    if (screenName === 'result') {
+      this._enableResultScreenQuickDismiss();
+    }
+  }
+
+  /**
+   * Enable quick-dismiss behavior on result screen
+   * Tap anywhere (except buttons) returns to scan screen
+   * @private
+   */
+  _enableResultScreenQuickDismiss() {
+    const resultScreen = this.screens.result;
+    if (!resultScreen) return;
+
+    const dismissHandler = (event) => {
+      // Don't dismiss if clicking any button (let data-action handlers handle navigation)
+      if (event.target.closest('button')) {
+        return;
+      }
+      resultScreen.removeEventListener('click', dismissHandler);
+      this.showScreen('scan');
+    };
+
+    // Remove any existing handler first (prevents stacking)
+    if (resultScreen._quickDismissHandler) {
+      resultScreen.removeEventListener('click', resultScreen._quickDismissHandler);
+    }
+    resultScreen._quickDismissHandler = dismissHandler;
+    resultScreen.addEventListener('click', dismissHandler);
   }
 
   /**
@@ -812,6 +841,7 @@ class UIManager {
     }
 
     this.showScreen('result');
+    // Quick-dismiss is now handled by showScreen('result') -> _enableResultScreenQuickDismiss()
   }
 
   /**
