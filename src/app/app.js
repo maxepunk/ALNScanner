@@ -176,15 +176,15 @@ class App {
       adminInstances: null,
 
       init() {
-        // Initialize based on session mode
-        if (app.sessionModeManager?.isNetworked()) {
-          // Show view selector tabs in networked mode
-          const viewSelector = document.getElementById('viewSelector');
-          if (viewSelector) {
-            viewSelector.style.display = 'flex';
-          }
-          // Admin modules will be initialized after connection
+        // Show view selector tabs in BOTH networked and standalone modes
+        // Phase 3: Admin panel is now available in standalone mode
+        const viewSelector = document.getElementById('viewSelector');
+        if (viewSelector) {
+          viewSelector.style.display = 'flex';
         }
+
+        // Admin modules (WebSocket-based) only initialized in networked mode
+        // Standalone admin operations use dataManager directly
       },
 
       switchView(viewName) {
@@ -539,6 +539,12 @@ class App {
         await this.dataManager.initializeStandaloneMode();
 
         this.debug.log('UnifiedDataManager initialized for standalone mode');
+
+        // Phase 3: Initialize view controller (shows admin tabs in standalone mode too)
+        this.viewController.init();
+
+        // Initialize team entry UI
+        this.initTeamEntryUI();
 
         this.uiManager.showScreen('teamEntry');
       }

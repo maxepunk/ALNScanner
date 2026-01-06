@@ -558,12 +558,13 @@ describe('App', () => {
       expect(document.getElementById('viewSelector').style.display).toBe('flex');
     });
 
-    it('should not show view selector in standalone mode', () => {
+    it('should show viewSelector in standalone mode', () => {
       mockSessionModeManager.isNetworked.mockReturnValue(false);
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
 
       app.viewController.init();
 
-      expect(document.getElementById('viewSelector').style.display).toBe('none');
+      expect(document.getElementById('viewSelector').style.display).toBe('flex');
     });
 
     it('should switch views correctly', () => {
