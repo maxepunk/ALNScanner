@@ -802,13 +802,6 @@ class App {
     if (!this.currentTeamId || this.currentTeamId.trim() === '') {
       this.debug.log('ERROR: No team selected - cannot process token', true);
       this.uiManager.showError('Please select a team before scanning tokens');
-
-      // Reset scan button if it exists
-      const button = document.getElementById('scanButton');
-      if (button) {
-        button.disabled = false;
-        button.textContent = 'Start Scanning';
-      }
       return;
     }
 
@@ -838,12 +831,6 @@ class App {
   }
 
   showDuplicateError(tokenId) {
-    const button = document.getElementById('scanButton');
-    if (button) {
-      button.disabled = false;
-      button.textContent = 'Start Scanning';
-    }
-
     const statusEl = document.getElementById('resultStatus');
     if (statusEl) {
       statusEl.className = 'status-message error';
@@ -956,12 +943,6 @@ class App {
 
     this.uiManager.updateSessionStats();
     this.uiManager.showTokenResult(token, tokenId, isUnknown);
-
-    const button = document.getElementById('scanButton');
-    if (button) {
-      button.disabled = false;
-      button.textContent = 'Start Scanning';
-    }
   }
 
   manualEntry() {
