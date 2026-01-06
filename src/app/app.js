@@ -75,14 +75,10 @@ class App {
     // Store reference as instance property (no window global assignment)
     this.sessionModeManager = this.initializationSteps.createSessionModeManager(SessionModeManager);
 
-    // CRITICAL: Inject sessionModeManager and app into UIManager (Phase S1 fix)
-    // This allows UIManager._getDataSource() to route correctly to StandaloneDataManager in standalone mode
+    // Inject sessionModeManager and app into UIManager
+    // This allows UIManager to access session mode for rendering decisions
     this.uiManager.sessionModeManager = this.sessionModeManager;
     this.uiManager.app = this;
-
-    // CRITICAL: Inject app into StandaloneDataManager (Phase S1 fix)
-    // This allows StandaloneDataManager.getSessionStats() to access currentTeamId for per-team stats
-    this.standaloneDataManager.app = this;
 
     // Initialize view controller (Phase 1F)
     this.initializationSteps.initializeViewController(this.viewController);
@@ -486,21 +482,8 @@ class App {
       currentTeamElement.textContent = this.currentTeamId;
     }
 
-    // Add team to registry/session if standalone
-    if (isStandalone && this.standaloneDataManager) {
-      // Ensure team exists in standalone session
-      if (!this.standaloneDataManager.sessionData.teams[teamName]) {
-        this.standaloneDataManager.sessionData.teams[teamName] = {
-          teamId: teamName,
-          score: 0,
-          tokensScanned: 0,
-          baseScore: 0,
-          bonusPoints: 0,
-          completedGroups: []
-        };
-        this.standaloneDataManager.saveLocalSession();
-      }
-    }
+    // Note: Team will be created automatically when first transaction is added
+    // UnifiedDataManager's strategy (LocalStorage/NetworkedStorage) handles team creation
 
     // Update stats and proceed to scan screen
     this.uiManager.updateSessionStats();
@@ -548,25 +531,15 @@ class App {
         this.sessionModeManager.setMode(mode);
         this.debug.log(`Game mode locked: ${mode}`);
 
-        // CRITICAL FIX: Clear phantom data from previous sessions
-        // Prevents old transactions from appearing in fresh game
-        this.dataManager.resetForNewSession(null);
-
-        // Also clear standalone session localStorage to prevent loading old session
+        // Clear phantom data from previous sessions
         localStorage.removeItem('standaloneSession');
 
-        // Reset StandaloneDataManager to fresh state
-        if (this.standaloneDataManager) {
-          this.standaloneDataManager.sessionData = {
-            sessionId: `standalone_${Date.now()}`,
-            startTime: new Date().toISOString(),
-            transactions: [],
-            teams: {}
-          };
-          this.standaloneDataManager.scannedTokens.clear();
-        }
+        // Initialize UnifiedDataManager for standalone mode
+        // This creates LocalStorage strategy and loads from localStorage if available
+        this.dataManager.sessionModeManager = this.sessionModeManager;
+        await this.dataManager.initializeStandaloneMode();
 
-        this.debug.log('Cleared old session data for fresh standalone game');
+        this.debug.log('UnifiedDataManager initialized for standalone mode');
 
         this.uiManager.showScreen('teamEntry');
       }
@@ -613,11 +586,12 @@ class App {
         await this.networkedSession.initialize();
         this.debug.log('NetworkedSession initialized - session:ready will fire');
 
-        // Wire DataManager to NetworkedSession for connection-aware score updates
-        // CRITICAL FIX: DataManager needs this.networkedSession reference to validate connection state
-        // before updating backendScores (see dataManager.js:570)
-        this.dataManager.networkedSession = this.networkedSession;
-        this.debug.log('DataManager.networkedSession injected for score update validation');
+        // Initialize UnifiedDataManager for networked mode
+        // Pass the socket from networkedSession for NetworkedStorage strategy
+        this.dataManager.sessionModeManager = this.sessionModeManager;
+        const client = this.networkedSession.getService('client');
+        await this.dataManager.initializeNetworkedMode(client?.socket);
+        this.debug.log('UnifiedDataManager initialized for networked mode');
 
         // Close connection wizard modal (if open) and show team entry screen
         // Per Architecture Refactoring 2025-11: App manages UI transitions after NetworkedSession ready
@@ -745,7 +719,7 @@ class App {
     }, this.config.SCAN_SIMULATION_DELAY);
   }
 
-  processNFCRead(result) {
+  async processNFCRead(result) {
     this.debug.log(`Processing token: "${result.id}" (from ${result.source})`);
     this.debug.log(`Token ID length: ${result.id.length} characters`);
 
@@ -773,21 +747,18 @@ class App {
     // Use matched ID for duplicate check (handles case variations)
     const tokenId = tokenData ? tokenData.matchedId : cleanId;
 
-    // Check for duplicate using normalized ID (mode-aware)
-    const dataSource = this.sessionModeManager?.isStandalone()
-      ? this.standaloneDataManager
-      : this.dataManager;
-
-    if (dataSource && dataSource.isTokenScanned(tokenId)) {
+    // Check for duplicate using normalized ID
+    // UnifiedDataManager handles this for both modes
+    if (this.dataManager.isTokenScanned(tokenId)) {
       this.debug.log(`Duplicate token detected: ${tokenId}`, true);
       this.showDuplicateError(tokenId);
       return;
     }
 
     if (!tokenData) {
-      this.recordTransaction(null, cleanId, true);
+      await this.recordTransaction(null, cleanId, true);
     } else {
-      this.recordTransaction(tokenData.token, tokenData.matchedId, false);
+      await this.recordTransaction(tokenData.token, tokenData.matchedId, false);
     }
   }
 
@@ -832,7 +803,7 @@ class App {
     this.uiManager.showScreen('result');
   }
 
-  recordTransaction(token, tokenId, isUnknown) {
+  async recordTransaction(token, tokenId, isUnknown) {
     const transaction = {
       timestamp: new Date().toISOString(),
       deviceId: this.settings.deviceId,
@@ -887,31 +858,24 @@ class App {
       });
       this.debug.log(`Transaction queued for orchestrator: ${txId}`);
     } else {
-      // Standalone mode - use StandaloneDataManager ONLY (Single Source of Truth)
+      // Standalone mode - use UnifiedDataManager (LocalStorage strategy)
       if (this.sessionModeManager && this.sessionModeManager.isStandalone()) {
-        // ARCHITECTURE: StandaloneDataManager is the ONLY data source for standalone mode
-        // UIManager is now mode-aware and will read from StandaloneDataManager via _getDataSource()
-        if (!this.standaloneDataManager) {
-          throw new Error('StandaloneDataManager not initialized');
-        }
-
-        // Add to StandaloneDataManager (handles scoring, group bonuses, and persists to localStorage.standaloneSession)
-        this.standaloneDataManager.addTransaction(transaction);
-        this.debug.log('Transaction stored in StandaloneDataManager (standalone mode - single source of truth)');
-      } else {
-        // No session mode selected yet - store in DataManager only
-        this.dataManager.addTransaction(transaction);
+        // Add transaction via UnifiedDataManager (delegates to LocalStorage strategy)
+        // LocalStorage handles scoring, group bonuses, and persists to localStorage
+        await this.dataManager.addTransaction(transaction);
         this.dataManager.markTokenAsScanned(tokenId);
-        this.debug.log('No session mode selected - storing in DataManager only');
+        this.debug.log('Transaction stored via UnifiedDataManager (standalone mode)');
+      } else {
+        // No session mode selected yet - should not happen, but handle gracefully
+        this.debug.log('Warning: No session mode selected - cannot process transaction', true);
+        this.uiManager.showError('Please select a game mode first');
+        return;
       }
     }
 
     if (this.settings.mode === 'blackmarket' && !isUnknown) {
-      // Use appropriate data manager based on mode
-      const dataSource = this.sessionModeManager?.isStandalone()
-        ? this.standaloneDataManager
-        : this.dataManager;
-      const tokenScore = dataSource.calculateTokenValue(transaction);
+      // Use UnifiedDataManager for all modes
+      const tokenScore = this.dataManager.calculateTokenValue(transaction);
       this.debug.log(`Token scored: $${tokenScore.toLocaleString()}`);
     }
 
@@ -1439,10 +1403,10 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
     const isStandalone = this.sessionModeManager?.isStandalone();
 
-    // Standalone mode: Use StandaloneDataManager (local only)
+    // Standalone mode: Use UnifiedDataManager (LocalStorage strategy)
     if (isStandalone) {
       try {
-        this.standaloneDataManager.adjustTeamScore(teamId, delta, reason);
+        await this.dataManager.adjustTeamScore(teamId, delta, reason);
         this.debug.log(`Score adjusted (standalone): Team ${teamId} ${delta > 0 ? '+' : ''}${delta} (${reason})`);
 
         // Clear inputs
@@ -1450,7 +1414,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
         if (reasonInput) reasonInput.value = '';
 
         // Refresh team details immediately with updated local data
-        const transactions = this.standaloneDataManager.getTeamTransactions(teamId);
+        const transactions = this.dataManager.getTeamTransactions(teamId);
         this.uiManager.renderTeamDetails(teamId, transactions);
 
         this.uiManager.showToast(`Score adjusted: ${delta > 0 ? '+' : ''}${delta} points`, 'success');
@@ -1490,17 +1454,17 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
     const isStandalone = this.sessionModeManager?.isStandalone();
 
-    // Standalone mode: Use StandaloneDataManager (local only)
+    // Standalone mode: Use UnifiedDataManager (LocalStorage strategy)
     if (isStandalone) {
       try {
-        const deletedTx = this.standaloneDataManager.removeTransaction(transactionId);
-        if (deletedTx) {
+        const result = await this.dataManager.removeTransaction(transactionId);
+        if (result.success) {
           this.debug.log(`Transaction deleted (standalone): ${transactionId}`);
 
           // Refresh team details immediately with updated local data
           const teamId = this.currentInterventionTeamId;
           if (teamId) {
-            const transactions = this.standaloneDataManager.getTeamTransactions(teamId);
+            const transactions = this.dataManager.getTeamTransactions(teamId);
             this.uiManager.renderTeamDetails(teamId, transactions);
           }
 
