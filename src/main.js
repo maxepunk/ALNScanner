@@ -279,6 +279,10 @@ const app = new App({
 // Set app context for screen handlers that need it (replaces window.__app hack)
 screenUpdateManager.setAppContext(app);
 
+// TeamRegistry dependencies (sessionModeManager, orchestratorClient) are wired
+// by App.selectGameMode() after mode selection - not here in main.js
+// This follows the same pattern as UnifiedDataManager strategy initialization
+
 /**
  * Create connection wizard and queue status manager
  * These handle networked mode connection UI and offline queue indicator
