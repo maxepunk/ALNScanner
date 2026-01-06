@@ -49,8 +49,14 @@
  * Implementations:
  * - NetworkedStorage: WebSocket communication with backend
  * - LocalStorage: Browser localStorage persistence
+ *
+ * Extends EventTarget to allow strategies to emit events that can be
+ * forwarded by UnifiedDataManager to consumers.
  */
-export class IStorageStrategy {
+export class IStorageStrategy extends EventTarget {
+  constructor() {
+    super();
+  }
   /**
    * Initialize the storage strategy
    * @returns {Promise<void>}
