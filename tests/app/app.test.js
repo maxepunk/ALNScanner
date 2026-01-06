@@ -18,7 +18,6 @@ jest.mock('../../src/ui/uiManager.js', () => ({
     showTokenResult: jest.fn(),
     updateModeDisplay: jest.fn(),
     updateHistoryStats: jest.fn(),
-    renderTransactions: jest.fn(),
     renderGameActivity: jest.fn(),
     renderScoreboard: jest.fn(),
     renderTeamDetails: jest.fn(),

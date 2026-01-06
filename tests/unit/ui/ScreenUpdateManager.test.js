@@ -21,7 +21,7 @@ describe('ScreenUpdateManager', () => {
       updateHistoryBadge: jest.fn(),
       updateSessionStats: jest.fn(),
       updateHistoryStats: jest.fn(),
-      renderTransactions: jest.fn(),
+      renderGameActivity: jest.fn(),
       renderTeamDetails: jest.fn(),
       renderScoreboard: jest.fn()
     };
@@ -575,7 +575,7 @@ describe('ScreenUpdateManager', () => {
       screenUpdateManager.registerScreen('history', {
         'transaction:added': () => {
           mockUIManager.updateHistoryStats();
-          mockUIManager.renderTransactions();
+          mockUIManager.renderGameActivity();
         }
       });
 
@@ -586,7 +586,7 @@ describe('ScreenUpdateManager', () => {
       expect(mockUIManager.updateHistoryBadge).toHaveBeenCalled();
       expect(mockUIManager.updateSessionStats).toHaveBeenCalled();
       expect(mockUIManager.updateHistoryStats).toHaveBeenCalled();
-      expect(mockUIManager.renderTransactions).toHaveBeenCalled();
+      expect(mockUIManager.renderGameActivity).toHaveBeenCalled();
     });
 
     it('should handle team details screen with app context', () => {
