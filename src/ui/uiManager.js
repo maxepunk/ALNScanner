@@ -16,14 +16,16 @@ class UIManager {
    * Create UIManager instance
    * @param {Object} options - Dependency injection options
    * @param {Object} options.settings - Settings instance (for mode checking)
-   * @param {Object} options.dataManager - DataManager instance (for networked mode stats/scores)
-   * @param {Object} options.standaloneDataManager - StandaloneDataManager instance (for standalone mode)
+   * @param {Object} options.dataManager - UnifiedDataManager instance
+   * @param {Object} options.standaloneDataManager - Deprecated (same as dataManager for compatibility)
    * @param {Object} options.sessionModeManager - SessionModeManager instance (for mode check)
    * @param {Object} options.app - App instance (for callbacks like showTeamDetails, deleteTeamTransaction)
    */
   constructor({ settings, dataManager, standaloneDataManager, sessionModeManager, app } = {}) {
     this.settings = settings;
     this.dataManager = dataManager;
+    // Note: standaloneDataManager is same instance as dataManager (UnifiedDataManager)
+    // Kept for backward compatibility during migration, will be removed in cleanup
     this.standaloneDataManager = standaloneDataManager;
     this.sessionModeManager = sessionModeManager;
     this.app = app;
@@ -31,33 +33,6 @@ class UIManager {
     this.screens = {};
     this.previousScreen = null;
     this.errorContainer = null;
-  }
-
-  /**
-   * Get appropriate data source based on session mode
-   * Single Source of Truth: Route to correct manager based on mode
-   * @returns {Object} DataManager (networked) or StandaloneDataManager (standalone)
-   */
-  _getDataSource() {
-    // Check if in standalone mode
-    const isStandalone = this.sessionModeManager?.isStandalone();
-
-    // DEBUGGING: Check which data source is being used and why
-    const debug = {
-      isStandalone,
-      hasSessionModeManager: !!this.sessionModeManager,
-      dataManagerTxCount: this.dataManager?.transactions?.length || 0,
-      standaloneTxCount: this.standaloneDataManager?.transactions?.length || 0
-    };
-    console.log(`[UIManager] _getDataSource: standalone=${isStandalone}, DataManager txs=${debug.dataManagerTxCount}, Standalone txs=${debug.standaloneTxCount}`);
-
-    if (isStandalone) {
-      console.log('[UIManager] Returning StandaloneDataManager');
-      return this.standaloneDataManager;
-    }
-    // Default to DataManager (networked mode or no mode set)
-    console.log('[UIManager] Returning DataManager (networked)');
-    return this.dataManager;
   }
 
   /**
@@ -233,7 +208,7 @@ class UIManager {
    * Update session statistics display
    */
   updateSessionStats() {
-    const dataSource = this._getDataSource();
+    const dataSource = this.dataManager;
     if (!dataSource || !this.settings) return;
 
     const stats = dataSource.getSessionStats();
@@ -260,7 +235,7 @@ class UIManager {
    * Update history badge count
    */
   updateHistoryBadge() {
-    const dataSource = this._getDataSource();
+    const dataSource = this.dataManager;
     if (!dataSource) return;
 
     const badge = document.getElementById('historyBadge');
@@ -279,7 +254,7 @@ class UIManager {
    * Update history statistics
    */
   updateHistoryStats() {
-    const dataSource = this._getDataSource();
+    const dataSource = this.dataManager;
     if (!dataSource) return;
 
     const stats = dataSource.getGlobalStats();
@@ -299,7 +274,7 @@ class UIManager {
    * @param {HTMLElement|null} container - Optional container element. Defaults to #scoreboardContainer
    */
   renderScoreboard(container = null) {
-    const dataSource = this._getDataSource();
+    const dataSource = this.dataManager;
     if (!dataSource || !this.app) return;
 
     // Use provided container or default to scoreboardContainer
@@ -347,7 +322,7 @@ class UIManager {
    * @param {Array} transactions - Team transactions
    */
   renderTeamDetails(teamId, transactions) {
-    const dataSource = this._getDataSource();
+    const dataSource = this.dataManager;
     if (!dataSource) return;
 
     // Get enhanced data structure
@@ -545,7 +520,7 @@ class UIManager {
    * @returns {string} HTML string
    */
   renderTokenCard(token, hasBonus = false, isUnknown = false, showDelete = false) {
-    const dataSource = this._getDataSource();
+    const dataSource = this.dataManager;
     if (!dataSource) return '';
 
     const tokenValue = dataSource.calculateTokenValue(token);
@@ -675,7 +650,7 @@ class UIManager {
    * @param {boolean} isUnknown - Whether token is unknown
    */
   showTokenResult(token, tokenId, isUnknown) {
-    const dataSource = this._getDataSource();
+    const dataSource = this.dataManager;
     if (!dataSource || !this.settings) return;
 
     const statusEl = document.getElementById('resultStatus');
@@ -775,7 +750,7 @@ class UIManager {
     if (!container) return;
 
     const { showSummary = true, showFilters = true } = options;
-    const dataSource = this._getDataSource();
+    const dataSource = this.dataManager;
     if (!dataSource) return;
 
     // Check if getGameActivity exists (only on DataManager, not StandaloneDataManager)
