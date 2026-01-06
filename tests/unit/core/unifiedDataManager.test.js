@@ -276,7 +276,8 @@ describe('UnifiedDataManager', () => {
     it('should normalize group names', () => {
       const normalized = manager.normalizeGroupName('Server Logs');
 
-      expect(normalized).toBe('serverlogs');
+      // scoring.js preserves single spaces, just lowercases
+      expect(normalized).toBe('server logs');
     });
 
     it('should reset for new session', async () => {

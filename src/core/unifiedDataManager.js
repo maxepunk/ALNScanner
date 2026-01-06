@@ -8,7 +8,11 @@
 import { LocalStorage } from './storage/LocalStorage.js';
 import { NetworkedStorage } from './storage/NetworkedStorage.js';
 import { DataManagerUtils } from './dataManagerUtils.js';
-import { calculateTokenValue as calcTokenValue, parseGroupInfo as parseGroup } from './scoring.js';
+import {
+  calculateTokenValue as calcTokenValue,
+  parseGroupInfo as parseGroup,
+  normalizeGroupName as sharedNormalizeGroupName
+} from './scoring.js';
 
 export class UnifiedDataManager extends EventTarget {
   /**
@@ -366,11 +370,12 @@ export class UnifiedDataManager extends EventTarget {
 
   /**
    * Normalize group name for comparison
+   * Delegates to shared scoring.js implementation for consistency
    * @param {string} groupName
    * @returns {string}
    */
   normalizeGroupName(groupName) {
-    return groupName?.toLowerCase().replace(/\s+/g, '') || '';
+    return sharedNormalizeGroupName(groupName);
   }
 
   /**
