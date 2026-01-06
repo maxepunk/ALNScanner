@@ -36,8 +36,10 @@ class GMScannerPage {
     this.standaloneBtn = page.locator('button[data-action="app.selectGameMode"][data-arg="standalone"]');
     this.networkedBtn = page.locator('button[data-action="app.selectGameMode"][data-arg="networked"]');
 
-    // Team entry elements (standalone mode uses text input)
-    this.teamNameInput = page.locator('#standaloneTeamName');
+    // Team entry elements - UNIFIED (single input + clickable list)
+    this.teamNameInput = page.locator('#teamNameInput');
+    this.teamList = page.locator('#teamList');
+    this.teamListLabel = page.locator('#teamListLabel');
     this.confirmTeamBtn = page.locator('button[data-action="app.confirmTeamId"]');
 
     // Scan screen elements
@@ -96,11 +98,34 @@ class GMScannerPage {
   }
 
   /**
-   * Enter team name using text input (standalone mode)
+   * Enter team name using unified text input
+   * Works for both networked and standalone modes
    * @param {string} teamName - Team name (e.g., "001" or "Team Alpha")
    */
   async enterTeam(teamName) {
     await this.teamNameInput.fill(teamName);
+  }
+
+  /**
+   * Select team from clickable team list
+   * Auto-proceeds to scan screen after selection
+   * @param {string} teamName - Team name to select
+   */
+  async selectTeamFromList(teamName) {
+    await this.teamList.locator(`.team-list-item:has-text("${teamName}")`).click();
+    await this.scanScreen.waitFor({ state: 'visible', timeout: 5000 });
+  }
+
+  /**
+   * Wait for team to appear in team list
+   * @param {string} teamName - Team name to wait for
+   * @param {number} timeout - Timeout in ms
+   */
+  async waitForTeamInList(teamName, timeout = 10000) {
+    await this.teamList.locator(`.team-list-item:has-text("${teamName}")`).waitFor({
+      state: 'visible',
+      timeout
+    });
   }
 
   /**
