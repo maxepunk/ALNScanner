@@ -628,63 +628,6 @@ class UIManager {
   }
 
   /**
-   * Render transaction history
-   * @param {Array} filtered - Filtered transactions (optional)
-   */
-  renderTransactions(filtered = null) {
-    const dataSource = this._getDataSource();
-    if (!dataSource) return;
-
-    const container = document.getElementById('historyContainer');
-    if (!container) return;
-
-    const transactions = filtered || dataSource.transactions;
-
-    if (transactions.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <h3>No Transactions Yet</h3>
-        </div>
-      `;
-      return;
-    }
-
-    container.innerHTML = transactions.map(t => {
-      const date = new Date(t.timestamp);
-      const timeStr = date.toLocaleTimeString();
-      const dateStr = date.toLocaleDateString();
-      const isUnknown = t.isUnknown || t.memoryType === 'UNKNOWN';
-
-      let valueDisplay;
-      if (t.mode === 'blackmarket') {
-        valueDisplay = `$${dataSource.calculateTokenValue(t).toLocaleString()}`;
-      } else {
-        valueDisplay = isUnknown ? 'N/A' : '⭐'.repeat(t.valueRating || 0);
-      }
-
-      // Add duplicate marker
-      const isDuplicate = t.status === 'duplicate';
-      const duplicateBadge = isDuplicate ? '<span class="duplicate-badge">DUPLICATE</span>' : '';
-
-      return `
-        <div class="transaction-card ${t.mode} ${isUnknown ? 'unknown' : ''} ${isDuplicate ? 'duplicate' : ''}">
-          <div class="transaction-header">
-            <span>Team ${t.teamId}</span>
-            <span class="transaction-time">${dateStr} ${timeStr}${duplicateBadge}</span>
-          </div>
-          <div class="transaction-details">
-            <div class="detail">RFID: <span>${t.rfid}</span></div>
-            <div class="detail">Value: <span>${valueDisplay}</span></div>
-            <div class="detail">Type: <span>${t.memoryType}</span></div>
-            <div class="detail">Mode: <span>${t.mode === 'blackmarket' ? 'Black Market' : 'Detective'}</span></div>
-            <div class="detail" style="grid-column: 1 / -1;">Group: <span>${t.group}</span></div>
-          </div>
-        </div>
-      `;
-    }).join('');
-  }
-
-  /**
    * Filter transactions based on search criteria
    */
   filterTransactions() {

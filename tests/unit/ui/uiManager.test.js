@@ -484,54 +484,6 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
     });
   });
 
-  describe('Transaction History', () => {
-    beforeEach(() => {
-      uiManager.init();
-    });
-
-    it('should render transaction list', () => {
-      uiManager.renderTransactions();
-
-      const container = document.getElementById('historyContainer');
-      expect(container.innerHTML).toContain('Team 001');
-      expect(container.innerHTML).toContain('token1');
-    });
-
-    it('should render empty state when no transactions', () => {
-      uiManager.renderTransactions([]);
-
-      expect(document.getElementById('historyContainer').innerHTML).toContain('No Transactions Yet');
-    });
-
-    it('should filter transactions by search term', () => {
-      mockDataManager.transactions = [
-        { rfid: 'token1', teamId: '001', memoryType: 'Technical', group: 'Group A', timestamp: '2025-11-11T10:00:00Z', mode: 'blackmarket', valueRating: 3, isUnknown: false },
-        { rfid: 'token2', teamId: '002', memoryType: 'Personal', group: 'Group B', timestamp: '2025-11-11T10:01:00Z', mode: 'detective', valueRating: 2, isUnknown: false }
-      ];
-
-      document.getElementById('searchFilter').value = '002';
-      uiManager.filterTransactions();
-
-      const container = document.getElementById('historyContainer');
-      expect(container.innerHTML).toContain('Team 002');
-      expect(container.innerHTML).not.toContain('Team 001');
-    });
-
-    it('should filter transactions by mode', () => {
-      mockDataManager.transactions = [
-        { rfid: 'token1', teamId: '001', mode: 'blackmarket', timestamp: '2025-11-11T10:00:00Z', valueRating: 3, memoryType: 'Technical', group: 'Group A', isUnknown: false },
-        { rfid: 'token2', teamId: '002', mode: 'detective', timestamp: '2025-11-11T10:01:00Z', valueRating: 2, memoryType: 'Personal', group: 'Group B', isUnknown: false }
-      ];
-
-      document.getElementById('modeFilter').value = 'detective';
-      uiManager.filterTransactions();
-
-      const container = document.getElementById('historyContainer');
-      expect(container.innerHTML).toContain('Team 002');
-      expect(container.innerHTML).not.toContain('Team 001');
-    });
-  });
-
   describe('Token Result Display', () => {
     beforeEach(() => {
       uiManager.init();
