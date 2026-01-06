@@ -457,7 +457,7 @@ class App {
    * Confirm team selection and proceed to scan screen
    * Reads from dropdown (networked) or text input (standalone)
    */
-  confirmTeamId() {
+  async confirmTeamId() {
     const isStandalone = this.sessionModeManager?.isStandalone();
     let teamName = '';
 
@@ -489,6 +489,9 @@ class App {
     // Update stats and proceed to scan screen
     this.uiManager.updateSessionStats();
     this.uiManager.showScreen('scan');
+
+    // Auto-start NFC scanning after team confirmation
+    await this._startNFCScanning();
   }
 
   // ========== Game Mode Selection ==========
@@ -732,6 +735,43 @@ class App {
         status.textContent = 'NFC not available. Using demo mode.';
       }
       this.simulateScan();
+    }
+  }
+
+  /**
+   * Start NFC scanning without button state management
+   * Called automatically on team confirmation
+   * @private
+   */
+  async _startNFCScanning() {
+    if (!this.nfcSupported) {
+      this.debug.log('NFC not supported - scan simulation available via Manual Entry');
+      return;
+    }
+
+    const status = document.getElementById('scanStatus');
+
+    try {
+      if (status) {
+        status.textContent = 'Scanning... Tap a token';
+      }
+
+      await this.nfcHandler.startScan(
+        (result) => this.processNFCRead(result),
+        (err) => {
+          this.debug.log(`NFC read error: ${err?.message || err}`, true);
+          if (status) {
+            status.textContent = 'Read error. Tap token again.';
+          }
+        }
+      );
+
+      this.debug.log('NFC scanning started automatically');
+    } catch (error) {
+      this.debug.log(`NFC start error: ${error.message}`, true);
+      if (status) {
+        status.textContent = 'NFC unavailable. Use Manual Entry.';
+      }
     }
   }
 

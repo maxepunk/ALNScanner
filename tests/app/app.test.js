@@ -465,7 +465,7 @@ describe('App', () => {
       expect(app.teamRegistry.populateDropdown).toHaveBeenCalled();
     });
 
-    it('should confirm team ID and show scan screen', () => {
+    it('should confirm team ID and show scan screen', async () => {
       const UIManager = require('../../src/ui/uiManager.js').default;
       app.sessionModeManager = { isStandalone: () => true, isNetworked: () => false };
 
@@ -479,7 +479,8 @@ describe('App', () => {
       // Set team via standalone input
       document.getElementById('standaloneTeamName').value = 'Test Team';
 
-      app.confirmTeamId();
+      // confirmTeamId is now async (auto-starts NFC scanning)
+      await app.confirmTeamId();
 
       expect(app.currentTeamId).toBe('Test Team');
       expect(document.getElementById('currentTeam').textContent).toBe('Test Team');
@@ -879,11 +880,13 @@ describe('App', () => {
 
     it('should render local scores in standalone mode', () => {
       const DataManager = require('../../src/core/dataManager.js').default;
-      DataManager.transactions = [
+      const testTransactions = [
         { teamId: '001', mode: 'blackmarket' },
         { teamId: '001', mode: 'blackmarket' },
         { teamId: '002', mode: 'blackmarket' }
       ];
+      // Mock getTransactions to return test data (not just set property)
+      DataManager.getTransactions.mockReturnValue(testTransactions);
       app.viewController.adminInstances = null;
 
       app.updateAdminPanel();
