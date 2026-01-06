@@ -6,19 +6,41 @@
  */
 
 /**
+ * @typedef {Object} Transaction
+ * @property {string} id - Unique transaction ID
+ * @property {string} tokenId - Token identifier (from NFC/manual entry)
+ * @property {string} teamId - Team identifier
+ * @property {string} mode - Transaction mode ('blackmarket' | 'detective')
+ * @property {number} [points] - Score value (blackmarket mode only)
+ * @property {number} [valueRating] - Token star rating (1-5)
+ * @property {string} [memoryType] - Token type ('Personal' | 'Business' | 'Technical')
+ * @property {string} [group] - Group name with multiplier, e.g., "Server Logs (x5)"
+ * @property {boolean} [isUnknown] - True if token not found in database
+ * @property {string} timestamp - ISO timestamp of transaction
+ */
+
+/**
  * @typedef {Object} TransactionResult
  * @property {boolean} success - Whether operation succeeded
- * @property {Object} [transaction] - The processed transaction
+ * @property {boolean} [pending] - True if operation is pending backend confirmation (NetworkedStorage)
+ * @property {Transaction} [transaction] - The processed transaction
  * @property {Object} [teamScore] - Updated team score
+ * @property {number} [teamScore.score] - Current total score
+ * @property {number} [teamScore.baseScore] - Score from tokens only
+ * @property {number} [teamScore.bonusPoints] - Score from group completions
+ * @property {number} [teamScore.tokensScanned] - Number of tokens scanned
  * @property {Object} [groupBonusInfo] - Group completion info if applicable
+ * @property {string} [groupBonusInfo.groupName] - Name of completed group
+ * @property {number} [groupBonusInfo.bonus] - Bonus points awarded
  * @property {string} [error] - Error message if failed
  */
 
 /**
  * @typedef {Object} SessionInfo
  * @property {string} sessionId - Session identifier
+ * @property {string} [name] - Session name
  * @property {string} startTime - ISO timestamp
- * @property {string} [status] - Session status (active/paused/ended)
+ * @property {string} [status] - Session status ('active' | 'paused' | 'ended')
  */
 
 /**
@@ -39,7 +61,7 @@ export class IStorageStrategy {
 
   /**
    * Add a transaction
-   * @param {Object} transaction - Transaction data
+   * @param {Transaction} transaction - Transaction data
    * @returns {Promise<TransactionResult>}
    */
   async addTransaction(transaction) {
