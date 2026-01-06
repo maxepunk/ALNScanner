@@ -229,6 +229,18 @@ screenUpdateManager.registerContainer('admin-game-activity', {
   }
 });
 
+// Session Status container (admin panel) - Phase 3: Session lifecycle display
+screenUpdateManager.registerContainer('session-status-container', {
+  'session:updated': (eventData, container) => {
+    Debug.log('[main.js] Updating session-status-container (session updated)');
+    UIManager.renderSessionStatus(container);
+  },
+  'data:cleared': (eventData, container) => {
+    Debug.log('[main.js] Session reset - re-rendering session-status-container');
+    UIManager.renderSessionStatus(container);
+  }
+});
+
 // ============================================================================
 // CONNECT TO DATA SOURCES
 // ============================================================================
@@ -242,7 +254,8 @@ screenUpdateManager.connectToDataSource(DataManager, [
   'data:cleared',
   'game-state:updated',
   'team-score:updated',
-  'player-scan:added'  // Game Activity: token lifecycle tracking
+  'player-scan:added',  // Game Activity: token lifecycle tracking
+  'session:updated'     // Phase 3: Session lifecycle events for admin panel
 ]);
 
 /**

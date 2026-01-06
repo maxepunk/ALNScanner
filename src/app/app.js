@@ -547,6 +547,12 @@ class App {
         // Phase 3: Initialize view controller (shows admin tabs in standalone mode too)
         this.viewController.init();
 
+        // Phase 3: Initialize admin session display in standalone mode
+        const sessionContainer = document.getElementById('session-status-container');
+        if (sessionContainer) {
+          this.uiManager.renderSessionStatus(sessionContainer);
+        }
+
         // Initialize team entry UI
         this.initTeamEntryUI();
 
