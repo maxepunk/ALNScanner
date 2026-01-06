@@ -49,15 +49,10 @@
 
 ## Team Entry Screen (Step 4)
 
-**Networked Mode:**
-- Dropdown selector shows existing teams from session
-- "Add Team" button creates new team if needed
-- Select team from dropdown → Click confirm
-
-**Standalone Mode:**
-- Text input field (`#standaloneTeamName`)
-- Enter team name (any string)
-- Click CLEAR to reset, ENTER to confirm
+**Unified Interface (both modes):**
+- Text input field (`#teamNameInput`) - enter team name
+- Clickable team list shows teams (Session Teams in networked, Recent Teams in standalone)
+- Click existing team to auto-select and proceed, OR type new name and click "Start Scanning"
 
 **On Enter:** Team Entry transitions to Scan Screen
 

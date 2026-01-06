@@ -38,33 +38,6 @@
   letter-spacing: var(--tracking-wide);
 }
 
-.team-select-container,
-.standalone-team-container {
-  margin: var(--space-4) 0;
-}
-
-.team-dropdown {
-  width: 100%;
-  padding: var(--space-4);
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  background: var(--color-bg-tertiary);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23999' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right var(--space-4) center;
-}
-
-.team-dropdown:hover,
-.team-dropdown:focus {
-  border-color: var(--color-accent-primary);
-  outline: none;
-}
-
 .team-name-input {
   width: 100%;
   padding: var(--space-4);
@@ -83,25 +56,6 @@
 
 .team-name-input::placeholder {
   color: var(--color-text-tertiary);
-}
-
-.add-team-btn {
-  width: 100%;
-  margin: var(--space-4) 0;
-}
-
-.add-team-container {
-  display: flex;
-  gap: var(--space-3);
-  margin: var(--space-4) 0;
-}
-
-.add-team-container .team-name-input {
-  flex: 1;
-}
-
-.add-team-container .btn {
-  flex-shrink: 0;
 }
 
 .start-scan-btn {
