@@ -9,7 +9,8 @@ describe('UnifiedDataManager', () => {
   beforeEach(() => {
     mockTokenManager = {
       getAllTokens: jest.fn(() => []),
-      findToken: jest.fn(() => null)
+      findToken: jest.fn(() => null),
+      getGroupInventory: jest.fn(() => ({}))
     };
     mockSessionModeManager = {
       isStandalone: jest.fn(() => true),
@@ -348,10 +349,12 @@ describe('UnifiedDataManager', () => {
 
       const enhanced = manager.getEnhancedTeamTransactions('Alpha');
 
-      expect(enhanced.teamId).toBe('Alpha');
-      expect(enhanced.transactions).toHaveLength(1);
-      expect(enhanced.score).toBe(50000);
-      expect(enhanced.tokensScanned).toBe(1);
+      // Method returns organization data, not summary fields
+      expect(enhanced.hasCompletedGroups).toBe(false);
+      expect(enhanced.hasIncompleteGroups).toBe(false);
+      expect(enhanced.hasUngroupedTokens).toBe(true);  // No group = ungrouped
+      expect(enhanced.ungroupedTokens).toHaveLength(1);
+      expect(enhanced.ungroupedTokens[0].tokenId).toBe('token1');
     });
   });
 });

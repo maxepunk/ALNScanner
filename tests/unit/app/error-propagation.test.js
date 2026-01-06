@@ -33,7 +33,9 @@ describe('App - Error Propagation', () => {
       tokenManager: {},
       dataManager: {
         resetForNewSession: jest.fn(),
-        networkedSession: null
+        networkedSession: null,
+        sessionModeManager: null,
+        initializeNetworkedMode: jest.fn().mockResolvedValue()
       },
       standaloneDataManager: {
         sessionData: {},

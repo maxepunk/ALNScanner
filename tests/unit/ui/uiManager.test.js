@@ -33,6 +33,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
         BASE_VALUES: { 1: 10000, 2: 25000, 3: 50000, 4: 75000, 5: 150000 },
         TYPE_MULTIPLIERS: { 'Personal': 1, 'Business': 3, 'Technical': 5, 'UNKNOWN': 0 }
       },
+      getTransactions: jest.fn(function() { return this.transactions; }),
       getSessionStats: jest.fn(() => ({ count: 1, totalScore: 5000, totalValue: '⭐⭐⭐' })),
       getGlobalStats: jest.fn(() => ({ total: 1, teams: 1, totalValue: '5000', avgValue: '5000' })),
       getTeamScores: jest.fn(() => [{ teamId: '001', score: 5000, tokenCount: 1, isFromBackend: false }]),
@@ -45,7 +46,8 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       })),
       calculateTeamScoreWithBonuses: jest.fn(() => ({ baseScore: 5000, bonusScore: 0, totalScore: 5000 })),
       calculateTokenValue: jest.fn(() => 5000),
-      parseGroupInfo: jest.fn((group) => ({ groupId: 'Server Logs', multiplier: 5 }))
+      parseGroupInfo: jest.fn((group) => ({ groupId: 'Server Logs', multiplier: 5 })),
+      getActiveStrategyType: jest.fn(() => 'local')
     };
 
     // Mock SessionModeManager

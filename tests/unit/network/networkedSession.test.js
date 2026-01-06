@@ -56,6 +56,10 @@ describe('NetworkedSession', () => {
       transactions: [],
       scannedTokens: new Set(),
       addTransaction: jest.fn(),
+      addTransactionFromBroadcast: jest.fn(),
+      removeTransaction: jest.fn(),
+      clearBackendScores: jest.fn(),
+      updateTeamScoreFromBackend: jest.fn(),
     };
 
     // Mock constructors
@@ -548,7 +552,7 @@ describe('NetworkedSession', () => {
 
       messageHandler({ detail: { type: 'transaction:new', payload: { transaction } } });
 
-      expect(mockDataManager.addTransaction).toHaveBeenCalledWith(transaction);
+      expect(mockDataManager.addTransactionFromBroadcast).toHaveBeenCalledWith(transaction);
     });
 
     it('should remove transaction on transaction:deleted event', () => {
