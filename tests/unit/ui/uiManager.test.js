@@ -904,6 +904,67 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
     });
   });
 
+  describe('showTokenResult - summary display', () => {
+    beforeEach(() => {
+      document.body.innerHTML = `
+        <div id="resultStatus" class="status-message"></div>
+        <div id="resultRfid"></div>
+        <div id="resultType"></div>
+        <div id="resultGroup"></div>
+        <div id="resultValue"></div>
+        <div id="resultSummaryContainer" style="display: none;"></div>
+        <p id="resultSummary"></p>
+        <div id="resultScreen" class="screen"></div>
+      `;
+      uiManager.init();
+    });
+
+    it('should show summary in blackmarket mode when token has summary', () => {
+      uiManager.settings = { mode: 'blackmarket' };
+
+      const mockDataSource = {
+        calculateTokenValue: jest.fn(() => 50000)
+      };
+      jest.spyOn(uiManager, '_getDataSource').mockReturnValue(mockDataSource);
+
+      const token = {
+        SF_MemoryType: 'Technical',
+        SF_ValueRating: 3,
+        SF_Group: 'Server Logs',
+        summary: 'Encrypted server logs revealing unauthorized access'
+      };
+
+      uiManager.showTokenResult(token, 'token123', false);
+
+      const summaryContainer = document.getElementById('resultSummaryContainer');
+      const summaryEl = document.getElementById('resultSummary');
+
+      expect(summaryContainer.style.display).toBe('flex');
+      expect(summaryEl.textContent).toBe('Encrypted server logs revealing unauthorized access');
+    });
+
+    it('should hide summary when token has no summary', () => {
+      uiManager.settings = { mode: 'blackmarket' };
+
+      const mockDataSource = {
+        calculateTokenValue: jest.fn(() => 50000)
+      };
+      jest.spyOn(uiManager, '_getDataSource').mockReturnValue(mockDataSource);
+
+      const token = {
+        SF_MemoryType: 'Technical',
+        SF_ValueRating: 3,
+        SF_Group: 'Server Logs'
+        // No summary field
+      };
+
+      uiManager.showTokenResult(token, 'token123', false);
+
+      const summaryContainer = document.getElementById('resultSummaryContainer');
+      expect(summaryContainer.style.display).toBe('none');
+    });
+  });
+
   describe('Utility Methods - escapeHtml', () => {
     beforeEach(() => {
       uiManager.init();

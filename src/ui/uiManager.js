@@ -817,8 +817,8 @@ class UIManager {
         valueEl.textContent = '⭐'.repeat(token.SF_ValueRating || 0);
       }
 
-      // Show summary in detective mode if available
-      if (this.settings.mode === 'detective' && token.summary && summaryContainer && summaryEl) {
+      // Show summary if available (all modes - gives GM visibility on token content)
+      if (token.summary && summaryContainer && summaryEl) {
         summaryContainer.style.display = 'flex';
         summaryEl.textContent = token.summary;
       } else if (summaryContainer) {
