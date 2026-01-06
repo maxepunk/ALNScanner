@@ -137,6 +137,22 @@ export class IStorageStrategy extends EventTarget {
   }
 
   /**
+   * Pause the current session
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async pauseSession() {
+    throw new Error('IStorageStrategy.pauseSession() must be implemented');
+  }
+
+  /**
+   * Resume a paused session
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async resumeSession() {
+    throw new Error('IStorageStrategy.resumeSession() must be implemented');
+  }
+
+  /**
    * Get current session info
    * @returns {SessionInfo|null}
    */

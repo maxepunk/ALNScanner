@@ -144,8 +144,9 @@ export class LocalStorage extends IStorageStrategy {
   getCurrentSession() {
     return {
       sessionId: this.sessionData.sessionId,
+      name: this.sessionData.name,
       startTime: this.sessionData.startTime,
-      status: 'active'
+      status: this.sessionData.status || 'active'
     };
   }
 
@@ -159,6 +160,7 @@ export class LocalStorage extends IStorageStrategy {
     this.sessionData = {
       sessionId: this._generateSessionId(),
       name: name,
+      status: 'active',
       startTime: new Date().toISOString(),
       transactions: [],
       teams: {},
@@ -176,6 +178,59 @@ export class LocalStorage extends IStorageStrategy {
    */
   async endSession() {
     this._saveSession();
+  }
+
+  /**
+   * Pause the current session
+   * Blocks scanning while paused
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async pauseSession() {
+    // Check for explicit session with status (created via createSession)
+    if (!this.sessionData?.sessionId || !this.sessionData?.status) {
+      return { success: false, error: 'No active session to pause' };
+    }
+
+    if (this.sessionData.status === 'paused') {
+      return { success: false, error: 'Session already paused' };
+    }
+
+    this.sessionData.status = 'paused';
+    this.sessionData.pausedAt = new Date().toISOString();
+    this._saveSession();
+
+    // Emit event for UI updates
+    this.dispatchEvent(new CustomEvent('session:updated', {
+      detail: { session: this.getCurrentSession() }
+    }));
+
+    return { success: true };
+  }
+
+  /**
+   * Resume a paused session
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async resumeSession() {
+    // Check for explicit session with status (created via createSession)
+    if (!this.sessionData?.sessionId || !this.sessionData?.status) {
+      return { success: false, error: 'No session to resume' };
+    }
+
+    if (this.sessionData.status !== 'paused') {
+      return { success: false, error: 'Session is not paused' };
+    }
+
+    this.sessionData.status = 'active';
+    delete this.sessionData.pausedAt;
+    this._saveSession();
+
+    // Emit event for UI updates
+    this.dispatchEvent(new CustomEvent('session:updated', {
+      detail: { session: this.getCurrentSession() }
+    }));
+
+    return { success: true };
   }
 
   /**

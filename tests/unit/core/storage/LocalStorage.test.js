@@ -421,4 +421,61 @@ describe('LocalStorage Strategy', () => {
       expect(() => storage.dispose()).not.toThrow();
     });
   });
+
+  describe('Session Lifecycle', () => {
+    let storage;
+
+    beforeEach(() => {
+      localStorage.clear();
+      storage = new LocalStorage({ debug: mockDebug });
+      storage.initialize();
+    });
+
+    describe('pauseSession', () => {
+      it('should set session status to paused', async () => {
+        await storage.createSession('Test Session', []);
+
+        const result = await storage.pauseSession();
+
+        expect(result.success).toBe(true);
+        expect(storage.getCurrentSession().status).toBe('paused');
+      });
+
+      it('should return error if no active session', async () => {
+        const result = await storage.pauseSession();
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('No active session');
+      });
+
+      it('should persist paused status to localStorage', async () => {
+        await storage.createSession('Test Session', []);
+        await storage.pauseSession();
+
+        const saved = JSON.parse(localStorage.getItem('standaloneSession'));
+        expect(saved.status).toBe('paused');
+      });
+    });
+
+    describe('resumeSession', () => {
+      it('should set session status to active', async () => {
+        await storage.createSession('Test Session', []);
+        await storage.pauseSession();
+
+        const result = await storage.resumeSession();
+
+        expect(result.success).toBe(true);
+        expect(storage.getCurrentSession().status).toBe('active');
+      });
+
+      it('should return error if session not paused', async () => {
+        await storage.createSession('Test Session', []);
+
+        const result = await storage.resumeSession();
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('not paused');
+      });
+    });
+  });
 });

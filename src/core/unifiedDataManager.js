@@ -273,6 +273,24 @@ export class UnifiedDataManager extends EventTarget {
   }
 
   /**
+   * Pause the current session
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async pauseSession() {
+    this._requireActiveStrategy();
+    return this._activeStrategy.pauseSession();
+  }
+
+  /**
+   * Resume a paused session
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async resumeSession() {
+    this._requireActiveStrategy();
+    return this._activeStrategy.resumeSession();
+  }
+
+  /**
    * Dispose of resources - clean up event listeners and strategies
    * Call when manager is no longer needed to prevent memory leaks
    */
