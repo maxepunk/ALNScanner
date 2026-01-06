@@ -228,11 +228,10 @@
             <div class="scan-area">
                 <div class="scan-icon">📡</div>
                 <h2>Tap Memory Token</h2>
-                <p id="scanStatus">Waiting for NFC tag...</p>
+                <p id="scanStatus">Scanning... Tap a token</p>
             </div>
-            <button id="scanButton" class="btn btn-primary" data-action="app.startScan">Start Scanning</button>
             <button class="btn btn-secondary" data-action="app.manualEntry">Manual Entry (Debug)</button>
-            <button class="btn btn-secondary" data-action="app.cancelScan">Back to Team Entry</button>
+            <button class="btn btn-primary" data-action="app.finishTeam">Finish Team</button>
             <div class="stats">
                 <div class="stat-item">
                     <div class="stat-value" id="teamTokenCount">0</div>
