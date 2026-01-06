@@ -874,10 +874,10 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
     it('should show summary in blackmarket mode when token has summary', () => {
       uiManager.settings = { mode: 'blackmarket' };
 
-      const mockDataSource = {
+      // Set up dataManager mock for blackmarket calculations
+      uiManager.dataManager = {
         calculateTokenValue: jest.fn(() => 50000)
       };
-      jest.spyOn(uiManager, '_getDataSource').mockReturnValue(mockDataSource);
 
       const token = {
         SF_MemoryType: 'Technical',
@@ -898,10 +898,10 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
     it('should hide summary when token has no summary', () => {
       uiManager.settings = { mode: 'blackmarket' };
 
-      const mockDataSource = {
+      // Set up dataManager mock for blackmarket calculations
+      uiManager.dataManager = {
         calculateTokenValue: jest.fn(() => 50000)
       };
-      jest.spyOn(uiManager, '_getDataSource').mockReturnValue(mockDataSource);
 
       const token = {
         SF_MemoryType: 'Technical',

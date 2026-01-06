@@ -47,8 +47,10 @@ jest.mock('../../src/core/dataManager.js', () => ({
     scannedTokens: new Set(),
     isTokenScanned: jest.fn(() => false),
     markTokenAsScanned: jest.fn(),
-    addTransaction: jest.fn(),
+    addTransaction: jest.fn().mockResolvedValue({ success: true }),
+    removeTransaction: jest.fn().mockResolvedValue({ success: true }),
     calculateTokenValue: jest.fn(() => 1000),
+    getTransactions: jest.fn(() => []),
     getTeamTransactions: jest.fn(() => []),
     getTeamScores: jest.fn(() => []),
     getTeamCompletedGroups: jest.fn(() => []),
@@ -64,7 +66,13 @@ jest.mock('../../src/core/dataManager.js', () => ({
     normalizeGroupName: jest.fn(),
     saveTransactions: jest.fn(),
     saveScannedTokens: jest.fn(),
-    resetForNewSession: jest.fn()
+    resetForNewSession: jest.fn(),
+    // UnifiedDataManager methods
+    initializeStandaloneMode: jest.fn().mockResolvedValue(),
+    initializeNetworkedMode: jest.fn().mockResolvedValue(),
+    isReady: jest.fn(() => true),
+    getActiveStrategyType: jest.fn(() => 'local'),
+    sessionModeManager: null
   }
 }));
 
@@ -639,21 +647,22 @@ describe('App', () => {
       expect(document.getElementById('resultType').textContent).toBe('DUPLICATE');
     });
 
-    it('should process unknown token', () => {
+    it('should process unknown token', async () => {
       const TokenManager = require('../../src/core/tokenManager.js').default;
       TokenManager.findToken.mockReturnValue(null);
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
       app.currentTeamId = '123';
 
       // Ensure isTokenScanned returns false for this token
       app.dataManager.isTokenScanned.mockReturnValue(false);
 
-      app.processNFCRead({ id: 'unknown', source: 'nfc', raw: 'unknown' });
+      await app.processNFCRead({ id: 'unknown', source: 'nfc', raw: 'unknown' });
 
       // Assert on injected dataManager, not global mock
       expect(app.dataManager.markTokenAsScanned).toHaveBeenCalledWith('unknown');
     });
 
-    it('should process known token', () => {
+    it('should process known token', async () => {
       const TokenManager = require('../../src/core/tokenManager.js').default;
       const UIManager = require('../../src/ui/uiManager.js').default;
 
@@ -661,12 +670,13 @@ describe('App', () => {
         token: { SF_MemoryType: 'Technical', SF_ValueRating: 5, SF_Group: 'Test Group' },
         matchedId: 'test123'
       });
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
       app.currentTeamId = '123';
 
       // Ensure isTokenScanned returns false for this token
       app.dataManager.isTokenScanned.mockReturnValue(false);
 
-      app.processNFCRead({ id: 'test123', source: 'nfc', raw: 'test123' });
+      await app.processNFCRead({ id: 'test123', source: 'nfc', raw: 'test123' });
 
       // Assert on injected dataManager, not global mock
       expect(app.dataManager.markTokenAsScanned).toHaveBeenCalledWith('test123');
@@ -675,19 +685,20 @@ describe('App', () => {
   });
 
   describe('Transaction Recording', () => {
-    it('should record transaction in standalone mode', () => {
-      const StandaloneDataManager = require('../../src/core/standaloneDataManager.js').default;
+    it('should record transaction in standalone mode', async () => {
+      const DataManager = require('../../src/core/dataManager.js').default;
       mockSessionModeManager.isStandalone.mockReturnValue(true);
       app.currentTeamId = '123';
 
       const token = { SF_MemoryType: 'Technical', SF_ValueRating: 5, SF_Group: 'Test' };
-      app.recordTransaction(token, 'test123', false);
+      await app.recordTransaction(token, 'test123', false);
 
-      // In standalone mode, transactions go to StandaloneDataManager, not DataManager
-      expect(StandaloneDataManager.addTransaction).toHaveBeenCalled();
+      // In standalone mode, transactions go to UnifiedDataManager
+      expect(DataManager.addTransaction).toHaveBeenCalled();
+      expect(DataManager.markTokenAsScanned).toHaveBeenCalledWith('test123');
     });
 
-    it('should queue transaction in networked mode', () => {
+    it('should queue transaction in networked mode', async () => {
       mockSessionModeManager.isNetworked.mockReturnValue(true);
       app.networkedSession = {
         getService: jest.fn(() => ({
@@ -697,30 +708,32 @@ describe('App', () => {
       app.currentTeamId = '123';
 
       const token = { SF_MemoryType: 'Technical', SF_ValueRating: 5 };
-      app.recordTransaction(token, 'test123', false);
+      await app.recordTransaction(token, 'test123', false);
 
       expect(app.networkedSession.getService).toHaveBeenCalledWith('queueManager');
     });
 
-    it('should calculate points for blackmarket mode', () => {
+    it('should calculate points for blackmarket mode', async () => {
       const Settings = require('../../src/ui/settings.js').default;
       const DataManager = require('../../src/core/dataManager.js').default;
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
       Settings.mode = 'blackmarket';
       app.currentTeamId = '123';
 
       const token = { SF_MemoryType: 'Technical', SF_ValueRating: 5 };
-      app.recordTransaction(token, 'test123', false);
+      await app.recordTransaction(token, 'test123', false);
 
       expect(DataManager.calculateTokenValue).toHaveBeenCalled();
     });
 
-    it('should set points to 0 for unknown tokens', () => {
+    it('should set points to 0 for unknown tokens', async () => {
+      const DataManager = require('../../src/core/dataManager.js').default;
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
       app.currentTeamId = '123';
 
-      app.recordTransaction(null, 'unknown', true);
+      await app.recordTransaction(null, 'unknown', true);
 
       // Should create transaction with points: 0
-      const DataManager = require('../../src/core/dataManager.js').default;
       const call = DataManager.addTransaction.mock.calls[0];
       expect(call[0].points).toBe(0);
     });
