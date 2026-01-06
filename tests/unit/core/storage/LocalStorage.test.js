@@ -123,6 +123,91 @@ describe('LocalStorage Strategy', () => {
       const saved = JSON.parse(localStorage.getItem('standaloneSession'));
       expect(saved.transactions).toHaveLength(1);
     });
+
+    it('should not add score for detective mode transactions', async () => {
+      const tx = {
+        id: 'tx-1',
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'detective',
+        points: 50000,
+        valueRating: 3,
+        memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      };
+
+      await storage.addTransaction(tx);
+
+      const scores = storage.getTeamScores();
+      expect(scores).toHaveLength(1);
+      expect(scores[0].score).toBe(0); // Detective mode = no scoring
+    });
+
+    it('should return error for transaction without teamId', async () => {
+      const result = await storage.addTransaction({
+        id: 'tx-1',
+        tokenId: 'token1',
+        mode: 'blackmarket',
+        points: 10000
+        // Missing teamId
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Transaction must have teamId');
+    });
+
+    it('should return error for null transaction', async () => {
+      const result = await storage.addTransaction(null);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Transaction must have teamId');
+    });
+  });
+
+  describe('group completion', () => {
+    it('should award bonus when all group tokens collected', async () => {
+      // Mock tokenManager to return group tokens
+      mockTokenManager.getAllTokens.mockReturnValue([
+        { SF_RFID: 'g1t1', SF_Group: 'GroupA (x2)' },
+        { SF_RFID: 'g1t2', SF_Group: 'GroupA (x2)' }
+      ]);
+
+      // Add first token - no bonus yet
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'g1t1', teamId: '001',
+        mode: 'blackmarket', points: 10000, group: 'GroupA (x2)',
+        timestamp: new Date().toISOString()
+      });
+
+      expect(storage.getTeamScores()[0].score).toBe(10000);
+
+      // Add second token - group complete, bonus awarded
+      await storage.addTransaction({
+        id: 'tx-2', tokenId: 'g1t2', teamId: '001',
+        mode: 'blackmarket', points: 10000, group: 'GroupA (x2)',
+        timestamp: new Date().toISOString()
+      });
+
+      const scores = storage.getTeamScores();
+      // x2 multiplier means bonus = (2-1) * base = 1 * 20000 = 20000
+      expect(scores[0].score).toBe(40000); // 20000 base + 20000 bonus
+      expect(scores[0].bonusScore).toBe(20000);
+    });
+
+    it('should not award bonus for groups with multiplier <= 1', async () => {
+      mockTokenManager.getAllTokens.mockReturnValue([
+        { SF_RFID: 't1', SF_Group: 'NoBonus' }
+      ]);
+
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 't1', teamId: '001',
+        mode: 'blackmarket', points: 10000, group: 'NoBonus',
+        timestamp: new Date().toISOString()
+      });
+
+      expect(storage.getTeamScores()[0].score).toBe(10000);
+      expect(storage.getTeamScores()[0].bonusScore).toBe(0);
+    });
   });
 
   describe('removeTransaction', () => {
@@ -269,6 +354,71 @@ describe('LocalStorage Strategy', () => {
 
       const saved = JSON.parse(localStorage.getItem('standaloneSession'));
       expect(saved.transactions).toHaveLength(1);
+    });
+
+    it('should not load session from previous day', async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      const oldSession = {
+        sessionId: 'OLD_123',
+        startTime: yesterday.toISOString(),
+        transactions: [{ id: 'old-tx', tokenId: 'old-token', teamId: '001' }],
+        teams: {}
+      };
+      localStorage.setItem('standaloneSession', JSON.stringify(oldSession));
+
+      const newStorage = new LocalStorage({ tokenManager: mockTokenManager });
+      await newStorage.initialize();
+
+      expect(newStorage.getTransactions()).toHaveLength(0);
+      expect(newStorage.sessionData.sessionId).not.toBe('OLD_123');
+    });
+
+    it('should load session from today', async () => {
+      const today = new Date();
+
+      const todaySession = {
+        sessionId: 'TODAY_123',
+        startTime: today.toISOString(),
+        transactions: [{ id: 'tx-1', tokenId: 'token1', teamId: '001' }],
+        teams: {}
+      };
+      localStorage.setItem('standaloneSession', JSON.stringify(todaySession));
+
+      const newStorage = new LocalStorage({ tokenManager: mockTokenManager });
+      await newStorage.initialize();
+
+      expect(newStorage.getTransactions()).toHaveLength(1);
+      expect(newStorage.sessionData.sessionId).toBe('TODAY_123');
+    });
+
+    it('should repopulate scannedTokens on session load', async () => {
+      const today = new Date();
+
+      const todaySession = {
+        sessionId: 'TODAY_123',
+        startTime: today.toISOString(),
+        transactions: [
+          { id: 'tx-1', tokenId: 'token1', teamId: '001' },
+          { id: 'tx-2', tokenId: 'token2', teamId: '001' }
+        ],
+        teams: {}
+      };
+      localStorage.setItem('standaloneSession', JSON.stringify(todaySession));
+
+      const newStorage = new LocalStorage({ tokenManager: mockTokenManager });
+      await newStorage.initialize();
+
+      expect(newStorage.scannedTokens.has('token1')).toBe(true);
+      expect(newStorage.scannedTokens.has('token2')).toBe(true);
+      expect(newStorage.scannedTokens.has('token3')).toBe(false);
+    });
+  });
+
+  describe('dispose', () => {
+    it('should not throw when called', () => {
+      expect(() => storage.dispose()).not.toThrow();
     });
   });
 });

@@ -47,7 +47,7 @@ export class LocalStorage extends IStorageStrategy {
    * @private
    */
   _generateSessionId() {
-    return `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `LOCAL_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
   /**
@@ -184,6 +184,14 @@ export class LocalStorage extends IStorageStrategy {
    * @returns {Promise<TransactionResult>}
    */
   async addTransaction(transaction) {
+    // Validate required fields
+    if (!transaction || !transaction.teamId) {
+      return {
+        success: false,
+        error: 'Transaction must have teamId'
+      };
+    }
+
     // Add to transactions array
     this.sessionData.transactions.push(transaction);
 
@@ -485,5 +493,13 @@ export class LocalStorage extends IStorageStrategy {
     };
 
     return { tokens, stats };
+  }
+
+  /**
+   * Dispose of resources
+   * LocalStorage has no resources requiring cleanup
+   */
+  dispose() {
+    // No-op for LocalStorage - localStorage persists automatically
   }
 }
