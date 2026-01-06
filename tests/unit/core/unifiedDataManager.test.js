@@ -196,4 +196,63 @@ describe('UnifiedDataManager', () => {
       expect(manager._strategyListeners.size).toBe(0);
     });
   });
+
+  describe('utility methods (backward compatibility)', () => {
+    beforeEach(async () => {
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
+      manager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+      await manager.initializeStandaloneMode();
+    });
+
+    it('should track scanned tokens with isTokenScanned/markTokenAsScanned', () => {
+      expect(manager.isTokenScanned('token1')).toBe(false);
+
+      manager.markTokenAsScanned('token1');
+
+      expect(manager.isTokenScanned('token1')).toBe(true);
+    });
+
+    it('should unmark scanned tokens', () => {
+      manager.markTokenAsScanned('token1');
+      expect(manager.isTokenScanned('token1')).toBe(true);
+
+      manager.unmarkTokenAsScanned('token1');
+
+      expect(manager.isTokenScanned('token1')).toBe(false);
+    });
+
+    it('should calculate token value', () => {
+      const transaction = {
+        valueRating: 3,
+        memoryType: 'Personal'
+      };
+
+      const value = manager.calculateTokenValue(transaction);
+
+      expect(value).toBe(50000); // 3-star Personal = $50,000
+    });
+
+    it('should get team transactions', async () => {
+      await manager.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: 'Alpha',
+        mode: 'blackmarket', points: 50000,
+        valueRating: 3, memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      });
+      await manager.addTransaction({
+        id: 'tx-2', tokenId: 'token2', teamId: 'Beta',
+        mode: 'blackmarket', points: 25000,
+        valueRating: 2, memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      });
+
+      const alphaTransactions = manager.getTeamTransactions('Alpha');
+
+      expect(alphaTransactions).toHaveLength(1);
+      expect(alphaTransactions[0].teamId).toBe('Alpha');
+    });
+  });
 });

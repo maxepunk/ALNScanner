@@ -7,6 +7,8 @@
 
 import { LocalStorage } from './storage/LocalStorage.js';
 import { NetworkedStorage } from './storage/NetworkedStorage.js';
+import { DataManagerUtils } from './dataManagerUtils.js';
+import { calculateTokenValue as calcTokenValue } from './scoring.js';
 
 export class UnifiedDataManager extends EventTarget {
   /**
@@ -299,5 +301,53 @@ export class UnifiedDataManager extends EventTarget {
     if (!this._activeStrategy) {
       throw new Error('UnifiedDataManager: No active strategy. Call initializeStandaloneMode() or initializeNetworkedMode() first.');
     }
+  }
+
+  // ============================================================================
+  // UTILITY METHODS - Backward compatibility with DataManager/StandaloneDataManager
+  // ============================================================================
+
+  /**
+   * Check if token has been scanned
+   * @param {string} tokenId
+   * @returns {boolean}
+   */
+  isTokenScanned(tokenId) {
+    return DataManagerUtils.isTokenScanned(this.scannedTokens, tokenId);
+  }
+
+  /**
+   * Mark token as scanned
+   * @param {string} tokenId
+   */
+  markTokenAsScanned(tokenId) {
+    DataManagerUtils.markTokenAsScanned(this.scannedTokens, tokenId);
+  }
+
+  /**
+   * Unmark token as scanned (for re-scanning after deletion)
+   * @param {string} tokenId
+   */
+  unmarkTokenAsScanned(tokenId) {
+    DataManagerUtils.unmarkTokenAsScanned(this.scannedTokens, tokenId);
+  }
+
+  /**
+   * Calculate token value based on rating and type
+   * @param {Object} transaction - Transaction with valueRating and memoryType
+   * @returns {number}
+   */
+  calculateTokenValue(transaction) {
+    return calcTokenValue(transaction);
+  }
+
+  /**
+   * Get transactions for a specific team
+   * @param {string} teamId
+   * @returns {Array}
+   */
+  getTeamTransactions(teamId) {
+    const transactions = this.getTransactions();
+    return transactions.filter(tx => tx.teamId === teamId);
   }
 }
