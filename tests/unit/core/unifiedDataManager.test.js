@@ -255,4 +255,67 @@ describe('UnifiedDataManager', () => {
       expect(alphaTransactions[0].teamId).toBe('Alpha');
     });
   });
+
+  describe('advanced methods', () => {
+    beforeEach(async () => {
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
+      manager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+      await manager.initializeStandaloneMode();
+    });
+
+    it('should parse group info from group string', () => {
+      const result = manager.parseGroupInfo('Server Logs (x5)');
+
+      expect(result.name).toBe('Server Logs');
+      expect(result.multiplier).toBe(5);
+    });
+
+    it('should normalize group names', () => {
+      const normalized = manager.normalizeGroupName('Server Logs');
+
+      expect(normalized).toBe('serverlogs');
+    });
+
+    it('should reset for new session', async () => {
+      manager.markTokenAsScanned('token1');
+      await manager.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 50000,
+        valueRating: 3, memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      });
+      expect(manager.isTokenScanned('token1')).toBe(true);
+
+      manager.resetForNewSession();
+
+      expect(manager.isTokenScanned('token1')).toBe(false);
+    });
+
+    it('should clear all data', () => {
+      manager.markTokenAsScanned('token1');
+
+      manager.clearAllData();
+
+      expect(manager.isTokenScanned('token1')).toBe(false);
+    });
+
+    it('should get enhanced team transactions', async () => {
+      await manager.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: 'Alpha',
+        mode: 'blackmarket', points: 50000,
+        valueRating: 3, memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      });
+
+      const enhanced = manager.getEnhancedTeamTransactions('Alpha');
+
+      expect(enhanced.teamId).toBe('Alpha');
+      expect(enhanced.transactions).toHaveLength(1);
+      expect(enhanced.score).toBe(50000);
+      expect(enhanced.tokensScanned).toBe(1);
+    });
+  });
 });

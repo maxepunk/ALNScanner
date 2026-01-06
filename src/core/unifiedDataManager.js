@@ -8,7 +8,7 @@
 import { LocalStorage } from './storage/LocalStorage.js';
 import { NetworkedStorage } from './storage/NetworkedStorage.js';
 import { DataManagerUtils } from './dataManagerUtils.js';
-import { calculateTokenValue as calcTokenValue } from './scoring.js';
+import { calculateTokenValue as calcTokenValue, parseGroupInfo as parseGroup } from './scoring.js';
 
 export class UnifiedDataManager extends EventTarget {
   /**
@@ -349,5 +349,79 @@ export class UnifiedDataManager extends EventTarget {
   getTeamTransactions(teamId) {
     const transactions = this.getTransactions();
     return transactions.filter(tx => tx.teamId === teamId);
+  }
+
+  // ============================================================================
+  // ADVANCED METHODS - Group completion, session reset, etc.
+  // ============================================================================
+
+  /**
+   * Parse group info from group string
+   * @param {string} groupString - e.g., "Server Logs (x5)"
+   * @returns {Object} { name, multiplier }
+   */
+  parseGroupInfo(groupString) {
+    return parseGroup(groupString);
+  }
+
+  /**
+   * Normalize group name for comparison
+   * @param {string} groupName
+   * @returns {string}
+   */
+  normalizeGroupName(groupName) {
+    return groupName?.toLowerCase().replace(/\s+/g, '') || '';
+  }
+
+  /**
+   * Reset for new session - clears scannedTokens and emits data:cleared
+   */
+  resetForNewSession() {
+    this.scannedTokens.clear();
+    if (this._localStrategy) {
+      this._localStrategy.scannedTokens?.clear();
+    }
+    if (this._networkedStrategy) {
+      this._networkedStrategy.scannedTokens?.clear();
+    }
+    this.dispatchEvent(new CustomEvent('data:cleared'));
+  }
+
+  /**
+   * Clear all data - same as resetForNewSession
+   */
+  clearAllData() {
+    this.resetForNewSession();
+  }
+
+  /**
+   * Get team completed groups
+   * @param {string} teamId
+   * @returns {Array} Completed group names
+   */
+  getTeamCompletedGroups(teamId) {
+    // Delegate to strategy if available
+    if (this._activeStrategy?.getTeamCompletedGroups) {
+      return this._activeStrategy.getTeamCompletedGroups(teamId);
+    }
+    return [];
+  }
+
+  /**
+   * Get enhanced team transactions with score info
+   * @param {string} teamId
+   * @returns {Object} { teamId, transactions, score, tokensScanned }
+   */
+  getEnhancedTeamTransactions(teamId) {
+    const transactions = this.getTeamTransactions(teamId);
+    const scores = this.getTeamScores();
+    const teamScore = scores.find(s => s.teamId === teamId);
+
+    return {
+      teamId,
+      transactions,
+      score: teamScore?.score || 0,
+      tokensScanned: transactions.length
+    };
   }
 }
