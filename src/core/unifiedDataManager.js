@@ -292,6 +292,15 @@ export class UnifiedDataManager extends EventTarget {
   }
 
   /**
+   * Reset all team scores to zero
+   * @returns {Promise<{success: boolean}>}
+   */
+  async resetScores() {
+    this._requireActiveStrategy();
+    return this._activeStrategy.resetScores();
+  }
+
+  /**
    * Dispose of resources - clean up event listeners and strategies
    * Call when manager is no longer needed to prevent memory leaks
    */

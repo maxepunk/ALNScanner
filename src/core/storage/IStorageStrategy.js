@@ -153,6 +153,14 @@ export class IStorageStrategy extends EventTarget {
   }
 
   /**
+   * Reset all team scores to zero (keeps transactions for audit)
+   * @returns {Promise<{success: boolean}>}
+   */
+  async resetScores() {
+    throw new Error('IStorageStrategy.resetScores() must be implemented');
+  }
+
+  /**
    * Get current session info
    * @returns {SessionInfo|null}
    */

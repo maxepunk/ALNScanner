@@ -234,6 +234,31 @@ export class LocalStorage extends IStorageStrategy {
   }
 
   /**
+   * Reset all team scores to zero
+   * Keeps transactions for audit trail
+   * @returns {Promise<{success: boolean}>}
+   */
+  async resetScores() {
+    // Zero all team scores
+    Object.keys(this.sessionData.teams).forEach(teamId => {
+      const team = this.sessionData.teams[teamId];
+      team.score = 0;
+      team.baseScore = 0;
+      team.bonusPoints = 0;
+      team.adminAdjustments = [];
+    });
+
+    this._saveSession();
+
+    // Emit event for UI updates
+    this.dispatchEvent(new CustomEvent('scores:cleared', {
+      detail: {}
+    }));
+
+    return { success: true };
+  }
+
+  /**
    * Add transaction to local storage
    * @param {Transaction} transaction - Transaction data
    * @returns {Promise<TransactionResult>}

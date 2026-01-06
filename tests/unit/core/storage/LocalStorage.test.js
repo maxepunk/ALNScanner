@@ -422,6 +422,57 @@ describe('LocalStorage Strategy', () => {
     });
   });
 
+  describe('resetScores', () => {
+    it('should zero all team scores while keeping transactions', async () => {
+      await storage.createSession('Test Session', []);
+
+      // Add some transactions
+      await storage.addTransaction({
+        id: 'tx-001', tokenId: 'token-1', teamId: 'Team Alpha',
+        mode: 'blackmarket', points: 50000, valueRating: 3, memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      });
+      await storage.addTransaction({
+        id: 'tx-002', tokenId: 'token-2', teamId: 'Team Beta',
+        mode: 'blackmarket', points: 75000, valueRating: 4, memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      });
+
+      // Verify scores exist
+      let scores = storage.getTeamScores();
+      expect(scores.find(t => t.teamId === 'Team Alpha').score).toBeGreaterThan(0);
+
+      // Reset scores
+      const result = await storage.resetScores();
+
+      expect(result.success).toBe(true);
+
+      // Verify scores are zero but transactions remain
+      scores = storage.getTeamScores();
+      expect(scores.find(t => t.teamId === 'Team Alpha').score).toBe(0);
+      expect(scores.find(t => t.teamId === 'Team Beta').score).toBe(0);
+      expect(storage.getTransactions().length).toBe(2);
+    });
+
+    it('should emit scores:cleared event', async () => {
+      await storage.createSession('Test Session', []);
+      await storage.addTransaction({
+        id: 'tx-001', tokenId: 'token-1', teamId: 'Team Alpha',
+        mode: 'blackmarket', points: 50000,
+        timestamp: new Date().toISOString()
+      });
+
+      const eventPromise = new Promise(resolve => {
+        storage.addEventListener('scores:cleared', resolve, { once: true });
+      });
+
+      await storage.resetScores();
+
+      const event = await eventPromise;
+      expect(event.type).toBe('scores:cleared');
+    });
+  });
+
   describe('Session Lifecycle', () => {
     let storage;
 
