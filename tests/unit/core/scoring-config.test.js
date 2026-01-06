@@ -29,4 +29,29 @@ describe('Shared Scoring Config (Frontend)', () => {
   it('should have UNKNOWN type multiplier as 0', () => {
     expect(scoringConfig.typeMultipliers['UNKNOWN']).toBe(0);
   });
+
+  it('should return 0 for unknown memory types in calculateTokenValue', async () => {
+    const { calculateTokenValue } = await import('../../../src/core/scoring.js');
+
+    // Unknown type should return 0 (matches backend behavior)
+    const result = calculateTokenValue({
+      valueRating: 3,
+      memoryType: 'SomeRandomUnknownType',
+      isUnknown: false
+    });
+    expect(result).toBe(0);
+  });
+
+  it('should return correct value for known memory types', async () => {
+    const { calculateTokenValue, SCORING_CONFIG } = await import('../../../src/core/scoring.js');
+
+    // Rating 3 Technical = 50000 * 5 = 250000
+    const result = calculateTokenValue({
+      valueRating: 3,
+      memoryType: 'Technical',
+      isUnknown: false
+    });
+    expect(result).toBe(SCORING_CONFIG.BASE_VALUES[3] * SCORING_CONFIG.TYPE_MULTIPLIERS['Technical']);
+    expect(result).toBe(250000);
+  });
 });

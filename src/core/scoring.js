@@ -95,7 +95,10 @@ export function calculateTokenValue(transaction) {
     if (transaction.isUnknown) return 0;
 
     const baseValue = SCORING_CONFIG.BASE_VALUES[transaction.valueRating] || 0;
-    const multiplier = SCORING_CONFIG.TYPE_MULTIPLIERS[transaction.memoryType] || 1;
+    // Use UNKNOWN multiplier (0) for unknown types - matches backend behavior
+    const multiplier = SCORING_CONFIG.TYPE_MULTIPLIERS[transaction.memoryType]
+        ?? SCORING_CONFIG.TYPE_MULTIPLIERS.UNKNOWN
+        ?? 0;
 
     return baseValue * multiplier;
 }
