@@ -60,19 +60,13 @@ const DataManager = new UnifiedDataManagerClass({
   debug: Debug
 });
 
-// For backward compatibility during migration, alias same instance
-// TODO: Remove StandaloneDataManager references in Phase 2 cleanup
-const StandaloneDataManager = DataManager;
-
 // Create TeamRegistry for unified team management (networked + standalone)
 const TeamRegistry = new TeamRegistryClass();
 
 // Create UIManager with unified DataManager
-// UIManager._getDataSource() will be removed in Task 8
 const UIManager = new UIManagerClass({
   settings: Settings,
-  dataManager: DataManager,
-  standaloneDataManager: DataManager // Same instance for compatibility
+  dataManager: DataManager
   // sessionModeManager, app set later by App
 });
 
@@ -261,7 +255,6 @@ const app = new App({
   settings: Settings,
   tokenManager: TokenManager,
   dataManager: DataManager,
-  standaloneDataManager: StandaloneDataManager,
   teamRegistry: TeamRegistry,
   nfcHandler: NFCHandler,
   config: CONFIG,

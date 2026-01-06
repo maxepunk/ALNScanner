@@ -17,16 +17,12 @@ class UIManager {
    * @param {Object} options - Dependency injection options
    * @param {Object} options.settings - Settings instance (for mode checking)
    * @param {Object} options.dataManager - UnifiedDataManager instance
-   * @param {Object} options.standaloneDataManager - Deprecated (same as dataManager for compatibility)
    * @param {Object} options.sessionModeManager - SessionModeManager instance (for mode check)
    * @param {Object} options.app - App instance (for callbacks like showTeamDetails, deleteTeamTransaction)
    */
-  constructor({ settings, dataManager, standaloneDataManager, sessionModeManager, app } = {}) {
+  constructor({ settings, dataManager, sessionModeManager, app } = {}) {
     this.settings = settings;
     this.dataManager = dataManager;
-    // Note: standaloneDataManager is same instance as dataManager (UnifiedDataManager)
-    // Kept for backward compatibility during migration, will be removed in cleanup
-    this.standaloneDataManager = standaloneDataManager;
     this.sessionModeManager = sessionModeManager;
     this.app = app;
 
@@ -438,7 +434,7 @@ class UIManager {
     }
 
     // Check if backend has authoritative score (networked mode only)
-    // backendScores only exists in DataManager, not StandaloneDataManager
+    // backendScores only exists in networked mode
     const backendScore = isNetworked && this.dataManager?.backendScores?.get(teamId);
 
     // Use backend scores if available (authoritative in networked mode)
@@ -753,7 +749,7 @@ class UIManager {
     const dataSource = this.dataManager;
     if (!dataSource) return;
 
-    // Check if getGameActivity exists (only on DataManager, not StandaloneDataManager)
+    // Check if getGameActivity exists (UnifiedDataManager delegates to strategy)
     if (typeof dataSource.getGameActivity !== 'function') {
       // Fall back to transactions for standalone mode
       container.innerHTML = `

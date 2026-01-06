@@ -38,7 +38,6 @@ class App {
     this.settings = dependencies.settings || Settings;
     this.tokenManager = dependencies.tokenManager || TokenManager;
     this.dataManager = dependencies.dataManager || DataManager;
-    this.standaloneDataManager = dependencies.standaloneDataManager || null;
     this.teamRegistry = dependencies.teamRegistry || null;
     this.nfcHandler = dependencies.nfcHandler || NFCHandler;
     this.config = dependencies.config || CONFIG;
@@ -813,12 +812,12 @@ class App {
       tokenId: tokenId,  // Add tokenId for consistency with backend
       memoryType: isUnknown ? 'UNKNOWN' : (token?.SF_MemoryType || 'UNKNOWN'),
       group: isUnknown ? `Unknown: ${tokenId}` : (token?.SF_Group || ''),
-      tokenGroup: isUnknown ? '' : (token?.SF_Group || ''),  // For StandaloneDataManager group completion
+      tokenGroup: isUnknown ? '' : (token?.SF_Group || ''),  // For group completion detection
       valueRating: isUnknown ? 0 : (token?.SF_ValueRating || 0),
       isUnknown: isUnknown
     };
 
-    // Calculate points for blackmarket mode (needed by StandaloneDataManager)
+    // Calculate points for blackmarket mode
     if (this.settings.mode === 'blackmarket' && !isUnknown) {
       transaction.points = this.dataManager.calculateTokenValue(transaction);
       // DIAGNOSTIC: Log calculated points
