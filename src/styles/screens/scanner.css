@@ -668,3 +668,56 @@
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
 }
+
+/* ============================================================================
+   TEAM LIST - Unified team selection (standalone + networked)
+   ============================================================================ */
+
+.team-input-container {
+  margin: var(--space-4) 0;
+}
+
+.team-list-container {
+  margin: var(--space-4) 0;
+}
+
+.team-list-label {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-2);
+  display: block;
+}
+
+.team-list {
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.team-list:empty::after {
+  content: 'No teams yet';
+  display: block;
+  padding: var(--space-3);
+  color: var(--color-text-tertiary);
+  text-align: center;
+  font-style: italic;
+}
+
+.team-list-item {
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.15s;
+}
+
+.team-list-item:last-child {
+  border-bottom: none;
+}
+
+.team-list-item:hover {
+  background: var(--color-bg-secondary);
+}
