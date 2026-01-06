@@ -12,6 +12,7 @@ import {
   normalizeGroupName as sharedNormalizeGroupName,
   calculateTokenValue as sharedCalculateTokenValue
 } from './scoring.js';
+import { DataManagerUtils } from './dataManagerUtils.js';
 export class DataManager extends EventTarget {
   constructor({ tokenManager, settings, debug, app, sessionModeManager, networkedSession } = {}) {
     super();
@@ -106,7 +107,7 @@ export class DataManager extends EventTarget {
    * @returns {boolean} Whether token was already scanned
    */
   isTokenScanned(tokenId) {
-    return this.scannedTokens.has(tokenId);
+    return DataManagerUtils.isTokenScanned(this.scannedTokens, tokenId);
   }
 
   /**
@@ -114,7 +115,7 @@ export class DataManager extends EventTarget {
    * @param {string} tokenId - Token ID to mark
    */
   markTokenAsScanned(tokenId) {
-    this.scannedTokens.add(tokenId);
+    DataManagerUtils.markTokenAsScanned(this.scannedTokens, tokenId);
     this.saveScannedTokens();
   }
 
@@ -124,7 +125,7 @@ export class DataManager extends EventTarget {
    * @param {string} tokenId - Token ID to unmark
    */
   unmarkTokenAsScanned(tokenId) {
-    const wasRemoved = this.scannedTokens.delete(tokenId);
+    const wasRemoved = DataManagerUtils.unmarkTokenAsScanned(this.scannedTokens, tokenId);
     if (wasRemoved) {
       this.saveScannedTokens();
       this.debug?.log(`[DataManager] Token unmarked for re-scanning: ${tokenId}`);
