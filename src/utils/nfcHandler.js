@@ -39,18 +39,25 @@ class NFCHandlerClass {
       // Otherwise events may fire before listeners are registered
       this.reader.addEventListener("reading", ({ message, serialNumber }) => {
         try {
-          console.log('!!! NFC READING EVENT FIRED !!!');
-          console.log('Message:', message);
-          console.log('Serial:', serialNumber);
-          console.log('onRead callback type:', typeof onRead);
-
           const result = this.extractTokenId(message, serialNumber);
-          console.log('extractTokenId returned:', result);
+
+          // Debounce check (only for successful reads with an ID)
+          if (result.id) {
+            const now = Date.now();
+            if (this.lastRead &&
+                this.lastRead.id === result.id &&
+                (now - this.lastRead.timestamp) < this.debounceMs) {
+              Debug.log(`Debounced duplicate read: ${result.id}`);
+              return; // Silently ignore
+            }
+
+            // Update last read
+            this.lastRead = { id: result.id, timestamp: now };
+          }
 
           onRead(result);
-          console.log('onRead callback executed successfully');
         } catch (error) {
-          console.error('!!! EXCEPTION IN READING EVENT LISTENER !!!', error);
+          console.error('Exception in NFC reading handler:', error);
           Debug.log(`Exception in NFC reading handler: ${error.message}`, true);
         }
       });

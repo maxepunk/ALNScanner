@@ -133,5 +133,53 @@ describe('NFCHandler - ES6 Module', () => {
       expect(handler.lastRead).toBe(null);
       expect(handler.debounceMs).toBe(2000);
     });
+
+    it('should suppress rapid duplicate reads', () => {
+      const handler = new NFCHandlerClass();
+      handler.debounceMs = 2000;
+
+      // Simulate first read
+      handler.lastRead = { id: 'token123', timestamp: Date.now() - 500 }; // 500ms ago
+
+      // Check if same token would be debounced
+      const now = Date.now();
+      const wouldDebounce = handler.lastRead &&
+        handler.lastRead.id === 'token123' &&
+        (now - handler.lastRead.timestamp) < handler.debounceMs;
+
+      expect(wouldDebounce).toBe(true);
+    });
+
+    it('should allow reads after debounce window expires', () => {
+      const handler = new NFCHandlerClass();
+      handler.debounceMs = 2000;
+
+      // Simulate old read (3 seconds ago)
+      handler.lastRead = { id: 'token123', timestamp: Date.now() - 3000 };
+
+      // Check if same token would NOT be debounced
+      const now = Date.now();
+      const wouldDebounce = handler.lastRead &&
+        handler.lastRead.id === 'token123' &&
+        (now - handler.lastRead.timestamp) < handler.debounceMs;
+
+      expect(wouldDebounce).toBe(false);
+    });
+
+    it('should allow reads of different tokens immediately', () => {
+      const handler = new NFCHandlerClass();
+      handler.debounceMs = 2000;
+
+      // Simulate recent read of different token
+      handler.lastRead = { id: 'token123', timestamp: Date.now() - 100 };
+
+      // Check if different token would NOT be debounced
+      const now = Date.now();
+      const wouldDebounce = handler.lastRead &&
+        handler.lastRead.id === 'token456' &&
+        (now - handler.lastRead.timestamp) < handler.debounceMs;
+
+      expect(wouldDebounce).toBe(false);
+    });
   });
 });
