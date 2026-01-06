@@ -145,4 +145,55 @@ describe('UnifiedDataManager', () => {
       );
     });
   });
+
+  describe('dispose', () => {
+    it('should clean up resources when disposed', async () => {
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
+      manager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+      await manager.initializeStandaloneMode();
+
+      // Verify initialized
+      expect(manager.isReady()).toBe(true);
+      expect(manager.getActiveStrategyType()).toBe('local');
+
+      // Dispose
+      manager.dispose();
+
+      // Should be reset
+      expect(manager.isReady()).toBe(false);
+      expect(manager.getActiveStrategyType()).toBeNull();
+    });
+
+    it('should allow dispose before initialization', () => {
+      manager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+
+      // Should not throw
+      expect(() => manager.dispose()).not.toThrow();
+    });
+
+    it('should clean up event listeners on dispose', async () => {
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
+      manager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+      await manager.initializeStandaloneMode();
+
+      // Get strategy listener count before dispose
+      const listenerMapSize = manager._strategyListeners.size;
+      expect(listenerMapSize).toBe(1); // One strategy
+
+      // Dispose
+      manager.dispose();
+
+      // Listeners should be cleared
+      expect(manager._strategyListeners.size).toBe(0);
+    });
+  });
 });

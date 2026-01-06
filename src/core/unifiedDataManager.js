@@ -28,7 +28,11 @@ export class UnifiedDataManager extends EventTarget {
     this._networkedStrategy = null;
     this._activeStrategy = null;
 
+    // Store event listener references for cleanup
+    this._strategyListeners = new Map();
+
     // Expose scannedTokens for backward compatibility
+    // NOTE: This is a shared reference to the strategy's Set
     this.scannedTokens = new Set();
   }
 
@@ -106,6 +110,9 @@ export class UnifiedDataManager extends EventTarget {
 
   /**
    * Sync scannedTokens from active strategy
+   * NOTE: Creates a shared reference for backward compatibility.
+   * The scannedTokens Set is owned by the strategy - if strategy
+   * replaces its Set, call this method again to re-sync.
    * @private
    */
   _syncScannedTokens() {
@@ -116,6 +123,7 @@ export class UnifiedDataManager extends EventTarget {
 
   /**
    * Wire event forwarding from strategy to manager
+   * Stores listener references for cleanup via _unwireStrategyEvents
    * @private
    * @param {IStorageStrategy} strategy
    */
@@ -130,11 +138,31 @@ export class UnifiedDataManager extends EventTarget {
       'player-scan:added'
     ];
 
+    const listeners = [];
     events.forEach(eventName => {
-      strategy.addEventListener(eventName, (event) => {
+      const handler = (event) => {
         this.dispatchEvent(new CustomEvent(eventName, { detail: event.detail }));
-      });
+      };
+      strategy.addEventListener(eventName, handler);
+      listeners.push({ eventName, handler });
     });
+
+    this._strategyListeners.set(strategy, listeners);
+  }
+
+  /**
+   * Remove event listeners from strategy
+   * @private
+   * @param {IStorageStrategy} strategy
+   */
+  _unwireStrategyEvents(strategy) {
+    const listeners = this._strategyListeners.get(strategy);
+    if (listeners) {
+      listeners.forEach(({ eventName, handler }) => {
+        strategy.removeEventListener(eventName, handler);
+      });
+      this._strategyListeners.delete(strategy);
+    }
   }
 
   /**
@@ -236,6 +264,31 @@ export class UnifiedDataManager extends EventTarget {
   async endSession() {
     this._requireActiveStrategy();
     return this._activeStrategy.endSession();
+  }
+
+  /**
+   * Dispose of resources - clean up event listeners and strategies
+   * Call when manager is no longer needed to prevent memory leaks
+   */
+  dispose() {
+    // Unwire event listeners from all strategies
+    if (this._localStrategy) {
+      this._unwireStrategyEvents(this._localStrategy);
+      this._localStrategy.dispose();
+    }
+    if (this._networkedStrategy) {
+      this._unwireStrategyEvents(this._networkedStrategy);
+      this._networkedStrategy.dispose();
+    }
+
+    // Clear references
+    this._activeStrategy = null;
+    this._localStrategy = null;
+    this._networkedStrategy = null;
+    this._strategyListeners.clear();
+    this.scannedTokens = new Set();
+
+    this._log('Disposed');
   }
 
   /**
