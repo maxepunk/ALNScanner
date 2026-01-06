@@ -477,5 +477,38 @@ describe('LocalStorage Strategy', () => {
         expect(result.error).toContain('not paused');
       });
     });
+
+    describe('addTransaction with paused session', () => {
+      it('should reject transactions when session is paused', async () => {
+        await storage.createSession('Test Session', []);
+        await storage.pauseSession();
+
+        const result = await storage.addTransaction({
+          id: 'tx-001',
+          tokenId: 'token-123',
+          teamId: 'Team Alpha',
+          mode: 'blackmarket'
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('paused');
+      });
+
+      it('should accept transactions after session resumed', async () => {
+        await storage.createSession('Test Session', []);
+        await storage.pauseSession();
+        await storage.resumeSession();
+
+        const result = await storage.addTransaction({
+          id: 'tx-001',
+          tokenId: 'token-123',
+          teamId: 'Team Alpha',
+          mode: 'blackmarket',
+          points: 50000
+        });
+
+        expect(result.success).toBe(true);
+      });
+    });
   });
 });

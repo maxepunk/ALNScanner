@@ -239,6 +239,14 @@ export class LocalStorage extends IStorageStrategy {
    * @returns {Promise<TransactionResult>}
    */
   async addTransaction(transaction) {
+    // Check if session is paused
+    if (this.sessionData?.status === 'paused') {
+      return {
+        success: false,
+        error: 'Cannot add transaction: session is paused'
+      };
+    }
+
     // Validate required fields
     if (!transaction || !transaction.teamId) {
       return {
