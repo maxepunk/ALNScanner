@@ -6,6 +6,9 @@ on:
     branches:
       - main  # Auto-deploy on push to main
 
+permissions:
+  contents: write  # Required for pushing to gh-pages branch
+
 jobs:
   sync-and-deploy:
     runs-on: ubuntu-latest
