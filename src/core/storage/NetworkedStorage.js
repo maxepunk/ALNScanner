@@ -73,6 +73,17 @@ export class NetworkedStorage extends IStorageStrategy {
       };
     }
 
+    // Check socket connection
+    if (!this.isReady()) {
+      this.debug?.log('[NetworkedStorage] Cannot add transaction: socket not connected', true);
+      return {
+        success: false,
+        error: 'Socket not connected'
+      };
+    }
+
+    this.debug?.log(`[NetworkedStorage] Submitting transaction: ${transaction.tokenId} for team ${transaction.teamId}`);
+
     this.socket.emit('transaction:submit', {
       tokenId: transaction.tokenId,
       teamId: transaction.teamId,
@@ -100,6 +111,13 @@ export class NetworkedStorage extends IStorageStrategy {
    * @returns {Promise<TransactionResult>}
    */
   async removeTransaction(transactionId) {
+    if (!this.isReady()) {
+      this.debug?.log('[NetworkedStorage] Cannot remove transaction: socket not connected', true);
+      return { success: false, error: 'Socket not connected' };
+    }
+
+    this.debug?.log(`[NetworkedStorage] Removing transaction: ${transactionId}`);
+
     this.socket.emit('gm:command', {
       event: 'gm:command',
       data: {
@@ -150,6 +168,13 @@ export class NetworkedStorage extends IStorageStrategy {
    * @returns {Promise<TransactionResult>}
    */
   async adjustTeamScore(teamId, delta, reason) {
+    if (!this.isReady()) {
+      this.debug?.log('[NetworkedStorage] Cannot adjust score: socket not connected', true);
+      return { success: false, error: 'Socket not connected' };
+    }
+
+    this.debug?.log(`[NetworkedStorage] Adjusting score for team ${teamId}: ${delta > 0 ? '+' : ''}${delta} (${reason})`);
+
     this.socket.emit('gm:command', {
       event: 'gm:command',
       data: {
@@ -235,7 +260,10 @@ export class NetworkedStorage extends IStorageStrategy {
         timestamp: tx.timestamp,
         mode: tx.mode,
         teamId: tx.teamId,
-        points: calculateTokenValue(tx),
+        points: calculateTokenValue({
+          valueRating: tx.valueRating,
+          memoryType: tx.memoryType
+        }),
         summary: tx.summary || activity.tokenData?.summary
       });
       activity.status = 'claimed';
@@ -267,6 +295,13 @@ export class NetworkedStorage extends IStorageStrategy {
    * @returns {Promise<Object>}
    */
   async createSession(name, teams) {
+    if (!this.isReady()) {
+      this.debug?.log('[NetworkedStorage] Cannot create session: socket not connected', true);
+      return { success: false, error: 'Socket not connected' };
+    }
+
+    this.debug?.log(`[NetworkedStorage] Creating session: ${name}`);
+
     this.socket.emit('gm:command', {
       event: 'gm:command',
       data: {
@@ -284,6 +319,13 @@ export class NetworkedStorage extends IStorageStrategy {
    * @returns {Promise<void>}
    */
   async endSession() {
+    if (!this.isReady()) {
+      this.debug?.log('[NetworkedStorage] Cannot end session: socket not connected', true);
+      return;
+    }
+
+    this.debug?.log('[NetworkedStorage] Ending session');
+
     this.socket.emit('gm:command', {
       event: 'gm:command',
       data: { action: 'session:end', payload: {} },

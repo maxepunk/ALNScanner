@@ -118,6 +118,20 @@ describe('NetworkedStorage Strategy', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('Transaction must have teamId');
     });
+
+    it('should return error when socket is disconnected', async () => {
+      mockSocket.connected = false;
+
+      const result = await storage.addTransaction({
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'blackmarket'
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Socket not connected');
+      expect(mockSocket.emit).not.toHaveBeenCalled();
+    });
   });
 
   describe('removeTransaction', () => {
@@ -141,6 +155,16 @@ describe('NetworkedStorage Strategy', () => {
       expect(result.success).toBe(true);
       expect(result.pending).toBe(true);
     });
+
+    it('should return error when socket is disconnected', async () => {
+      mockSocket.connected = false;
+
+      const result = await storage.removeTransaction('tx-123');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Socket not connected');
+      expect(mockSocket.emit).not.toHaveBeenCalled();
+    });
   });
 
   describe('adjustTeamScore', () => {
@@ -160,6 +184,16 @@ describe('NetworkedStorage Strategy', () => {
           })
         })
       );
+    });
+
+    it('should return error when socket is disconnected', async () => {
+      mockSocket.connected = false;
+
+      const result = await storage.adjustTeamScore('001', 5000, 'Bonus');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Socket not connected');
+      expect(mockSocket.emit).not.toHaveBeenCalled();
     });
   });
 
