@@ -748,6 +748,13 @@ class App {
   }
 
   async processNFCRead(result) {
+    // Handle NFC read errors (no serial fallback - errors returned from NFCHandler)
+    if (result.source === 'error') {
+      this.debug.log(`NFC read failed: ${result.error}`, true);
+      this.uiManager.showError('Could not read token - please re-tap');
+      return;
+    }
+
     this.debug.log(`Processing token: "${result.id}" (from ${result.source})`);
     this.debug.log(`Token ID length: ${result.id.length} characters`);
 
