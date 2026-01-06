@@ -481,6 +481,27 @@ body.standalone-mode [data-requires="networked"] {
   font-size: var(--text-xl);
 }
 
+/* Element: Badge */
+.session-status__badge {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: auto;
+}
+
+.session-status__badge--active {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--color-accent-success);
+}
+
+.session-status__badge--paused {
+  background: rgba(255, 170, 51, 0.15);
+  color: var(--color-accent-warning);
+}
+
 /* Element: Details */
 .session-status__details {
   margin-bottom: var(--space-4);
