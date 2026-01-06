@@ -981,6 +981,64 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
     });
   });
 
+  describe('renderSessionStatus', () => {
+    let container;
+
+    beforeEach(() => {
+      container = document.createElement('div');
+      container.id = 'session-status-container';
+      document.body.appendChild(container);
+    });
+
+    afterEach(() => {
+      container.remove();
+    });
+
+    it('should render no-session state when no session exists', () => {
+      uiManager.dataManager = {
+        getCurrentSession: jest.fn(() => null)
+      };
+
+      uiManager.renderSessionStatus(container);
+
+      expect(container.innerHTML).toContain('No Active Session');
+      expect(container.innerHTML).toContain('data-action="app.adminCreateSession"');
+    });
+
+    it('should render active session state', () => {
+      uiManager.dataManager = {
+        getCurrentSession: jest.fn(() => ({
+          sessionId: 'test-123',
+          name: 'Friday Game',
+          status: 'active',
+          startTime: new Date().toISOString()
+        }))
+      };
+
+      uiManager.renderSessionStatus(container);
+
+      expect(container.innerHTML).toContain('Friday Game');
+      expect(container.innerHTML).toContain('Active');
+      expect(container.innerHTML).toContain('data-action="app.adminPauseSession"');
+    });
+
+    it('should render paused session state', () => {
+      uiManager.dataManager = {
+        getCurrentSession: jest.fn(() => ({
+          sessionId: 'test-123',
+          name: 'Friday Game',
+          status: 'paused',
+          startTime: new Date().toISOString()
+        }))
+      };
+
+      uiManager.renderSessionStatus(container);
+
+      expect(container.innerHTML).toContain('Paused');
+      expect(container.innerHTML).toContain('data-action="app.adminResumeSession"');
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should handle missing dependencies gracefully', () => {
       const managerNoDeps = new UIManager();

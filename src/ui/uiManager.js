@@ -313,6 +313,114 @@ class UIManager {
   }
 
   /**
+   * Render session status display (mode-agnostic)
+   * Used by standalone mode admin panel
+   * @param {HTMLElement} container - Container element
+   */
+  renderSessionStatus(container) {
+    if (!container) return;
+
+    const session = this.dataManager?.getCurrentSession?.();
+
+    // No session
+    if (!session) {
+      container.innerHTML = `
+        <div class="session-status session-status--empty">
+          <p class="session-status__message">No Active Session</p>
+          <p class="session-status__hint">Create a new session to begin tracking gameplay</p>
+          <button class="btn btn-primary" data-action="app.adminCreateSession">
+            Create New Session
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    // Calculate duration
+    const startTime = new Date(session.startTime);
+    const duration = this._formatDuration(Date.now() - startTime.getTime());
+
+    // Paused session
+    if (session.status === 'paused') {
+      container.innerHTML = `
+        <div class="session-status session-status--paused">
+          <h4 class="session-status__header">
+            <span class="session-status__icon">⏸️</span>
+            <span>${this._escapeHtml(session.name || 'Session')}</span>
+            <span class="session-status__badge session-status__badge--paused">Paused</span>
+          </h4>
+          <div class="session-status__details">
+            <span>Started: ${startTime.toLocaleTimeString()}</span>
+            <span>Duration: ${duration}</span>
+          </div>
+          <div class="session-status__actions">
+            <button class="btn btn-primary" data-action="app.adminResumeSession">
+              Resume Session
+            </button>
+            <button class="btn btn-danger" data-action="app.adminEndSession">
+              End Session
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // Active session (default)
+    container.innerHTML = `
+      <div class="session-status session-status--active">
+        <h4 class="session-status__header">
+          <span class="session-status__icon">🎮</span>
+          <span>${this._escapeHtml(session.name || 'Session')}</span>
+          <span class="session-status__badge session-status__badge--active">Active</span>
+        </h4>
+        <div class="session-status__details">
+          <span>Started: ${startTime.toLocaleTimeString()}</span>
+          <span>Duration: ${duration}</span>
+        </div>
+        <div class="session-status__actions">
+          <button class="btn btn-secondary" data-action="app.adminPauseSession">
+            Pause Session
+          </button>
+          <button class="btn btn-danger" data-action="app.adminEndSession">
+            End Session
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Format duration in milliseconds to human readable
+   * @private
+   */
+  _formatDuration(ms) {
+    if (!ms || ms < 0) return '0m';
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m`;
+    } else {
+      return `${seconds}s`;
+    }
+  }
+
+  /**
+   * Escape HTML to prevent XSS (private version)
+   * @private
+   */
+  _escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  /**
    * Render team details with enhanced grouping
    * @param {string} teamId - Team ID
    * @param {Array} transactions - Team transactions
@@ -749,13 +857,13 @@ class UIManager {
     const dataSource = this.dataManager;
     if (!dataSource) return;
 
-    // Check if getGameActivity exists (UnifiedDataManager delegates to strategy)
+    // UnifiedDataManager delegates to strategy - both modes support this now
+    // Defensive check in case dataManager doesn't have the method
     if (typeof dataSource.getGameActivity !== 'function') {
-      // Fall back to transactions for standalone mode
       container.innerHTML = `
         <div class="empty-state">
           <h3>Game Activity</h3>
-          <p>Available in networked mode only</p>
+          <p>No activity data available</p>
         </div>
       `;
       return;
