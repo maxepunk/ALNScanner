@@ -72,7 +72,14 @@ jest.mock('../../src/core/dataManager.js', () => ({
     initializeNetworkedMode: jest.fn().mockResolvedValue(),
     isReady: jest.fn(() => true),
     getActiveStrategyType: jest.fn(() => 'local'),
-    sessionModeManager: null
+    sessionModeManager: null,
+    // Phase 3: Session lifecycle methods for dual-mode admin operations
+    createSession: jest.fn().mockResolvedValue({ sessionId: 'test-123' }),
+    pauseSession: jest.fn().mockResolvedValue({ success: true }),
+    resumeSession: jest.fn().mockResolvedValue({ success: true }),
+    endSession: jest.fn().mockResolvedValue(),
+    resetScores: jest.fn().mockResolvedValue({ success: true }),
+    getCurrentSession: jest.fn(() => ({ sessionId: 'test-123', status: 'active' }))
   }
 }));
 
@@ -949,6 +956,77 @@ describe('App', () => {
       app.switchView('admin');
 
       expect(switchViewSpy).toHaveBeenCalledWith('admin');
+    });
+  });
+
+  describe('Admin Session Methods (Dual-Mode)', () => {
+    beforeEach(() => {
+      // Reset mocks
+      jest.clearAllMocks();
+    });
+
+    describe('adminCreateSession', () => {
+      it('should use dataManager in standalone mode', async () => {
+        mockSessionModeManager.isStandalone.mockReturnValue(true);
+        mockSessionModeManager.isNetworked.mockReturnValue(false);
+
+        // Mock prompt
+        global.prompt = jest.fn(() => 'Test Session');
+
+        await app.adminCreateSession();
+
+        expect(DataManager.createSession).toHaveBeenCalledWith('Test Session', []);
+      });
+    });
+
+    describe('adminPauseSession', () => {
+      it('should use dataManager in standalone mode', async () => {
+        mockSessionModeManager.isStandalone.mockReturnValue(true);
+        mockSessionModeManager.isNetworked.mockReturnValue(false);
+
+        await app.adminPauseSession();
+
+        expect(DataManager.pauseSession).toHaveBeenCalled();
+      });
+    });
+
+    describe('adminResumeSession', () => {
+      it('should use dataManager in standalone mode', async () => {
+        mockSessionModeManager.isStandalone.mockReturnValue(true);
+        mockSessionModeManager.isNetworked.mockReturnValue(false);
+
+        await app.adminResumeSession();
+
+        expect(DataManager.resumeSession).toHaveBeenCalled();
+      });
+    });
+
+    describe('adminEndSession', () => {
+      it('should use dataManager in standalone mode', async () => {
+        mockSessionModeManager.isStandalone.mockReturnValue(true);
+        mockSessionModeManager.isNetworked.mockReturnValue(false);
+
+        // Mock confirm
+        global.confirm = jest.fn(() => true);
+
+        await app.adminEndSession();
+
+        expect(DataManager.endSession).toHaveBeenCalled();
+      });
+    });
+
+    describe('adminResetScores', () => {
+      it('should use dataManager in standalone mode', async () => {
+        mockSessionModeManager.isStandalone.mockReturnValue(true);
+        mockSessionModeManager.isNetworked.mockReturnValue(false);
+
+        // Mock confirm
+        global.confirm = jest.fn(() => true);
+
+        await app.adminResetScores();
+
+        expect(DataManager.resetScores).toHaveBeenCalled();
+      });
     });
   });
 });

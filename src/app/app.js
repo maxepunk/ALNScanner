@@ -982,6 +982,25 @@ class App {
     const name = prompt('Enter session name:');
     if (!name) return;
 
+    const isStandalone = this.sessionModeManager?.isStandalone();
+
+    // Standalone mode: Use UnifiedDataManager (LocalStorage strategy)
+    if (isStandalone) {
+      try {
+        await this.dataManager.createSession(name.trim(), []);
+        this.debug.log(`Session created (standalone): ${name}`);
+        this.uiManager.showToast('Session created', 'success');
+
+        // Refresh session display
+        this._refreshAdminSessionDisplay();
+      } catch (error) {
+        console.error('Failed to create session (standalone):', error);
+        this.uiManager.showError(`Failed to create session: ${error.message}`);
+      }
+      return;
+    }
+
+    // Networked mode: Use SessionManager (existing code)
     if (!this.viewController.adminInstances?.sessionManager) {
       alert('Admin functions not available. Please ensure you are connected.');
       return;
@@ -997,6 +1016,27 @@ class App {
   }
 
   async adminPauseSession() {
+    const isStandalone = this.sessionModeManager?.isStandalone();
+
+    // Standalone mode: Use UnifiedDataManager
+    if (isStandalone) {
+      try {
+        const result = await this.dataManager.pauseSession();
+        if (result.success) {
+          this.debug.log('Session paused (standalone)');
+          this.uiManager.showToast('Session paused', 'info');
+          this._refreshAdminSessionDisplay();
+        } else {
+          this.uiManager.showError(result.error || 'Failed to pause session');
+        }
+      } catch (error) {
+        console.error('Failed to pause session (standalone):', error);
+        this.uiManager.showError(`Failed to pause session: ${error.message}`);
+      }
+      return;
+    }
+
+    // Networked mode (existing code)
     if (!this.viewController.adminInstances?.sessionManager) {
       alert('Admin functions not available.');
       return;
@@ -1011,6 +1051,27 @@ class App {
   }
 
   async adminResumeSession() {
+    const isStandalone = this.sessionModeManager?.isStandalone();
+
+    // Standalone mode: Use UnifiedDataManager
+    if (isStandalone) {
+      try {
+        const result = await this.dataManager.resumeSession();
+        if (result.success) {
+          this.debug.log('Session resumed (standalone)');
+          this.uiManager.showToast('Session resumed', 'success');
+          this._refreshAdminSessionDisplay();
+        } else {
+          this.uiManager.showError(result.error || 'Failed to resume session');
+        }
+      } catch (error) {
+        console.error('Failed to resume session (standalone):', error);
+        this.uiManager.showError(`Failed to resume session: ${error.message}`);
+      }
+      return;
+    }
+
+    // Networked mode (existing code)
     if (!this.viewController.adminInstances?.sessionManager) {
       alert('Admin functions not available.');
       return;
@@ -1027,6 +1088,23 @@ class App {
   async adminEndSession() {
     if (!confirm('Are you sure you want to end the session?')) return;
 
+    const isStandalone = this.sessionModeManager?.isStandalone();
+
+    // Standalone mode: Use UnifiedDataManager
+    if (isStandalone) {
+      try {
+        await this.dataManager.endSession();
+        this.debug.log('Session ended (standalone)');
+        this.uiManager.showToast('Session ended', 'info');
+        this._refreshAdminSessionDisplay();
+      } catch (error) {
+        console.error('Failed to end session (standalone):', error);
+        this.uiManager.showError(`Failed to end session: ${error.message}`);
+      }
+      return;
+    }
+
+    // Networked mode (existing code)
     if (!this.viewController.adminInstances?.sessionManager) {
       alert('Admin functions not available.');
       return;
@@ -1335,8 +1413,28 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
   }
 
   async adminResetScores() {
-    if (!confirm('Are you sure you want to reset all team scores? This cannot be undone.')) return;
+    if (!confirm('Reset all team scores to zero? Transactions will be preserved.')) return;
 
+    const isStandalone = this.sessionModeManager?.isStandalone();
+
+    // Standalone mode: Use UnifiedDataManager
+    if (isStandalone) {
+      try {
+        const result = await this.dataManager.resetScores();
+        if (result.success) {
+          this.debug.log('Scores reset (standalone)');
+          this.uiManager.showToast('All scores reset to zero', 'success');
+        } else {
+          this.uiManager.showError(result.error || 'Failed to reset scores');
+        }
+      } catch (error) {
+        console.error('Failed to reset scores (standalone):', error);
+        this.uiManager.showError(`Failed to reset scores: ${error.message}`);
+      }
+      return;
+    }
+
+    // Networked mode: Use AdminOps
     if (!this.viewController.adminInstances?.adminOps) {
       alert('Admin functions not available.');
       return;
@@ -1344,22 +1442,11 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
     try {
       await this.viewController.adminInstances.adminOps.resetScores();
-      this.debug.log('Scores reset successfully');
-
-      // ✅ Remove local mutation - let MonitoringDisplay handle broadcast
-      // Backend will send scores:reset broadcast
-      // MonitoringDisplay will call DataManager.clearBackendScores()
-      // DataManager will emit event
-      // main.js will update UI
-
-      // Update admin panel display (optional immediate feedback)
-      if (this.viewController.currentView === 'admin') {
-        this.updateAdminPanel();
-      }
+      this.debug.log('Scores reset');
+      this.uiManager.showToast('All scores reset', 'success');
     } catch (error) {
       console.error('Failed to reset scores:', error);
-      this.uiManager.showError(`Failed to reset scores: ${error.message}`);
-      alert(`Failed to reset scores: ${error.message}`);
+      this.uiManager.showError('Failed to reset scores.');
     }
   }
 
@@ -1379,6 +1466,16 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     this.showHistory();
   }
 
+  /**
+   * Refresh admin session display (standalone mode)
+   * @private
+   */
+  _refreshAdminSessionDisplay() {
+    const container = document.getElementById('session-status-container');
+    if (container && this.uiManager) {
+      this.uiManager.renderSessionStatus(container);
+    }
+  }
 
   // ========== GM Intervention (Both Modes) ==========
 
