@@ -698,44 +698,12 @@ class App {
 
   // ========== Scanning ==========
 
+  /**
+   * @deprecated Use _startNFCScanning() instead. Kept for console debugging.
+   */
   async startScan() {
-    const button = document.getElementById('scanButton');
-    const status = document.getElementById('scanStatus');
-
-    if (!this.nfcSupported) {
-      this.simulateScan();
-      return;
-    }
-
-    try {
-      if (button) {
-        button.disabled = true;
-        button.textContent = 'Scanning...';
-      }
-      if (status) {
-        status.textContent = 'Scanning... Tap a token';
-      }
-
-      await this.nfcHandler.startScan(
-        (result) => this.processNFCRead(result),
-        (err) => {
-          this.debug.log(`NFC read error: ${err?.message || err}`, true);
-          if (status) {
-            status.textContent = 'Read error. Try again.';
-          }
-          if (button) {
-            button.disabled = false;
-            button.textContent = 'Start Scanning';
-          }
-        }
-      );
-    } catch (error) {
-      this.debug.log(`Scan error: ${error.message}`, true);
-      if (status) {
-        status.textContent = 'NFC not available. Using demo mode.';
-      }
-      this.simulateScan();
-    }
+    console.warn('startScan() is deprecated - NFC now auto-starts on team confirmation');
+    await this._startNFCScanning();
   }
 
   /**

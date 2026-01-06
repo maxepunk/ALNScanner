@@ -603,37 +603,28 @@ describe('App', () => {
       expect(NFCHandler.startScan).toHaveBeenCalled();
     });
 
-    it('should simulate scan when NFC not supported', async () => {
-      jest.useFakeTimers();
+    it('should log deprecation warning when startScan called (NFC not supported)', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
       app.nfcSupported = false;
-      app.currentTeamId = '123'; // Required for processNFCRead
-
-      const status = document.getElementById('scanStatus');
-
-      app.startScan();
-
-      // Verify demo mode message is shown
-      expect(status.textContent).toBe('Demo Mode: Simulating scan...');
-
-      // Advance timers to trigger the simulated scan
-      jest.advanceTimersByTime(1000); // CONFIG.SCAN_SIMULATION_DELAY
-
-      // Verify NFCHandler.simulateScan was called
-      const NFCHandler = require('../../src/utils/nfcHandler.js').default;
-      expect(NFCHandler.simulateScan).toHaveBeenCalled();
-
-      jest.useRealTimers();
-    });
-
-    it('should disable scan button during scan', async () => {
-      const NFCHandler = require('../../src/utils/nfcHandler.js').default;
-      app.nfcSupported = true;
-      const button = document.getElementById('scanButton');
 
       await app.startScan();
 
-      expect(button.disabled).toBe(true);
-      expect(button.textContent).toBe('Scanning...');
+      // Verify deprecation warning is logged
+      expect(warnSpy).toHaveBeenCalledWith('startScan() is deprecated - NFC now auto-starts on team confirmation');
+
+      warnSpy.mockRestore();
+    });
+
+    it('should log deprecation warning when startScan called (NFC supported)', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      app.nfcSupported = true;
+
+      await app.startScan();
+
+      // Verify deprecation warning is logged
+      expect(warnSpy).toHaveBeenCalledWith('startScan() is deprecated - NFC now auto-starts on team confirmation');
+
+      warnSpy.mockRestore();
     });
 
     it('should require team selection before processing token', () => {
