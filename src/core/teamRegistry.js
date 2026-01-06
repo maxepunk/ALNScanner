@@ -32,6 +32,18 @@ class TeamRegistry extends EventTarget {
          * @type {'networked'|'standalone'|null}
          */
         this.mode = null;
+
+        /**
+         * SessionModeManager for mode detection
+         * @type {Object|null}
+         */
+        this.sessionModeManager = null;
+
+        /**
+         * OrchestratorClient for networked team creation
+         * @type {Object|null}
+         */
+        this.orchestratorClient = null;
     }
 
     /**
@@ -243,6 +255,124 @@ class TeamRegistry extends EventTarget {
             }
             selectElement.appendChild(option);
         });
+    }
+
+    // ============================================================================
+    // UNIFIED API - Mode-agnostic team operations
+    // ============================================================================
+
+    /**
+     * Select/create a team - UNIFIED API
+     * Standalone: Adds to localStorage recent history
+     * Networked: Sends session:addTeam if new, then selects
+     * @param {string} teamName
+     * @returns {Promise<{success: boolean, error?: string}>}
+     */
+    async selectTeam(teamName) {
+        if (!teamName?.trim()) {
+            return { success: false, error: 'Team name required' };
+        }
+
+        const normalized = teamName.trim();
+
+        if (this.sessionModeManager?.isStandalone()) {
+            // Standalone: track in recent history
+            this._addToRecentTeams(normalized);
+            return { success: true };
+        } else {
+            // Networked: create on backend if new
+            if (!this.hasTeam(normalized)) {
+                const result = await this._createTeamOnBackend(normalized);
+                if (!result.success) return result;
+            }
+            return { success: true };
+        }
+    }
+
+    /**
+     * Get teams for display - UNIFIED API
+     * Standalone: Returns recent teams from localStorage
+     * Networked: Returns teams from session (internal Map)
+     * @returns {Array<string>} Team names
+     */
+    getTeamsForDisplay() {
+        if (this.sessionModeManager?.isStandalone()) {
+            return this._getRecentTeams();
+        } else {
+            return this.getTeams().map(t => t.teamId);
+        }
+    }
+
+    /**
+     * Get label for team list - UNIFIED API
+     * @returns {string} Label text
+     */
+    getTeamListLabel() {
+        return this.sessionModeManager?.isStandalone()
+            ? 'Recent Teams:'
+            : 'Session Teams:';
+    }
+
+    // ============================================================================
+    // PRIVATE: localStorage recent teams (standalone mode)
+    // ============================================================================
+
+    /**
+     * Get recent teams from localStorage
+     * @returns {Array<string>} Recent team names (most recent first)
+     * @private
+     */
+    _getRecentTeams() {
+        try {
+            return JSON.parse(localStorage.getItem('aln_recent_teams') || '[]');
+        } catch {
+            return [];
+        }
+    }
+
+    /**
+     * Add team to recent history in localStorage
+     * Keeps max 10 teams, dedupes, most-recent-first
+     * @param {string} teamName
+     * @private
+     */
+    _addToRecentTeams(teamName) {
+        const recent = this._getRecentTeams().filter(t => t !== teamName);
+        recent.unshift(teamName);
+        const limited = recent.slice(0, 10);
+        localStorage.setItem('aln_recent_teams', JSON.stringify(limited));
+    }
+
+    // ============================================================================
+    // PRIVATE: Backend team creation (networked mode)
+    // ============================================================================
+
+    /**
+     * Create team on backend via session:addTeam command
+     * @param {string} teamName
+     * @returns {Promise<{success: boolean, error?: string}>}
+     * @private
+     */
+    async _createTeamOnBackend(teamName) {
+        if (!this.orchestratorClient) {
+            return { success: false, error: 'Not connected' };
+        }
+
+        try {
+            const response = await this.orchestratorClient.sendCommand(
+                'session:addTeam',
+                { teamId: teamName }
+            );
+
+            if (response.success) {
+                this.addTeam(teamName); // Update local registry
+                return { success: true };
+            } else {
+                return { success: false, error: response.message || 'Failed to create team' };
+            }
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
     }
 }
 
