@@ -2,30 +2,26 @@
  * Scoring Module - Shared Scoring Configuration and Utilities
  * ES6 Module Export
  *
- * Centralizes scoring logic used by both DataManager (networked) and
- * StandaloneDataManager (standalone) to eliminate code duplication.
+ * Loads scoring configuration from shared ALN-TokenData submodule.
+ * This ensures frontend and backend use identical scoring values.
  *
  * @module core/scoring
  */
 
+// Import shared config from data submodule (Vite resolves at build time)
+import sharedConfig from '../../data/scoring-config.json';
+
 /**
  * Scoring configuration for Black Market mode
  * Maps value ratings and memory types to point values
+ *
+ * NOTE: Values loaded from ALN-TokenData/scoring-config.json
  */
 export const SCORING_CONFIG = {
-    BASE_VALUES: {
-        1: 10000,
-        2: 25000,
-        3: 50000,
-        4: 75000,
-        5: 150000
-    },
-    TYPE_MULTIPLIERS: {
-        'Personal': 1,
-        'Business': 3,
-        'Technical': 5,
-        'UNKNOWN': 0
-    }
+    BASE_VALUES: Object.fromEntries(
+        Object.entries(sharedConfig.baseValues).map(([k, v]) => [parseInt(k), v])
+    ),
+    TYPE_MULTIPLIERS: { ...sharedConfig.typeMultipliers }
 };
 
 /**
