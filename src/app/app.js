@@ -530,6 +530,10 @@ class App {
         this.sessionModeManager.setMode(mode);
         this.debug.log(`Game mode locked: ${mode}`);
 
+        // Phase 3: Add body class for CSS-based feature hiding
+        document.body.classList.add('standalone-mode');
+        document.body.classList.remove('networked-mode');
+
         // Clear phantom data from previous sessions
         localStorage.removeItem('standaloneSession');
 
@@ -563,6 +567,10 @@ class App {
    * @private
    */
   async _initializeNetworkedMode() {
+    // Phase 3: Add body class for CSS-based feature display
+    document.body.classList.add('networked-mode');
+    document.body.classList.remove('standalone-mode');
+
     // Get configuration from localStorage (set by connection wizard)
     const orchestratorUrl = localStorage.getItem('aln_orchestrator_url') || 'https://localhost:3000';
     const deviceId = this.settings?.deviceId || 'GM_STATION_UNKNOWN';

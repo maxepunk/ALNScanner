@@ -4,6 +4,14 @@
  */
 
 /* ============================================
+   PHASE 3: MODE-BASED FEATURE VISIBILITY
+   Hide networked-only sections in standalone mode
+   ============================================ */
+body.standalone-mode [data-requires="networked"] {
+  display: none !important;
+}
+
+/* ============================================
    ADMIN SECTIONS
    ============================================ */
 .admin-section {
