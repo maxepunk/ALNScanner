@@ -190,28 +190,18 @@
         <div id="teamEntryScreen" class="screen">
             <h2 class="screen-title">Select Team</h2>
 
-            <!-- Team Selection Dropdown (networked mode - shows existing teams) -->
-            <div class="team-select-container">
-                <select id="teamSelect" class="team-dropdown">
-                    <option value="" disabled selected>Select Team...</option>
-                </select>
-            </div>
-
-            <!-- Standalone Team Name Input (standalone mode - text entry) -->
-            <div class="standalone-team-container" style="display: none;">
-                <input type="text" id="standaloneTeamName" class="team-name-input" 
+            <!-- UNIFIED: Single text input -->
+            <div class="team-input-container">
+                <input type="text" id="teamNameInput" class="team-name-input"
                        placeholder="Enter team name..." maxlength="30">
             </div>
 
-            <!-- Add New Team Section (networked mode) -->
-            <button id="showAddTeamBtn" class="btn btn-secondary add-team-btn">
-                + Add New Team
-            </button>
-
-            <div id="addTeamInputContainer" class="add-team-container" style="display: none;">
-                <input type="text" id="newTeamNameInput" class="team-name-input" 
-                       placeholder="New team name..." maxlength="30">
-                <button class="btn btn-primary" data-action="app.createAndSelectTeam">CREATE</button>
+            <!-- UNIFIED: Clickable team list (source varies by mode) -->
+            <div class="team-list-container">
+                <label id="teamListLabel" class="team-list-label"></label>
+                <div id="teamList" class="team-list" role="listbox">
+                    <!-- Rendered by App._renderTeamList() -->
+                </div>
             </div>
 
             <!-- Start Scanning Button -->
