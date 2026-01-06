@@ -144,8 +144,8 @@ class StandaloneDataManager extends EventTarget {
     // Persist to localStorage
     this.saveLocalSession();
 
-    // Emit event for UI updates
-    this.dispatchEvent(new CustomEvent('standalone:transaction-removed', {
+    // Emit event for UI updates (unified with DataManager)
+    this.dispatchEvent(new CustomEvent('transaction:deleted', {
       detail: {
         transaction: removedTx,
         teamId: affectedTeamId,

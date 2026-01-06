@@ -643,8 +643,8 @@ describe('StandaloneDataManager - ES6 Module (Event-Driven)', () => {
       expect(teamAfter.tokensScanned).toBe(1);
     });
 
-    it('should emit standalone:transaction-removed event', (done) => {
-      manager.addEventListener('standalone:transaction-removed', (event) => {
+    it('should emit transaction:deleted event', (done) => {
+      manager.addEventListener('transaction:deleted', (event) => {
         expect(event.detail.transaction).toBeDefined();
         expect(event.detail.transaction.id).toBe('tx_001');
         expect(event.detail.teamId).toBe('001');
