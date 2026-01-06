@@ -377,6 +377,13 @@ export class NetworkedStorage extends IStorageStrategy {
   }
 
   /**
+   * Clear all backend scores
+   */
+  clearBackendScores() {
+    this.backendScores.clear();
+  }
+
+  /**
    * Set scanned tokens from sync
    * @param {Array} tokens
    */

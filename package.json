@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:backend": "VITE_BASE_PATH=/gm-scanner/ vite build",
+    "build:pages": "VITE_BASE_PATH=/ALNScanner/ vite build",
     "preview": "vite preview",
     "test": "jest",
     "test:watch": "jest --watch",

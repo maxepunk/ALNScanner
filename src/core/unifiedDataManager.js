@@ -9,6 +9,7 @@ import { LocalStorage } from './storage/LocalStorage.js';
 import { NetworkedStorage } from './storage/NetworkedStorage.js';
 import { DataManagerUtils } from './dataManagerUtils.js';
 import {
+  SCORING_CONFIG,
   calculateTokenValue as calcTokenValue,
   parseGroupInfo as parseGroup,
   normalizeGroupName as sharedNormalizeGroupName
@@ -40,6 +41,13 @@ export class UnifiedDataManager extends EventTarget {
     // Expose scannedTokens for backward compatibility
     // NOTE: This is a shared reference to the strategy's Set
     this.scannedTokens = new Set();
+
+    // Expose SCORING_CONFIG for UIManager.renderTokenCard()
+    // This follows the pattern from DataManager and LocalStorage
+    this.SCORING_CONFIG = SCORING_CONFIG;
+
+    // Session tracking for boundary detection
+    this.currentSessionId = null;
   }
 
   /**
@@ -204,6 +212,22 @@ export class UnifiedDataManager extends EventTarget {
   async removeTransaction(transactionId) {
     this._requireActiveStrategy();
     return this._activeStrategy.removeTransaction(transactionId);
+  }
+
+  /**
+   * Add transaction from broadcast (networked mode only)
+   * Used when receiving transaction:new events from backend
+   * @param {Object} tx - Transaction from broadcast
+   */
+  addTransactionFromBroadcast(tx) {
+    // Only NetworkedStorage has this method
+    if (typeof this._activeStrategy?.addTransactionFromBroadcast === 'function') {
+      this._activeStrategy.addTransactionFromBroadcast(tx);
+      // Emit event so UI can update
+      this.dispatchEvent(new CustomEvent('transaction:added', {
+        detail: { transaction: tx }
+      }));
+    }
   }
 
   /**
@@ -408,15 +432,24 @@ export class UnifiedDataManager extends EventTarget {
 
   /**
    * Reset for new session - clears scannedTokens and emits data:cleared
+   * @param {string|null} sessionId - New session ID (null to clear)
    */
-  resetForNewSession() {
+  resetForNewSession(sessionId = null) {
+    this.currentSessionId = sessionId;
     this.scannedTokens.clear();
+
     if (this._localStrategy) {
       this._localStrategy.scannedTokens?.clear();
     }
     if (this._networkedStrategy) {
       this._networkedStrategy.scannedTokens?.clear();
+      this._networkedStrategy.transactions = [];
+      this._networkedStrategy.playerScans = [];
+      this._networkedStrategy.backendScores?.clear();
+      this._networkedStrategy.setSessionId?.(sessionId);
     }
+
+    this._log(`Reset for new session: ${sessionId || 'none'}`);
     this.dispatchEvent(new CustomEvent('data:cleared'));
   }
 
@@ -441,20 +474,351 @@ export class UnifiedDataManager extends EventTarget {
   }
 
   /**
-   * Get enhanced team transactions with score info
-   * @param {string} teamId
-   * @returns {Object} { teamId, transactions, score, tokensScanned }
+   * Get enhanced team transactions with grouping for team details display
+   * @param {string} teamId - Team ID
+   * @returns {Object} Grouped transaction data with completed/incomplete groups
    */
   getEnhancedTeamTransactions(teamId) {
     const transactions = this.getTeamTransactions(teamId);
-    const scores = this.getTeamScores();
-    const teamScore = scores.find(s => s.teamId === teamId);
+    const groupInventory = this.tokenManager?.getGroupInventory() || {};
+    const completedGroups = this.getTeamCompletedGroups(teamId);
+    const completedGroupNames = new Set(completedGroups.map(g => g.normalizedName));
+
+    // Calculate bonus values
+    const groupBonusData = {};
+    completedGroups.forEach(group => {
+      groupBonusData[group.normalizedName] = {
+        displayName: group.name,
+        multiplier: group.multiplier,
+        tokens: [],
+        totalBaseValue: 0,
+        bonusValue: 0
+      };
+    });
+
+    // Organize transactions
+    const completedGroupTokens = {};
+    const incompleteGroupTokens = {};
+    const ungroupedTokens = [];
+    const unknownTokens = [];
+
+    transactions.forEach(t => {
+      if (t.isUnknown) {
+        unknownTokens.push(t);
+        return;
+      }
+
+      const groupInfo = this.parseGroupInfo(t.group);
+      const normalizedGroupName = this.normalizeGroupName(groupInfo.name);
+      const groupData = groupInventory[normalizedGroupName];
+
+      if (!groupData || groupData.tokens.size <= 1) {
+        ungroupedTokens.push(t);
+        return;
+      }
+
+      const tokenValue = this.calculateTokenValue(t);
+
+      if (completedGroupNames.has(normalizedGroupName)) {
+        // Completed group
+        if (!completedGroupTokens[normalizedGroupName]) {
+          completedGroupTokens[normalizedGroupName] = [];
+        }
+        completedGroupTokens[normalizedGroupName].push(t);
+
+        if (groupBonusData[normalizedGroupName]) {
+          groupBonusData[normalizedGroupName].tokens.push(t);
+          groupBonusData[normalizedGroupName].totalBaseValue += tokenValue;
+          groupBonusData[normalizedGroupName].bonusValue += tokenValue * (groupInfo.multiplier - 1);
+        }
+      } else {
+        // Incomplete group
+        if (!incompleteGroupTokens[normalizedGroupName]) {
+          incompleteGroupTokens[normalizedGroupName] = {
+            displayName: groupData.displayName,
+            multiplier: groupData.multiplier,
+            tokens: [],
+            totalTokens: groupData.tokens.size,
+            collectedTokens: 0
+          };
+        }
+        incompleteGroupTokens[normalizedGroupName].tokens.push(t);
+      }
+    });
+
+    // Calculate progress
+    Object.keys(incompleteGroupTokens).forEach(normalizedName => {
+      const group = incompleteGroupTokens[normalizedName];
+      group.collectedTokens = group.tokens.length;
+      group.progress = `${group.collectedTokens}/${group.totalTokens}`;
+      group.percentage = Math.round((group.collectedTokens / group.totalTokens) * 100);
+    });
+
+    // Convert to arrays and sort
+    const completedGroupsArray = Object.entries(completedGroupTokens).map(([normalizedName, tokens]) => ({
+      ...groupBonusData[normalizedName],
+      normalizedName,
+      tokens
+    })).sort((a, b) => b.bonusValue - a.bonusValue);
+
+    const incompleteGroupsArray = Object.values(incompleteGroupTokens)
+      .sort((a, b) => b.percentage - a.percentage);
 
     return {
-      teamId,
-      transactions,
-      score: teamScore?.score || 0,
-      tokensScanned: transactions.length
+      completedGroups: completedGroupsArray,
+      incompleteGroups: incompleteGroupsArray,
+      ungroupedTokens,
+      unknownTokens,
+      hasCompletedGroups: completedGroupsArray.length > 0,
+      hasIncompleteGroups: incompleteGroupsArray.length > 0,
+      hasUngroupedTokens: ungroupedTokens.length > 0,
+      hasUnknownTokens: unknownTokens.length > 0
     };
+  }
+
+  /**
+   * Calculate team score with group completion bonuses
+   * @param {string} teamId - Team ID
+   * @returns {Object} Score breakdown
+   */
+  calculateTeamScoreWithBonuses(teamId) {
+    const transactions = this.getTeamTransactions(teamId).filter(t =>
+      t.mode === 'blackmarket' && !t.isUnknown
+    );
+
+    const completedGroups = this.getTeamCompletedGroups(teamId);
+    const completedGroupNames = new Set(
+      completedGroups.map(g => g.normalizedName)
+    );
+
+    let baseScore = 0;
+    let bonusScore = 0;
+    const groupBreakdown = {};
+
+    // Initialize breakdown for completed groups
+    completedGroups.forEach(group => {
+      groupBreakdown[group.name] = {
+        tokens: 0,
+        baseValue: 0,
+        bonusValue: 0,
+        multiplier: group.multiplier
+      };
+    });
+
+    // Calculate scores for each transaction
+    transactions.forEach(t => {
+      const tokenBaseValue = this.calculateTokenValue(t);
+      baseScore += tokenBaseValue;
+
+      // Check if this token's group is completed
+      const groupInfo = this.parseGroupInfo(t.group);
+      const normalizedGroupName = this.normalizeGroupName(groupInfo.name);
+
+      if (completedGroupNames.has(normalizedGroupName)) {
+        // Apply bonus (multiplier - 1) × base value
+        const bonusAmount = tokenBaseValue * (groupInfo.multiplier - 1);
+        bonusScore += bonusAmount;
+
+        // Track in breakdown
+        if (groupBreakdown[groupInfo.name]) {
+          groupBreakdown[groupInfo.name].tokens++;
+          groupBreakdown[groupInfo.name].baseValue += tokenBaseValue;
+          groupBreakdown[groupInfo.name].bonusValue += bonusAmount;
+        }
+      }
+    });
+
+    this._log(`Team ${teamId}: Base=$${baseScore}, Bonus=$${bonusScore}`);
+
+    return {
+      baseScore,
+      bonusScore,
+      totalScore: baseScore + bonusScore,
+      completedGroups: completedGroups.length,
+      groupBreakdown
+    };
+  }
+
+  /**
+   * Get session stats for the current team
+   * @returns {Object} { count, totalValue, totalScore }
+   */
+  getSessionStats() {
+    const currentTeamId = this.app?.currentTeamId;
+
+    if (!currentTeamId) {
+      return { count: 0, totalValue: 0, totalScore: 0 };
+    }
+
+    const teamTransactions = this.getTeamTransactions(currentTeamId);
+    const count = teamTransactions.length;
+    const knownTokens = teamTransactions.filter(t => !t.isUnknown);
+    const totalValue = knownTokens.reduce((sum, t) => sum + (t.valueRating || 0), 0);
+
+    // Get team score from teamScores
+    const scores = this.getTeamScores();
+    const teamScore = scores.find(s => s.teamId === currentTeamId);
+    const totalScore = teamScore?.score || 0;
+
+    return { count, totalValue, totalScore };
+  }
+
+  /**
+   * Get global stats across all teams
+   * @returns {Object} { total, teams, totalValue, avgValue, blackMarketScore }
+   */
+  getGlobalStats() {
+    const transactions = this.getTransactions();
+    const total = transactions.length;
+
+    // Count unique teams
+    const teamIds = [...new Set(transactions.map(t => t.teamId))];
+    const teams = teamIds.length;
+
+    // Calculate black market score from team scores
+    const teamScores = this.getTeamScores();
+    const blackMarketScore = teamScores.reduce((sum, ts) => sum + (ts.score || 0), 0);
+
+    // totalValue derived from blackMarketScore (display format)
+    const totalValue = Math.floor(blackMarketScore / 1000);
+    const known = transactions.filter(t => !t.isUnknown);
+    const avgValue = known.length > 0 ? (totalValue / known.length).toFixed(1) : 0;
+
+    return { total, teams, totalValue, avgValue, blackMarketScore };
+  }
+
+  // ============================================================================
+  // WEBSOCKET EVENT HANDLERS - Facade methods for NetworkedSession
+  // These delegate storage updates to the active strategy and emit UI events
+  // ============================================================================
+
+  /**
+   * Update team score from backend WebSocket event
+   * Called by NetworkedSession on 'score:updated' and 'sync:full'
+   * @param {Object} scoreData - Score data from backend
+   */
+  updateTeamScoreFromBackend(scoreData) {
+    if (!this._networkedStrategy) {
+      this._log('updateTeamScoreFromBackend called but no networked strategy active', true);
+      return;
+    }
+
+    // Delegate storage update to strategy
+    this._networkedStrategy.setBackendScores(scoreData.teamId, {
+      currentScore: scoreData.currentScore,
+      baseScore: scoreData.baseScore,
+      bonusPoints: scoreData.bonusPoints,
+      tokensScanned: scoreData.tokensScanned,
+      completedGroups: scoreData.completedGroups,
+      adminAdjustments: scoreData.adminAdjustments || [],
+      lastUpdate: scoreData.lastUpdate
+    });
+
+    // Emit event for UI updates
+    this.dispatchEvent(new CustomEvent('team-score:updated', {
+      detail: {
+        teamId: scoreData.teamId,
+        scoreData,
+        transactions: this.getTeamTransactions(scoreData.teamId)
+      }
+    }));
+
+    this._log(`Score updated from backend for team ${scoreData.teamId}: $${scoreData.currentScore}`);
+  }
+
+  /**
+   * Handle player scan event from WebSocket broadcast
+   * Called by NetworkedSession on 'player:scan'
+   * @param {Object} payload - Player scan event payload
+   */
+  handlePlayerScan(payload) {
+    if (!this._networkedStrategy) {
+      this._log('handlePlayerScan called but no networked strategy active', true);
+      return;
+    }
+
+    const playerScan = {
+      id: payload.scanId,
+      tokenId: payload.tokenId,
+      deviceId: payload.deviceId,
+      timestamp: payload.timestamp,
+      memoryType: payload.memoryType || null,
+      videoQueued: payload.videoQueued || false,
+      tokenData: payload.tokenData || null
+    };
+
+    // Delegate storage update to strategy
+    this._networkedStrategy.addPlayerScan(playerScan);
+
+    // Emit event for UI updates
+    this.dispatchEvent(new CustomEvent('player-scan:added', {
+      detail: { playerScan }
+    }));
+
+    this._log(`Player scan added: ${payload.tokenId} from ${payload.deviceId}`);
+  }
+
+  /**
+   * Set player scans from sync:full payload
+   * Called by NetworkedSession on reconnect to restore state
+   * @param {Array} playerScans - Array of player scan records from server
+   */
+  setPlayerScansFromServer(playerScans) {
+    if (!this._networkedStrategy) {
+      this._log('setPlayerScansFromServer called but no networked strategy active', true);
+      return;
+    }
+
+    if (!Array.isArray(playerScans)) {
+      this._log('setPlayerScansFromServer: invalid input (not array)', true);
+      return;
+    }
+
+    this._networkedStrategy.setPlayerScans(playerScans);
+    this._log(`Synced ${playerScans.length} player scans from server`);
+
+    // Emit event for UI updates
+    this.dispatchEvent(new CustomEvent('player-scans:synced', {
+      detail: { count: playerScans.length }
+    }));
+  }
+
+  /**
+   * Set scanned tokens from sync:full payload
+   * Called by NetworkedSession on reconnect to restore duplicate tracking
+   * @param {Array} tokens - Array of token IDs that have been scanned
+   */
+  setScannedTokensFromServer(tokens) {
+    if (!this._networkedStrategy) {
+      this._log('setScannedTokensFromServer called but no networked strategy active', true);
+      return;
+    }
+
+    if (!Array.isArray(tokens)) {
+      this._log('setScannedTokensFromServer: invalid input (not array)', true);
+      return;
+    }
+
+    this._networkedStrategy.setScannedTokens(tokens);
+    // Sync local reference
+    this._syncScannedTokens();
+    this._log(`Synced ${tokens.length} scanned tokens from server`);
+  }
+
+  /**
+   * Clear all backend scores
+   * Called by NetworkedSession on 'scores:reset'
+   */
+  clearBackendScores() {
+    if (!this._networkedStrategy) {
+      this._log('clearBackendScores called but no networked strategy active', true);
+      return;
+    }
+
+    this._networkedStrategy.clearBackendScores();
+    this._log('Backend scores cleared');
+
+    // Emit event for UI updates
+    this.dispatchEvent(new CustomEvent('scores:cleared'));
   }
 }

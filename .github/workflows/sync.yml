@@ -32,7 +32,10 @@ jobs:
         run: npm ci
 
       - name: Build scanner with Vite
-        run: npm run build
+        run: VITE_BASE_PATH=/ALNScanner/ npm run build
+
+      - name: Add .nojekyll for GitHub Pages
+        run: touch dist/.nojekyll
 
       - name: Sync token data
         run: python3 sync.py --local

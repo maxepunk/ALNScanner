@@ -232,7 +232,8 @@ export class NetworkedSession extends EventTarget {
 
         case 'transaction:new':
           if (payload.transaction) {
-            this.dataManager.addTransaction(payload.transaction);
+            // Use addTransactionFromBroadcast to store without re-submitting to backend
+            this.dataManager.addTransactionFromBroadcast(payload.transaction);
           }
           break;
 

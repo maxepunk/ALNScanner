@@ -37,6 +37,21 @@ npm run build:backend
 # Backend serves via symlink at https://[IP]:3000/gm-scanner/
 ```
 
+### GitHub Pages Deployment
+
+Automatic deployment on push to main:
+
+1. Push to `main` branch
+2. GitHub Actions runs `sync.yml` workflow
+3. Builds with `/ALNScanner/` base path
+4. Deploys to: https://maxepunk.github.io/ALNScanner/
+
+Manual build for GitHub Pages testing:
+```bash
+npm run build:pages
+# Output: dist/ with /ALNScanner/ base path
+```
+
 ## Port Configuration
 
 - **Backend Orchestrator**: 3000 (HTTPS), 8000 (HTTP redirect)

@@ -237,7 +237,13 @@ class UIManager {
     const badge = document.getElementById('historyBadge');
     if (!badge) return;
 
-    const count = dataSource.transactions.length;
+    // Check if strategy is initialized before accessing transactions
+    if (!dataSource.getActiveStrategyType()) {
+      badge.style.display = 'none';
+      return;
+    }
+
+    const count = dataSource.getTransactions().length;
     if (count > 0) {
       badge.textContent = count;
       badge.style.display = 'inline';

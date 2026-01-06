@@ -375,7 +375,9 @@ class App {
         this.teamRegistry.addEventListener('teams:updated', () => {
           const currentTeamSelect = document.getElementById('teamSelect');
           if (currentTeamSelect && !this.sessionModeManager?.isStandalone()) {
-            this.teamRegistry.populateDropdown(currentTeamSelect);
+            // Preserve current selection when repopulating
+            const currentValue = currentTeamSelect.value;
+            this.teamRegistry.populateDropdown(currentTeamSelect, { selectedTeamId: currentValue });
           }
         });
       }
@@ -602,15 +604,22 @@ class App {
         // Wire event listeners BEFORE initializing (so we catch session:ready)
         this._wireNetworkedSessionEvents();
 
+        // CRITICAL: Initialize UnifiedDataManager BEFORE WebSocket connects
+        // NetworkedSession._messageHandler calls dataManager methods on sync:full
+        // If _networkedStrategy doesn't exist, score updates are silently dropped
+        this.dataManager.sessionModeManager = this.sessionModeManager;
+        await this.dataManager.initializeNetworkedMode(null); // Socket added after connect
+        this.debug.log('UnifiedDataManager initialized for networked mode (socket pending)');
+
         await this.networkedSession.initialize();
         this.debug.log('NetworkedSession initialized - session:ready will fire');
 
-        // Initialize UnifiedDataManager for networked mode
-        // Pass the socket from networkedSession for NetworkedStorage strategy
-        this.dataManager.sessionModeManager = this.sessionModeManager;
+        // Update NetworkedStorage with the actual socket reference
         const client = this.networkedSession.getService('client');
-        await this.dataManager.initializeNetworkedMode(client?.socket);
-        this.debug.log('UnifiedDataManager initialized for networked mode');
+        if (client?.socket && this.dataManager._networkedStrategy) {
+          this.dataManager._networkedStrategy.socket = client.socket;
+          this.debug.log('NetworkedStorage socket reference updated');
+        }
 
         // Close connection wizard modal (if open) and show team entry screen
         // Per Architecture Refactoring 2025-11: App manages UI transitions after NetworkedSession ready
@@ -1399,7 +1408,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       const scoreBoard = document.getElementById('admin-score-board');
       if (scoreBoard) {
         const teams = {};
-        this.dataManager.transactions.forEach(tx => {
+        this.dataManager.getTransactions().forEach(tx => {
           if (!teams[tx.teamId]) {
             teams[tx.teamId] = {
               score: 0,
@@ -1728,7 +1737,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
   testCompletionDetection() {
     console.log('=== Testing Group Completion Detection ===\n');
 
-    const realTeams = [...new Set(this.dataManager.transactions
+    const realTeams = [...new Set(this.dataManager.getTransactions()
       .filter(t => t.mode === 'blackmarket')
       .map(t => t.teamId))];
 
@@ -1772,7 +1781,8 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     console.log('=== Testing Enhanced UI Data Structure ===\n');
 
     const teamId = prompt('Enter a team ID to test (or leave blank for first team):');
-    const testTeamId = teamId || this.dataManager.transactions[0]?.teamId;
+    const transactions = this.dataManager.getTransactions();
+    const testTeamId = teamId || transactions[0]?.teamId;
 
     if (!testTeamId) {
       alert('No teams found. Add some transactions first.');
