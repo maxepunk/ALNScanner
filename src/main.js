@@ -19,13 +19,12 @@
 
 // Import core dependencies
 // Note: Debug, Settings, TokenManager, NFCHandler, CONFIG are singletons (pre-created instances)
-// Note: DataManager, UIManager, StandaloneDataManager are classes (instances created below with DI)
+// Note: UnifiedDataManager, UIManager are classes (instances created below with DI)
 import Debug from './utils/debug.js';
 import { UIManager as UIManagerClass } from './ui/uiManager.js';
 import Settings from './ui/settings.js';
 import TokenManager from './core/tokenManager.js';
-import { DataManager as DataManagerClass } from './core/dataManager.js';
-import { StandaloneDataManager as StandaloneDataManagerClass } from './core/standaloneDataManager.js';
+import { UnifiedDataManager as UnifiedDataManagerClass } from './core/unifiedDataManager.js';
 import { TeamRegistry as TeamRegistryClass } from './core/teamRegistry.js';
 import NFCHandler from './utils/nfcHandler.js';
 import CONFIG from './utils/config.js';
@@ -45,34 +44,35 @@ import { ScreenUpdateManager } from './ui/ScreenUpdateManager.js';
  * Create service instances with proper dependency injection
  *
  * Architecture: Event-Driven Coordination (no direct cross-dependencies)
- * - DataManager emits events (transaction:added, data:cleared, etc.)
+ * - UnifiedDataManager emits events (transaction:added, data:cleared, etc.)
  * - ScreenUpdateManager routes events to appropriate UI updates
  * - Event wiring happens in main.js (centralized)
+ *
+ * Phase 2: UnifiedDataManager replaces both DataManager and StandaloneDataManager
+ * - Single manager with strategy pattern (LocalStorage/NetworkedStorage)
+ * - Mode-specific initialization done by App during selectGameMode()
  */
 
-// Create DataManager first (no UI dependencies)
-const DataManager = new DataManagerClass({
+// Create UnifiedDataManager (strategy selected during App initialization)
+const DataManager = new UnifiedDataManagerClass({
   tokenManager: TokenManager,
-  settings: Settings,
+  sessionModeManager: null, // Set by App during mode selection
   debug: Debug
-  // app, sessionModeManager, networkedSession set later by App
 });
 
-// Create StandaloneDataManager for standalone mode scoring
-const StandaloneDataManager = new StandaloneDataManagerClass({
-  tokenManager: TokenManager,
-  debug: Debug
-});
+// For backward compatibility during migration, alias same instance
+// TODO: Remove StandaloneDataManager references in Phase 2 cleanup
+const StandaloneDataManager = DataManager;
 
 // Create TeamRegistry for unified team management (networked + standalone)
 const TeamRegistry = new TeamRegistryClass();
 
-// Create UIManager with both DataManager and StandaloneDataManager
-// UIManager will route to appropriate manager based on session mode
+// Create UIManager with unified DataManager
+// UIManager._getDataSource() will be removed in Task 8
 const UIManager = new UIManagerClass({
   settings: Settings,
   dataManager: DataManager,
-  standaloneDataManager: StandaloneDataManager
+  standaloneDataManager: DataManager // Same instance for compatibility
   // sessionModeManager, app set later by App
 });
 
@@ -239,7 +239,8 @@ screenUpdateManager.registerContainer('admin-game-activity', {
 // CONNECT TO DATA SOURCES
 // ============================================================================
 
-// Connect ScreenUpdateManager to DataManager events
+// Connect ScreenUpdateManager to UnifiedDataManager events
+// Phase 2: Single connection - UnifiedDataManager emits all events
 screenUpdateManager.connectToDataSource(DataManager, [
   'transaction:added',
   'transaction:deleted',
@@ -248,12 +249,6 @@ screenUpdateManager.connectToDataSource(DataManager, [
   'game-state:updated',
   'team-score:updated',
   'player-scan:added'  // Game Activity: token lifecycle tracking
-]);
-
-// Connect ScreenUpdateManager to StandaloneDataManager events (now unified)
-screenUpdateManager.connectToDataSource(StandaloneDataManager, [
-  'transaction:added',
-  'team-score:updated'
 ]);
 
 /**
