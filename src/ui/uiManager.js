@@ -346,7 +346,7 @@ class UIManager {
         <div class="session-status session-status--paused">
           <h4 class="session-status__header">
             <span class="session-status__icon">⏸️</span>
-            <span>${this._escapeHtml(session.name || 'Session')}</span>
+            <span>${this.escapeHtml(session.name || 'Session')}</span>
             <span class="session-status__badge session-status__badge--paused">Paused</span>
           </h4>
           <div class="session-status__details">
@@ -371,7 +371,7 @@ class UIManager {
       <div class="session-status session-status--active">
         <h4 class="session-status__header">
           <span class="session-status__icon">🎮</span>
-          <span>${this._escapeHtml(session.name || 'Session')}</span>
+          <span>${this.escapeHtml(session.name || 'Session')}</span>
           <span class="session-status__badge session-status__badge--active">Active</span>
         </h4>
         <div class="session-status__details">
@@ -407,17 +407,6 @@ class UIManager {
     } else {
       return `${seconds}s`;
     }
-  }
-
-  /**
-   * Escape HTML to prevent XSS (private version)
-   * @private
-   */
-  _escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
   }
 
   /**
