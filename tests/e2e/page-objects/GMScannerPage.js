@@ -55,7 +55,7 @@ class GMScannerPage {
     this.resultStatus = page.locator('#resultStatus');
     this.resultTitle = page.locator('#resultTitle');
     this.resultValue = page.locator('#resultValue');
-    this.continueScanBtn = page.locator('button[data-action="app.continueScan"]');
+    // Note: Continue Scan button removed - result screen uses quick-dismiss pattern
     this.finishTeamBtn = page.locator('button[data-action="app.finishTeam"]');
 
     // History screen elements
@@ -208,9 +208,11 @@ class GMScannerPage {
 
   /**
    * Continue scanning (after result)
+   * Uses quick-dismiss pattern - tap anywhere on result screen except buttons
    */
   async continueScan() {
-    await this.continueScanBtn.click();
+    // Quick-dismiss pattern: tap on result screen (not on buttons)
+    await this.resultScreen.click({ position: { x: 100, y: 100 } });
     await this.scanScreen.waitFor({ state: 'visible', timeout: 5000 });
   }
 

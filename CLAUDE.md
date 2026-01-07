@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2025-12-16
+Last verified: 2026-01-06
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -27,7 +27,7 @@ ALNScanner is the **Game Master (GM) Scanner** for "About Last Night" - a PWA fo
 - Dual operation modes: Networked (WebSocket) OR Standalone (offline)
 - Two game modes: Detective (star ratings) OR Black Market (currency)
 - Android Chrome/Edge 89+ required for NFC
-- Automated testing: Jest (598 unit tests) + Playwright (E2E)
+- Automated testing: Jest (759 unit tests) + Playwright (E2E)
 - Automated deployment to GitHub Pages
 
 ## Development Commands
@@ -45,7 +45,7 @@ npm run build         # Output to dist/
 npm run preview       # Test production build locally
 
 # Run tests
-npm test              # Jest unit tests (L1: 598 tests, ~15-30s)
+npm test              # Jest unit tests (L1: 759 tests, ~15-30s)
 npm run test:e2e      # Playwright E2E tests (L2: scanner only, ~2-3 min)
 npm run test:all      # All tests (L1 + L2)
 
@@ -110,6 +110,29 @@ npm run build
 - Group completion bonuses (2x - 20x)
 - Exclusive scoreboard feature
 
+### Storage Strategy Pattern (Phase 2 Architecture)
+
+**UnifiedDataManager** uses the Strategy Pattern to handle both operation modes:
+
+```
+UnifiedDataManager (Facade)
+├── IStorageStrategy (Interface)
+│   ├── LocalStorage     → Standalone mode (localStorage persistence)
+│   └── NetworkedStorage → Networked mode (WebSocket sync)
+└── Delegates all operations to active strategy
+```
+
+**Key Files:**
+- `src/core/unifiedDataManager.js` - Facade that delegates to active strategy
+- `src/core/storage/IStorageStrategy.js` - Interface defining required methods
+- `src/core/storage/LocalStorage.js` - Standalone mode implementation
+- `src/core/storage/NetworkedStorage.js` - Networked mode implementation
+
+**Strategy Selection:**
+- Mode determined at startup by SessionModeManager
+- `unifiedDataManager.setStrategy(strategy)` called during initialization
+- Once set, strategy handles all data operations for the session
+
 ## Testing Architecture
 
 ### Test Taxonomy
@@ -117,12 +140,12 @@ npm run build
 The scanner uses a 3-tier testing strategy:
 
 **L1: Smoke Tests (Unit-level Verification)**
-- **Location**: `tests/unit/` (598 tests)
+- **Location**: `tests/unit/` (759 tests)
 - **Scope**: Module-level testing with mocks
 - **Purpose**: Verify individual components work correctly in isolation
 - **Run**: `npm test`
 - **Duration**: ~15-30s
-- **Coverage**: 598 tests across all modules (app, core, network, ui, utils)
+- **Coverage**: 759 tests across all modules (app, core, network, ui, utils)
 
 **L2: Scanner E2E Tests (No Orchestrator)**
 - **Location**: `tests/e2e/specs/`
@@ -149,7 +172,7 @@ ALNScanner/
 ├── tests/
 │   ├── unit/                       # L1: Jest unit tests
 │   │   ├── app/                    # App layer (App.js, SessionModeManager, etc.)
-│   │   ├── core/                   # Business logic (DataManager, TokenManager)
+│   │   ├── core/                   # Business logic (UnifiedDataManager, TokenManager, Storage)
 │   │   ├── network/                # WebSocket layer (OrchestratorClient, etc.)
 │   │   ├── ui/                     # UI management (UIManager, Settings)
 │   │   └── utils/                  # Utilities (Config, Debug, NFC)
@@ -173,7 +196,7 @@ ALNScanner/
 - **Pre-Merge**: L1 + L2 + L3 + CI checks (`./verify-merge-ready.sh` - full validation)
 
 **Test Pattern: Event-Driven Architecture**
-- DataManager and StandaloneDataManager emit CustomEvents
+- UnifiedDataManager emits CustomEvents via its storage strategies
 - Tests register event listeners BEFORE triggering actions (avoid race conditions)
 - Example pattern:
 ```javascript
@@ -196,8 +219,7 @@ it('should emit event when transaction added', (done) => {
 ```javascript
 const app = new App({
   sessionModeManager: mockSessionModeManager,
-  dataManager: mockDataManager,
-  standaloneDataManager: mockStandaloneDataManager,
+  dataManager: mockUnifiedDataManager,
   tokenManager: mockTokenManager
 });
 ```
@@ -228,7 +250,7 @@ localStorage.setItem('aln_auth_token', createValidToken());
 
 **Local Verification** (`./verify-merge-ready.sh`):
 - 8-phase pre-merge checklist
-- Runs all L1 tests (598/598 passing)
+- Runs all L1 tests (759/759 passing)
 - Verifies production build succeeds
 - Checks bundle size (<10MB)
 - Validates critical files present
@@ -270,7 +292,7 @@ Example: 5-star Technical token = $150,000 × 5 = $750,000
   - Bonus = (5 - 1) × $15,000 = $60,000
   - Total = $15,000 + $60,000 = $75,000
 
-**Group Completion Rules (dataManager.js:418-471):**
+**Group Completion Rules (LocalStorage.js:345-400):**
 - Groups must have 2+ tokens
 - Group multiplier must be > 1x
 - Team must collect ALL tokens in group
@@ -315,8 +337,14 @@ ALNScanner/
 │   │   ├── VideoController.js
 │   │   └── utils/
 │   ├── core/              # Core business logic
-│   │   ├── dataManager.js
-│   │   └── tokenManager.js
+│   │   ├── unifiedDataManager.js   # Facade for storage strategies
+│   │   ├── tokenManager.js
+│   │   ├── scoring.js              # Scoring config and utilities
+│   │   ├── teamRegistry.js         # Team state management
+│   │   └── storage/                # Storage strategy implementations
+│   │       ├── IStorageStrategy.js
+│   │       ├── LocalStorage.js     # Standalone mode
+│   │       └── NetworkedStorage.js # Networked mode
 │   ├── network/           # Network layer (WebSocket)
 │   │   ├── OrchestratorClient.js
 │   │   ├── ConnectionManager.js
@@ -388,8 +416,12 @@ ALNScanner/
 
 **Core Layer ([src/core/](src/core/)):**
 - [scoring.js](src/core/scoring.js) - Centralized scoring config (SCORING_CONFIG) and utilities
-- [dataManager.js](src/core/dataManager.js) - Transaction storage, group completion (both modes)
+- [unifiedDataManager.js](src/core/unifiedDataManager.js) - Facade pattern delegating to storage strategies
 - [tokenManager.js](src/core/tokenManager.js) - Token database loading, fuzzy matching, group inventory
+- [teamRegistry.js](src/core/teamRegistry.js) - Team state management for standalone mode
+- [storage/IStorageStrategy.js](src/core/storage/IStorageStrategy.js) - Interface for storage implementations
+- [storage/LocalStorage.js](src/core/storage/LocalStorage.js) - Standalone mode: localStorage persistence, group completion
+- [storage/NetworkedStorage.js](src/core/storage/NetworkedStorage.js) - Networked mode: WebSocket sync
 
 **Network Layer ([src/network/](src/network/)):**
 - [OrchestratorClient.js](src/network/OrchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
@@ -526,11 +558,11 @@ screenUpdateManager.registerContainer('admin-score-board', {
 1. NFC Scan → processNFCRead(result)
 2. Global Duplicate Check
 3. Token Lookup
-4. Local Storage
-   ├─ DataManager.addTransaction()
-   ├─ StandaloneDataManager.addTransaction()
-   ├─ Calculate points locally
-   └─ Check group completion
+4. Local Storage (via UnifiedDataManager → LocalStorage strategy)
+   ├─ unifiedDataManager.addTransaction()
+   ├─ LocalStorage.addTransaction()
+   ├─ Calculate points locally (scoring.js)
+   └─ Check group completion (LocalStorage._checkGroupCompletion)
 5. UI Update → Show Result
 ```
 
@@ -571,7 +603,7 @@ screenUpdateManager.registerContainer('admin-score-board', {
 - `player:scan` - Player scanner activity (persisted to session.playerScans)
 - `session:update` - Session lifecycle changes
 - `video:status` - Video playback state
-- `score:updated` - Team score changed
+- `score:updated` - Team score changed (**DEPRECATED**: Use `transaction:new.teamScore` instead)
 - `gm:command:ack` - Command response (success/failure)
 - `device:connected` / `device:disconnected` - Device tracking
 
@@ -920,7 +952,7 @@ localStorage.getItem('transactions') returns null after reload
 Expected bonus: $120,000, Received: $0
 ```
 - **Cause**: Field name inconsistency (tx.tokenGroup vs tx.group)
-- **Fix**: Already fixed in standaloneDataManager.js:249 (uses `tx.group` consistently)
+- **Fix**: Already fixed in LocalStorage.js:345 (uses `tx.group` consistently)
 - **Verification**: Check transaction object structure in localStorage:
 ```javascript
 JSON.parse(localStorage.getItem('transactions'))[0]
@@ -982,12 +1014,16 @@ For comprehensive Playwright testing patterns, see @docs/PLAYWRIGHT_TESTING_GUID
 
 ## Related Documentation
 
-**For detailed UI/UX documentation**, see:
-- `DOCUMENTATION_INDEX.md` - Master index
-- `UI_MAP_SUMMARY.md` - Quick reference (282 lines)
-- `UI_STRUCTURE_MAP.md` - Technical reference with line numbers (526 lines)
-- `SCREEN_FLOW_DIAGRAMS.md` - 10 ASCII diagrams (800+ lines)
-- `docs/NETWORKED_MODE_QUICK_REFERENCE.md` - User flow guide (238 lines)
+**Start here:**
+- `DOCUMENTATION_INDEX.md` - Master documentation index with all links
+
+**UI/UX documentation:**
+- `docs/UI_TESTING_REFERENCE.md` - Playwright selectors, navigation flows, page object patterns
+- `docs/UI_ARCHITECTURE.md` - Conceptual overview: screens, views, event routing, mode selection
+
+**User flows:**
+- `docs/NETWORKED_MODE_QUICK_REFERENCE.md` - Networked mode quick reference
+- `docs/NETWORKED_MODE_USER_FLOW.md` - Complete user flow documentation
 
 **For backend integration**, see:
 - `../backend/CLAUDE.md` - Orchestrator architecture

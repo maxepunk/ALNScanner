@@ -1133,7 +1133,8 @@ Once user selects "Networked" mode:
 - `/src/utils/nfcHandler.js` - Web NFC API wrapper
 - `/src/network/networkedQueueManager.js` - Transaction queueing & retry
 - `/src/core/tokenManager.js` - Token database & fuzzy matching
-- `/src/core/dataManager.js` - Scoring, group completion detection
+- `/src/core/unifiedDataManager.js` - Facade delegating to storage strategies
+- `/src/core/storage/LocalStorage.js` - Standalone mode: scoring, group completion
 
 ### Styling
 - `/index.html` lines 7-1373 - All CSS (inline)
