@@ -40,19 +40,20 @@ class NFCHandlerClass {
       this.reader.addEventListener("reading", ({ message, serialNumber }) => {
         try {
           const result = this.extractTokenId(message, serialNumber);
+          const now = Date.now();
 
-          // Debounce check (only for successful reads with an ID)
-          if (result.id) {
-            const now = Date.now();
+          // Debounce check - use tokenId for success, serialNumber for errors
+          const debounceKey = result.id || serialNumber;
+          if (debounceKey) {
             if (this.lastRead &&
-                this.lastRead.id === result.id &&
+                this.lastRead.id === debounceKey &&
                 (now - this.lastRead.timestamp) < this.debounceMs) {
-              Debug.log(`Debounced duplicate read: ${result.id}`);
+              Debug.log(`Debounced duplicate ${result.id ? 'read' : 'error'}: ${debounceKey}`);
               return; // Silently ignore
             }
 
             // Update last read
-            this.lastRead = { id: result.id, timestamp: now };
+            this.lastRead = { id: debounceKey, timestamp: now };
           }
 
           onRead(result);

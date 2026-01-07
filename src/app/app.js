@@ -14,7 +14,7 @@ import Debug from '../utils/debug.js';
 import UIManager from '../ui/uiManager.js';
 import Settings from '../ui/settings.js';
 import TokenManager from '../core/tokenManager.js';
-import DataManager from '../core/dataManager.js';
+// DataManager import removed - use UnifiedDataManager via dependency injection
 import NFCHandler from '../utils/nfcHandler.js';
 import CONFIG from '../utils/config.js';
 import InitializationSteps from './initializationSteps.js';
@@ -37,7 +37,7 @@ class App {
     this.uiManager = dependencies.uiManager || UIManager;
     this.settings = dependencies.settings || Settings;
     this.tokenManager = dependencies.tokenManager || TokenManager;
-    this.dataManager = dependencies.dataManager || DataManager;
+    this.dataManager = dependencies.dataManager; // Required: inject via main.js
     this.teamRegistry = dependencies.teamRegistry || null;
     this.nfcHandler = dependencies.nfcHandler || NFCHandler;
     this.config = dependencies.config || CONFIG;

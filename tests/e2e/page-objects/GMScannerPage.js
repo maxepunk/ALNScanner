@@ -47,7 +47,7 @@ class GMScannerPage {
     this.scanStatus = page.locator('#scanStatus');
     this.scanButton = page.locator('#scanButton[data-action="app.startScan"]');
     this.manualEntryBtn = page.locator('button[data-action="app.manualEntry"]');
-    this.cancelScanBtn = page.locator('button[data-action="app.cancelScan"]');
+    // cancelScanBtn removed from HTML - use finishTeamBtn instead
     this.teamTokenCount = page.locator('#teamTokenCount');
     this.teamTotalValue = page.locator('#teamTotalValue');
 
@@ -224,10 +224,11 @@ class GMScannerPage {
 
   /**
    * Cancel scan and return to team entry
+   * @deprecated Use finishTeam() instead - cancelScan button was removed
    */
   async cancelScan() {
-    await this.cancelScanBtn.click();
-    await this.teamEntryScreen.waitFor({ state: 'visible', timeout: 5000 });
+    // Redirect to finishTeam since cancelScan button was removed
+    return this.finishTeam();
   }
 
   /**

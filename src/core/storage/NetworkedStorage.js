@@ -260,7 +260,8 @@ export class NetworkedStorage extends IStorageStrategy {
         timestamp: tx.timestamp,
         mode: tx.mode,
         teamId: tx.teamId,
-        points: calculateTokenValue({
+        // Use stored points (from backend) if available, fall back to recalculation
+        points: tx.points || calculateTokenValue({
           valueRating: tx.valueRating,
           memoryType: tx.memoryType
         }),
@@ -342,6 +343,69 @@ export class NetworkedStorage extends IStorageStrategy {
       sessionId: this.currentSessionId,
       status: 'active'
     } : null;
+  }
+
+  /**
+   * Pause the current session - delegates to backend
+   * @returns {Promise<Object>}
+   */
+  async pauseSession() {
+    if (!this.isReady()) {
+      this.debug?.log('[NetworkedStorage] Cannot pause session: socket not connected', true);
+      return { success: false, error: 'Socket not connected' };
+    }
+
+    this.debug?.log('[NetworkedStorage] Pausing session');
+
+    this.socket.emit('gm:command', {
+      event: 'gm:command',
+      data: { action: 'session:pause', payload: {} },
+      timestamp: new Date().toISOString()
+    });
+
+    return { success: true, pending: true };
+  }
+
+  /**
+   * Resume the current session - delegates to backend
+   * @returns {Promise<Object>}
+   */
+  async resumeSession() {
+    if (!this.isReady()) {
+      this.debug?.log('[NetworkedStorage] Cannot resume session: socket not connected', true);
+      return { success: false, error: 'Socket not connected' };
+    }
+
+    this.debug?.log('[NetworkedStorage] Resuming session');
+
+    this.socket.emit('gm:command', {
+      event: 'gm:command',
+      data: { action: 'session:resume', payload: {} },
+      timestamp: new Date().toISOString()
+    });
+
+    return { success: true, pending: true };
+  }
+
+  /**
+   * Reset all scores - delegates to backend
+   * @returns {Promise<Object>}
+   */
+  async resetScores() {
+    if (!this.isReady()) {
+      this.debug?.log('[NetworkedStorage] Cannot reset scores: socket not connected', true);
+      return { success: false, error: 'Socket not connected' };
+    }
+
+    this.debug?.log('[NetworkedStorage] Resetting all scores');
+
+    this.socket.emit('gm:command', {
+      event: 'gm:command',
+      data: { action: 'scores:reset', payload: {} },
+      timestamp: new Date().toISOString()
+    });
+
+    return { success: true, pending: true };
   }
 
   // ========================================

@@ -41,58 +41,47 @@ jest.mock('../../src/core/tokenManager.js', () => ({
   }
 }));
 
-jest.mock('../../src/core/dataManager.js', () => ({
-  default: {
-    transactions: [],
-    scannedTokens: new Set(),
-    isTokenScanned: jest.fn(() => false),
-    markTokenAsScanned: jest.fn(),
-    addTransaction: jest.fn().mockResolvedValue({ success: true }),
-    removeTransaction: jest.fn().mockResolvedValue({ success: true }),
-    calculateTokenValue: jest.fn(() => 1000),
-    getTransactions: jest.fn(() => []),
-    getTeamTransactions: jest.fn(() => []),
-    getTeamScores: jest.fn(() => []),
-    getTeamCompletedGroups: jest.fn(() => []),
-    getEnhancedTeamTransactions: jest.fn(() => ({
-      completedGroups: [],
-      incompleteGroups: [],
-      ungroupedTokens: [],
-      unknownTokens: [],
-      hasCompletedGroups: false,
-      hasIncompleteGroups: false
-    })),
-    parseGroupInfo: jest.fn(),
-    normalizeGroupName: jest.fn(),
-    saveTransactions: jest.fn(),
-    saveScannedTokens: jest.fn(),
-    resetForNewSession: jest.fn(),
-    // UnifiedDataManager methods
-    initializeStandaloneMode: jest.fn().mockResolvedValue(),
-    initializeNetworkedMode: jest.fn().mockResolvedValue(),
-    isReady: jest.fn(() => true),
-    getActiveStrategyType: jest.fn(() => 'local'),
-    sessionModeManager: null,
-    // Phase 3: Session lifecycle methods for dual-mode admin operations
-    createSession: jest.fn().mockResolvedValue({ sessionId: 'test-123' }),
-    pauseSession: jest.fn().mockResolvedValue({ success: true }),
-    resumeSession: jest.fn().mockResolvedValue({ success: true }),
-    endSession: jest.fn().mockResolvedValue(),
-    resetScores: jest.fn().mockResolvedValue({ success: true }),
-    getCurrentSession: jest.fn(() => ({ sessionId: 'test-123', status: 'active' }))
-  }
-}));
-
-jest.mock('../../src/core/standaloneDataManager.js', () => ({
-  default: {
-    app: null,
-    addTransaction: jest.fn(),
-    getSessionStats: jest.fn(() => ({ total: 0, scanned: 0, score: 0 })),
-    getTeamScore: jest.fn(() => 0),
-    getAllTeamScores: jest.fn(() => []),
-    scannedTokens: new Set()
-  }
-}));
+// Create mock DataManager - used for dependency injection into App
+// No longer mocking module since dataManager.js is deleted
+const createMockDataManager = () => ({
+  transactions: [],
+  scannedTokens: new Set(),
+  isTokenScanned: jest.fn(() => false),
+  markTokenAsScanned: jest.fn(),
+  addTransaction: jest.fn().mockResolvedValue({ success: true }),
+  removeTransaction: jest.fn().mockResolvedValue({ success: true }),
+  calculateTokenValue: jest.fn(() => 1000),
+  getTransactions: jest.fn(() => []),
+  getTeamTransactions: jest.fn(() => []),
+  getTeamScores: jest.fn(() => []),
+  getTeamCompletedGroups: jest.fn(() => []),
+  getEnhancedTeamTransactions: jest.fn(() => ({
+    completedGroups: [],
+    incompleteGroups: [],
+    ungroupedTokens: [],
+    unknownTokens: [],
+    hasCompletedGroups: false,
+    hasIncompleteGroups: false
+  })),
+  parseGroupInfo: jest.fn(),
+  normalizeGroupName: jest.fn(),
+  saveTransactions: jest.fn(),
+  saveScannedTokens: jest.fn(),
+  resetForNewSession: jest.fn(),
+  // UnifiedDataManager methods
+  initializeStandaloneMode: jest.fn().mockResolvedValue(),
+  initializeNetworkedMode: jest.fn().mockResolvedValue(),
+  isReady: jest.fn(() => true),
+  getActiveStrategyType: jest.fn(() => 'local'),
+  sessionModeManager: null,
+  // Phase 3: Session lifecycle methods for dual-mode admin operations
+  createSession: jest.fn().mockResolvedValue({ sessionId: 'test-123' }),
+  pauseSession: jest.fn().mockResolvedValue({ success: true }),
+  resumeSession: jest.fn().mockResolvedValue({ success: true }),
+  endSession: jest.fn().mockResolvedValue(),
+  resetScores: jest.fn().mockResolvedValue({ success: true }),
+  getCurrentSession: jest.fn(() => ({ sessionId: 'test-123', status: 'active' }))
+});
 
 jest.mock('../../src/utils/nfcHandler.js', () => ({
   default: {
@@ -200,8 +189,7 @@ const Debug = require('../../src/utils/debug.js').default;
 const UIManager = require('../../src/ui/uiManager.js').default;
 const Settings = require('../../src/ui/settings.js').default;
 const TokenManager = require('../../src/core/tokenManager.js').default;
-const DataManager = require('../../src/core/dataManager.js').default;
-const StandaloneDataManager = require('../../src/core/standaloneDataManager.js').default;
+// DataManager and StandaloneDataManager modules deleted - use createMockDataManager() instead
 const NFCHandler = require('../../src/utils/nfcHandler.js').default;
 const CONFIG = require('../../src/utils/config.js').default;
 const InitializationSteps = require('../../src/app/initializationSteps.js').default;
@@ -210,6 +198,7 @@ const SessionModeManager = require('../../src/app/sessionModeManager.js').defaul
 describe('App', () => {
   let app;
   let mockSessionModeManager;
+  let mockDataManager;
 
   // Helper function to create a valid JWT token for tests
   const createValidToken = (expiresInHours = 24) => {
@@ -265,6 +254,9 @@ describe('App', () => {
       setMode: jest.fn()
     };
 
+    // Create mock DataManager for injection
+    mockDataManager = createMockDataManager();
+
     // Mock window for HTML onclick handlers (temporary until Phase 6)
     // Use Object.defineProperty to make window mockable in tests
     delete global.window;
@@ -280,8 +272,7 @@ describe('App', () => {
       uiManager: UIManager,
       settings: Settings,
       tokenManager: TokenManager,
-      dataManager: DataManager,
-      standaloneDataManager: StandaloneDataManager,
+      dataManager: mockDataManager,
       nfcHandler: NFCHandler,
       config: CONFIG,
       initializationSteps: InitializationSteps,
@@ -636,8 +627,7 @@ describe('App', () => {
     });
 
     it('should detect duplicate tokens', () => {
-      const DataManager = require('../../src/core/dataManager.js').default;
-      DataManager.isTokenScanned.mockReturnValue(true);
+      app.dataManager.isTokenScanned.mockReturnValue(true);
       app.currentTeamId = '123';
 
       app.processNFCRead({ id: 'test123', source: 'nfc', raw: 'test123' });
@@ -685,7 +675,6 @@ describe('App', () => {
 
   describe('Transaction Recording', () => {
     it('should record transaction in standalone mode', async () => {
-      const DataManager = require('../../src/core/dataManager.js').default;
       mockSessionModeManager.isStandalone.mockReturnValue(true);
       app.currentTeamId = '123';
 
@@ -693,8 +682,8 @@ describe('App', () => {
       await app.recordTransaction(token, 'test123', false);
 
       // In standalone mode, transactions go to UnifiedDataManager
-      expect(DataManager.addTransaction).toHaveBeenCalled();
-      expect(DataManager.markTokenAsScanned).toHaveBeenCalledWith('test123');
+      expect(app.dataManager.addTransaction).toHaveBeenCalled();
+      expect(app.dataManager.markTokenAsScanned).toHaveBeenCalledWith('test123');
     });
 
     it('should queue transaction in networked mode', async () => {
@@ -714,7 +703,6 @@ describe('App', () => {
 
     it('should calculate points for blackmarket mode', async () => {
       const Settings = require('../../src/ui/settings.js').default;
-      const DataManager = require('../../src/core/dataManager.js').default;
       mockSessionModeManager.isStandalone.mockReturnValue(true);
       Settings.mode = 'blackmarket';
       app.currentTeamId = '123';
@@ -722,18 +710,17 @@ describe('App', () => {
       const token = { SF_MemoryType: 'Technical', SF_ValueRating: 5 };
       await app.recordTransaction(token, 'test123', false);
 
-      expect(DataManager.calculateTokenValue).toHaveBeenCalled();
+      expect(app.dataManager.calculateTokenValue).toHaveBeenCalled();
     });
 
     it('should set points to 0 for unknown tokens', async () => {
-      const DataManager = require('../../src/core/dataManager.js').default;
       mockSessionModeManager.isStandalone.mockReturnValue(true);
       app.currentTeamId = '123';
 
       await app.recordTransaction(null, 'unknown', true);
 
       // Should create transaction with points: 0
-      const call = DataManager.addTransaction.mock.calls[0];
+      const call = app.dataManager.addTransaction.mock.calls[0];
       expect(call[0].points).toBe(0);
     });
   });
@@ -816,15 +803,14 @@ describe('App', () => {
 
   describe('Team Details', () => {
     it('should show team details screen', () => {
-      const DataManager = require('../../src/core/dataManager.js').default;
       const UIManager = require('../../src/ui/uiManager.js').default;
-      DataManager.getTeamTransactions.mockReturnValue([
+      app.dataManager.getTeamTransactions.mockReturnValue([
         { teamId: '123', tokenId: 'token1' }
       ]);
 
       app.showTeamDetails('123');
 
-      expect(DataManager.getTeamTransactions).toHaveBeenCalledWith('123');
+      expect(app.dataManager.getTeamTransactions).toHaveBeenCalledWith('123');
       expect(UIManager.renderTeamDetails).toHaveBeenCalledWith('123', expect.any(Array));
       expect(UIManager.showScreen).toHaveBeenCalledWith('teamDetails');
     });
@@ -869,14 +855,13 @@ describe('App', () => {
     });
 
     it('should render local scores in standalone mode', () => {
-      const DataManager = require('../../src/core/dataManager.js').default;
       const testTransactions = [
         { teamId: '001', mode: 'blackmarket' },
         { teamId: '001', mode: 'blackmarket' },
         { teamId: '002', mode: 'blackmarket' }
       ];
       // Mock getTransactions to return test data (not just set property)
-      DataManager.getTransactions.mockReturnValue(testTransactions);
+      app.dataManager.getTransactions.mockReturnValue(testTransactions);
       app.viewController.adminInstances = null;
 
       app.updateAdminPanel();
@@ -969,7 +954,7 @@ describe('App', () => {
 
         await app.adminCreateSession();
 
-        expect(DataManager.createSession).toHaveBeenCalledWith('Test Session', []);
+        expect(app.dataManager.createSession).toHaveBeenCalledWith('Test Session', []);
       });
     });
 
@@ -980,7 +965,7 @@ describe('App', () => {
 
         await app.adminPauseSession();
 
-        expect(DataManager.pauseSession).toHaveBeenCalled();
+        expect(app.dataManager.pauseSession).toHaveBeenCalled();
       });
     });
 
@@ -991,7 +976,7 @@ describe('App', () => {
 
         await app.adminResumeSession();
 
-        expect(DataManager.resumeSession).toHaveBeenCalled();
+        expect(app.dataManager.resumeSession).toHaveBeenCalled();
       });
     });
 
@@ -1005,7 +990,7 @@ describe('App', () => {
 
         await app.adminEndSession();
 
-        expect(DataManager.endSession).toHaveBeenCalled();
+        expect(app.dataManager.endSession).toHaveBeenCalled();
       });
     });
 
@@ -1019,7 +1004,7 @@ describe('App', () => {
 
         await app.adminResetScores();
 
-        expect(DataManager.resetScores).toHaveBeenCalled();
+        expect(app.dataManager.resetScores).toHaveBeenCalled();
       });
     });
   });

@@ -9,12 +9,11 @@
  * these tests verify:
  * - Full session lifecycles (create → scan → adjust → end)
  * - Persistence and reload from localStorage
- * - API parity between LocalStorage and DataManager/StandaloneDataManager
+ * - Data structure consistency
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { LocalStorage } from '../../src/core/storage/LocalStorage.js';
-import StandaloneDataManager from '../../src/core/standaloneDataManager.js';
 
 describe('Storage Strategy Integration', () => {
   let storage;
@@ -128,7 +127,7 @@ describe('Storage Strategy Integration', () => {
   });
 
   describe('Data Format Compatibility', () => {
-    it('should produce same getGameActivity structure as StandaloneDataManager', async () => {
+    it('should produce correct getGameActivity structure', async () => {
       // Setup storage with transaction
       await storage.addTransaction({
         id: 'tx-1', tokenId: 'token1', teamId: '001',
@@ -139,49 +138,32 @@ describe('Storage Strategy Integration', () => {
       });
 
       // Get activity from LocalStorage
-      const storageActivity = storage.getGameActivity();
+      const activity = storage.getGameActivity();
 
-      // Create StandaloneDataManager with same transaction
-      localStorage.clear(); // Clear to avoid loading old data
-      const dataManager = new StandaloneDataManager({
-        tokenManager: { getAllTokens: () => [], findToken: () => null }
-      });
-      dataManager.addTransaction({
-        id: 'tx-1', tokenId: 'token1', teamId: '001',
-        mode: 'blackmarket', points: 50000,
-        valueRating: 3, memoryType: 'Personal',
-        summary: 'Test summary',
-        timestamp: '2025-01-05T10:00:00Z'
-      });
-
-      const dmActivity = dataManager.getGameActivity();
-
-      // Verify structure matches
-      expect(storageActivity).toHaveProperty('tokens');
-      expect(storageActivity).toHaveProperty('stats');
-      expect(dmActivity).toHaveProperty('tokens');
-      expect(dmActivity).toHaveProperty('stats');
+      // Verify top-level structure
+      expect(activity).toHaveProperty('tokens');
+      expect(activity).toHaveProperty('stats');
 
       // Verify token structure
-      expect(storageActivity.tokens[0]).toHaveProperty('tokenId');
-      expect(storageActivity.tokens[0]).toHaveProperty('tokenData');
-      expect(storageActivity.tokens[0]).toHaveProperty('events');
-      expect(storageActivity.tokens[0]).toHaveProperty('status');
-      expect(storageActivity.tokens[0]).toHaveProperty('discoveredByPlayers');
-      expect(storageActivity.tokens[0]).toHaveProperty('potentialValue');
+      expect(activity.tokens[0]).toHaveProperty('tokenId');
+      expect(activity.tokens[0]).toHaveProperty('tokenData');
+      expect(activity.tokens[0]).toHaveProperty('events');
+      expect(activity.tokens[0]).toHaveProperty('status');
+      expect(activity.tokens[0]).toHaveProperty('discoveredByPlayers');
+      expect(activity.tokens[0]).toHaveProperty('potentialValue');
 
       // Verify event structure
-      expect(storageActivity.tokens[0].events[0]).toHaveProperty('type');
-      expect(storageActivity.tokens[0].events[0]).toHaveProperty('teamId');
-      expect(storageActivity.tokens[0].events[0]).toHaveProperty('points');
-      expect(storageActivity.tokens[0].events[0]).toHaveProperty('summary');
+      expect(activity.tokens[0].events[0]).toHaveProperty('type');
+      expect(activity.tokens[0].events[0]).toHaveProperty('teamId');
+      expect(activity.tokens[0].events[0]).toHaveProperty('points');
+      expect(activity.tokens[0].events[0]).toHaveProperty('summary');
 
       // Verify stats structure
-      expect(storageActivity.stats).toHaveProperty('totalTokens');
-      expect(storageActivity.stats).toHaveProperty('available');
-      expect(storageActivity.stats).toHaveProperty('claimed');
-      expect(storageActivity.stats).toHaveProperty('claimedWithoutDiscovery');
-      expect(storageActivity.stats).toHaveProperty('totalPlayerScans');
+      expect(activity.stats).toHaveProperty('totalTokens');
+      expect(activity.stats).toHaveProperty('available');
+      expect(activity.stats).toHaveProperty('claimed');
+      expect(activity.stats).toHaveProperty('claimedWithoutDiscovery');
+      expect(activity.stats).toHaveProperty('totalPlayerScans');
     });
 
     it('should produce matching stat values for same data', async () => {

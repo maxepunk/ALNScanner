@@ -675,3 +675,23 @@
 .team-list-item:hover {
   background: var(--color-bg-secondary);
 }
+
+/* ============================================
+   QUICK DISMISS HINT (Result Screen)
+   ============================================ */
+.quick-dismiss-hint {
+  text-align: center;
+  color: var(--color-text-muted);
+  margin: var(--space-4) 0;
+  font-size: var(--text-sm);
+  animation: pulse-fade 2s ease-in-out infinite;
+}
+
+@keyframes pulse-fade {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
