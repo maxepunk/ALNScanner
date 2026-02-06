@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-01-06
+Last verified: 2026-02-06
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -11,7 +11,7 @@ For scoring implementation details, see @../docs/SCORING_LOGIC.md.
 
 **This scanner now uses ES6 modules with Vite build system.**
 
-Previous architecture (20+ script tags) was migrated to modern ES6 modules. See [docs/plans/2025-11-11-es6-module-migration.md](docs/plans/2025-11-11-es6-module-migration.md) for complete migration details.
+Previous architecture (20+ script tags) was migrated to modern ES6 modules (Nov 2025).
 
 ### What Changed
 - **Before**: Single HTML file with 20+ `<script>` tags, global namespace pollution
@@ -23,7 +23,7 @@ Previous architecture (20+ script tags) was migrated to modern ES6 modules. See 
 ALNScanner is the **Game Master (GM) Scanner** for "About Last Night" - a PWA for tracking team transactions via NFC token scanning during a 2-hour immersive game. This is the GM control tool, NOT the player-facing scanner.
 
 **Key Facts:**
-- ES6 module architecture with Vite 5.x build system
+- ES6 module architecture with Vite 7.x build system
 - Dual operation modes: Networked (WebSocket) OR Standalone (offline)
 - Two game modes: Detective (star ratings) OR Black Market (currency)
 - Android Chrome/Edge 89+ required for NFC
@@ -105,7 +105,7 @@ npm run build
 - Simple cumulative scoring
 
 **2. Black Market Mode** (`mode: 'blackmarket'`)
-- Currency-based scoring ($100 - $10,000)
+- Currency-based scoring ($10,000 - $750,000)
 - Type multipliers (Personal 1x, Business 3x, Technical 5x)
 - Group completion bonuses (2x - 20x)
 - Exclusive scoreboard feature
@@ -171,15 +171,19 @@ The scanner uses a 3-tier testing strategy:
 ALNScanner/
 ├── tests/
 │   ├── unit/                       # L1: Jest unit tests
-│   │   ├── app/                    # App layer (App.js, SessionModeManager, etc.)
+│   │   ├── app/                    # App layer (app.js, SessionModeManager, etc.)
 │   │   ├── core/                   # Business logic (UnifiedDataManager, TokenManager, Storage)
 │   │   ├── network/                # WebSocket layer (OrchestratorClient, etc.)
 │   │   ├── ui/                     # UI management (UIManager, Settings)
 │   │   └── utils/                  # Utilities (Config, Debug, NFC)
 │   └── e2e/                        # L2: Playwright E2E (scanner only)
 │       └── specs/
-│           ├── standalone-mode.spec.js
-│           └── ui-navigation.spec.js
+│           ├── 00-smoke-no-globals.spec.js
+│           ├── 00-smoke.spec.js
+│           ├── 01-integration.spec.js
+│           ├── 02-standalone-mode.spec.js
+│           ├── 99-diagnostic.spec.js
+│           └── phase2-validation.spec.js
 └── ...
 
 ../../backend/tests/e2e/flows/      # L3: Full stack E2E (parent repo)
@@ -225,7 +229,7 @@ const app = new App({
 ```
 
 **Test Pattern: JWT Token Validation**
-- App.js validates JWT token expiration before allowing networked mode
+- app.js validates JWT token expiration before allowing networked mode
 - Tests must provide valid tokens in localStorage:
 ```javascript
 const createValidToken = (expiresInHours = 24) => {
@@ -259,22 +263,17 @@ localStorage.setItem('aln_auth_token', createValidToken());
 
 ### Scoring System (Black Market Mode Only)
 
-**Scoring Configuration (scoring.js:15-29):**
+**Scoring Configuration (scoring.js:20-25):**
+
+Values are dynamically loaded from the shared `data/scoring-config.json` submodule (not hardcoded):
 ```javascript
+import sharedConfig from '../../data/scoring-config.json';
+
 export const SCORING_CONFIG = {
-    BASE_VALUES: {
-        1: 10000,    // 1-star token = $10,000
-        2: 25000,    // 2-star = $25,000
-        3: 50000,    // 3-star = $50,000
-        4: 75000,    // 4-star = $75,000
-        5: 150000    // 5-star = $150,000
-    },
-    TYPE_MULTIPLIERS: {
-        'Personal': 1,    // 1x (baseline)
-        'Business': 3,    // 3x
-        'Technical': 5,   // 5x
-        'UNKNOWN': 0      // 0x (no points)
-    }
+    BASE_VALUES: Object.fromEntries(
+        Object.entries(sharedConfig.baseValues).map(([k, v]) => [parseInt(k), v])
+    ),
+    TYPE_MULTIPLIERS: { ...sharedConfig.typeMultipliers }
 };
 ```
 
@@ -292,7 +291,7 @@ Example: 5-star Technical token = $150,000 × 5 = $750,000
   - Bonus = (5 - 1) × $15,000 = $60,000
   - Total = $15,000 + $60,000 = $75,000
 
-**Group Completion Rules (LocalStorage.js:345-400):**
+**Group Completion Rules (LocalStorage.js:345-386):**
 - Groups must have 2+ tokens
 - Group multiplier must be > 1x
 - Team must collect ALL tokens in group
@@ -306,10 +305,10 @@ Example: 5-star Technical token = $150,000 × 5 = $750,000
 - Persists in localStorage
 - Prevents token sharing between teams
 
-**Implementation (app.js:723-726):**
+**Implementation (app.js:729-733):**
 ```javascript
-if (DataManager.isTokenScanned(tokenId)) {
-    Debug.log(`Duplicate token detected: ${tokenId}`, true);
+if (this.dataManager.isTokenScanned(tokenId)) {
+    this.debug.log(`Duplicate token detected: ${tokenId}`, true);
     this.showDuplicateError(tokenId);
     return;
 }
@@ -325,12 +324,13 @@ ALNScanner/
 ├── src/                    # ES6 modules (source code)
 │   ├── main.js            # Entry point - orchestrates initialization
 │   ├── app/               # Application layer
-│   │   ├── App.js         # Main application controller
-│   │   ├── AdminController.js
-│   │   ├── SessionModeManager.js
+│   │   ├── app.js         # Main application controller
+│   │   ├── adminController.js
+│   │   ├── sessionModeManager.js
 │   │   └── initializationSteps.js
 │   ├── admin/             # Admin panel modules (Phase 2/3 refactor)
 │   │   ├── AdminOperations.js
+│   │   ├── DisplayController.js    # HDMI display mode toggling
 │   │   ├── MonitoringDisplay.js
 │   │   ├── SessionManager.js
 │   │   ├── SystemMonitor.js
@@ -338,6 +338,7 @@ ALNScanner/
 │   │   └── utils/
 │   ├── core/              # Core business logic
 │   │   ├── unifiedDataManager.js   # Facade for storage strategies
+│   │   ├── dataManagerUtils.js     # Shared duplicate detection helpers
 │   │   ├── tokenManager.js
 │   │   ├── scoring.js              # Scoring config and utilities
 │   │   ├── teamRegistry.js         # Team state management
@@ -345,10 +346,12 @@ ALNScanner/
 │   │       ├── IStorageStrategy.js
 │   │       ├── LocalStorage.js     # Standalone mode
 │   │       └── NetworkedStorage.js # Networked mode
+│   ├── services/          # Cross-cutting services
+│   │   └── StateValidationService.js  # JWT/session validation on restore
 │   ├── network/           # Network layer (WebSocket)
-│   │   ├── OrchestratorClient.js
-│   │   ├── ConnectionManager.js
-│   │   ├── NetworkedSession.js
+│   │   ├── orchestratorClient.js
+│   │   ├── connectionManager.js
+│   │   ├── networkedSession.js
 │   │   └── networkedQueueManager.js
 │   ├── ui/                # UI management
 │   │   ├── uiManager.js
@@ -371,7 +374,7 @@ ALNScanner/
 ```
 
 **Build System:**
-- **Vite 5.x**: Fast dev server with hot module reload
+- **Vite 7.x**: Fast dev server with hot module reload
 - **Production**: Minified, code-split bundles
 - **Module Loading**: Single `<script type="module" src="/src/main.js">`
 - **Development**: https://localhost:8443 with self-signed cert (for NFC API)
@@ -409,14 +412,15 @@ ALNScanner/
 ### Module Responsibilities
 
 **App Layer ([src/app/](src/app/)):**
-- [App.js](src/app/App.js) - Main coordinator, NFC processing, admin actions (ES6 class)
-- [SessionModeManager.js](src/app/SessionModeManager.js) - Mode locking (networked/standalone)
+- [app.js](src/app/app.js) - Main coordinator, NFC processing, admin actions (ES6 class)
+- [sessionModeManager.js](src/app/sessionModeManager.js) - Mode locking (networked/standalone)
 - [initializationSteps.js](src/app/initializationSteps.js) - 11-phase startup sequence (1A-1J)
-- [AdminController.js](src/app/AdminController.js) - Admin module lifecycle management
+- [adminController.js](src/app/adminController.js) - Admin module lifecycle management
 
 **Core Layer ([src/core/](src/core/)):**
 - [scoring.js](src/core/scoring.js) - Centralized scoring config (SCORING_CONFIG) and utilities
 - [unifiedDataManager.js](src/core/unifiedDataManager.js) - Facade pattern delegating to storage strategies
+- [dataManagerUtils.js](src/core/dataManagerUtils.js) - Shared duplicate detection helpers (extracted from DataManager)
 - [tokenManager.js](src/core/tokenManager.js) - Token database loading, fuzzy matching, group inventory
 - [teamRegistry.js](src/core/teamRegistry.js) - Team state management for standalone mode
 - [storage/IStorageStrategy.js](src/core/storage/IStorageStrategy.js) - Interface for storage implementations
@@ -424,9 +428,9 @@ ALNScanner/
 - [storage/NetworkedStorage.js](src/core/storage/NetworkedStorage.js) - Networked mode: WebSocket sync
 
 **Network Layer ([src/network/](src/network/)):**
-- [OrchestratorClient.js](src/network/OrchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
-- [ConnectionManager.js](src/network/ConnectionManager.js) - Auth, connection state, retry logic
-- [NetworkedSession.js](src/network/NetworkedSession.js) - Service factory and lifecycle orchestrator
+- [orchestratorClient.js](src/network/orchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
+- [connectionManager.js](src/network/connectionManager.js) - Auth, connection state, retry logic
+- [networkedSession.js](src/network/networkedSession.js) - Service factory and lifecycle orchestrator
 - [networkedQueueManager.js](src/network/networkedQueueManager.js) - Offline transaction queue
 
 **UI Layer ([src/ui/](src/ui/)):**
@@ -436,10 +440,14 @@ ALNScanner/
 - [ScreenUpdateManager.js](src/ui/ScreenUpdateManager.js) - Centralized event-to-screen routing (Phase 3)
 - [connectionWizard.js](src/ui/connectionWizard.js) - Network auth flow UI
 
+**Services Layer ([src/services/](src/services/)):**
+- [StateValidationService.js](src/services/StateValidationService.js) - Validates JWT token, orchestrator reachability, and session existence before restoring networked mode (prevents stale cache issues)
+
 **Admin Layer ([src/admin/](src/admin/)) - Phase 2/3 Refactor:**
 - [MonitoringDisplay.js](src/admin/MonitoringDisplay.js) - Game Activity display (player discoveries + GM transactions)
 - [SessionManager.js](src/admin/SessionManager.js) - Session create/pause/resume/end
 - [VideoController.js](src/admin/VideoController.js) - Video queue management
+- [DisplayController.js](src/admin/DisplayController.js) - HDMI display mode toggling (idle loop vs scoreboard)
 - [SystemMonitor.js](src/admin/SystemMonitor.js) - Health checks, system status
 - [AdminOperations.js](src/admin/AdminOperations.js) - Admin action coordination
 
@@ -526,7 +534,7 @@ screenUpdateManager.registerContainer('admin-score-board', {
 
 **Key Files:**
 - `src/ui/ScreenUpdateManager.js` - The manager class
-- `src/main.js:85-203` - Registration and wiring
+- `src/main.js:84-259` - Registration and wiring
 
 ## Transaction Flow
 
@@ -603,7 +611,7 @@ screenUpdateManager.registerContainer('admin-score-board', {
 - `player:scan` - Player scanner activity (persisted to session.playerScans)
 - `session:update` - Session lifecycle changes
 - `video:status` - Video playback state
-- `score:updated` - Team score changed (**DEPRECATED**: Use `transaction:new.teamScore` instead)
+- `score:updated` - Team score changed (mapped to internal `team-score:updated` event)
 - `gm:command:ack` - Command response (success/failure)
 - `device:connected` / `device:disconnected` - Device tracking
 
@@ -646,7 +654,7 @@ screenUpdateManager.registerContainer('admin-score-board', {
 - `Technical` - 5x multiplier
 - Any other value → treated as `UNKNOWN` (0x multiplier)
 
-### Fuzzy Matching (tokenManager.js:212-263)
+### Fuzzy Matching (tokenManager.js:207-233)
 
 Handles various RFID formats:
 - Case insensitive (`ABC123` matches `abc123`)
@@ -668,7 +676,7 @@ Handles various RFID formats:
 10. **Phase 1J**: Register service worker
 11. **Phase 1C**: Determine initial screen (connection restoration logic)
 
-**Connection Restoration Logic (initializationSteps.js:146-171):**
+**Connection Restoration Logic (initializationSteps.js:187-224):**
 - No saved mode → Show game mode selection
 - Saved mode + connection lost → Clear mode, show wizard
 - Saved mode + connection ready → Proceed to team entry
@@ -823,7 +831,7 @@ Error: Cannot find module '@vitejs/plugin-basic-ssl'
 ```
 - **Cause**: Missing HTTPS plugin required for Web NFC API
 - **Fix**: Install plugin: `npm install --save-dev @vitejs/plugin-basic-ssl`
-- **Verification**: Check `package.json` devDependencies includes `"@vitejs/plugin-basic-ssl": "^1.1.0"`
+- **Verification**: Check `package.json` devDependencies includes `"@vitejs/plugin-basic-ssl": "^2.1.0"`
 
 **Problem: Vite dev server starts but page won't load**
 ```
@@ -835,7 +843,7 @@ Failed to load module script: MIME type text/html not supported
 
 **Problem: Production build succeeds but dist/ directory empty**
 ```
-vite v5.4.11 building for production...
+vite v7.x.x building for production...
 ✓ built in 2s
 ```
 - **Cause**: Vite config issue or missing source files
@@ -863,10 +871,10 @@ module.exports = {
 **Problem: Tests fail with "ReferenceError: global is not defined"**
 ```
 ReferenceError: global is not defined
-  at OrchestratorClient.js:15
+  at orchestratorClient.js:15
 ```
 - **Cause**: Browser-only code using Node.js `global` fallback
-- **Fix**: Remove `global` fallback from OrchestratorClient.js (already fixed in ES6 migration)
+- **Fix**: Remove `global` fallback from orchestratorClient.js (already fixed in ES6 migration)
 - **Verification**: `grep -r "global\." src/` should return no results
 
 **Problem: Tests timeout waiting for event listeners**
