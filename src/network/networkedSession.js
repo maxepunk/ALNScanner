@@ -251,6 +251,12 @@ export class NetworkedSession extends EventTarget {
           // Player scanner activity - forward to DataManager for Game Activity tracking
           this.dataManager.handlePlayerScan(payload);
           break;
+
+        case 'group:completed':
+          this.dispatchEvent(new CustomEvent('group:completed', {
+            detail: payload
+          }));
+          break;
       }
     };
 

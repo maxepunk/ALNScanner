@@ -151,6 +151,12 @@ class App {
         this.showConnectionWizard();
       }
     });
+
+    this.networkedSession.addEventListener('group:completed', (event) => {
+      const { teamId, bonus } = event.detail || {};
+      const formattedBonus = bonus ? ` +$${bonus.toLocaleString()}` : '';
+      this.uiManager.showToast(`Group completed by ${teamId || 'team'}${formattedBonus}`);
+    });
   }
 
   /**
