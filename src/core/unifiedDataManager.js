@@ -7,7 +7,6 @@
 
 import { LocalStorage } from './storage/LocalStorage.js';
 import { NetworkedStorage } from './storage/NetworkedStorage.js';
-import { DataManagerUtils } from './dataManagerUtils.js';
 import {
   SCORING_CONFIG,
   calculateTokenValue as calcTokenValue,
@@ -369,7 +368,7 @@ export class UnifiedDataManager extends EventTarget {
    * @returns {boolean}
    */
   isTokenScanned(tokenId) {
-    return DataManagerUtils.isTokenScanned(this.scannedTokens, tokenId);
+    return this.scannedTokens.has(tokenId);
   }
 
   /**
@@ -377,7 +376,7 @@ export class UnifiedDataManager extends EventTarget {
    * @param {string} tokenId
    */
   markTokenAsScanned(tokenId) {
-    DataManagerUtils.markTokenAsScanned(this.scannedTokens, tokenId);
+    this.scannedTokens.add(tokenId);
   }
 
   /**
@@ -385,7 +384,7 @@ export class UnifiedDataManager extends EventTarget {
    * @param {string} tokenId
    */
   unmarkTokenAsScanned(tokenId) {
-    DataManagerUtils.unmarkTokenAsScanned(this.scannedTokens, tokenId);
+    this.scannedTokens.delete(tokenId);
   }
 
   /**
@@ -451,13 +450,6 @@ export class UnifiedDataManager extends EventTarget {
 
     this._log(`Reset for new session: ${sessionId || 'none'}`);
     this.dispatchEvent(new CustomEvent('data:cleared'));
-  }
-
-  /**
-   * Clear all data - same as resetForNewSession
-   */
-  clearAllData() {
-    this.resetForNewSession();
   }
 
   /**
