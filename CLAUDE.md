@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-02-06
+Last verified: 2026-02-07
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -27,7 +27,7 @@ ALNScanner is the **Game Master (GM) Scanner** for "About Last Night" - a PWA fo
 - Dual operation modes: Networked (WebSocket) OR Standalone (offline)
 - Two game modes: Detective (star ratings) OR Black Market (currency)
 - Android Chrome/Edge 89+ required for NFC
-- Automated testing: Jest (759 unit tests) + Playwright (E2E)
+- Automated testing: Jest (754 unit tests) + Playwright (E2E)
 - Automated deployment to GitHub Pages
 
 ## Development Commands
@@ -45,7 +45,7 @@ npm run build         # Output to dist/
 npm run preview       # Test production build locally
 
 # Run tests
-npm test              # Jest unit tests (L1: 759 tests, ~15-30s)
+npm test              # Jest unit tests (L1: 754 tests, ~15-30s)
 npm run test:e2e      # Playwright E2E tests (L2: scanner only, ~2-3 min)
 npm run test:all      # All tests (L1 + L2)
 
@@ -140,12 +140,12 @@ UnifiedDataManager (Facade)
 The scanner uses a 3-tier testing strategy:
 
 **L1: Smoke Tests (Unit-level Verification)**
-- **Location**: `tests/unit/` (759 tests)
+- **Location**: `tests/unit/` (754 tests)
 - **Scope**: Module-level testing with mocks
 - **Purpose**: Verify individual components work correctly in isolation
 - **Run**: `npm test`
 - **Duration**: ~15-30s
-- **Coverage**: 759 tests across all modules (app, core, network, ui, utils)
+- **Coverage**: 754 tests across all modules (app, core, network, ui, utils)
 
 **L2: Scanner E2E Tests (No Orchestrator)**
 - **Location**: `tests/e2e/specs/`
@@ -254,7 +254,7 @@ localStorage.setItem('aln_auth_token', createValidToken());
 
 **Local Verification** (`./verify-merge-ready.sh`):
 - 8-phase pre-merge checklist
-- Runs all L1 tests (759/759 passing)
+- Runs all L1 tests (754/754 passing)
 - Verifies production build succeeds
 - Checks bundle size (<10MB)
 - Validates critical files present
@@ -338,7 +338,7 @@ ALNScanner/
 │   │   └── utils/
 │   ├── core/              # Core business logic
 │   │   ├── unifiedDataManager.js   # Facade for storage strategies
-│   │   ├── dataManagerUtils.js     # Shared duplicate detection helpers
+│   │   ├── gameActivityBuilder.js  # Shared game activity builder (DRY)
 │   │   ├── tokenManager.js
 │   │   ├── scoring.js              # Scoring config and utilities
 │   │   ├── teamRegistry.js         # Team state management
@@ -363,6 +363,7 @@ ALNScanner/
 │       ├── config.js
 │       ├── debug.js
 │       ├── domEventBindings.js
+│       ├── jwtUtils.js
 │       └── nfcHandler.js
 ├── tests/
 │   ├── unit/              # Jest unit tests
@@ -407,6 +408,7 @@ ALNScanner/
 - CSS class `.active` shows/hides screens
 - Back button uses `UIManager.previousScreen`
 - Overlay screens (history, scoreboard) don't update back stack
+- `showScreen('teamEntry')` calls `app.initTeamEntryUI()` which **clears the team input field**
 
 ### Module Responsibilities
 
@@ -419,7 +421,7 @@ ALNScanner/
 **Core Layer ([src/core/](src/core/)):**
 - [scoring.js](src/core/scoring.js) - Centralized scoring config (SCORING_CONFIG) and utilities
 - [unifiedDataManager.js](src/core/unifiedDataManager.js) - Facade pattern delegating to storage strategies
-- [dataManagerUtils.js](src/core/dataManagerUtils.js) - Shared duplicate detection helpers (extracted from DataManager)
+- [gameActivityBuilder.js](src/core/gameActivityBuilder.js) - Shared game activity builder (used by LocalStorage + NetworkedStorage)
 - [tokenManager.js](src/core/tokenManager.js) - Token database loading, fuzzy matching, group inventory
 - [teamRegistry.js](src/core/teamRegistry.js) - Team state management for standalone mode
 - [storage/IStorageStrategy.js](src/core/storage/IStorageStrategy.js) - Interface for storage implementations
@@ -436,7 +438,7 @@ ALNScanner/
 **UI Layer ([src/ui/](src/ui/)):**
 - [uiManager.js](src/ui/uiManager.js) - Screen navigation, stats rendering, error display
   - `renderScoreboard(container?)` - Parameterized: defaults to `#scoreboardContainer`, accepts any container
-- [settings.js](src/ui/settings.js) - localStorage persistence for config
+- [settings.js](src/ui/settings.js) - Pure state holder + localStorage persistence (no DOM manipulation)
 - [ScreenUpdateManager.js](src/ui/ScreenUpdateManager.js) - Centralized event-to-screen routing (Phase 3)
 - [connectionWizard.js](src/ui/connectionWizard.js) - Network auth flow UI
 
@@ -452,6 +454,7 @@ ALNScanner/
 - [AdminOperations.js](src/admin/AdminOperations.js) - Admin action coordination
 
 **Utils Layer ([src/utils/](src/utils/)):**
+- [jwtUtils.js](src/utils/jwtUtils.js) - Shared JWT token validation (expiry check with 60s buffer)
 - [nfcHandler.js](src/utils/nfcHandler.js) - Web NFC API wrapper
 - [debug.js](src/utils/debug.js) - Debug panel and logging (singleton class)
 - [config.js](src/utils/config.js) - App constants
@@ -473,6 +476,11 @@ DataManager emits 'transaction:added'
     → Check active screen ID
     → Run screen-specific handler IF registered for this event
 ```
+
+**CRITICAL: Storage strategies MUST emit events.** `_wireStrategyEvents()` in UnifiedDataManager
+forwards events from the active strategy. If a strategy method (e.g., `addTransaction`) doesn't
+`dispatchEvent(new CustomEvent('transaction:added', ...))`, the ScreenUpdateManager handlers
+(badge updates, stats) will silently never fire.
 
 **Usage Pattern:**
 ```javascript
