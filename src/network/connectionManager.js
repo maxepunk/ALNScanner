@@ -16,6 +16,8 @@
  * - Admin operations (AdminController)
  */
 
+import { isTokenValid as validateToken } from '../utils/jwtUtils.js';
+
 export class ConnectionManager extends EventTarget {
   constructor(config = {}) {
     super();
@@ -45,27 +47,7 @@ export class ConnectionManager extends EventTarget {
    * @returns {boolean}
    */
   isTokenValid() {
-    if (!this.token) return false;
-
-    try {
-      // Parse JWT (format: header.payload.signature)
-      const parts = this.token.split('.');
-      if (parts.length !== 3) return false;
-
-      const payload = JSON.parse(atob(parts[1]));
-      const expiry = payload.exp; // Unix timestamp (seconds)
-
-      if (!expiry) return false;
-
-      // Check with 1-minute buffer
-      const now = Math.floor(Date.now() / 1000);
-      const buffer = 60; // 1 minute
-
-      return (expiry - buffer) > now;
-    } catch {
-      // Token parsing failed - consider invalid
-      return false;
-    }
+    return validateToken(this.token);
   }
 
   /**

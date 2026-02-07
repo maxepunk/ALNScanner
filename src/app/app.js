@@ -11,10 +11,10 @@
  */
 
 import Debug from '../utils/debug.js';
+import { isTokenValid } from '../utils/jwtUtils.js';
 import UIManager from '../ui/uiManager.js';
 import Settings from '../ui/settings.js';
 import TokenManager from '../core/tokenManager.js';
-// DataManager import removed - use UnifiedDataManager via dependency injection
 import NFCHandler from '../utils/nfcHandler.js';
 import CONFIG from '../utils/config.js';
 import InitializationSteps from './initializationSteps.js';
@@ -137,17 +137,8 @@ class App {
       return;
     }
 
-    // Listen for session:ready from NetworkedSession
-    // Services are provided via event.detail.services (per Architecture Refactoring 2025-11)
-    this.networkedSession.addEventListener('session:ready', (event) => {
+    this.networkedSession.addEventListener('session:ready', () => {
       this.debug.log('NetworkedSession ready - initializing admin modules');
-
-      // Event-driven: Receive services from event detail, not window lookup
-      if (event.detail && event.detail.services) {
-        this.debug.log('Received services via session:ready event.detail');
-      }
-
-      // Initialize admin modules when session is ready
       if (this.viewController) {
         this.viewController.initAdminModules();
       }
@@ -218,33 +209,11 @@ class App {
 
         // Trigger view-specific initialization
         if (viewName === 'admin') {
-          // Initialize admin modules if not already done
           if (!this.adminInstances) {
             this.initAdminModules();
           }
-
-          // Refresh admin panel
-          if (this.adminInstances) {
-            // Fetch current session state
-            this.fetchCurrentSession();
-          }
-          // Update admin panel displays
           app.updateAdminPanel();
         }
-      },
-
-      async fetchCurrentSession() {
-        // BUG FIX (Phase 2.3): Session state and display now handled by broadcasts
-        // SessionManager.currentSession updated from session:update broadcasts (event-driven)
-        // MonitoringDisplay updates DOM from session:update broadcasts
-        // No need to manually refresh display - broadcasts handle everything
-        // This follows event-driven architecture with clear separation of concerns
-
-        if (!this.adminInstances?.sessionManager) return;
-
-        app.debug.log(this.adminInstances.sessionManager.currentSession
-          ? 'Session active: ' + JSON.stringify(this.adminInstances.sessionManager.currentSession)
-          : 'No active session');
       },
 
       initAdminModules() {
@@ -507,7 +476,6 @@ class App {
 
   /**
    * Initialize networked mode by creating NetworkedSession
-   * Per Architecture Refactoring 2025-11 line 166: "App creates NetworkedSession with config"
    * @private
    */
   async _initializeNetworkedMode() {
@@ -608,24 +576,7 @@ class App {
    * @private
    */
   _isTokenValid(token) {
-    if (!token) return false;
-
-    try {
-      const parts = token.split('.');
-      if (parts.length !== 3) return false;
-
-      const payload = JSON.parse(atob(parts[1]));
-      const exp = payload.exp;
-
-      if (!exp) return false;
-
-      const now = Math.floor(Date.now() / 1000);
-      const bufferMinutes = 1;
-      return exp > (now + (bufferMinutes * 60));
-    } catch (error) {
-      console.error('Token validation error:', error);
-      return false;
-    }
+    return isTokenValid(token);
   }
 
   // ========== Helper Methods ==========
@@ -792,17 +743,8 @@ class App {
     // Calculate points for blackmarket mode
     if (this.settings.mode === 'blackmarket' && !isUnknown) {
       transaction.points = this.dataManager.calculateTokenValue(transaction);
-      // DIAGNOSTIC: Log calculated points
-      console.log('[app.js] Transaction points calculated:', {
-        tokenId: transaction.tokenId,
-        valueRating: transaction.valueRating,
-        memoryType: transaction.memoryType,
-        calculatedPoints: transaction.points,
-        tokenGroup: transaction.tokenGroup
-      });
     } else {
       transaction.points = 0;
-      console.log('[app.js] Transaction points set to 0 (detective mode or unknown token)');
     }
 
     // Submit transaction based on session mode
@@ -845,9 +787,7 @@ class App {
     }
 
     if (this.settings.mode === 'blackmarket' && !isUnknown) {
-      // Use UnifiedDataManager for all modes
-      const tokenScore = this.dataManager.calculateTokenValue(transaction);
-      this.debug.log(`Token scored: $${tokenScore.toLocaleString()}`);
+      this.debug.log(`Token scored: $${transaction.points.toLocaleString()}`);
     }
 
     this.uiManager.updateSessionStats();
@@ -1231,57 +1171,24 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     return parts.length > 0 ? parts.join(' ') : '0s';
   }
 
-  async adminPlayVideo() {
+  async _adminVideoAction(action) {
     if (!this.viewController.adminInstances?.videoController) {
       alert('Video controls not available.');
       return;
     }
     try {
-      await this.viewController.adminInstances.videoController.playVideo();
+      await this.viewController.adminInstances.videoController[action]();
     } catch (error) {
-      console.error('Failed to play video:', error);
-      this.uiManager.showError('Failed to play video.');
+      const label = action.replace('Video', ' video');
+      console.error(`Failed to ${label}:`, error);
+      this.uiManager.showError(`Failed to ${label}.`);
     }
   }
 
-  async adminPauseVideo() {
-    if (!this.viewController.adminInstances?.videoController) {
-      alert('Video controls not available.');
-      return;
-    }
-    try {
-      await this.viewController.adminInstances.videoController.pauseVideo();
-    } catch (error) {
-      console.error('Failed to pause video:', error);
-      this.uiManager.showError('Failed to pause video.');
-    }
-  }
-
-  async adminStopVideo() {
-    if (!this.viewController.adminInstances?.videoController) {
-      alert('Video controls not available.');
-      return;
-    }
-    try {
-      await this.viewController.adminInstances.videoController.stopVideo();
-    } catch (error) {
-      console.error('Failed to stop video:', error);
-      this.uiManager.showError('Failed to stop video.');
-    }
-  }
-
-  async adminSkipVideo() {
-    if (!this.viewController.adminInstances?.videoController) {
-      alert('Video controls not available.');
-      return;
-    }
-    try {
-      await this.viewController.adminInstances.videoController.skipVideo();
-    } catch (error) {
-      console.error('Failed to skip video:', error);
-      this.uiManager.showError('Failed to skip video.');
-    }
-  }
+  async adminPlayVideo() { return this._adminVideoAction('playVideo'); }
+  async adminPauseVideo() { return this._adminVideoAction('pauseVideo'); }
+  async adminStopVideo() { return this._adminVideoAction('stopVideo'); }
+  async adminSkipVideo() { return this._adminVideoAction('skipVideo'); }
 
   // ============================================
   async adminAddVideoToQueue() {
@@ -1551,12 +1458,6 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       await this.viewController.adminInstances.adminOps.deleteTransaction(transactionId);
       this.debug.log(`Transaction deleted (networked): ${transactionId}`);
 
-      // ✅ Remove local mutations - let broadcast flow handle it
-      // Backend sends transaction:deleted broadcast
-      // MonitoringDisplay calls DataManager.removeTransaction()
-      // DataManager emits event
-      // main.js listener re-renders team details if active
-
       this.uiManager.showToast('Transaction deleted', 'success');
     } catch (error) {
       console.error('Failed to delete transaction (networked):', error);
@@ -1566,11 +1467,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
   // ========== Admin Display Control (Phase 4.2) ==========
 
-  /**
-   * Set display to Idle Loop mode
-   * Called by data-action="app.adminSetIdleLoop" from admin panel button
-   */
-  async adminSetIdleLoop() {
+  async _adminDisplayAction(action, label) {
     if (!this.sessionModeManager?.isNetworked()) {
       this.debug.log('Display control only available in networked mode');
       return;
@@ -1584,39 +1481,16 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     }
 
     try {
-      const result = await displayController.setIdleLoop();
-      this.debug.log(`Display mode set to Idle Loop: ${JSON.stringify(result)}`);
+      const result = await displayController[action]();
+      this.debug.log(`Display mode set to ${label}: ${JSON.stringify(result)}`);
     } catch (error) {
       console.error('Failed to set display mode:', error);
       this.uiManager.showError(`Failed to set display mode: ${error.message}`);
     }
   }
 
-  /**
-   * Set display to Scoreboard mode
-   * Called by data-action="app.adminSetScoreboard" from admin panel button
-   */
-  async adminSetScoreboard() {
-    if (!this.sessionModeManager?.isNetworked()) {
-      this.debug.log('Display control only available in networked mode');
-      return;
-    }
-
-    const displayController = this.viewController?.adminInstances?.displayController;
-    if (!displayController) {
-      this.debug.log('DisplayController not available - admin modules not initialized');
-      this.uiManager.showError('Admin functions not available. Please ensure connection is established.');
-      return;
-    }
-
-    try {
-      const result = await displayController.setScoreboard();
-      this.debug.log(`Display mode set to Scoreboard: ${JSON.stringify(result)}`);
-    } catch (error) {
-      console.error('Failed to set display mode:', error);
-      this.uiManager.showError(`Failed to set display mode: ${error.message}`);
-    }
-  }
+  async adminSetIdleLoop() { return this._adminDisplayAction('setIdleLoop', 'Idle Loop'); }
+  async adminSetScoreboard() { return this._adminDisplayAction('setScoreboard', 'Scoreboard'); }
 
   // ========== Testing Functions ==========
 

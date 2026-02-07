@@ -19,6 +19,7 @@
  */
 
 import Debug from '../utils/debug.js';
+import { isTokenValid } from '../utils/jwtUtils.js';
 import stateValidationService from '../services/StateValidationService.js';
 
 /**
@@ -65,22 +66,9 @@ export function loadSettings(settings) {
 }
 
 /**
- * Initialize DataManager (no data loading)
- *
- * CRITICAL: Don't load transactions from localStorage on initialization.
- * Backend is the authoritative source for all modes:
- * - Networked: sync:full provides ALL transactions (MonitoringDisplay.updateAllDisplays)
- * - Standalone: loadLocalSession() restores same-day session
- *
- * This prevents phantom data from old sessions while ensuring complete
- * state restoration from backend after page refresh.
- *
- * @param {Object} dataManager - DataManager instance
- * @param {Object} uiManager - UIManager instance
+ * Initialize DataManager UI state (data loading deferred to sync:full / loadLocalSession)
  */
 export function loadDataManager(dataManager, uiManager) {
-  // No data loading - sync:full will populate everything
-  // Initialize UI with empty state
   uiManager.updateHistoryBadge();
 }
 
@@ -275,40 +263,6 @@ export async function validateAndDetermineInitialScreen(sessionModeManager) {
   return { screen: 'gameModeScreen', action: null, savedMode: null, validationResult: null };
 }
 
-/**
- * Check if JWT token is valid (not expired, with 1-minute buffer)
- * @param {string} token - JWT token string
- * @returns {boolean} True if valid
- * @private
- */
-function isTokenValid(token) {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return false;
-
-    // Use atob for browser, Buffer for Node.js
-    let decode;
-    if (typeof atob !== 'undefined') {
-      decode = (str) => atob(str);
-    } else if (typeof Buffer !== 'undefined') {
-      decode = (str) => Buffer.from(str, 'base64').toString();
-    } else {
-      // Fallback or fail if neither is available
-      return false;
-    }
-
-    const payload = JSON.parse(decode(parts[1]));
-    const expiry = payload.exp;
-    if (!expiry) return false;
-
-    const now = Math.floor(Date.now() / 1000);
-    const buffer = 60; // 1-minute safety buffer
-    return (expiry - buffer) > now;
-  } catch (error) {
-    console.error('Token validation error:', error);
-    return false;
-  }
-}
 
 /**
  * Apply initial screen decision (executes side effects)

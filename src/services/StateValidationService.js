@@ -15,6 +15,7 @@
  */
 
 import Debug from '../utils/debug.js';
+import { isTokenValid as validateToken } from '../utils/jwtUtils.js';
 
 /**
  * @typedef {Object} ValidationResult
@@ -108,26 +109,7 @@ class StateValidationService {
    * @returns {boolean} True if valid
    */
   isTokenValid(token) {
-    try {
-      const parts = token.split('.');
-      if (parts.length !== 3) return false;
-
-      // Use atob for browser, Buffer for Node.js (tests)
-      const decode = typeof atob !== 'undefined'
-        ? (str) => atob(str)
-        : (str) => Buffer.from(str, 'base64').toString();
-
-      const payload = JSON.parse(decode(parts[1]));
-      const expiry = payload.exp;
-      if (!expiry) return false;
-
-      const now = Math.floor(Date.now() / 1000);
-      const buffer = 60; // 1-minute safety buffer
-      return (expiry - buffer) > now;
-    } catch (error) {
-      Debug.log(`[StateValidation] Token parse error: ${error.message}`);
-      return false;
-    }
+    return validateToken(token);
   }
 
   /**
