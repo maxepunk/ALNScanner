@@ -7,6 +7,7 @@
 
 import { IStorageStrategy } from './IStorageStrategy.js';
 import { calculateTokenValue } from '../scoring.js';
+import { buildGameActivity } from '../gameActivityBuilder.js';
 
 export class NetworkedStorage extends IStorageStrategy {
   /**
@@ -41,22 +42,11 @@ export class NetworkedStorage extends IStorageStrategy {
 
   /**
    * Initialize storage
+   * Event listeners are handled by NetworkedSession which owns the socket.
    * @returns {Promise<void>}
    */
   async initialize() {
-    // Setup event listeners for sync
-    this._setupEventListeners();
-  }
-
-  /**
-   * Setup event listeners
-   * Note: These are typically set up by NetworkedSession which owns the socket
-   * This is a pass-through storage that delegates to backend
-   * @private
-   */
-  _setupEventListeners() {
-    if (!this.socket) return;
-    // Event listeners handled by NetworkedSession
+    // No-op: NetworkedSession handles socket event wiring
   }
 
   /**
@@ -193,100 +183,18 @@ export class NetworkedStorage extends IStorageStrategy {
    * @returns {Object} { tokens: Array, stats: Object }
    */
   getGameActivity() {
-    const tokenMap = new Map();
-
-    // Process player scans (discoveries)
-    this.playerScans.forEach(scan => {
-      if (!tokenMap.has(scan.tokenId)) {
-        const tokenData = scan.tokenData || {};
-        tokenMap.set(scan.tokenId, {
-          tokenId: scan.tokenId,
-          tokenData,
-          potentialValue: calculateTokenValue({
-            valueRating: tokenData.SF_ValueRating,
-            memoryType: tokenData.SF_MemoryType
-          }),
-          events: [{
-            type: 'discovery',
-            timestamp: scan.timestamp,
-            deviceId: scan.deviceId
-          }],
-          status: 'available',
-          discoveredByPlayers: true
-        });
-      } else {
-        tokenMap.get(scan.tokenId).events.push({
-          type: 'scan',
-          timestamp: scan.timestamp,
-          deviceId: scan.deviceId
-        });
-      }
-    });
-
-    // Process transactions (claims)
-    this.transactions.forEach(tx => {
-      if (tx.status && tx.status !== 'accepted') return;
-
-      let activity = tokenMap.get(tx.tokenId);
-
-      if (!activity) {
-        const lookedUpToken = this.tokenManager?.findToken(tx.tokenId);
-        const tokenData = lookedUpToken ? {
-          SF_MemoryType: lookedUpToken.SF_MemoryType,
-          SF_ValueRating: lookedUpToken.SF_ValueRating,
-          SF_Group: lookedUpToken.SF_Group,
-          summary: lookedUpToken.summary
-        } : {
-          SF_MemoryType: tx.memoryType,
-          SF_ValueRating: tx.valueRating
-        };
-
-        activity = {
-          tokenId: tx.tokenId,
-          tokenData,
-          potentialValue: calculateTokenValue({
-            valueRating: tokenData.SF_ValueRating,
-            memoryType: tokenData.SF_MemoryType
-          }),
-          events: [],
-          status: 'claimed',
-          discoveredByPlayers: false
-        };
-        tokenMap.set(tx.tokenId, activity);
-      }
-
-      activity.events.push({
-        type: 'claim',
-        timestamp: tx.timestamp,
-        mode: tx.mode,
-        teamId: tx.teamId,
-        // Use stored points (from backend) if available, fall back to recalculation
-        points: tx.points || calculateTokenValue({
+    return buildGameActivity({
+      transactions: this.transactions,
+      playerScans: this.playerScans,
+      tokenManager: this.tokenManager,
+      options: {
+        transactionFilter: (tx) => !tx.status || tx.status === 'accepted',
+        pointsFallback: (tx) => calculateTokenValue({
           valueRating: tx.valueRating,
           memoryType: tx.memoryType
-        }),
-        summary: tx.summary || activity.tokenData?.summary
-      });
-      activity.status = 'claimed';
-    });
-
-    // Sort events within each token
-    tokenMap.forEach(activity => {
-      activity.events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    });
-
-    const tokens = Array.from(tokenMap.values());
-
-    return {
-      tokens,
-      stats: {
-        totalTokens: tokens.length,
-        available: tokens.filter(t => t.status === 'available').length,
-        claimed: tokens.filter(t => t.status === 'claimed').length,
-        claimedWithoutDiscovery: tokens.filter(t => !t.discoveredByPlayers && t.status === 'claimed').length,
-        totalPlayerScans: this.playerScans.length
+        })
       }
-    };
+    });
   }
 
   /**

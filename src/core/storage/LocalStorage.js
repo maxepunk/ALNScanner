@@ -11,6 +11,7 @@ import {
   parseGroupInfo,
   calculateTokenValue
 } from '../scoring.js';
+import { buildGameActivity } from '../gameActivityBuilder.js';
 
 export class LocalStorage extends IStorageStrategy {
   /**
@@ -493,94 +494,11 @@ export class LocalStorage extends IStorageStrategy {
    * @returns {Object} { tokens: Array, stats: Object }
    */
   getGameActivity() {
-    const tokenMap = new Map();
-
-    // Process player scans (empty in standalone, but maintain structure)
-    this.playerScans.forEach(scan => {
-      if (!tokenMap.has(scan.tokenId)) {
-        tokenMap.set(scan.tokenId, {
-          tokenId: scan.tokenId,
-          tokenData: scan.tokenData || {},
-          potentialValue: calculateTokenValue({
-            valueRating: scan.tokenData?.SF_ValueRating,
-            memoryType: scan.tokenData?.SF_MemoryType
-          }),
-          events: [{
-            type: 'discovery',
-            timestamp: scan.timestamp,
-            deviceId: scan.deviceId
-          }],
-          status: 'available',
-          discoveredByPlayers: true
-        });
-      } else {
-        tokenMap.get(scan.tokenId).events.push({
-          type: 'scan',
-          timestamp: scan.timestamp,
-          deviceId: scan.deviceId
-        });
-      }
+    return buildGameActivity({
+      transactions: this.sessionData.transactions,
+      playerScans: this.playerScans,
+      tokenManager: this.tokenManager
     });
-
-    // Process GM transactions (claims)
-    this.sessionData.transactions.forEach(tx => {
-      let activity = tokenMap.get(tx.tokenId);
-
-      if (!activity) {
-        // Look up token data
-        const lookedUpToken = this.tokenManager?.findToken(tx.tokenId);
-        const tokenData = lookedUpToken ? {
-          SF_MemoryType: lookedUpToken.SF_MemoryType,
-          SF_ValueRating: lookedUpToken.SF_ValueRating,
-          SF_Group: lookedUpToken.SF_Group || null,
-          summary: lookedUpToken.summary || null
-        } : {
-          SF_MemoryType: tx.memoryType,
-          SF_ValueRating: tx.valueRating
-        };
-
-        activity = {
-          tokenId: tx.tokenId,
-          tokenData,
-          potentialValue: calculateTokenValue({
-            valueRating: tokenData.SF_ValueRating,
-            memoryType: tokenData.SF_MemoryType
-          }),
-          events: [],
-          status: 'claimed',
-          discoveredByPlayers: false
-        };
-        tokenMap.set(tx.tokenId, activity);
-      }
-
-      // Add claim event
-      activity.events.push({
-        type: 'claim',
-        timestamp: tx.timestamp,
-        mode: tx.mode,
-        teamId: tx.teamId,
-        points: tx.points || 0,
-        summary: tx.summary || activity.tokenData?.summary || null
-      });
-      activity.status = 'claimed';
-    });
-
-    // Sort events within each token
-    tokenMap.forEach(activity => {
-      activity.events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    });
-
-    const tokens = Array.from(tokenMap.values());
-
-    const stats = {
-      totalTokens: tokens.length,
-      available: tokens.filter(t => t.status === 'available').length,
-      claimed: tokens.filter(t => t.status === 'claimed').length,
-      claimedWithoutDiscovery: tokens.filter(t => t.status === 'claimed' && !t.discoveredByPlayers).length,
-      totalPlayerScans: this.playerScans.length
-    };
-
-    return { tokens, stats };
   }
 
   /**
