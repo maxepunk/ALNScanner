@@ -19,7 +19,6 @@ export class ConnectionWizard {
     this.handleConnectionSubmit = this.handleConnectionSubmit.bind(this);
     this.cancelNetworkedMode = this.cancelNetworkedMode.bind(this);
     this.showConnectionWizard = this.showConnectionWizard.bind(this);
-    this.showAuthModal = this.showAuthModal.bind(this);
   }
 
   /**
@@ -71,7 +70,7 @@ export class ConnectionWizard {
       const promises = [];
 
       // Scan detected subnet (254 IPs × 2 ports = 508 requests max)
-      // Limited to 20 concurrent to avoid overwhelming network
+      // Browser connection pooling naturally rate-limits concurrent requests
       for (let i = 1; i <= 254; i++) {
         for (const port of commonPorts) {
           const url = `${protocol}://${subnet}.${i}:${port}`;
@@ -84,11 +83,6 @@ export class ConnectionWizard {
             .then(response => response.ok ? url : null)
             .catch(() => null)
           );
-        }
-
-        // Limit concurrent requests to avoid overwhelming the network
-        if (promises.length >= 20) {
-          await Promise.race(promises);
         }
       }
 
@@ -397,31 +391,6 @@ export class ConnectionWizard {
     setTimeout(() => this.scanForServers(), 100);
   }
 
-  /**
-   * Show non-blocking authentication modal
-   */
-  async showAuthModal() {
-    // Show the connection wizard modal instead of using prompt
-    this.showConnectionWizard();
-
-    // Pre-fill the server URL if we already have one
-    const connectionManager = this.app.networkedSession?.services?.connectionManager;
-    if (connectionManager && connectionManager.url) {
-      document.getElementById('serverUrl').value = connectionManager.url;
-
-      // Trigger station name assignment
-      this.assignStationName(connectionManager.url);
-    }
-
-    // Pre-fill station name display if we have one
-    if (connectionManager && connectionManager.stationName) {
-      const stationNameDisplay = document.getElementById('stationNameDisplay');
-      if (stationNameDisplay) {
-        stationNameDisplay.textContent = connectionManager.stationName;
-        stationNameDisplay.dataset.deviceId = connectionManager.stationName;
-      }
-    }
-  }
 }
 
 /**
@@ -465,15 +434,8 @@ export class QueueStatusManager {
     const queueStatus = queueManager?.getStatus();
     const queueCount = queueStatus ? queueStatus.queuedCount : 0;
 
-    // Update count display
     countSpan.textContent = queueCount;
-
-    // Show/hide indicator based on queue count
-    if (queueCount > 0) {
-      indicator.classList.add('visible');
-    } else {
-      indicator.classList.remove('visible');
-    }
+    indicator.classList.toggle('visible', queueCount > 0);
   }
 }
 
