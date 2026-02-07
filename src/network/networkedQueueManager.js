@@ -28,51 +28,6 @@ export class NetworkedQueueManager extends EventTarget {
 
     // Load any persisted queue
     this.loadQueue();
-
-    // Merge orphaned transactions from fallback queue
-    this.mergeOrphanedTransactions();
-  }
-
-  /**
-   * Merge transactions from fallback queue into main queue
-   *
-   * CONTEXT: This is a migration helper for Phase 0 development.
-   * During connection wizard testing, transactions were temporarily saved to
-   * 'pendingNetworkedTransactions' (a fallback queue used before NetworkedQueueManager existed).
-   *
-   * This method rescues those orphaned transactions by:
-   * 1. Loading transactions from 'pendingNetworkedTransactions' (if present)
-   * 2. Merging them into the main queue (networkedTempQueue)
-   * 3. Removing the fallback queue
-   *
-   * This ensures no transactions are lost during the migration to the new queue system.
-   * Once all devices have migrated, this logic becomes a no-op (fallback queue won't exist).
-   */
-  mergeOrphanedTransactions() {
-    try {
-      const fallbackQueue = localStorage.getItem('pendingNetworkedTransactions');
-      if (fallbackQueue) {
-        const orphaned = JSON.parse(fallbackQueue);
-        if (Array.isArray(orphaned) && orphaned.length > 0) {
-          this.debug.log('Merging orphaned transactions', { count: orphaned.length });
-
-          // Add to main queue
-          this.tempQueue.push(...orphaned);
-
-          // Clear fallback queue
-          localStorage.removeItem('pendingNetworkedTransactions');
-
-          // Save merged queue
-          this.saveQueue();
-
-          this.debug.log('Orphaned transactions merged successfully', {
-            totalQueueSize: this.tempQueue.length
-          });
-        }
-      }
-    } catch (error) {
-      this.debug.error?.('Failed to merge orphaned transactions', error);
-    }
   }
 
   /**
@@ -142,47 +97,22 @@ export class NetworkedQueueManager extends EventTarget {
           const result = await this.replayTransaction(transaction);
           results.push({ success: true, transaction, result });
         } catch (error) {
-          // Categorize error type for future retry logic (case-insensitive)
-          let errorType = 'unknown';
-          const message = error.message.toLowerCase();
-          if (message.includes('timeout')) {
-            errorType = 'timeout';
-          } else if (message.includes('validation') || message.includes('invalid')) {
-            errorType = 'validation';
-          } else if (message.includes('network') || message.includes('connection')) {
-            errorType = 'network';
-          }
-
-          this.debug.error?.(`Transaction replay failed (${errorType})`, {
+          this.debug.error?.('Transaction replay failed', {
             tokenId: transaction.tokenId,
-            error: error.message,
-            errorType: errorType
+            error: error.message
           });
 
-          results.push({
-            success: false,
-            transaction,
-            error: error.message,
-            errorType: errorType  // Enables future retry logic per error type
-          });
+          results.push({ success: false, transaction, error: error.message });
         }
       }
 
-      // Summary with error type breakdown
       const successCount = results.filter(r => r.success).length;
-      const failCount = results.filter(r => !r.success).length;
-      const errorTypes = results
-        .filter(r => !r.success)
-        .reduce((acc, r) => {
-          acc[r.errorType] = (acc[r.errorType] || 0) + 1;
-          return acc;
-        }, {});
+      const failCount = results.length - successCount;
 
       this.debug.log('Queue sync complete', {
         total: batch.length,
         success: successCount,
-        failed: failCount,
-        errorBreakdown: errorTypes  // e.g., { timeout: 2, validation: 1 }
+        failed: failCount
       });
 
       // Clear queue after ALL transactions processed (even if some failed)
@@ -270,10 +200,6 @@ export class NetworkedQueueManager extends EventTarget {
       });
     });
   }
-
-  // TODO P0.2: Implement batch upload with batch:ack pattern per AsyncAPI Phase 1.2
-  // Current implementation uses transaction replay (transaction:submit) which is correct
-  // for Phase 0. Batch upload will be added in Phase 1.2 for performance optimization.
 
   /**
    * Save queue to localStorage

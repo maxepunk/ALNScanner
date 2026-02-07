@@ -90,22 +90,7 @@ describe('NetworkedQueueManager', () => {
       expect(newManager.tempQueue).toEqual(savedQueue);
     });
 
-    it('should merge orphaned transactions from fallback queue', () => {
-      const orphanedQueue = [
-        { tokenId: 'orphan1', teamId: '001' }
-      ];
-      // Use setItem to properly populate the mock
-      localStorageMock.setItem('pendingNetworkedTransactions', JSON.stringify(orphanedQueue));
-
-      const newManager = new NetworkedQueueManager({
-        client: mockClient,
-        debug: mockDebug
-      });
-
-      expect(newManager.tempQueue).toEqual(orphanedQueue);
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith('pendingNetworkedTransactions');
-    });
-  });
+});
 
   describe('queueTransaction', () => {
     it('should queue transaction when disconnected', () => {
@@ -231,15 +216,14 @@ describe('NetworkedQueueManager', () => {
       );
 
       expect(syncCompleteCall).toBeDefined();
-      expect(syncCompleteCall[1]).toEqual(expect.objectContaining({
+      expect(syncCompleteCall[1]).toEqual({
         total: 2,
         success: 1,
-        failed: 1,
-        errorBreakdown: { validation: 1 }
-      }));
+        failed: 1
+      });
     });
 
-    it('should categorize errors correctly', async () => {
+    it('should log individual replay failures', async () => {
       queueManager.tempQueue = [
         { tokenId: 'token1', teamId: '001' },
         { tokenId: 'token2', teamId: '002' },
@@ -253,19 +237,14 @@ describe('NetworkedQueueManager', () => {
 
       await queueManager.syncQueue();
 
-      // Find the call with 'Queue sync complete'
-      const syncCompleteCall = mockDebug.log.mock.calls.find(
-        call => call[0] === 'Queue sync complete'
+      // Each failure should be logged individually
+      const failureCalls = mockDebug.error.mock.calls.filter(
+        call => call[0] === 'Transaction replay failed'
       );
-
-      expect(syncCompleteCall).toBeDefined();
-      expect(syncCompleteCall[1]).toEqual(expect.objectContaining({
-        errorBreakdown: {
-          timeout: 1,
-          validation: 1,
-          network: 1
-        }
-      }));
+      expect(failureCalls).toHaveLength(3);
+      expect(failureCalls[0][1]).toEqual({ tokenId: 'token1', error: 'Connection timeout' });
+      expect(failureCalls[1][1]).toEqual({ tokenId: 'token2', error: 'Invalid token format' });
+      expect(failureCalls[2][1]).toEqual({ tokenId: 'token3', error: 'Network error' });
     });
 
     it('should emit queue:changed event after sync', async () => {
