@@ -14,8 +14,6 @@
  * - Transaction processing (backend)
  */
 
-import OrchestratorClient from './orchestratorClient.js';
-
 export class NetworkedQueueManager extends EventTarget {
   constructor(config = {}) {
     super();

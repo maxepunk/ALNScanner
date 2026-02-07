@@ -16,8 +16,6 @@
  * - Admin operations (AdminController)
  */
 
-import OrchestratorClient from './orchestratorClient.js';
-
 export class ConnectionManager extends EventTarget {
   constructor(config = {}) {
     super();

@@ -251,6 +251,8 @@ export class OrchestratorClient extends EventTarget {
       'device:disconnected',
       'group:completed',
       'display:mode',  // Phase 4.2: Display control events
+      'video:progress',      // Video playback progress (1s interval)
+      'video:queue:update',  // Video queue changes
       'gm:command:ack',
       'offline:queue:processed',
       'batch:ack',

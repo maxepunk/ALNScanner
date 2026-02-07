@@ -429,6 +429,7 @@ ALNScanner/
 
 **Network Layer ([src/network/](src/network/)):**
 - [orchestratorClient.js](src/network/orchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
+- **GOTCHA**: `orchestratorClient.js:_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner
 - [connectionManager.js](src/network/connectionManager.js) - Auth, connection state, retry logic
 - [networkedSession.js](src/network/networkedSession.js) - Service factory and lifecycle orchestrator
 - [networkedQueueManager.js](src/network/networkedQueueManager.js) - Offline transaction queue
