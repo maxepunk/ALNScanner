@@ -108,6 +108,29 @@ describe('LocalStorage Strategy', () => {
       expect(storage.scannedTokens.has('token1')).toBe(true);
     });
 
+    it('should emit transaction:added event', async () => {
+      const tx = {
+        id: 'tx-1',
+        tokenId: 'token1',
+        teamId: '001',
+        mode: 'blackmarket',
+        points: 10000,
+        timestamp: new Date().toISOString()
+      };
+
+      const eventPromise = new Promise(resolve => {
+        storage.addEventListener('transaction:added', (event) => {
+          resolve(event.detail);
+        });
+      });
+
+      await storage.addTransaction(tx);
+
+      const detail = await eventPromise;
+      expect(detail.transaction.tokenId).toBe('token1');
+      expect(detail.teamScore).toBeDefined();
+    });
+
     it('should persist to localStorage', async () => {
       const tx = {
         id: 'tx-1',

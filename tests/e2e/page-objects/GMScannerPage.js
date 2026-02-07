@@ -23,7 +23,6 @@ class GMScannerPage {
 
     // Screen locators (within scanner-view, toggled with .active class)
     this.loadingScreen = page.locator('#loadingScreen.active');
-    this.settingsScreen = page.locator('#settingsScreen.active');
     this.gameModeScreen = page.locator('#gameModeScreen.active');
     this.teamEntryScreen = page.locator('#teamEntryScreen.active');
     this.scanScreen = page.locator('#scanScreen.active');
@@ -56,7 +55,8 @@ class GMScannerPage {
     this.resultTitle = page.locator('#resultTitle');
     this.resultValue = page.locator('#resultValue');
     // Note: Continue Scan button removed - result screen uses quick-dismiss pattern
-    this.finishTeamBtn = page.locator('button[data-action="app.finishTeam"]');
+    // Finish Team button exists on both scan and result screens — scope to visible one
+    this.finishTeamBtn = page.locator('.screen.active button[data-action="app.finishTeam"]');
 
     // History screen elements
     this.historyBadge = page.locator('#historyBadge');
@@ -66,10 +66,7 @@ class GMScannerPage {
     this.closeHistoryBtn = page.locator('button[data-action="app.closeHistory"]');
 
     // Settings elements
-    this.settingsButton = page.locator('button[data-action="app.showSettings"]');
-    this.deviceIdInput = page.locator('#deviceId');
     this.modeIndicator = page.locator('#modeIndicator');
-    this.saveSettingsBtn = page.locator('button[data-action="app.saveSettings"]');
   }
 
   /**
@@ -225,15 +222,6 @@ class GMScannerPage {
   }
 
   /**
-   * Cancel scan and return to team entry
-   * @deprecated Use finishTeam() instead - cancelScan button was removed
-   */
-  async cancelScan() {
-    // Redirect to finishTeam since cancelScan button was removed
-    return this.finishTeam();
-  }
-
-  /**
    * Get team token count
    * @returns {Promise<number>}
    */
@@ -286,38 +274,6 @@ class GMScannerPage {
 
     const text = await this.historyBadge.textContent();
     return parseInt(text, 10);
-  }
-
-  /**
-   * Open settings screen
-   */
-  async openSettings() {
-    await this.settingsButton.click();
-    await this.settingsScreen.waitFor({ state: 'visible', timeout: 5000 });
-  }
-
-  /**
-   * Set device ID in settings
-   * @param {string} deviceId
-   */
-  async setDeviceId(deviceId) {
-    await this.deviceIdInput.fill(deviceId);
-  }
-
-  /**
-   * Get device ID from settings
-   * @returns {Promise<string>}
-   */
-  async getDeviceId() {
-    return await this.deviceIdInput.inputValue();
-  }
-
-  /**
-   * Save settings and return to team entry screen
-   */
-  async saveSettings() {
-    await this.saveSettingsBtn.click();
-    await this.teamEntryScreen.waitFor({ state: 'visible', timeout: 5000 });
   }
 
   /**

@@ -119,17 +119,15 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     await scanner.manualScan('asm042');
     await scanner.continueScan();
 
-    // Badge should now show 1
-    badgeCount = await scanner.getHistoryBadgeCount();
-    expect(badgeCount).toBe(1);
+    // Badge should now show 1 (use Playwright auto-retry for async badge update)
+    await expect(scanner.historyBadge).toHaveText('1', { timeout: 5000 });
 
     // Scan second token
     await scanner.manualScan('det001');
     await scanner.continueScan();
 
     // Badge should now show 2
-    badgeCount = await scanner.getHistoryBadgeCount();
-    expect(badgeCount).toBe(2);
+    await expect(scanner.historyBadge).toHaveText('2', { timeout: 5000 });
   });
 
   test('should display correct history count', async () => {
@@ -187,49 +185,21 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     expect(teamDisplay).toBe('');
   });
 
-  test('should persist settings across page reload', async ({ page }) => {
-    // Select standalone mode first (required for mode restoration on reload)
-    await scanner.selectStandaloneMode();
-    await expect(scanner.teamEntryScreen).toBeVisible();
-
-    // Open settings
-    await scanner.openSettings();
-    await expect(scanner.settingsScreen).toBeVisible();
-
-    // Change device ID (maxlength=10 per index.html:1599)
-    await scanner.setDeviceId('TEST_DEV_9');
-
-    // Save settings
-    await scanner.saveSettings();
-    await expect(scanner.teamEntryScreen).toBeVisible();
-
-    // Reload page - should auto-restore standalone mode and return to team entry screen
-    await page.reload();
-    await scanner.teamEntryScreen.waitFor({ state: 'visible', timeout: 10000 });
-
-    // Open settings to verify device ID persistence
-    await scanner.openSettings();
-
-    // Device ID should be persisted
-    const deviceId = await scanner.getDeviceId();
-    expect(deviceId).toBe('TEST_DEV_9');
-  });
-
-  test('should allow canceling scan and returning to team entry', async () => {
+  test('should allow finishing team from scan screen and returning to team entry', async () => {
     await scanner.selectStandaloneMode();
     await scanner.enterTeam('555');
     await scanner.confirmTeam();
     await expect(scanner.scanScreen).toBeVisible();
 
-    // Cancel scan
-    await scanner.cancelScan();
+    // Finish team (clears team state for new entry)
+    await scanner.finishTeam();
 
     // Should return to team entry screen
     await expect(scanner.teamEntryScreen).toBeVisible();
 
-    // Team name should be preserved (UX improvement - allows continuing with same team)
+    // Team input should be cleared (finishTeam resets for new team)
     const teamDisplay = await scanner.getTeamDisplay();
-    expect(teamDisplay).toBe('555');
+    expect(teamDisplay).toBe('');
   });
 
   test('should allow finishing team after scan', async () => {
@@ -249,15 +219,14 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
   });
 
   test('should show mode indicator and allow mode toggle', async () => {
-    // Open settings to check mode
-    await scanner.openSettings();
-    await expect(scanner.settingsScreen).toBeVisible();
+    await scanner.selectStandaloneMode();
+    await expect(scanner.teamEntryScreen).toBeVisible();
 
     // Check initial mode (Detective Mode by default)
     let modeText = await scanner.getModeText();
     expect(modeText).toBe('Detective Mode');
 
-    // Toggle mode
+    // Toggle mode via header indicator
     await scanner.toggleMode();
 
     // Should now be Black Market Mode
