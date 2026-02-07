@@ -115,30 +115,18 @@ screenUpdateManager.registerGlobalHandler('game-state:updated', () => {
 // when accessing eventData properties: `const { prop } = eventData || {}`
 
 // History screen: Re-render game activity when data changes
-screenUpdateManager.registerScreen('history', {
-  'transaction:added': () => {
-    Debug.log('[main.js] History screen active - rendering game activity');
-    UIManager.updateHistoryStats();
-    const historyContainer = document.getElementById('historyContainer');
-    if (historyContainer) {
-      UIManager.renderGameActivity(historyContainer, { showSummary: true, showFilters: true });
-    }
-  },
-  'transaction:deleted': () => {
-    Debug.log('[main.js] History screen active - re-rendering after deletion');
-    UIManager.updateHistoryStats();
-    const historyContainer = document.getElementById('historyContainer');
-    if (historyContainer) {
-      UIManager.renderGameActivity(historyContainer, { showSummary: true, showFilters: true });
-    }
-  },
-  'player-scan:added': () => {
-    Debug.log('[main.js] History screen active - rendering game activity (player scan)');
-    const historyContainer = document.getElementById('historyContainer');
-    if (historyContainer) {
-      UIManager.renderGameActivity(historyContainer, { showSummary: true, showFilters: true });
-    }
+const refreshHistoryScreen = (includeStats = true) => {
+  if (includeStats) UIManager.updateHistoryStats();
+  const historyContainer = document.getElementById('historyContainer');
+  if (historyContainer) {
+    UIManager.renderGameActivity(historyContainer, { showSummary: true, showFilters: true });
   }
+};
+
+screenUpdateManager.registerScreen('history', {
+  'transaction:added': () => refreshHistoryScreen(),
+  'transaction:deleted': () => refreshHistoryScreen(),
+  'player-scan:added': () => refreshHistoryScreen(false)
 });
 
 // Team details screen: Re-render team data when transactions change
@@ -179,35 +167,14 @@ screenUpdateManager.registerScreen('teamDetails', {
 // Scoreboard containers - both use UIManager.renderScoreboard() for consistent rendering
 // scoreboardContainer: Full scoreboard screen (scanner-view)
 // admin-score-board: Admin panel inline scoreboard (admin-view)
-screenUpdateManager.registerContainer('scoreboardContainer', {
-  'team-score:updated': (eventData, container) => {
-    Debug.log('[main.js] Updating scoreboardContainer');
-    UIManager.renderScoreboard(container);
-  },
-  'scores:cleared': (eventData, container) => {
-    Debug.log('[main.js] Clearing scoreboardContainer');
-    container.innerHTML = '';
-  },
-  'data:cleared': (eventData, container) => {
-    Debug.log('[main.js] Session reset - clearing scoreboardContainer');
-    container.innerHTML = '';
-  }
-});
+const scoreboardContainerHandlers = {
+  'team-score:updated': (_eventData, container) => UIManager.renderScoreboard(container),
+  'scores:cleared': (_eventData, container) => { container.innerHTML = ''; },
+  'data:cleared': (_eventData, container) => { container.innerHTML = ''; }
+};
 
-screenUpdateManager.registerContainer('admin-score-board', {
-  'team-score:updated': (eventData, container) => {
-    Debug.log('[main.js] Updating admin-score-board');
-    UIManager.renderScoreboard(container);
-  },
-  'scores:cleared': (eventData, container) => {
-    Debug.log('[main.js] Clearing admin-score-board');
-    container.innerHTML = '';
-  },
-  'data:cleared': (eventData, container) => {
-    Debug.log('[main.js] Session reset - clearing admin-score-board');
-    container.innerHTML = '';
-  }
-});
+screenUpdateManager.registerContainer('scoreboardContainer', scoreboardContainerHandlers);
+screenUpdateManager.registerContainer('admin-score-board', scoreboardContainerHandlers);
 
 // Game Activity container (admin panel) - unified token lifecycle display
 screenUpdateManager.registerContainer('admin-game-activity', {
@@ -275,6 +242,9 @@ const app = new App({
   // Note: sessionModeManager and networkedSession are set internally by App
   // during mode selection (see App.selectGameMode)
 });
+
+// Wire app reference for getSessionStats (same pattern as UIManager at app.js:79)
+DataManager.app = app;
 
 // Set app context for screen handlers that need it (replaces window.__app hack)
 screenUpdateManager.setAppContext(app);

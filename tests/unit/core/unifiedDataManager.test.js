@@ -331,10 +331,10 @@ describe('UnifiedDataManager', () => {
       expect(manager.isTokenScanned('token1')).toBe(false);
     });
 
-    it('should clear all data', () => {
+    it('should clear all data via resetForNewSession', () => {
       manager.markTokenAsScanned('token1');
 
-      manager.clearAllData();
+      manager.resetForNewSession();
 
       expect(manager.isTokenScanned('token1')).toBe(false);
     });
@@ -355,6 +355,45 @@ describe('UnifiedDataManager', () => {
       expect(enhanced.hasUngroupedTokens).toBe(true);  // No group = ungrouped
       expect(enhanced.ungroupedTokens).toHaveLength(1);
       expect(enhanced.ungroupedTokens[0].tokenId).toBe('token1');
+    });
+  });
+
+  describe('getSessionStats', () => {
+    beforeEach(async () => {
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
+      manager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+      await manager.initializeStandaloneMode();
+    });
+
+    it('should return stats for current team when app is wired', async () => {
+      const tx = {
+        tokenId: 'test001', teamId: 'TeamA', mode: 'blackmarket',
+        valueRating: 3, memoryType: 'Personal', points: 50000,
+        timestamp: new Date().toISOString()
+      };
+      await manager.addTransaction(tx);
+
+      // Wire app reference with currentTeamId
+      manager.app = { currentTeamId: 'TeamA' };
+
+      const stats = manager.getSessionStats();
+      expect(stats.count).toBe(1);
+      expect(stats.totalScore).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should return zeros when no app is wired', () => {
+      manager.app = null;
+      const stats = manager.getSessionStats();
+      expect(stats).toEqual({ count: 0, totalValue: 0, totalScore: 0 });
+    });
+
+    it('should return zeros when no team is selected', () => {
+      manager.app = { currentTeamId: '' };
+      const stats = manager.getSessionStats();
+      expect(stats).toEqual({ count: 0, totalValue: 0, totalScore: 0 });
     });
   });
 });
