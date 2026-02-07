@@ -93,7 +93,6 @@ jest.mock('../../src/utils/nfcHandler.js', () => ({
 
 jest.mock('../../src/utils/config.js', () => ({
   default: {
-    MAX_TEAM_ID_LENGTH: 6,
     MODE_TOGGLE_SCALE: 1.1,
     ANIMATION_DURATION: 200,
     SCAN_SIMULATION_DELAY: 1000
@@ -357,24 +356,6 @@ describe('App', () => {
   });
 
   describe('Settings Management', () => {
-    it('should show settings screen', () => {
-      const UIManager = require('../../src/ui/uiManager.js').default;
-
-      app.showSettings();
-
-      expect(UIManager.showScreen).toHaveBeenCalledWith('settings');
-    });
-
-    it('should save settings and return to team entry', () => {
-      const Settings = require('../../src/ui/settings.js').default;
-      const UIManager = require('../../src/ui/uiManager.js').default;
-
-      app.saveSettings();
-
-      expect(Settings.save).toHaveBeenCalled();
-      expect(UIManager.showScreen).toHaveBeenCalledWith('teamEntry');
-    });
-
     it('should toggle mode between detective and blackmarket', () => {
       const Settings = require('../../src/ui/settings.js').default;
       const UIManager = require('../../src/ui/uiManager.js').default;
@@ -386,24 +367,6 @@ describe('App', () => {
       expect(UIManager.updateModeDisplay).toHaveBeenCalledWith('blackmarket');
 
       app.toggleMode();
-
-      expect(Settings.mode).toBe('detective');
-      expect(UIManager.updateModeDisplay).toHaveBeenCalledWith('detective');
-    });
-
-    it('should update mode from toggle checkbox', () => {
-      const Settings = require('../../src/ui/settings.js').default;
-      const UIManager = require('../../src/ui/uiManager.js').default;
-      const toggle = document.getElementById('modeToggle');
-
-      toggle.checked = true;
-      app.updateModeFromToggle();
-
-      expect(Settings.mode).toBe('blackmarket');
-      expect(UIManager.updateModeDisplay).toHaveBeenCalledWith('blackmarket');
-
-      toggle.checked = false;
-      app.updateModeFromToggle();
 
       expect(Settings.mode).toBe('detective');
       expect(UIManager.updateModeDisplay).toHaveBeenCalledWith('detective');

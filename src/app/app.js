@@ -266,15 +266,6 @@ class App {
 
   // ========== Settings Management ==========
 
-  showSettings() {
-    this.uiManager.showScreen('settings');
-  }
-
-  saveSettings() {
-    this.settings.save();
-    this.uiManager.showScreen('teamEntry');
-  }
-
   toggleMode() {
     this.settings.mode = this.settings.mode === 'detective' ? 'blackmarket' : 'detective';
 
@@ -295,14 +286,6 @@ class App {
       setTimeout(() => {
         indicator.style.transform = 'scale(1)';
       }, this.config.ANIMATION_DURATION);
-    }
-  }
-
-  updateModeFromToggle() {
-    const modeToggle = document.getElementById('modeToggle');
-    if (modeToggle) {
-      this.settings.mode = modeToggle.checked ? 'blackmarket' : 'detective';
-      this.uiManager.updateModeDisplay(this.settings.mode);
     }
   }
 
@@ -1497,139 +1480,6 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
   async adminSetIdleLoop() { return this._adminDisplayAction('setIdleLoop', 'Idle Loop'); }
   async adminSetScoreboard() { return this._adminDisplayAction('setScoreboard', 'Scoreboard'); }
-
-  // ========== Testing Functions ==========
-
-  testTokenMatch() {
-    const testId = prompt('Enter a token ID to test:');
-    if (testId) {
-      const result = this.tokenManager.findToken(testId);
-      if (result) {
-        alert(`Match found!\nID: ${result.matchedId}\nType: ${result.token.SF_MemoryType}\nGroup: ${result.token.SF_Group}`);
-      } else {
-        alert(`No match found for: ${testId}`);
-      }
-    }
-  }
-
-  testGroupParsing() {
-    const testCases = [
-      'Server Logs (x5)',
-      'Marcus\' Memories (x1)',
-      'Government Files (x3)',
-      'No Multiplier Group',
-      'Bad Format (x)',
-      'Zero Multiplier (x0)',
-      'Large Multiplier (x999)'
-    ];
-
-    console.log('=== Testing Group Parsing ===');
-    testCases.forEach(testCase => {
-      const parsed = this.dataManager.parseGroupInfo(testCase);
-      const normalized = this.dataManager.normalizeGroupName(parsed.name);
-      console.log(`Input: "${testCase}"`);
-      console.log(`  Parsed: name="${parsed.name}", multiplier=${parsed.multiplier}`);
-      console.log(`  Normalized: "${normalized}"`);
-    });
-
-    alert('Check console for test results');
-  }
-
-  testGroupInventory() {
-    const inventory = this.tokenManager.getGroupInventory();
-
-    console.log('=== Group Inventory Test ===');
-    console.log('Total groups:', Object.keys(inventory).length);
-
-    Object.entries(inventory).forEach(([normalizedName, groupData]) => {
-      console.log(`\nGroup: "${groupData.displayName}"`);
-      console.log(`  Normalized: "${normalizedName}"`);
-      console.log(`  Multiplier: ${groupData.multiplier}x`);
-      console.log(`  Tokens: ${groupData.tokens.size}`);
-    });
-
-    alert('Check console for group inventory details');
-  }
-
-  testCompletionDetection() {
-    console.log('=== Testing Group Completion Detection ===\n');
-
-    const realTeams = [...new Set(this.dataManager.getTransactions()
-      .filter(t => t.mode === 'blackmarket')
-      .map(t => t.teamId))];
-
-    if (realTeams.length > 0) {
-      console.log('=== Testing with REAL data ===');
-      realTeams.forEach(teamId => {
-        const completed = this.dataManager.getTeamCompletedGroups(teamId);
-        console.log(`Team ${teamId}: ${completed.length} completed groups`);
-        completed.forEach(group => {
-          console.log(`  ✅ "${group.name}" - ${group.tokenCount} tokens, ${group.multiplier}x`);
-        });
-      });
-    } else {
-      console.log('No real data found. Add some transactions first.');
-    }
-
-    alert('Check console for completion detection results');
-  }
-
-  testBonusCalculations() {
-    console.log('=== Testing Bonus Score Calculations ===\n');
-
-    const teamScores = this.dataManager.getTeamScores();
-
-    if (teamScores.length > 0) {
-      teamScores.forEach((team, index) => {
-        console.log(`${index + 1}. Team ${team.teamId}`);
-        console.log(`   Base: $${team.baseScore.toLocaleString()}`);
-        console.log(`   Bonus: $${team.bonusScore.toLocaleString()}`);
-        console.log(`   Total: $${team.score.toLocaleString()}`);
-        console.log(`   Completed Groups: ${team.completedGroups}`);
-      });
-    } else {
-      console.log('No teams found. Add some transactions first.');
-    }
-
-    alert('Check console for bonus calculation results');
-  }
-
-  testEnhancedUI() {
-    console.log('=== Testing Enhanced UI Data Structure ===\n');
-
-    const teamId = prompt('Enter a team ID to test (or leave blank for first team):');
-    const transactions = this.dataManager.getTransactions();
-    const testTeamId = teamId || transactions[0]?.teamId;
-
-    if (!testTeamId) {
-      alert('No teams found. Add some transactions first.');
-      return;
-    }
-
-    const enhancedData = this.dataManager.getEnhancedTeamTransactions(testTeamId);
-
-    console.log(`Team ${testTeamId} Enhanced Data:`);
-    console.log(`  Completed Groups: ${enhancedData.completedGroups.length}`);
-    console.log(`  In-Progress Groups: ${enhancedData.incompleteGroups.length}`);
-    console.log(`  Ungrouped Tokens: ${enhancedData.ungroupedTokens.length}`);
-    console.log(`  Unknown Tokens: ${enhancedData.unknownTokens.length}`);
-
-    if (enhancedData.hasCompletedGroups) {
-      console.log('\nCompleted Groups:');
-      enhancedData.completedGroups.forEach(group => {
-        console.log(`  "${group.displayName}": ${group.tokens.length} tokens, +$${group.bonusValue.toLocaleString()} bonus`);
-      });
-    }
-
-    if (enhancedData.hasIncompleteGroups) {
-      console.log('\nIn-Progress Groups:');
-      enhancedData.incompleteGroups.forEach(group => {
-        console.log(`  "${group.displayName}": ${group.progress} (${group.percentage}%)`);
-      });
-    }
-
-    alert('Check console for enhanced UI data structure');
-  }
 }
 
 // Create singleton instance

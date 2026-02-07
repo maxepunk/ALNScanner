@@ -75,7 +75,6 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
     // Setup DOM
     document.body.innerHTML = `
       <div id="loadingScreen" class="screen"></div>
-      <div id="settingsScreen" class="screen"></div>
       <div id="gameModeScreen" class="screen"></div>
       <div id="teamEntryScreen" class="screen"></div>
       <div id="scanScreen" class="screen"></div>
@@ -163,7 +162,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
 
       expect(uiManager.screens.loading).toBe(document.getElementById('loadingScreen'));
       expect(uiManager.screens.scan).toBe(document.getElementById('scanScreen'));
-      expect(Object.keys(uiManager.screens).length).toBe(9);
+      expect(Object.keys(uiManager.screens).length).toBe(8);
     });
 
     it('should create error container on init()', () => {

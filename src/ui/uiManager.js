@@ -38,7 +38,6 @@ class UIManager {
   init() {
     this.screens = {
       loading: document.getElementById('loadingScreen'),
-      settings: document.getElementById('settingsScreen'),
       gameModeScreen: document.getElementById('gameModeScreen'),
       teamEntry: document.getElementById('teamEntryScreen'),
       scan: document.getElementById('scanScreen'),

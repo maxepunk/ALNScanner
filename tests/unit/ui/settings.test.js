@@ -10,13 +10,9 @@ describe('Settings - ES6 Module (Event-Driven)', () => {
     // Clear localStorage (global mock from test-setup.js)
     localStorage.clear();
 
-    // Setup DOM elements
+    // Setup minimal DOM (only deviceIdDisplay remains after settings screen deletion)
     document.body.innerHTML = `
-      <div id="settingsScreen">
-        <input id="deviceId" type="text" />
-        <span id="deviceIdDisplay"></span>
-        <input id="modeToggle" type="checkbox" />
-      </div>
+      <span id="deviceIdDisplay"></span>
     `;
   });
 
@@ -81,27 +77,6 @@ describe('Settings - ES6 Module (Event-Driven)', () => {
       instance.load();
     });
 
-    it('should update DOM elements with loaded values', () => {
-      localStorage.setItem('deviceId', '456');
-      localStorage.setItem('mode', 'detective');
-
-      const instance = new Settings();
-      instance.load();
-
-      expect(document.getElementById('deviceId').value).toBe('456');
-      expect(document.getElementById('deviceIdDisplay').textContent).toBe('456');
-      expect(document.getElementById('modeToggle').checked).toBe(false);
-    });
-
-    it('should set modeToggle checked for blackmarket mode', () => {
-      localStorage.setItem('mode', 'blackmarket');
-
-      const instance = new Settings();
-      instance.load();
-
-      expect(document.getElementById('modeToggle').checked).toBe(true);
-    });
-
     it('should handle missing DOM elements gracefully', () => {
       document.body.innerHTML = ''; // Remove all elements
 
@@ -150,11 +125,9 @@ describe('Settings - ES6 Module (Event-Driven)', () => {
         done();
       });
 
-      // Simulate reading from active settings screen
-      document.getElementById('settingsScreen').classList.add('active');
-      document.getElementById('deviceId').value = '555';
-      document.getElementById('modeToggle').checked = true;
-
+      // Change values directly (no settings screen DOM)
+      instance.deviceId = '555';
+      instance.mode = 'blackmarket';
       instance.save();
     });
 
@@ -169,37 +142,6 @@ describe('Settings - ES6 Module (Event-Driven)', () => {
       instance.save();
 
       expect(changedHandler).not.toHaveBeenCalled();
-    });
-
-    it('should read from DOM when settings screen is active', () => {
-      document.getElementById('settingsScreen').classList.add('active');
-      document.getElementById('deviceId').value = '333';
-      document.getElementById('modeToggle').checked = true;
-
-      const instance = new Settings();
-      instance.save();
-
-      expect(instance.deviceId).toBe('333');
-      expect(instance.mode).toBe('blackmarket');
-      expect(localStorage.getItem('deviceId')).toBe('333');
-      expect(localStorage.getItem('mode')).toBe('blackmarket');
-    });
-
-    it('should NOT read from DOM when settings screen is not active', () => {
-      document.getElementById('settingsScreen').classList.remove('active');
-      document.getElementById('deviceId').value = '777';
-      document.getElementById('modeToggle').checked = true;
-
-      const instance = new Settings();
-      instance.deviceId = '001';
-      instance.mode = 'detective';
-      instance.save();
-
-      // Should save current instance values, not DOM values
-      expect(instance.deviceId).toBe('001');
-      expect(instance.mode).toBe('detective');
-      expect(localStorage.getItem('deviceId')).toBe('001');
-      expect(localStorage.getItem('mode')).toBe('detective');
     });
 
     it('should update deviceIdDisplay in DOM', () => {
@@ -220,17 +162,6 @@ describe('Settings - ES6 Module (Event-Driven)', () => {
       expect(() => instance.save()).not.toThrow();
       expect(localStorage.getItem('deviceId')).toBe('123');
     });
-
-    it('should use default deviceId if DOM input is empty', () => {
-      document.getElementById('settingsScreen').classList.add('active');
-      document.getElementById('deviceId').value = '';
-
-      const instance = new Settings();
-      instance.save();
-
-      expect(instance.deviceId).toBe('001');
-      expect(localStorage.getItem('deviceId')).toBe('001');
-    });
   });
 
   describe('Mode handling', () => {
@@ -248,26 +179,6 @@ describe('Settings - ES6 Module (Event-Driven)', () => {
       instance.save();
 
       expect(localStorage.getItem('mode')).toBe('blackmarket');
-    });
-
-    it('should convert checkbox unchecked to detective mode', () => {
-      document.getElementById('settingsScreen').classList.add('active');
-      document.getElementById('modeToggle').checked = false;
-
-      const instance = new Settings();
-      instance.save();
-
-      expect(instance.mode).toBe('detective');
-    });
-
-    it('should convert checkbox checked to blackmarket mode', () => {
-      document.getElementById('settingsScreen').classList.add('active');
-      document.getElementById('modeToggle').checked = true;
-
-      const instance = new Settings();
-      instance.save();
-
-      expect(instance.mode).toBe('blackmarket');
     });
   });
 
@@ -332,9 +243,8 @@ describe('Settings - ES6 Module (Event-Driven)', () => {
       instance.addEventListener('settings:saved', savedHandler);
       instance.addEventListener('settings:changed', changedHandler);
 
-      document.getElementById('settingsScreen').classList.add('active');
-      document.getElementById('deviceId').value = '999';
-
+      // Change values directly
+      instance.deviceId = '999';
       instance.save();
 
       expect(savedHandler).toHaveBeenCalledTimes(1);
@@ -345,6 +255,7 @@ describe('Settings - ES6 Module (Event-Driven)', () => {
       const instance = new Settings();
       instance.deviceId = 'old-id';
       instance.mode = 'detective';
+      instance.save(); // Persist old values to localStorage first
 
       instance.addEventListener('settings:changed', (event) => {
         expect(event.detail.oldDeviceId).toBe('old-id');
@@ -354,10 +265,9 @@ describe('Settings - ES6 Module (Event-Driven)', () => {
         done();
       });
 
-      document.getElementById('settingsScreen').classList.add('active');
-      document.getElementById('deviceId').value = 'new-id';
-      document.getElementById('modeToggle').checked = true;
-
+      // Change values directly
+      instance.deviceId = 'new-id';
+      instance.mode = 'blackmarket';
       instance.save();
     });
   });
@@ -370,14 +280,6 @@ describe('Settings - ES6 Module (Event-Driven)', () => {
 
       expect(instance.deviceId).toBe('001');
       expect(instance.mode).toBe('detective');
-    });
-
-    it('should handle settingsScreen without classList', () => {
-      document.getElementById('settingsScreen').classList = undefined;
-
-      const instance = new Settings();
-
-      expect(() => instance.save()).not.toThrow();
     });
 
     it('should handle concurrent event listeners', () => {

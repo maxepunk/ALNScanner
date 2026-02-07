@@ -386,12 +386,11 @@ ALNScanner/
 - ✅ Dependency injection throughout
 - ✅ Real browser E2E testing (Playwright catches jsdom misses)
 
-### Screen System (9 Screens)
+### Screen System (8 Screens)
 
 **Core Screens:**
 - `loadingScreen` - Initial app load
 - `gameModeScreen` - Networked vs Standalone selection
-- `settingsScreen` - Device ID, mode toggle, data management
 - `teamEntryScreen` - Team selection (Dropdown or Text Input)
 - `scanScreen` - NFC interface + stats
 - `resultScreen` - Transaction outcome

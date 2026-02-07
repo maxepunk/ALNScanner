@@ -65,9 +65,6 @@
                 <button class="nav-button" id="scoreboardButton" data-action="app.showScoreboard" title="View scoreboard" style="display: none;">
                     🏆
                 </button>
-                <button class="nav-button" data-action="app.showSettings" title="Settings">
-                    ⚙️
-                </button>
             </div>
             <div class="header-content">
                 <h1>Transaction Station</h1>
@@ -100,43 +97,6 @@
             <div class="status-message">
                 <div class="scan-icon">⏳</div>
                 <p>Loading token database...</p>
-            </div>
-        </div>
-
-        <!-- Settings Screen -->
-        <div id="settingsScreen" class="screen">
-            <div class="settings-panel">
-                <h3>Station Configuration</h3>
-                <div class="settings-group">
-                    <label for="deviceId">Device ID</label>
-                    <input type="text" id="deviceId" placeholder="001" maxlength="10">
-                </div>
-                <div class="toggle-switch">
-                    <label>Station Mode</label>
-                    <label class="switch">
-                        <input type="checkbox" id="modeToggle" onchange="App.updateModeFromToggle()">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-                <p style="text-align: center; color: #666; margin-top: 10px;">
-                    <span id="modeText">Detective Mode</span>
-                </p>
-            </div>
-
-            <!-- Network configuration removed - use connection wizard instead -->
-
-            <button class="btn btn-primary" data-action="app.saveSettings">Save & Start Station</button>
-            <div class="settings-panel" style="margin-top: 20px;">
-                <h3>Data Management</h3>
-                <button class="btn btn-secondary" data-action="dataManager.exportData" data-arg="json">Export JSON</button>
-                <button class="btn btn-secondary" data-action="dataManager.exportData" data-arg="csv">Export CSV</button>
-                <button class="btn btn-secondary" data-action="dataManager.clearData">Clear All Data</button>
-                <button class="btn btn-secondary" data-action="app.testTokenMatch">Test Token Match</button>
-                <button class="btn btn-secondary" data-action="app.testGroupParsing">Test Group Parsing</button>
-                <button class="btn btn-secondary" data-action="app.testGroupInventory">Test Group Inventory</button>
-                <button class="btn btn-secondary" data-action="app.testCompletionDetection">Test Completions</button>
-                <button class="btn btn-secondary" data-action="app.testBonusCalculations">Test Bonuses</button>
-                <button class="btn btn-secondary" data-action="app.testEnhancedUI">Test Enhanced UI</button>
             </div>
         </div>
 
@@ -517,7 +477,6 @@
          - handleConnectionSubmit()
          - cancelNetworkedMode()
          - showConnectionWizard()
-         - showAuthModal()
 
          Use data-action attributes for event binding:
          - data-action="connectionWizard.scanForServers"

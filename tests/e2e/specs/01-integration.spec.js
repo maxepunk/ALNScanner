@@ -30,20 +30,6 @@ test.describe('Browser Integration - ES6 Module Loading', () => {
     await expect(networkedBtn).toBeVisible();
   });
 
-  test('should have functional data-action event delegation', async ({ page }) => {
-    // Click settings button to verify event delegation works
-    const settingsBtn = await page.locator('button[data-action="app.showSettings"]');
-    await settingsBtn.click();
-
-    // Verify settings screen appears
-    const settingsScreen = await page.locator('#settingsScreen');
-    await expect(settingsScreen).toBeVisible();
-
-    // Verify settings form has expected fields
-    const deviceIdInput = await page.locator('#deviceId');
-    await expect(deviceIdInput).toBeVisible();
-  });
-
   test('should initialize without console errors', async ({ page }) => {
     const errors = [];
 

@@ -126,16 +126,6 @@ test.describe('Smoke Test: No Window Globals', () => {
     expect(hasOnsubmit).toBe(false);
   });
 
-  test('should be able to click buttons with data-action attributes', async ({ page }) => {
-    // Click settings button to verify data-action event delegation works
-    const settingsBtn = await page.locator('button[data-action="app.showSettings"]');
-    await settingsBtn.click();
-
-    // Verify settings screen appears
-    const settingsScreen = await page.locator('#settingsScreen');
-    await expect(settingsScreen).toBeVisible();
-  });
-
   test('should be able to open connection wizard via data-action', async ({ page }) => {
     // Click connection status link with data-action
     const connectionStatus = await page.locator('#connectionStatus[data-action="connectionWizard.showConnectionWizard"]');
