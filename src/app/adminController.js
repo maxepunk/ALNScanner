@@ -20,6 +20,9 @@ import { DisplayController } from '../admin/DisplayController.js';
 import { SystemMonitor } from '../admin/SystemMonitor.js';
 import { AdminOperations } from '../admin/AdminOperations.js';
 import { MonitoringDisplay } from '../admin/MonitoringDisplay.js';
+import { BluetoothController } from '../admin/BluetoothController.js';
+import { AudioController } from '../admin/AudioController.js';
+import { LightingController } from '../admin/LightingController.js';
 
 export class AdminController extends EventTarget {
   constructor(client, dataManager, teamRegistry = null) {
@@ -50,7 +53,10 @@ export class AdminController extends EventTarget {
       displayController: new DisplayController(this.client),
       systemMonitor: new SystemMonitor(this.client),
       adminOperations: new AdminOperations(this.client),
-      monitoringDisplay: new MonitoringDisplay(this.client, this.dataManager, this.teamRegistry)
+      monitoringDisplay: new MonitoringDisplay(this.client, this.dataManager, this.teamRegistry),
+      bluetoothController: new BluetoothController(this.client),
+      audioController: new AudioController(this.client),
+      lightingController: new LightingController(this.client)
     };
 
     this.initialized = true;

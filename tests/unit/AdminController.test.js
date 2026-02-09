@@ -45,6 +45,24 @@ jest.mock('../../src/admin/MonitoringDisplay.js', () => ({
   }))
 }));
 
+jest.mock('../../src/admin/BluetoothController.js', () => ({
+  BluetoothController: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn()
+  }))
+}));
+
+jest.mock('../../src/admin/AudioController.js', () => ({
+  AudioController: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn()
+  }))
+}));
+
+jest.mock('../../src/admin/LightingController.js', () => ({
+  LightingController: jest.fn().mockImplementation(() => ({
+    destroy: jest.fn()
+  }))
+}));
+
 // Import AFTER mocks are set up
 import AdminController from '../../src/app/adminController.js';
 import { SessionManager } from '../../src/admin/SessionManager.js';
@@ -52,6 +70,9 @@ import { VideoController } from '../../src/admin/VideoController.js';
 import { SystemMonitor } from '../../src/admin/SystemMonitor.js';
 import { AdminOperations } from '../../src/admin/AdminOperations.js';
 import { MonitoringDisplay } from '../../src/admin/MonitoringDisplay.js';
+import { BluetoothController } from '../../src/admin/BluetoothController.js';
+import { AudioController } from '../../src/admin/AudioController.js';
+import { LightingController } from '../../src/admin/LightingController.js';
 
 describe('AdminController - Admin Module Lifecycle', () => {
   let controller;
@@ -98,6 +119,9 @@ describe('AdminController - Admin Module Lifecycle', () => {
       expect(SystemMonitor).toHaveBeenCalledWith(mockClient);
       expect(AdminOperations).toHaveBeenCalledWith(mockClient);
       expect(MonitoringDisplay).toHaveBeenCalled();
+      expect(BluetoothController).toHaveBeenCalledWith(mockClient);
+      expect(AudioController).toHaveBeenCalledWith(mockClient);
+      expect(LightingController).toHaveBeenCalledWith(mockClient);
 
       expect(controller.initialized).toBe(true);
     });
@@ -111,6 +135,9 @@ describe('AdminController - Admin Module Lifecycle', () => {
       expect(controller.modules.systemMonitor).toBeDefined();
       expect(controller.modules.adminOperations).toBeDefined();
       expect(controller.modules.monitoringDisplay).toBeDefined();
+      expect(controller.modules.bluetoothController).toBeDefined();
+      expect(controller.modules.audioController).toBeDefined();
+      expect(controller.modules.lightingController).toBeDefined();
     });
 
     it('should not re-initialize if already initialized', () => {
@@ -123,6 +150,9 @@ describe('AdminController - Admin Module Lifecycle', () => {
       expect(SystemMonitor).toHaveBeenCalledTimes(1);
       expect(AdminOperations).toHaveBeenCalledTimes(1);
       expect(MonitoringDisplay).toHaveBeenCalledTimes(1);
+      expect(BluetoothController).toHaveBeenCalledTimes(1);
+      expect(AudioController).toHaveBeenCalledTimes(1);
+      expect(LightingController).toHaveBeenCalledTimes(1);
     });
 
     it('should emit initialized event', () => {
@@ -214,6 +244,9 @@ describe('AdminController - Admin Module Lifecycle', () => {
       expect(modules.systemMonitor.destroy).toHaveBeenCalled();
       expect(modules.adminOperations.destroy).toHaveBeenCalled();
       expect(modules.monitoringDisplay.destroy).toHaveBeenCalled();
+      expect(modules.bluetoothController.destroy).toHaveBeenCalled();
+      expect(modules.audioController.destroy).toHaveBeenCalled();
+      expect(modules.lightingController.destroy).toHaveBeenCalled();
     });
 
     it('should reset state after destroy', () => {
@@ -285,6 +318,9 @@ describe('AdminController - Admin Module Lifecycle', () => {
       expect(() => controller.getModule('systemMonitor')).not.toThrow();
       expect(() => controller.getModule('adminOperations')).not.toThrow();
       expect(() => controller.getModule('monitoringDisplay')).not.toThrow();
+      expect(() => controller.getModule('bluetoothController')).not.toThrow();
+      expect(() => controller.getModule('audioController')).not.toThrow();
+      expect(() => controller.getModule('lightingController')).not.toThrow();
     });
 
     it('should allow pause/resume immediately after initialize', () => {
