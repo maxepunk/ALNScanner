@@ -368,7 +368,7 @@ export class MonitoringDisplay {
     Debug.log(`[MonitoringDisplay] bluetooth:scan: scanning=${payload.scanning}`);
 
     const scanBtn = document.getElementById('btn-bt-scan');
-    const scanSpinner = document.getElementById('bt-scan-spinner');
+    const scanSpinner = document.getElementById('bt-scan-status');
 
     if (payload.scanning) {
       if (scanBtn) {
@@ -450,8 +450,12 @@ export class MonitoringDisplay {
     if (!payload) return;
     Debug.log(`[MonitoringDisplay] lighting:status: connected=${payload.connected}`);
 
+    const lightingSection = document.getElementById('lighting-section');
     const notConnected = document.getElementById('lighting-not-connected');
-    const sceneGrid = document.getElementById('scene-grid');
+    const sceneGrid = document.getElementById('lighting-scenes');
+
+    // Show the lighting section once we receive any status event
+    if (lightingSection) lightingSection.style.display = '';
 
     if (!payload.connected) {
       if (notConnected) notConnected.style.display = 'block';

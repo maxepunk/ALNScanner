@@ -270,7 +270,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       document.body.appendChild(scanBtn);
 
       scanSpinner = document.createElement('span');
-      scanSpinner.id = 'bt-scan-spinner';
+      scanSpinner.id = 'bt-scan-status';
       scanSpinner.style.display = 'none';
       document.body.appendChild(scanSpinner);
     });
@@ -517,7 +517,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
     beforeEach(() => {
       // Create scene tiles
       const grid = document.createElement('div');
-      grid.id = 'scene-grid';
+      grid.id = 'lighting-scenes';
 
       const tile1 = document.createElement('button');
       tile1.className = 'scene-tile scene-tile--active';
@@ -582,6 +582,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
     beforeEach(() => {
       lightingSection = document.createElement('div');
       lightingSection.id = 'lighting-section';
+      lightingSection.style.display = 'none'; // Hidden by default in HTML
       document.body.appendChild(lightingSection);
 
       notConnected = document.createElement('div');
@@ -590,9 +591,21 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       lightingSection.appendChild(notConnected);
 
       sceneGrid = document.createElement('div');
-      sceneGrid.id = 'scene-grid';
+      sceneGrid.id = 'lighting-scenes';
       sceneGrid.style.display = 'grid';
       lightingSection.appendChild(sceneGrid);
+    });
+
+    it('should make lighting section visible on any status event', () => {
+      expect(lightingSection.style.display).toBe('none');
+
+      dispatchMessage('lighting:status', {
+        connected: false,
+        scenes: [],
+        activeScene: null
+      });
+
+      expect(lightingSection.style.display).toBe('');
     });
 
     it('should show "not connected" message when disconnected', () => {
@@ -723,7 +736,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       document.body.appendChild(scanBtn);
 
       scanSpinner = document.createElement('span');
-      scanSpinner.id = 'bt-scan-spinner';
+      scanSpinner.id = 'bt-scan-status';
       scanSpinner.style.display = 'none';
       document.body.appendChild(scanSpinner);
 
@@ -752,7 +765,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       lightingSection.appendChild(notConnected);
 
       sceneGrid = document.createElement('div');
-      sceneGrid.id = 'scene-grid';
+      sceneGrid.id = 'lighting-scenes';
       lightingSection.appendChild(sceneGrid);
 
       // Session status container (needed by updateAllDisplays)
