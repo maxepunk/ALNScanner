@@ -402,6 +402,61 @@
                 </div>
             </section>
 
+            <!-- Audio Output Section (Networked mode only - Phase 0 Environment Control) -->
+            <section class="admin-section" data-requires="networked" id="audio-output-section">
+                <h3>Audio Output <span id="bt-speaker-count" class="section-badge"></span></h3>
+
+                <!-- Video Audio Route Toggle -->
+                <div class="audio-output-toggle">
+                    <label class="radio-toggle">
+                        <input type="radio" name="audioOutput" value="hdmi" checked
+                               data-action="admin.setAudioRoute" data-stream="video">
+                        <span>HDMI</span>
+                    </label>
+                    <label class="radio-toggle">
+                        <input type="radio" name="audioOutput" value="bluetooth"
+                               data-action="admin.setAudioRoute" data-stream="video">
+                        <span>Bluetooth</span>
+                    </label>
+                </div>
+
+                <!-- BT Fallback Warning (hidden by default) -->
+                <div id="bt-warning" class="alert alert-warning" style="display:none;">
+                    No Bluetooth speaker connected — video audio will use HDMI
+                </div>
+
+                <!-- Bluetooth Speakers -->
+                <div class="bt-speakers-header">
+                    <h4>Bluetooth Speakers</h4>
+                    <button id="btn-bt-scan" class="btn btn-sm" data-action="admin.bluetoothScan">Scan</button>
+                </div>
+                <div id="bt-scan-status" style="display:none;">
+                    <span class="spinner-sm"></span> Scanning...
+                </div>
+                <div id="bt-device-list" class="device-list">
+                    <!-- Populated dynamically by MonitoringDisplay -->
+                    <p class="empty-state">No speakers found. Put your speaker in pairing mode and tap Scan.</p>
+                </div>
+                <div id="bt-unavailable" style="display:none;">
+                    Bluetooth adapter not available
+                </div>
+            </section>
+
+            <!-- Lighting Section (Networked mode only - Phase 0 Environment Control) -->
+            <section class="admin-section" data-requires="networked" id="lighting-section" style="display:none;">
+                <h3>Lighting <span id="ha-connection-status" class="section-badge"></span></h3>
+                <div id="lighting-scenes" class="scene-grid">
+                    <!-- Populated dynamically by MonitoringDisplay -->
+                </div>
+                <div id="lighting-no-scenes" style="display:none;">
+                    No scenes configured in Home Assistant
+                </div>
+                <div id="lighting-not-connected" style="display:none;">
+                    Home Assistant not connected
+                    <button class="btn btn-sm" data-action="admin.lightingRetry">Retry</button>
+                </div>
+            </section>
+
             <!-- System Status Section (Networked mode only - requires WebSocket) -->
             <section class="admin-section" data-requires="networked">
                 <h3>System Status</h3>
