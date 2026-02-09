@@ -20,7 +20,7 @@ export class AudioController {
 
   /**
    * Set audio output for a stream (Phase 0: video stream only)
-   * @param {string} sink - PipeWire sink name (e.g., 'bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink')
+   * @param {string} sink - PipeWire sink name (e.g., 'bluez_output.AA_BB_CC_DD_EE_FF.1')
    * @param {string} [stream='video'] - Stream identifier (default: 'video')
    * @returns {Promise<Object>} Route set response
    */

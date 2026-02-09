@@ -386,20 +386,23 @@ export class MonitoringDisplay {
 
   /**
    * Handle audio routing change
-   * @param {Object} payload - { stream, sink }
+   * @param {Object} payload - { stream, sink, sinkType? }
+   *   routing:changed sends { stream, sink } (user's literal input)
+   *   routing:applied sends { stream, sink, sinkType } (resolved)
    */
   _handleAudioRouting(payload) {
     if (!payload) return;
-    Debug.log(`[MonitoringDisplay] audio:routing: ${payload.stream} -> ${payload.sink}`);
+    Debug.log(`[MonitoringDisplay] audio:routing: ${payload.stream} -> ${payload.sink} (type: ${payload.sinkType || 'unknown'})`);
+
+    // Use sinkType when available (from routing:applied), fall back to sink name
+    const isBluetooth = payload.sinkType
+      ? payload.sinkType === 'bluetooth'
+      : payload.sink === 'bluetooth';
 
     // Update radio button selection
     const radios = document.querySelectorAll('input[name="audioOutput"]');
     radios.forEach(radio => {
-      if (payload.sink && payload.sink.startsWith('bluez_sink')) {
-        radio.checked = radio.value === 'bluetooth';
-      } else {
-        radio.checked = radio.value === 'hdmi';
-      }
+      radio.checked = radio.value === (isBluetooth ? 'bluetooth' : 'hdmi');
     });
 
     // Hide fallback warning when routing succeeds

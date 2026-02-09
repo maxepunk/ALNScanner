@@ -369,27 +369,39 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       document.body.appendChild(btWarning);
     });
 
-    it('should select bluetooth radio when sink is a bluez sink', () => {
+    it('should select bluetooth radio when sinkType is bluetooth (routing:applied)', () => {
       dispatchMessage('audio:routing', {
         stream: 'video',
-        sink: 'bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink'
+        sink: 'bluez_output.AA_BB_CC_DD_EE_FF.1',
+        sinkType: 'bluetooth'
       });
 
       expect(btRadio.checked).toBe(true);
       expect(hdmiRadio.checked).toBe(false);
     });
 
-    it('should select hdmi radio when sink is not a bluez sink', () => {
+    it('should select bluetooth radio from logical name (routing:changed)', () => {
+      dispatchMessage('audio:routing', {
+        stream: 'video',
+        sink: 'bluetooth'
+      });
+
+      expect(btRadio.checked).toBe(true);
+      expect(hdmiRadio.checked).toBe(false);
+    });
+
+    it('should select hdmi radio when sinkType is hdmi', () => {
       // First switch to bluetooth
       dispatchMessage('audio:routing', {
         stream: 'video',
-        sink: 'bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink'
+        sink: 'bluetooth'
       });
 
       // Then switch to HDMI
       dispatchMessage('audio:routing', {
         stream: 'video',
-        sink: 'alsa_output.hdmi-stereo'
+        sink: 'alsa_output.hdmi-stereo',
+        sinkType: 'hdmi'
       });
 
       expect(hdmiRadio.checked).toBe(true);
@@ -401,7 +413,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
       dispatchMessage('audio:routing', {
         stream: 'video',
-        sink: 'bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink'
+        sink: 'bluetooth'
       });
 
       expect(btWarning.style.display).toBe('none');
@@ -787,7 +799,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
           },
           audio: {
             routes: {
-              video: { sink: 'bluez_sink.AA_BB_CC_DD_EE_01.a2dp_sink' }
+              video: { sink: 'bluetooth' }
             }
           },
           lighting: {
@@ -809,7 +821,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
         environment: {
           audio: {
             routes: {
-              video: { sink: 'bluez_sink.AA_BB_CC_DD_EE_01.a2dp_sink' }
+              video: { sink: 'bluetooth' }
             }
           }
         }
