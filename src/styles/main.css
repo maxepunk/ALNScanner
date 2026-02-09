@@ -19,6 +19,7 @@
 
 /* Reusable Components */
 @import './components.css';
+@import './components/environment.css';
 
 /* Layout System */
 @import './layout.css';
