@@ -336,18 +336,17 @@ export class MonitoringDisplay {
         list.appendChild(item);
       }
       const isConnected = type === 'connected';
-      const connectedClass = isConnected ? 'bt-connected' : '';
+      item.className = isConnected ? 'bt-device-item bt-device-item--connected' : 'bt-device-item';
       item.innerHTML = `
-        <span class="bt-device-name ${connectedClass}">${this.escapeHtml(device.name || device.address)}</span>
+        <span class="bt-device-name">${this.escapeHtml(device.name || device.address)}</span>
         <span class="bt-device-status">${isConnected ? 'Connected' : 'Paired'}</span>
       `;
     } else if (type === 'disconnected') {
       const item = list.querySelector(`[data-bt-address="${device.address}"]`);
       if (item) {
+        item.className = 'bt-device-item';
         const statusEl = item.querySelector('.bt-device-status');
         if (statusEl) statusEl.textContent = 'Paired';
-        const nameEl = item.querySelector('.bt-device-name');
-        if (nameEl) nameEl.classList.remove('bt-connected');
       }
     } else if (type === 'unpaired') {
       const item = list.querySelector(`[data-bt-address="${device.address}"]`);

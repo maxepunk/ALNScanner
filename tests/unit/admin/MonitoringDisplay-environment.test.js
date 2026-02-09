@@ -101,7 +101,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
       const item = btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]');
       expect(item).not.toBeNull();
-      expect(item.querySelector('.bt-device-name').classList.contains('bt-connected')).toBe(true);
+      expect(item.classList.contains('bt-device-item--connected')).toBe(true);
       expect(item.querySelector('.bt-device-status').textContent).toBe('Connected');
     });
 
@@ -139,7 +139,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       const item = btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]');
       expect(item).not.toBeNull();
       expect(item.querySelector('.bt-device-status').textContent).toBe('Paired');
-      expect(item.querySelector('.bt-device-name').classList.contains('bt-connected')).toBe(false);
+      expect(item.classList.contains('bt-device-item--connected')).toBe(false);
     });
 
     it('should remove device on "unpaired" event', () => {

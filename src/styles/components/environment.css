@@ -101,13 +101,15 @@
 
 /* ============================================
    DEVICE LIST - Container for BT speakers
+   Scoped to #bt-device-list to avoid collision
+   with .device-list in layout.css (System Status)
    ============================================ */
-.device-list {
+#bt-device-list {
   min-height: var(--space-10);
   margin-bottom: var(--space-4);
 }
 
-.device-list .empty-state {
+#bt-device-list .empty-state {
   padding: var(--space-4) var(--space-3);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
@@ -116,9 +118,10 @@
 }
 
 /* ============================================
-   DEVICE ITEM - Individual BT speaker row
+   BT DEVICE ITEM - Individual BT speaker row
+   Class names match MonitoringDisplay.js output
    ============================================ */
-.device-item {
+.bt-device-item {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -131,49 +134,29 @@
   transition: all var(--duration-fast) var(--ease-default);
 }
 
-.device-item__name {
+.bt-device-name {
   flex: 1;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   color: var(--color-text-primary);
 }
 
-.device-item__status {
+.bt-device-status {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
 }
 
-.device-item__actions {
-  display: flex;
-  gap: var(--space-2);
-}
-
-/* Connected state - green accent */
-.device-item--connected {
+/* Connected state - green accent (modifier set by MonitoringDisplay.js) */
+.bt-device-item--connected {
   border-left-color: var(--color-accent-success);
   background: rgba(34, 197, 94, 0.05);
 }
 
-.device-item--connected .device-item__status {
+.bt-device-item--connected .bt-device-status {
   color: var(--color-accent-success);
   font-weight: var(--weight-semibold);
-}
-
-/* Discovering state - pulsing animation */
-.device-item--discovering {
-  border-left-color: var(--color-accent-info);
-  animation: device-pulse 2s ease-in-out infinite;
-}
-
-@keyframes device-pulse {
-  0%, 100% {
-    background: var(--color-bg-secondary);
-  }
-  50% {
-    background: rgba(59, 130, 246, 0.08);
-  }
 }
 
 /* ============================================
