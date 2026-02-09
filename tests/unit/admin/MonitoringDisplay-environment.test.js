@@ -83,10 +83,8 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
     it('should add a device on "paired" event', () => {
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        name: 'Speaker 1',
-        connected: false,
-        event: 'paired'
+        type: 'paired',
+        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
       });
 
       const item = btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]');
@@ -97,10 +95,8 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
     it('should add a device on "connected" event with connected class', () => {
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        name: 'Speaker 1',
-        connected: true,
-        event: 'connected'
+        type: 'connected',
+        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
       });
 
       const item = btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]');
@@ -112,18 +108,14 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
     it('should update existing device instead of creating duplicate', () => {
       // First pair
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        name: 'Speaker 1',
-        connected: false,
-        event: 'paired'
+        type: 'paired',
+        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
       });
 
       // Then connect same device
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        name: 'Speaker 1',
-        connected: true,
-        event: 'connected'
+        type: 'connected',
+        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
       });
 
       const items = btDeviceList.querySelectorAll('[data-bt-address="AA:BB:CC:DD:EE:FF"]');
@@ -134,18 +126,14 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
     it('should update device status to "Paired" on disconnect', () => {
       // First add device
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        name: 'Speaker 1',
-        connected: true,
-        event: 'connected'
+        type: 'connected',
+        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
       });
 
       // Then disconnect
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        name: 'Speaker 1',
-        connected: false,
-        event: 'disconnected'
+        type: 'disconnected',
+        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
       });
 
       const item = btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]');
@@ -157,20 +145,16 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
     it('should remove device on "unpaired" event', () => {
       // First add device
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        name: 'Speaker 1',
-        connected: false,
-        event: 'paired'
+        type: 'paired',
+        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
       });
 
       expect(btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]')).not.toBeNull();
 
       // Then unpair
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        name: 'Speaker 1',
-        connected: false,
-        event: 'unpaired'
+        type: 'unpaired',
+        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
       });
 
       expect(btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]')).toBeNull();
@@ -178,10 +162,8 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
     it('should use address as name when name is missing', () => {
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        name: null,
-        connected: false,
-        event: 'paired'
+        type: 'paired',
+        device: { address: 'AA:BB:CC:DD:EE:FF', name: null }
       });
 
       const item = btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]');
@@ -199,10 +181,8 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
       expect(() => {
         dispatchMessage('bluetooth:device', {
-          address: 'AA:BB:CC:DD:EE:FF',
-          name: 'Speaker',
-          connected: false,
-          event: 'paired'
+          type: 'paired',
+          device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker' }
         });
       }).not.toThrow();
     });
@@ -210,10 +190,8 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
     it('should handle disconnect for non-existent device gracefully', () => {
       expect(() => {
         dispatchMessage('bluetooth:device', {
-          address: 'XX:XX:XX:XX:XX:XX',
-          name: 'Ghost',
-          connected: false,
-          event: 'disconnected'
+          type: 'disconnected',
+          device: { address: 'XX:XX:XX:XX:XX:XX', name: 'Ghost' }
         });
       }).not.toThrow();
     });
@@ -239,10 +217,8 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
     it('should update badge count after adding devices', () => {
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        name: 'Speaker 1',
-        connected: false,
-        event: 'paired'
+        type: 'paired',
+        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
       });
 
       expect(btSpeakerCount.textContent).toBe('1');
@@ -251,15 +227,13 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
     it('should show empty string for zero devices', () => {
       // Add then remove device
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        name: 'Speaker 1',
-        connected: false,
-        event: 'paired'
+        type: 'paired',
+        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
       });
 
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        event: 'unpaired'
+        type: 'unpaired',
+        device: { address: 'AA:BB:CC:DD:EE:FF' }
       });
 
       expect(btSpeakerCount.textContent).toBe('');
@@ -267,17 +241,13 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
     it('should count multiple devices correctly', () => {
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:01',
-        name: 'Speaker 1',
-        connected: false,
-        event: 'paired'
+        type: 'paired',
+        device: { address: 'AA:BB:CC:DD:EE:01', name: 'Speaker 1' }
       });
 
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:02',
-        name: 'Speaker 2',
-        connected: false,
-        event: 'paired'
+        type: 'paired',
+        device: { address: 'AA:BB:CC:DD:EE:02', name: 'Speaker 2' }
       });
 
       expect(btSpeakerCount.textContent).toBe('2');
@@ -307,8 +277,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
     it('should update button to "Stop Scan" when scanning starts', () => {
       dispatchMessage('bluetooth:scan', {
-        scanning: true,
-        event: 'started'
+        scanning: true
       });
 
       expect(scanBtn.textContent).toBe('Stop Scan');
@@ -317,8 +286,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
     it('should show spinner when scanning starts', () => {
       dispatchMessage('bluetooth:scan', {
-        scanning: true,
-        event: 'started'
+        scanning: true
       });
 
       expect(scanSpinner.style.display).toBe('inline-block');
@@ -327,14 +295,12 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
     it('should update button to "Scan for Speakers" when scanning stops', () => {
       // Start scan first
       dispatchMessage('bluetooth:scan', {
-        scanning: true,
-        event: 'started'
+        scanning: true
       });
 
       // Stop scan
       dispatchMessage('bluetooth:scan', {
-        scanning: false,
-        event: 'stopped'
+        scanning: false
       });
 
       expect(scanBtn.textContent).toBe('Scan for Speakers');
@@ -343,13 +309,11 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
     it('should hide spinner when scanning stops', () => {
       dispatchMessage('bluetooth:scan', {
-        scanning: true,
-        event: 'started'
+        scanning: true
       });
 
       dispatchMessage('bluetooth:scan', {
-        scanning: false,
-        event: 'stopped'
+        scanning: false
       });
 
       expect(scanSpinner.style.display).toBe('none');
@@ -956,10 +920,8 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       document.body.appendChild(btDeviceList);
 
       dispatchMessage('bluetooth:device', {
-        address: 'AA:BB:CC:DD:EE:FF',
-        name: 'Speaker',
-        connected: false,
-        event: 'paired'
+        type: 'paired',
+        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker' }
       });
 
       expect(Debug.log).toHaveBeenCalledWith(
@@ -969,8 +931,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
     it('should log bluetooth:scan events', () => {
       dispatchMessage('bluetooth:scan', {
-        scanning: true,
-        event: 'started'
+        scanning: true
       });
 
       expect(Debug.log).toHaveBeenCalledWith(

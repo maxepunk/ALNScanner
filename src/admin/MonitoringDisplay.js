@@ -314,52 +314,58 @@ export class MonitoringDisplay {
 
   /**
    * Handle bluetooth device state change
-   * @param {Object} payload - { address, name, connected, event }
+   * Backend payload shape: { type: 'connected'|'disconnected'|'paired'|'unpaired'|'discovered', device: { address, name } }
+   * @param {Object} payload
    */
   _handleBluetoothDevice(payload) {
     if (!payload) return;
-    Debug.log(`[MonitoringDisplay] bluetooth:device: ${payload.event} ${payload.address}`);
+    const { type, device } = payload;
+    if (!device?.address) return;
+    Debug.log(`[MonitoringDisplay] bluetooth:device: ${type} ${device.address}`);
 
     const list = document.getElementById('bt-device-list');
     if (!list) return;
 
-    if (payload.event === 'paired' || payload.event === 'connected') {
+    if (type === 'paired' || type === 'connected') {
       // Add or update device in list
-      let item = list.querySelector(`[data-bt-address="${payload.address}"]`);
+      let item = list.querySelector(`[data-bt-address="${device.address}"]`);
       if (!item) {
         item = document.createElement('div');
         item.className = 'bt-device-item';
-        item.dataset.btAddress = payload.address;
+        item.dataset.btAddress = device.address;
         list.appendChild(item);
       }
-      const connectedClass = payload.connected ? 'bt-connected' : '';
+      const isConnected = type === 'connected';
+      const connectedClass = isConnected ? 'bt-connected' : '';
       item.innerHTML = `
-        <span class="bt-device-name ${connectedClass}">${this.escapeHtml(payload.name || payload.address)}</span>
-        <span class="bt-device-status">${payload.connected ? 'Connected' : 'Paired'}</span>
+        <span class="bt-device-name ${connectedClass}">${this.escapeHtml(device.name || device.address)}</span>
+        <span class="bt-device-status">${isConnected ? 'Connected' : 'Paired'}</span>
       `;
-    } else if (payload.event === 'disconnected') {
-      const item = list.querySelector(`[data-bt-address="${payload.address}"]`);
+    } else if (type === 'disconnected') {
+      const item = list.querySelector(`[data-bt-address="${device.address}"]`);
       if (item) {
         const statusEl = item.querySelector('.bt-device-status');
         if (statusEl) statusEl.textContent = 'Paired';
         const nameEl = item.querySelector('.bt-device-name');
         if (nameEl) nameEl.classList.remove('bt-connected');
       }
-    } else if (payload.event === 'unpaired') {
-      const item = list.querySelector(`[data-bt-address="${payload.address}"]`);
+    } else if (type === 'unpaired') {
+      const item = list.querySelector(`[data-bt-address="${device.address}"]`);
       if (item) item.remove();
     }
+    // 'discovered' events are intentionally ignored in Phase 0 — future scan results UI
 
     this._updateBtSpeakerCount();
   }
 
   /**
    * Handle bluetooth scan state change
-   * @param {Object} payload - { scanning, event }
+   * Backend payload shape: { scanning: boolean, timeout?, exitCode? }
+   * @param {Object} payload
    */
   _handleBluetoothScan(payload) {
     if (!payload) return;
-    Debug.log(`[MonitoringDisplay] bluetooth:scan: ${payload.event}`);
+    Debug.log(`[MonitoringDisplay] bluetooth:scan: scanning=${payload.scanning}`);
 
     const scanBtn = document.getElementById('btn-bt-scan');
     const scanSpinner = document.getElementById('bt-scan-spinner');
@@ -941,18 +947,15 @@ export class MonitoringDisplay {
         const allDevices = environment.bluetooth.pairedDevices || [];
         allDevices.forEach(device => {
           this._handleBluetoothDevice({
-            address: device.address,
-            name: device.name,
-            connected: device.connected,
-            event: device.connected ? 'connected' : 'paired'
+            type: device.connected ? 'connected' : 'paired',
+            device: { address: device.address, name: device.name }
           });
         });
       }
 
       // Update scan state
       this._handleBluetoothScan({
-        scanning: environment.bluetooth.scanning,
-        event: environment.bluetooth.scanning ? 'started' : 'stopped'
+        scanning: environment.bluetooth.scanning
       });
     }
 
