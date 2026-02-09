@@ -7,6 +7,46 @@
  */
 
 export function bindDOMEvents(app, dataManager, settings, debug, uiManager, connectionWizard, queueStatusManager) {
+
+  /**
+   * Handle admin.* actions — routes to AdminController modules
+   * AdminController is accessed lazily via networkedSession (created after connection)
+   */
+  function handleAdminAction(method, actionElement) {
+    const adminController = app.networkedSession?.getService('adminController');
+    if (!adminController?.initialized) {
+      debug.log('Admin action ignored: admin not initialized', true);
+      return;
+    }
+
+    switch (method) {
+      case 'startBtScan':
+        adminController.getModule('bluetoothController').startScan();
+        break;
+      case 'stopBtScan':
+        adminController.getModule('bluetoothController').stopScan();
+        break;
+      case 'setAudioRoute': {
+        const stream = actionElement.dataset.stream || 'video';
+        const sink = actionElement.value;
+        adminController.getModule('audioController').setVideoOutput(sink, stream);
+        break;
+      }
+      case 'lightingRetry':
+        adminController.getModule('lightingController').refreshScenes();
+        break;
+      case 'activateScene': {
+        const sceneId = actionElement.dataset.sceneId;
+        if (sceneId) {
+          adminController.getModule('lightingController').activateScene(sceneId);
+        }
+        break;
+      }
+      default:
+        debug.log(`Unknown admin action: ${method}`, true);
+    }
+  }
+
   // Event delegation for data-action attributes
   document.addEventListener('click', (event) => {
     const actionElement = event.target.closest('[data-action]');
@@ -81,8 +121,32 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
           }
           break;
 
+        case 'admin':
+          handleAdminAction(method, actionElement);
+          break;
+
         default:
           debug.log(`Unknown action target: ${target}`, true);
+      }
+    } catch (error) {
+      debug.log(`Action handler error: ${action} - ${error.message}`, true);
+      console.error(`Action handler error: ${action}`, error);
+    }
+  });
+
+  // Handle change events for radio/checkbox inputs with data-action
+  // (clicking label text triggers change on the input, but click event
+  // targets the label/span — closest('[data-action]') won't find the input)
+  document.addEventListener('change', (event) => {
+    const actionElement = event.target.closest('[data-action]');
+    if (!actionElement) return;
+
+    const action = actionElement.dataset.action;
+    const [target, method] = action.split('.');
+
+    try {
+      if (target === 'admin') {
+        handleAdminAction(method, actionElement);
       }
     } catch (error) {
       debug.log(`Action handler error: ${action} - ${error.message}`, true);
