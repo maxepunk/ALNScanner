@@ -234,7 +234,13 @@ describe('OrchestratorClient - Dumb Pipe', () => {
         'gm:command:ack',
         'offline:queue:processed',
         'batch:ack',
-        'error'
+        'error',
+        'bluetooth:device',
+        'bluetooth:scan',
+        'audio:routing',
+        'audio:routing:fallback',
+        'lighting:scene',
+        'lighting:status'
       ];
 
       messageTypes.forEach(type => {

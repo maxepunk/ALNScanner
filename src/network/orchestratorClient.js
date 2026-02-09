@@ -257,7 +257,13 @@ export class OrchestratorClient extends EventTarget {
       'offline:queue:processed',
       'batch:ack',
       'error',
-      'player:scan'  // Phase 3: Unified Game Activity - player scan broadcasts
+      'player:scan',  // Phase 3: Unified Game Activity - player scan broadcasts
+      'bluetooth:device',        // Phase 0: Environment Control - BT device state changes
+      'bluetooth:scan',          // Phase 0: Environment Control - BT scan start/stop
+      'audio:routing',           // Phase 0: Environment Control - audio route changes
+      'audio:routing:fallback',  // Phase 0: Environment Control - audio HDMI fallback
+      'lighting:scene',          // Phase 0: Environment Control - scene activated
+      'lighting:status'          // Phase 0: Environment Control - HA connection/scene refresh
     ];
 
     messageTypes.forEach(type => {
