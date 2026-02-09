@@ -133,6 +133,30 @@ export class MonitoringDisplay {
         this._handleTransactionDeleted(payload);
         break;
 
+      case 'bluetooth:device':
+        this._handleBluetoothDevice(payload);
+        break;
+
+      case 'bluetooth:scan':
+        this._handleBluetoothScan(payload);
+        break;
+
+      case 'audio:routing':
+        this._handleAudioRouting(payload);
+        break;
+
+      case 'audio:routing:fallback':
+        this._handleAudioFallback(payload);
+        break;
+
+      case 'lighting:scene':
+        this._handleLightingScene(payload);
+        break;
+
+      case 'lighting:status':
+        this._handleLightingStatus(payload);
+        break;
+
       case 'sync:full':
         this.updateAllDisplays(payload);
         break;
@@ -282,6 +306,180 @@ export class MonitoringDisplay {
     }
 
     Debug.log(`[MonitoringDisplay] Display mode updated: ${payload.mode}`);
+  }
+
+  // ============================================
+  // ENVIRONMENT CONTROL HANDLERS
+  // ============================================
+
+  /**
+   * Handle bluetooth device state change
+   * @param {Object} payload - { address, name, connected, event }
+   */
+  _handleBluetoothDevice(payload) {
+    if (!payload) return;
+    Debug.log(`[MonitoringDisplay] bluetooth:device: ${payload.event} ${payload.address}`);
+
+    const list = document.getElementById('bt-device-list');
+    if (!list) return;
+
+    if (payload.event === 'paired' || payload.event === 'connected') {
+      // Add or update device in list
+      let item = list.querySelector(`[data-bt-address="${payload.address}"]`);
+      if (!item) {
+        item = document.createElement('div');
+        item.className = 'bt-device-item';
+        item.dataset.btAddress = payload.address;
+        list.appendChild(item);
+      }
+      const connectedClass = payload.connected ? 'bt-connected' : '';
+      item.innerHTML = `
+        <span class="bt-device-name ${connectedClass}">${this.escapeHtml(payload.name || payload.address)}</span>
+        <span class="bt-device-status">${payload.connected ? 'Connected' : 'Paired'}</span>
+      `;
+    } else if (payload.event === 'disconnected') {
+      const item = list.querySelector(`[data-bt-address="${payload.address}"]`);
+      if (item) {
+        const statusEl = item.querySelector('.bt-device-status');
+        if (statusEl) statusEl.textContent = 'Paired';
+        const nameEl = item.querySelector('.bt-device-name');
+        if (nameEl) nameEl.classList.remove('bt-connected');
+      }
+    } else if (payload.event === 'unpaired') {
+      const item = list.querySelector(`[data-bt-address="${payload.address}"]`);
+      if (item) item.remove();
+    }
+
+    this._updateBtSpeakerCount();
+  }
+
+  /**
+   * Handle bluetooth scan state change
+   * @param {Object} payload - { scanning, event }
+   */
+  _handleBluetoothScan(payload) {
+    if (!payload) return;
+    Debug.log(`[MonitoringDisplay] bluetooth:scan: ${payload.event}`);
+
+    const scanBtn = document.getElementById('btn-bt-scan');
+    const scanSpinner = document.getElementById('bt-scan-spinner');
+
+    if (payload.scanning) {
+      if (scanBtn) {
+        scanBtn.textContent = 'Stop Scan';
+        scanBtn.dataset.action = 'admin.stopBtScan';
+      }
+      if (scanSpinner) scanSpinner.style.display = 'inline-block';
+    } else {
+      if (scanBtn) {
+        scanBtn.textContent = 'Scan for Speakers';
+        scanBtn.dataset.action = 'admin.startBtScan';
+      }
+      if (scanSpinner) scanSpinner.style.display = 'none';
+    }
+  }
+
+  /**
+   * Handle audio routing change
+   * @param {Object} payload - { stream, sink }
+   */
+  _handleAudioRouting(payload) {
+    if (!payload) return;
+    Debug.log(`[MonitoringDisplay] audio:routing: ${payload.stream} -> ${payload.sink}`);
+
+    // Update radio button selection
+    const radios = document.querySelectorAll('input[name="audioOutput"]');
+    radios.forEach(radio => {
+      if (payload.sink && payload.sink.startsWith('bluez_sink')) {
+        radio.checked = radio.value === 'bluetooth';
+      } else {
+        radio.checked = radio.value === 'hdmi';
+      }
+    });
+
+    // Hide fallback warning when routing succeeds
+    const btWarning = document.getElementById('bt-warning');
+    if (btWarning) btWarning.style.display = 'none';
+  }
+
+  /**
+   * Handle audio fallback to HDMI
+   * @param {Object} payload - { stream, reason, sink }
+   */
+  _handleAudioFallback(payload) {
+    if (!payload) return;
+    Debug.log(`[MonitoringDisplay] audio:routing:fallback: ${payload.reason}`);
+
+    // Show warning toast
+    const btWarning = document.getElementById('bt-warning');
+    if (btWarning) {
+      btWarning.textContent = `Audio fell back to HDMI: ${payload.reason || 'unknown'}`;
+      btWarning.style.display = 'block';
+    }
+
+    // Reset radio to HDMI
+    const hdmiRadio = document.querySelector('input[name="audioOutput"][value="hdmi"]');
+    if (hdmiRadio) hdmiRadio.checked = true;
+  }
+
+  /**
+   * Handle lighting scene activated
+   * @param {Object} payload - { sceneId }
+   */
+  _handleLightingScene(payload) {
+    if (!payload) return;
+    Debug.log(`[MonitoringDisplay] lighting:scene: ${payload.sceneId}`);
+
+    const tiles = document.querySelectorAll('.scene-tile');
+    tiles.forEach(tile => {
+      tile.classList.toggle('scene-tile--active', tile.dataset.sceneId === payload.sceneId);
+    });
+  }
+
+  /**
+   * Handle lighting status update (connection change or scene refresh)
+   * @param {Object} payload - { connected, scenes, activeScene }
+   */
+  _handleLightingStatus(payload) {
+    if (!payload) return;
+    Debug.log(`[MonitoringDisplay] lighting:status: connected=${payload.connected}`);
+
+    const notConnected = document.getElementById('lighting-not-connected');
+    const sceneGrid = document.getElementById('scene-grid');
+
+    if (!payload.connected) {
+      if (notConnected) notConnected.style.display = 'block';
+      if (sceneGrid) sceneGrid.style.display = 'none';
+      return;
+    }
+
+    if (notConnected) notConnected.style.display = 'none';
+    if (sceneGrid) sceneGrid.style.display = 'grid';
+
+    // Rebuild scene grid if scenes provided
+    if (payload.scenes && sceneGrid) {
+      sceneGrid.innerHTML = payload.scenes.map(scene => {
+        const isActive = scene.id === payload.activeScene;
+        return `<button class="scene-tile ${isActive ? 'scene-tile--active' : ''}"
+                        data-scene-id="${this.escapeHtml(scene.id)}"
+                        data-action="admin.activateScene">
+                  ${this.escapeHtml(scene.name)}
+                </button>`;
+      }).join('');
+    }
+  }
+
+  /**
+   * Update BT speaker count badge
+   * @private
+   */
+  _updateBtSpeakerCount() {
+    const list = document.getElementById('bt-device-list');
+    const badge = document.getElementById('bt-speaker-count');
+    if (list && badge) {
+      const count = list.querySelectorAll('.bt-device-item').length;
+      badge.textContent = count > 0 ? String(count) : '';
+    }
   }
 
   // ============================================
@@ -721,7 +919,59 @@ export class MonitoringDisplay {
       this.updateDeviceList(syncData.devices);
     }
 
+    // Update environment state (Phase 0: Environment Control)
+    if (syncData.environment) {
+      this._updateEnvironmentFromSync(syncData.environment);
+    }
+
     this.updateSystemDisplay();
+  }
+
+  /**
+   * Update all environment displays from sync:full payload
+   * @param {Object} environment - { bluetooth, audio, lighting }
+   * @private
+   */
+  _updateEnvironmentFromSync(environment) {
+    // Bluetooth devices
+    if (environment.bluetooth) {
+      const list = document.getElementById('bt-device-list');
+      if (list) {
+        list.innerHTML = '';
+        const allDevices = environment.bluetooth.pairedDevices || [];
+        allDevices.forEach(device => {
+          this._handleBluetoothDevice({
+            address: device.address,
+            name: device.name,
+            connected: device.connected,
+            event: device.connected ? 'connected' : 'paired'
+          });
+        });
+      }
+
+      // Update scan state
+      this._handleBluetoothScan({
+        scanning: environment.bluetooth.scanning,
+        event: environment.bluetooth.scanning ? 'started' : 'stopped'
+      });
+    }
+
+    // Audio routing
+    if (environment.audio?.routes?.video) {
+      this._handleAudioRouting({
+        stream: 'video',
+        sink: environment.audio.routes.video.sink
+      });
+    }
+
+    // Lighting
+    if (environment.lighting) {
+      this._handleLightingStatus({
+        connected: environment.lighting.connected,
+        scenes: environment.lighting.scenes,
+        activeScene: environment.lighting.activeScene
+      });
+    }
   }
 
   /**
