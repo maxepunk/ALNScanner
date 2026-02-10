@@ -305,7 +305,7 @@ Example: 5-star Technical token = $150,000 × 5 = $750,000
 - Persists in localStorage
 - Prevents token sharing between teams
 
-**Implementation (app.js:729-733):**
+**Implementation (app.js `processNFCRead`):**
 ```javascript
 if (this.dataManager.isTokenScanned(tokenId)) {
     this.debug.log(`Duplicate token detected: ${tokenId}`, true);
@@ -328,10 +328,13 @@ ALNScanner/
 │   │   ├── adminController.js
 │   │   ├── sessionModeManager.js
 │   │   └── initializationSteps.js
-│   ├── admin/             # Admin panel modules (Phase 2/3 refactor)
+│   ├── admin/             # Admin panel modules (Phase 2/3 + Phase 0 Environment)
 │   │   ├── AdminOperations.js
+│   │   ├── AudioController.js      # Audio routing (HDMI/BT)
+│   │   ├── BluetoothController.js  # BT speaker management
 │   │   ├── DisplayController.js    # HDMI display mode toggling
-│   │   ├── MonitoringDisplay.js
+│   │   ├── LightingController.js   # Home Assistant scenes
+│   │   ├── MonitoringDisplay.js    # Game Activity + environment status
 │   │   ├── SessionManager.js
 │   │   ├── SystemMonitor.js
 │   │   ├── VideoController.js
@@ -358,7 +361,7 @@ ALNScanner/
 │   │   ├── settings.js
 │   │   ├── ScreenUpdateManager.js  # Phase 3: Centralized event routing
 │   │   └── connectionWizard.js
-│   ├── styles/            # CSS architecture (Phase 1 refactor)
+│   ├── styles/            # CSS architecture (Phase 1 refactor + environment.css)
 │   └── utils/             # Utilities
 │       ├── config.js
 │       ├── debug.js
@@ -430,7 +433,7 @@ ALNScanner/
 
 **Network Layer ([src/network/](src/network/)):**
 - [orchestratorClient.js](src/network/orchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
-- **GOTCHA**: `orchestratorClient.js:_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner
+- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list includes environment control events: `bluetooth:device`, `bluetooth:scan`, `audio:routing`, `audio:routing:fallback`, `lighting:scene`, `lighting:status`
 - [connectionManager.js](src/network/connectionManager.js) - Auth, connection state, retry logic
 - [networkedSession.js](src/network/networkedSession.js) - Service factory and lifecycle orchestrator
 - [networkedQueueManager.js](src/network/networkedQueueManager.js) - Offline transaction queue
@@ -445,13 +448,16 @@ ALNScanner/
 **Services Layer ([src/services/](src/services/)):**
 - [StateValidationService.js](src/services/StateValidationService.js) - Validates JWT token, orchestrator reachability, and session existence before restoring networked mode (prevents stale cache issues)
 
-**Admin Layer ([src/admin/](src/admin/)) - Phase 2/3 Refactor:**
-- [MonitoringDisplay.js](src/admin/MonitoringDisplay.js) - Game Activity display (player discoveries + GM transactions)
+**Admin Layer ([src/admin/](src/admin/)) - Phase 2/3 Refactor + Phase 0 Environment:**
+- [MonitoringDisplay.js](src/admin/MonitoringDisplay.js) - Game Activity display + environment status handlers
 - [SessionManager.js](src/admin/SessionManager.js) - Session create/pause/resume/end
 - [VideoController.js](src/admin/VideoController.js) - Video queue management
 - [DisplayController.js](src/admin/DisplayController.js) - HDMI display mode toggling (idle loop vs scoreboard)
 - [SystemMonitor.js](src/admin/SystemMonitor.js) - Health checks, system status
 - [AdminOperations.js](src/admin/AdminOperations.js) - Admin action coordination
+- [AudioController.js](src/admin/AudioController.js) - Audio routing control (HDMI/Bluetooth via PipeWire)
+- [BluetoothController.js](src/admin/BluetoothController.js) - BT speaker scan/pair/connect/disconnect
+- [LightingController.js](src/admin/LightingController.js) - Home Assistant scene activation/refresh
 
 **Utils Layer ([src/utils/](src/utils/)):**
 - [jwtUtils.js](src/utils/jwtUtils.js) - Shared JWT token validation (expiry check with 60s buffer)
@@ -542,7 +548,7 @@ screenUpdateManager.registerContainer('admin-score-board', {
 
 **Key Files:**
 - `src/ui/ScreenUpdateManager.js` - The manager class
-- `src/main.js:84-259` - Registration and wiring
+- `src/main.js` (ScreenUpdateManager section) - Registration and wiring
 
 ## Transaction Flow
 
@@ -622,6 +628,9 @@ screenUpdateManager.registerContainer('admin-score-board', {
 - `score:updated` - Team score changed (mapped to internal `team-score:updated` event)
 - `gm:command:ack` - Command response (success/failure)
 - `device:connected` / `device:disconnected` - Device tracking
+- `bluetooth:device` / `bluetooth:scan` - BT device state and scan status
+- `audio:routing` / `audio:routing:fallback` - Audio route changes and HDMI fallback
+- `lighting:scene` / `lighting:status` - Scene activation and HA connection status
 
 **Event Envelope Pattern (AsyncAPI Decision #2):**
 ```javascript
@@ -730,6 +739,18 @@ socket.emit('gm:command', {
 
 **Video List:**
 - Populated from `GET /api/videos` (backend's video directory)
+
+### Environment Controllers (Phase 0)
+
+Three controllers manage venue environment via `gm:command` WebSocket commands. All use `CommandSender.sendCommand()` (one-time ack listeners, no persistent state).
+
+**BluetoothController:** Scan for speakers, pair/unpair, connect/disconnect. Events: `bluetooth:device`, `bluetooth:scan`.
+
+**AudioController:** Route VLC audio between HDMI and Bluetooth sinks. Events: `audio:routing`, `audio:routing:fallback`.
+
+**LightingController:** Activate Home Assistant scenes, refresh scene list. Events: `lighting:scene`, `lighting:status`.
+
+**MonitoringDisplay** handles all environment status display updates (BT device list, audio routing indicator, lighting scene list). Uses `data-action` attributes wired in `domEventBindings.js`.
 
 ### SystemMonitor
 
