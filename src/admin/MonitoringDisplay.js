@@ -534,17 +534,21 @@ export class MonitoringDisplay {
       return;
     }
 
-    grid.innerHTML = quickFireCues.map(cue => `
+    grid.innerHTML = quickFireCues.map(cue => {
+      const icon = cue.icon || 'default';
+      const label = cue.label || cue.id;
+      return `
       <button
-        class="cue-tile cue-tile--${cue.icon || 'default'}"
+        class="cue-tile cue-tile--${icon}"
         data-action="admin.fireCue"
         data-cue-id="${this.escapeHtml(cue.id)}"
-        title="${this.escapeHtml(cue.label || cue.id)}"
+        title="${this.escapeHtml(label)}"
       >
-        <span class="cue-tile__icon cue-icon--${cue.icon || 'default'}"></span>
-        <span class="cue-tile__label">${this.escapeHtml(cue.label || cue.id)}</span>
+        <span class="cue-tile__icon cue-icon--${icon}"></span>
+        <span class="cue-tile__label">${this.escapeHtml(label)}</span>
       </button>
-    `).join('');
+    `;
+    }).join('');
   }
 
   /**
@@ -599,7 +603,7 @@ export class MonitoringDisplay {
     if (!clockDisplay) return;
 
     const { state, elapsed } = payload;
-    const formattedTime = this.formatDuration(elapsed);
+    const formattedTime = this.formatClockTime(elapsed);
 
     clockDisplay.textContent = formattedTime;
 
@@ -834,7 +838,7 @@ export class MonitoringDisplay {
   }
 
   _renderSetupSession(session) {
-    const createdTime = session.createdAt ? new Date(session.createdAt).toLocaleString() : 'Unknown';
+    const createdTime = session.startTime ? new Date(session.startTime).toLocaleString() : 'Unknown';
     const teamCount = session.teams?.length || 0;
 
     return `
@@ -1239,27 +1243,30 @@ export class MonitoringDisplay {
   }
 
   /**
-   * Format duration in ms to human readable
-   * Also handles seconds input for game clock (Phase 1)
+   * Format elapsed seconds as HH:MM:SS for game clock display
+   * @param {number} seconds - Elapsed time in seconds
+   * @returns {string} Formatted time string
    */
-  formatDuration(input) {
-    if (input === null || input === undefined || input < 0) return 'Unknown';
+  formatClockTime(seconds) {
+    if (seconds === null || seconds === undefined || seconds < 0) return '00:00:00';
+    const totalSeconds = Math.floor(seconds);
+    const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+    const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+    const s = String(totalSeconds % 60).padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  }
 
-    // If input is < 10000, treat as seconds (game clock uses seconds)
-    // Otherwise treat as milliseconds (session duration)
-    const seconds = input < 10000 ? Math.floor(input) : Math.floor(input / 1000);
+  /**
+   * Format duration in milliseconds to human readable
+   * @param {number} ms - Duration in milliseconds
+   * @returns {string} Formatted duration string
+   */
+  formatDuration(ms) {
+    if (ms === null || ms === undefined || ms < 0) return 'Unknown';
+    const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
 
-    // For game clock display (HH:MM:SS format)
-    if (input < 10000) {
-      const h = String(hours).padStart(2, '0');
-      const m = String(minutes % 60).padStart(2, '0');
-      const s = String(seconds % 60).padStart(2, '0');
-      return `${h}:${m}:${s}`;
-    }
-
-    // For session duration (human-readable)
     if (hours > 0) {
       return `${hours}h ${minutes % 60}m`;
     } else if (minutes > 0) {
@@ -1276,7 +1283,13 @@ export class MonitoringDisplay {
    * @param {number} duration - Duration in milliseconds (default: 3000)
    */
   showToast(message, type = 'info', duration = 3000) {
-    // Simple toast implementation - creates a temporary div
+    const colors = {
+      error: 'var(--color-accent-danger, #dc3545)',
+      success: 'var(--color-accent-success, #28a745)',
+      warning: 'var(--color-accent-warning, #ffc107)',
+      info: 'var(--color-accent-info, #007bff)'
+    };
+
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.textContent = message;
@@ -1285,20 +1298,18 @@ export class MonitoringDisplay {
       top: 20px;
       right: 20px;
       padding: 12px 20px;
-      background: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : type === 'warning' ? '#ffc107' : '#007bff'};
+      background: ${colors[type] || colors.info};
       color: white;
       border-radius: 4px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.2);
       z-index: 10000;
       max-width: 400px;
-      animation: slideIn 0.3s ease-out;
     `;
 
     document.body.appendChild(toast);
 
     setTimeout(() => {
-      toast.style.animation = 'slideOut 0.3s ease-in';
-      setTimeout(() => toast.remove(), 300);
+      toast.remove();
     }, duration);
   }
 

@@ -266,7 +266,7 @@ export class OrchestratorClient extends EventTarget {
       'lighting:status',         // Phase 0: Environment Control - HA connection/scene refresh
       'gameclock:status',        // Phase 1: Game clock state (running/paused/stopped)
       'cue:fired',               // Phase 1: Cue triggered
-      'cue:status',              // Phase 1: Cue status update
+      'cue:status',              // Phase 2: Compound cue progress (placeholder)
       'cue:completed',           // Phase 1: Cue action sequence completed
       'cue:error',               // Phase 1: Cue action failed
       'sound:status'             // Phase 1: Sound playback status
@@ -276,9 +276,6 @@ export class OrchestratorClient extends EventTarget {
       this.socket.on(type, (envelope) => {
         // Extract payload from AsyncAPI envelope
         const payload = envelope.data || envelope;
-
-
-
         // Forward as generic message:received event
         this.dispatchEvent(new CustomEvent('message:received', {
           detail: { type, payload }
