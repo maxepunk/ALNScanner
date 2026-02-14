@@ -515,6 +515,77 @@ export class MonitoringDisplay {
   }
 
   // ============================================
+  // PHASE 1: CUE ENGINE - SHOW CONTROL RENDERING
+  // ============================================
+
+  /**
+   * Render Quick Fire grid from cue data
+   * @param {Array} cues - Cue objects from cueEngine
+   * @private
+   */
+  _renderQuickFireGrid(cues) {
+    const grid = document.getElementById('quick-fire-grid');
+    if (!grid) return;
+
+    const quickFireCues = cues.filter(cue => cue.quickFire === true);
+
+    if (quickFireCues.length === 0) {
+      grid.innerHTML = '<p class="empty-state">No Quick Fire cues available</p>';
+      return;
+    }
+
+    grid.innerHTML = quickFireCues.map(cue => `
+      <button
+        class="cue-tile cue-tile--${cue.icon || 'default'}"
+        data-action="admin.fireCue"
+        data-cue-id="${this.escapeHtml(cue.id)}"
+        title="${this.escapeHtml(cue.label || cue.id)}"
+      >
+        <span class="cue-tile__icon cue-icon--${cue.icon || 'default'}"></span>
+        <span class="cue-tile__label">${this.escapeHtml(cue.label || cue.id)}</span>
+      </button>
+    `).join('');
+  }
+
+  /**
+   * Render Standing Cues list from cue data
+   * @param {Array} cues - Cue objects from cueEngine
+   * @param {Array} disabledCues - Array of disabled cue IDs
+   * @private
+   */
+  _renderStandingCuesList(cues, disabledCues = []) {
+    const list = document.getElementById('standing-cues-list');
+    if (!list) return;
+
+    const standingCues = cues.filter(cue => cue.trigger && !cue.quickFire);
+
+    if (standingCues.length === 0) {
+      list.innerHTML = '<p class="empty-state">No standing cues configured</p>';
+      return;
+    }
+
+    list.innerHTML = standingCues.map(cue => {
+      const isDisabled = disabledCues.includes(cue.id) || cue.enabled === false;
+      const statusClass = isDisabled ? 'standing-cue-item--disabled' : 'standing-cue-item--enabled';
+
+      return `
+        <div class="standing-cue-item ${statusClass}">
+          <div class="standing-cue-item__info">
+            <span class="standing-cue-item__label">${this.escapeHtml(cue.label || cue.id)}</span>
+            <span class="standing-cue-item__trigger">${this.escapeHtml(cue.trigger)}</span>
+          </div>
+          <div class="standing-cue-item__actions">
+            ${isDisabled ?
+              `<button class="btn btn-sm btn-success" data-action="admin.enableCue" data-cue-id="${this.escapeHtml(cue.id)}">Enable</button>` :
+              `<button class="btn btn-sm btn-secondary" data-action="admin.disableCue" data-cue-id="${this.escapeHtml(cue.id)}">Disable</button>`
+            }
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ============================================
   // PHASE 1: CUE ENGINE & GAME CLOCK HANDLERS
   // ============================================
 
@@ -1066,9 +1137,14 @@ export class MonitoringDisplay {
       });
     }
 
-    // Cue engine state is informational only (no UI render yet)
-    if (syncData.cueEngine) {
+    // Update cue engine displays (Phase 1: Show Control)
+    if (syncData.cueEngine && syncData.cueEngine.loaded) {
       Debug.log(`[MonitoringDisplay] Cue engine loaded: ${syncData.cueEngine.loaded}, cues: ${syncData.cueEngine.cues?.length || 0}`);
+      this._renderQuickFireGrid(syncData.cueEngine.cues || []);
+      this._renderStandingCuesList(
+        syncData.cueEngine.cues || [],
+        syncData.cueEngine.disabledCues || []
+      );
     }
 
     this.updateSystemDisplay();

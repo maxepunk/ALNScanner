@@ -23,6 +23,27 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
       case 'startGame':
         adminController.getModule('sessionManager').startGame();
         break;
+      case 'fireCue': {
+        const cueId = actionElement.dataset.cueId;
+        if (cueId) {
+          adminController.getModule('cueController').fireCue(cueId);
+        }
+        break;
+      }
+      case 'enableCue': {
+        const cueId = actionElement.dataset.cueId;
+        if (cueId) {
+          adminController.getModule('cueController').enableCue(cueId);
+        }
+        break;
+      }
+      case 'disableCue': {
+        const cueId = actionElement.dataset.cueId;
+        if (cueId) {
+          adminController.getModule('cueController').disableCue(cueId);
+        }
+        break;
+      }
       case 'startBtScan':
         adminController.getModule('bluetoothController').startScan();
         break;

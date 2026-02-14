@@ -402,6 +402,27 @@
                 </div>
             </section>
 
+            <!-- Show Control Section (Networked mode only - Phase 1 Cue Engine) -->
+            <section class="admin-section" data-requires="networked" id="show-control-section">
+                <h3>Show Control</h3>
+
+                <!-- Quick Fire grid -->
+                <div class="subsection">
+                    <h4>Quick Fire</h4>
+                    <div id="quick-fire-grid" class="tile-grid">
+                        <!-- Populated dynamically from cueEngine.cues where quickFire: true -->
+                    </div>
+                </div>
+
+                <!-- Standing Cues -->
+                <div class="subsection">
+                    <h4>Standing Cues</h4>
+                    <div id="standing-cues-list">
+                        <!-- Populated dynamically from cueEngine.cues where trigger exists -->
+                    </div>
+                </div>
+            </section>
+
             <!-- Audio Output Section (Networked mode only - Phase 0 Environment Control) -->
             <section class="admin-section" data-requires="networked" id="audio-output-section">
                 <h3>Audio Output <span id="bt-speaker-count" class="section-badge"></span></h3>
