@@ -177,6 +177,18 @@ export class MonitoringDisplay {
         this._handleSoundStatus(payload);
         break;
 
+      case 'cue:status':
+        this._handleCueStatus(payload);
+        break;
+
+      case 'cue:conflict':
+        this._handleCueConflict(payload);
+        break;
+
+      case 'spotify:status':
+        this._handleSpotifyStatus(payload);
+        break;
+
       case 'sync:full':
         this.updateAllDisplays(payload);
         break;
@@ -589,6 +601,118 @@ export class MonitoringDisplay {
     }).join('');
   }
 
+  /**
+   * Render Active Cues list with progress bars (Phase 2: Compound Cues)
+   * @param {Array} activeCues - Array of {cueId, state, progress, duration}
+   * @private
+   */
+  _renderActiveCues(activeCues) {
+    const list = document.getElementById('active-cues-list');
+    if (!list) return;
+
+    if (!activeCues || activeCues.length === 0) {
+      list.innerHTML = '<p class="empty-state">No active cues</p>';
+      return;
+    }
+
+    list.innerHTML = activeCues.map(cue => {
+      const { cueId, state, progress, duration } = cue;
+      const progressPercent = Math.round(progress);
+      const isPaused = state === 'paused';
+
+      // Find cue label from cue engine cues if available
+      const cueLabel = this._findCueLabel(cueId) || cueId;
+
+      return `
+        <div class="active-cue-item" data-cue-id="${this.escapeHtml(cueId)}">
+          <div class="active-cue-item__header">
+            <span class="active-cue-item__label">${this.escapeHtml(cueLabel)}</span>
+            <span class="active-cue-item__state ${isPaused ? 'state-paused' : 'state-running'}">
+              ${isPaused ? 'Paused' : 'Running'}
+            </span>
+          </div>
+          <div class="active-cue-item__progress">
+            <div class="progress-bar">
+              <div class="progress-bar__fill" style="width: ${progressPercent}%"></div>
+            </div>
+            <span class="progress-bar__text">${progressPercent}% (${Math.round(progress * duration / 100)}s / ${duration}s)</span>
+          </div>
+          <div class="active-cue-item__actions">
+            ${isPaused ?
+              `<button class="btn btn-sm btn-primary" data-action="admin.resumeCue" data-cue-id="${this.escapeHtml(cueId)}">Resume</button>` :
+              `<button class="btn btn-sm btn-secondary" data-action="admin.pauseCue" data-cue-id="${this.escapeHtml(cueId)}">Pause</button>`
+            }
+            <button class="btn btn-sm btn-danger" data-action="admin.stopCue" data-cue-id="${this.escapeHtml(cueId)}">Stop</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  /**
+   * Render Now Playing section (Phase 2: Spotify)
+   * @param {Object} spotifyState - {connected, state, track, volume}
+   * @private
+   */
+  _renderNowPlaying(spotifyState) {
+    const section = document.getElementById('now-playing-section');
+    if (!section) return;
+
+    if (!spotifyState || !spotifyState.connected) {
+      section.innerHTML = `
+        <div class="now-playing now-playing--disconnected">
+          <p class="now-playing__status">Spotify: disconnected</p>
+        </div>
+      `;
+      return;
+    }
+
+    const { state, track, volume } = spotifyState;
+    const isPlaying = state === 'playing';
+    const isPaused = state === 'paused';
+    const trackTitle = track?.title || 'No track';
+    const trackArtist = track?.artist || 'Unknown artist';
+
+    section.innerHTML = `
+      <div class="now-playing now-playing--connected">
+        <div class="now-playing__header">
+          <span class="now-playing__label">Now Playing</span>
+          <span class="now-playing__state ${isPaused ? 'state-paused' : isPlaying ? 'state-playing' : 'state-stopped'}">
+            ${isPaused ? 'Paused' : isPlaying ? 'Playing' : 'Stopped'}
+          </span>
+        </div>
+        <div class="now-playing__track">
+          <span class="track-title">${this.escapeHtml(trackTitle)}</span>
+          <span class="track-artist">${this.escapeHtml(trackArtist)}</span>
+        </div>
+        <div class="now-playing__controls">
+          <button class="btn btn-sm btn-icon" data-action="admin.spotifyPrevious" title="Previous">⏮</button>
+          ${isPlaying ?
+            `<button class="btn btn-sm btn-icon" data-action="admin.spotifyPause" title="Pause">⏸</button>` :
+            `<button class="btn btn-sm btn-icon" data-action="admin.spotifyPlay" title="Play">▶</button>`
+          }
+          <button class="btn btn-sm btn-icon" data-action="admin.spotifyNext" title="Next">⏭</button>
+          <span class="volume-indicator">🔊 ${volume}%</span>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Find cue label from cue engine cues (helper for active cues display)
+   * @param {string} cueId
+   * @returns {string|null}
+   * @private
+   */
+  _findCueLabel(cueId) {
+    // Check if we have cue engine data from last sync:full
+    if (this._cueEngineCues) {
+      const cue = this._cueEngineCues.find(c => c.id === cueId);
+      return cue?.label || null;
+    }
+    return null;
+  }
+
   // ============================================
   // PHASE 1: CUE ENGINE & GAME CLOCK HANDLERS
   // ============================================
@@ -631,6 +755,12 @@ export class MonitoringDisplay {
   _handleCueCompleted(payload) {
     // Cue completion is logged but not shown to user
     Debug.log(`[MonitoringDisplay] Cue completed: ${payload.cueId}`);
+
+    // Phase 2: Remove from active cues list
+    if (this._activeCues) {
+      this._activeCues.delete(payload.cueId);
+      this._renderActiveCues(Array.from(this._activeCues.values()));
+    }
   }
 
   /**
@@ -652,6 +782,49 @@ export class MonitoringDisplay {
   _handleSoundStatus(payload) {
     // Sound status is informational - can be used for future sound indicator UI
     Debug.log(`[MonitoringDisplay] Sound status update:`, payload);
+  }
+
+  // ============================================
+  // PHASE 2: COMPOUND CUE + SPOTIFY HANDLERS
+  // ============================================
+
+  /**
+   * Handle cue:status event - update active cues list (Phase 2)
+   * @param {Object} payload - {cueId, state, progress, duration}
+   * @private
+   */
+  _handleCueStatus(payload) {
+    // Store active cues state
+    if (!this._activeCues) {
+      this._activeCues = new Map();
+    }
+
+    if (payload.state === 'running' || payload.state === 'paused') {
+      this._activeCues.set(payload.cueId, payload);
+    }
+
+    // Re-render active cues list
+    this._renderActiveCues(Array.from(this._activeCues.values()));
+  }
+
+  /**
+   * Handle cue:conflict event - show conflict toast (Phase 2)
+   * @param {Object} payload - {cueId, reason, currentVideo}
+   * @private
+   */
+  _handleCueConflict(payload) {
+    const { cueId, reason, currentVideo } = payload;
+    const message = `Cue Conflict: ${cueId} - ${reason}${currentVideo ? ` (current: ${currentVideo})` : ''}`;
+    this.showToast(message, 'warning', 10000);
+  }
+
+  /**
+   * Handle spotify:status event - update Now Playing section (Phase 2)
+   * @param {Object} payload - {connected, state, track, volume}
+   * @private
+   */
+  _handleSpotifyStatus(payload) {
+    this._renderNowPlaying(payload);
   }
 
   // ============================================
@@ -1149,6 +1322,24 @@ export class MonitoringDisplay {
         syncData.cueEngine.cues || [],
         syncData.cueEngine.disabledCues || []
       );
+
+      // Phase 2: Cache cues for label lookup in active cues
+      this._cueEngineCues = syncData.cueEngine.cues || [];
+
+      // Phase 2: Render active compound cues
+      if (syncData.cueEngine.activeCues) {
+        // Initialize active cues Map from sync data
+        this._activeCues = new Map();
+        syncData.cueEngine.activeCues.forEach(cue => {
+          this._activeCues.set(cue.cueId, cue);
+        });
+        this._renderActiveCues(syncData.cueEngine.activeCues);
+      }
+    }
+
+    // Phase 2: Render Spotify Now Playing
+    if (syncData.spotify) {
+      this._renderNowPlaying(syncData.spotify);
     }
 
     this.updateSystemDisplay();

@@ -44,6 +44,39 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
         }
         break;
       }
+      case 'pauseCue': {
+        const cueId = actionElement.dataset.cueId;
+        if (cueId) {
+          adminController.getModule('cueController').pauseCue(cueId);
+        }
+        break;
+      }
+      case 'stopCue': {
+        const cueId = actionElement.dataset.cueId;
+        if (cueId) {
+          adminController.getModule('cueController').stopCue(cueId);
+        }
+        break;
+      }
+      case 'resumeCue': {
+        const cueId = actionElement.dataset.cueId;
+        if (cueId) {
+          adminController.getModule('cueController').resumeCue(cueId);
+        }
+        break;
+      }
+      case 'spotifyPlay':
+        adminController.getModule('spotifyController').play();
+        break;
+      case 'spotifyPause':
+        adminController.getModule('spotifyController').pause();
+        break;
+      case 'spotifyNext':
+        adminController.getModule('spotifyController').next();
+        break;
+      case 'spotifyPrevious':
+        adminController.getModule('spotifyController').previous();
+        break;
       case 'startBtScan':
         adminController.getModule('bluetoothController').startScan();
         break;

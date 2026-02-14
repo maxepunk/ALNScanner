@@ -48,6 +48,40 @@ describe('CueController', () => {
     });
   });
 
+  describe('pauseCue (Phase 2)', () => {
+    it('should pause a running compound cue', async () => {
+      await controller.pauseCue('opening-sequence');
+      expect(sendCommand).toHaveBeenCalledWith(
+        mockClient, 'cue:pause', { cueId: 'opening-sequence' }, 5000
+      );
+    });
+
+    it('should accept custom timeout', async () => {
+      await controller.pauseCue('opening-sequence', 10000);
+      expect(sendCommand).toHaveBeenCalledWith(
+        mockClient, 'cue:pause', { cueId: 'opening-sequence' }, 10000
+      );
+    });
+  });
+
+  describe('stopCue (Phase 2)', () => {
+    it('should stop a running compound cue', async () => {
+      await controller.stopCue('opening-sequence');
+      expect(sendCommand).toHaveBeenCalledWith(
+        mockClient, 'cue:stop', { cueId: 'opening-sequence' }, 5000
+      );
+    });
+  });
+
+  describe('resumeCue (Phase 2)', () => {
+    it('should resume a paused compound cue', async () => {
+      await controller.resumeCue('opening-sequence');
+      expect(sendCommand).toHaveBeenCalledWith(
+        mockClient, 'cue:resume', { cueId: 'opening-sequence' }, 5000
+      );
+    });
+  });
+
   describe('destroy', () => {
     it('should clean up without error', () => {
       expect(() => controller.destroy()).not.toThrow();

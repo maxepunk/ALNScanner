@@ -50,6 +50,36 @@ export class CueController {
   }
 
   /**
+   * Pause a running compound cue (Phase 2)
+   * @param {string} cueId - Cue identifier
+   * @param {number} [timeout=5000] - Command timeout in milliseconds
+   * @returns {Promise<Object>} Command acknowledgment
+   */
+  async pauseCue(cueId, timeout = 5000) {
+    return sendCommand(this.connection, 'cue:pause', { cueId }, timeout);
+  }
+
+  /**
+   * Stop a running compound cue (Phase 2)
+   * @param {string} cueId - Cue identifier
+   * @param {number} [timeout=5000] - Command timeout in milliseconds
+   * @returns {Promise<Object>} Command acknowledgment
+   */
+  async stopCue(cueId, timeout = 5000) {
+    return sendCommand(this.connection, 'cue:stop', { cueId }, timeout);
+  }
+
+  /**
+   * Resume a paused compound cue (Phase 2)
+   * @param {string} cueId - Cue identifier
+   * @param {number} [timeout=5000] - Command timeout in milliseconds
+   * @returns {Promise<Object>} Command acknowledgment
+   */
+  async resumeCue(cueId, timeout = 5000) {
+    return sendCommand(this.connection, 'cue:resume', { cueId }, timeout);
+  }
+
+  /**
    * Cleanup (no persistent listeners)
    */
   destroy() {
