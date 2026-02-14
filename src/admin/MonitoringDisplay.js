@@ -157,6 +157,26 @@ export class MonitoringDisplay {
         this._handleLightingStatus(payload);
         break;
 
+      case 'gameclock:status':
+        this._updateGameClockDisplay(payload);
+        break;
+
+      case 'cue:fired':
+        this._handleCueFired(payload);
+        break;
+
+      case 'cue:completed':
+        this._handleCueCompleted(payload);
+        break;
+
+      case 'cue:error':
+        this._handleCueError(payload);
+        break;
+
+      case 'sound:status':
+        this._handleSoundStatus(payload);
+        break;
+
       case 'sync:full':
         this.updateAllDisplays(payload);
         break;
@@ -495,6 +515,71 @@ export class MonitoringDisplay {
   }
 
   // ============================================
+  // PHASE 1: CUE ENGINE & GAME CLOCK HANDLERS
+  // ============================================
+
+  /**
+   * Update game clock display from gameclock:status event
+   * @param {Object} payload - {state: 'running'|'paused'|'stopped', elapsed: seconds}
+   * @private
+   */
+  _updateGameClockDisplay(payload) {
+    const clockDisplay = document.getElementById('game-clock-display');
+    if (!clockDisplay) return;
+
+    const { state, elapsed } = payload;
+    const formattedTime = this.formatDuration(elapsed);
+
+    clockDisplay.textContent = formattedTime;
+
+    // Update clock state styling
+    clockDisplay.classList.remove('clock-running', 'clock-paused', 'clock-stopped');
+    clockDisplay.classList.add(`clock-${state}`);
+  }
+
+  /**
+   * Handle cue:fired event - show toast notification
+   * @param {Object} payload - {cueId, trigger, source}
+   * @private
+   */
+  _handleCueFired(payload) {
+    const { cueId, trigger } = payload;
+    const message = `Cue Fired: ${cueId}${trigger ? ` (${trigger})` : ''}`;
+    this.showToast(message, 'info', 3000);
+  }
+
+  /**
+   * Handle cue:completed event (silent acknowledgment)
+   * @param {Object} payload - {cueId}
+   * @private
+   */
+  _handleCueCompleted(payload) {
+    // Cue completion is logged but not shown to user
+    Debug.log(`[MonitoringDisplay] Cue completed: ${payload.cueId}`);
+  }
+
+  /**
+   * Handle cue:error event - show error toast
+   * @param {Object} payload - {cueId, action, position, error}
+   * @private
+   */
+  _handleCueError(payload) {
+    const { cueId, action, error } = payload;
+    const message = `Cue Error: ${cueId} - ${action} failed: ${error}`;
+    this.showToast(message, 'error', 5000);
+  }
+
+  /**
+   * Handle sound:status event - update sound playback indicator
+   * @param {Object} payload - {playing: [{file, target, volume, pid}, ...]}
+   * @private
+   */
+  _handleSoundStatus(payload) {
+    // Sound status is informational - can be used for future sound indicator UI
+    Debug.log(`[MonitoringDisplay] Sound status update:`, payload);
+  }
+
+  // ============================================
   // DISPLAY UPDATE METHODS
   // ============================================
 
@@ -594,6 +679,12 @@ export class MonitoringDisplay {
       return;
     }
 
+    // Setup session state (Phase 1: before game starts)
+    if (session.status === 'setup') {
+      container.innerHTML = this._renderSetupSession(session);
+      return;
+    }
+
     // Paused session state
     if (session.status === 'paused') {
       container.innerHTML = this._renderPausedSession(session);
@@ -671,6 +762,34 @@ export class MonitoringDisplay {
     `;
   }
 
+  _renderSetupSession(session) {
+    const createdTime = session.createdAt ? new Date(session.createdAt).toLocaleString() : 'Unknown';
+    const teamCount = session.teams?.length || 0;
+
+    return `
+      <div class="session-status session-status--setup">
+        <h4 class="session-status__header">
+          <span class="session-status__icon">🎬</span>
+          <span>Session Ready</span>
+        </h4>
+        <div class="session-status__details">
+          <p class="session-status__name">${this.escapeHtml(session.name || 'Session')}</p>
+          <p class="session-status__meta">Created: ${this.escapeHtml(createdTime)}</p>
+          <p class="session-status__meta">Teams: ${teamCount}</p>
+          <p class="session-status__hint">Ready to start the game</p>
+        </div>
+        <div class="session-status__actions">
+          <button class="btn btn-success" data-action="admin.startGame">
+            🚀 Start Game
+          </button>
+          <button class="btn btn-danger" data-action="app.adminEndSession">
+            Cancel Session
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   _renderActiveSession(session) {
     const startTime = session.startTime ? new Date(session.startTime).toLocaleString() : 'Unknown';
     const totalScans = session.metadata?.totalScans || 0;
@@ -705,6 +824,9 @@ export class MonitoringDisplay {
         <div class="session-status__details">
           <p class="session-status__meta">Started: ${this.escapeHtml(startTime)}</p>
           <p class="session-status__meta">Total Scans: ${totalScans}</p>
+          <p class="session-status__meta">
+            Game Clock: <span id="game-clock-display" class="game-clock">00:00:00</span>
+          </p>
           <p class="session-status__meta">Status: <span class="status-active">Active</span></p>
         </div>
         <div class="session-status__actions">
@@ -936,6 +1058,19 @@ export class MonitoringDisplay {
       this._updateEnvironmentFromSync(syncData.environment);
     }
 
+    // Update game clock (Phase 1: Cue Engine)
+    if (syncData.gameClock) {
+      this._updateGameClockDisplay({
+        state: syncData.gameClock.status,
+        elapsed: syncData.gameClock.elapsed
+      });
+    }
+
+    // Cue engine state is informational only (no UI render yet)
+    if (syncData.cueEngine) {
+      Debug.log(`[MonitoringDisplay] Cue engine loaded: ${syncData.cueEngine.loaded}, cues: ${syncData.cueEngine.cues?.length || 0}`);
+    }
+
     this.updateSystemDisplay();
   }
 
@@ -1029,13 +1164,26 @@ export class MonitoringDisplay {
 
   /**
    * Format duration in ms to human readable
+   * Also handles seconds input for game clock (Phase 1)
    */
-  formatDuration(ms) {
-    if (!ms || ms < 0) return 'Unknown';
-    const seconds = Math.floor(ms / 1000);
+  formatDuration(input) {
+    if (input === null || input === undefined || input < 0) return 'Unknown';
+
+    // If input is < 10000, treat as seconds (game clock uses seconds)
+    // Otherwise treat as milliseconds (session duration)
+    const seconds = input < 10000 ? Math.floor(input) : Math.floor(input / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
 
+    // For game clock display (HH:MM:SS format)
+    if (input < 10000) {
+      const h = String(hours).padStart(2, '0');
+      const m = String(minutes % 60).padStart(2, '0');
+      const s = String(seconds % 60).padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    // For session duration (human-readable)
     if (hours > 0) {
       return `${hours}h ${minutes % 60}m`;
     } else if (minutes > 0) {
@@ -1043,6 +1191,39 @@ export class MonitoringDisplay {
     } else {
       return `${seconds}s`;
     }
+  }
+
+  /**
+   * Show a toast notification
+   * @param {string} message - Message to display
+   * @param {string} type - Toast type ('info', 'error', 'success', 'warning')
+   * @param {number} duration - Duration in milliseconds (default: 3000)
+   */
+  showToast(message, type = 'info', duration = 3000) {
+    // Simple toast implementation - creates a temporary div
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    toast.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      background: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : type === 'warning' ? '#ffc107' : '#007bff'};
+      color: white;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 10000;
+      max-width: 400px;
+      animation: slideIn 0.3s ease-out;
+    `;
+
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.animation = 'slideOut 0.3s ease-in';
+      setTimeout(() => toast.remove(), 300);
+    }, duration);
   }
 
   /**

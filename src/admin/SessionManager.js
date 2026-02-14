@@ -57,6 +57,16 @@ export class SessionManager {
   }
 
   /**
+   * Start the game (transition from setup to active)
+   * Phase 1: Cue Engine integration
+   * @returns {Promise<Object>} Start response
+   */
+  async startGame() {
+    if (!this.currentSession) return;
+    return sendCommand(this.connection, 'session:start', {});
+  }
+
+  /**
    * Pause the current session
    * @returns {Promise<Object>} Pause response
    */

@@ -20,6 +20,9 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
     }
 
     switch (method) {
+      case 'startGame':
+        adminController.getModule('sessionManager').startGame();
+        break;
       case 'startBtScan':
         adminController.getModule('bluetoothController').startScan();
         break;
