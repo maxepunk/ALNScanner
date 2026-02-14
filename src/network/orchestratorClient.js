@@ -266,10 +266,12 @@ export class OrchestratorClient extends EventTarget {
       'lighting:status',         // Phase 0: Environment Control - HA connection/scene refresh
       'gameclock:status',        // Phase 1: Game clock state (running/paused/stopped)
       'cue:fired',               // Phase 1: Cue triggered
-      'cue:status',              // Phase 2: Compound cue progress (placeholder)
+      'cue:status',              // Phase 2: Compound cue progress
       'cue:completed',           // Phase 1: Cue action sequence completed
       'cue:error',               // Phase 1: Cue action failed
-      'sound:status'             // Phase 1: Sound playback status
+      'cue:conflict',            // Phase 2: Compound cue video conflict detection
+      'sound:status',            // Phase 1: Sound playback status
+      'spotify:status'           // Phase 2: Spotify playback status
     ];
 
     messageTypes.forEach(type => {
