@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-02-07
+Last verified: 2026-02-14
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -433,7 +433,7 @@ ALNScanner/
 
 **Network Layer ([src/network/](src/network/)):**
 - [orchestratorClient.js](src/network/orchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
-- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list includes environment control events: `bluetooth:device`, `bluetooth:scan`, `audio:routing`, `audio:routing:fallback`, `lighting:scene`, `lighting:status`
+- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list includes environment control events (`bluetooth:device`, `bluetooth:scan`, `audio:routing`, `audio:routing:fallback`, `lighting:scene`, `lighting:status`) and Phase 1 events (`gameclock:status`, `cue:fired`, `cue:completed`, `cue:error`, `sound:status`, `cue:status`)
 - [connectionManager.js](src/network/connectionManager.js) - Auth, connection state, retry logic
 - [networkedSession.js](src/network/networkedSession.js) - Service factory and lifecycle orchestrator
 - [networkedQueueManager.js](src/network/networkedQueueManager.js) - Offline transaction queue
@@ -750,7 +750,17 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 **LightingController:** Activate Home Assistant scenes, refresh scene list. Events: `lighting:scene`, `lighting:status`.
 
-**MonitoringDisplay** handles all environment status display updates (BT device list, audio routing indicator, lighting scene list). Uses `data-action` attributes wired in `domEventBindings.js`.
+### Show Control (Phase 1)
+
+**CueController (`src/admin/CueController.js`):** Fire cues manually, enable/disable standing cues. Sends `cue:fire`, `cue:enable`, `cue:disable` via `gm:command`.
+
+**SoundController (`src/admin/SoundController.js`):** Play/stop sounds. Sends `sound:play`, `sound:stop` via `gm:command`.
+
+**SessionManager updates:** Added `startGame()` method for `session:start` command. Sessions now created in `setup` state, requiring explicit start.
+
+**MonitoringDisplay updates:** Game clock display (elapsed time), cue/sound event toast notifications, Quick Fire cue grid, Standing Cues list with enable/disable toggles.
+
+**MonitoringDisplay** handles all environment and show control status display updates (BT device list, audio routing indicator, lighting scene list, game clock, cues, sounds). Uses `data-action` attributes wired in `domEventBindings.js`.
 
 ### SystemMonitor
 
