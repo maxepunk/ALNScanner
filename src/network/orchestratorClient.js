@@ -263,7 +263,13 @@ export class OrchestratorClient extends EventTarget {
       'audio:routing',           // Phase 0: Environment Control - audio route changes
       'audio:routing:fallback',  // Phase 0: Environment Control - audio HDMI fallback
       'lighting:scene',          // Phase 0: Environment Control - scene activated
-      'lighting:status'          // Phase 0: Environment Control - HA connection/scene refresh
+      'lighting:status',         // Phase 0: Environment Control - HA connection/scene refresh
+      'gameclock:status',        // Phase 1: Game clock state (running/paused/stopped)
+      'cue:fired',               // Phase 1: Cue triggered
+      'cue:status',              // Phase 1: Cue status update
+      'cue:completed',           // Phase 1: Cue action sequence completed
+      'cue:error',               // Phase 1: Cue action failed
+      'sound:status'             // Phase 1: Sound playback status
     ];
 
     messageTypes.forEach(type => {
