@@ -421,6 +421,21 @@
                         <!-- Populated dynamically from cueEngine.cues where trigger exists -->
                     </div>
                 </div>
+
+                <!-- Active Compound Cues (Phase 2 - populated by MonitoringDisplay) -->
+                <div class="subsection">
+                    <h4>Active Cues</h4>
+                    <div id="active-cues-list">
+                        <!-- Populated dynamically by MonitoringDisplay._renderActiveCues() -->
+                    </div>
+                </div>
+
+                <!-- Now Playing / Spotify Status (Phase 2 - populated by MonitoringDisplay) -->
+                <div class="subsection">
+                    <div id="now-playing-section">
+                        <!-- Populated dynamically by MonitoringDisplay._renderNowPlaying() -->
+                    </div>
+                </div>
             </section>
 
             <!-- Audio Output Section (Networked mode only - Phase 0 Environment Control) -->

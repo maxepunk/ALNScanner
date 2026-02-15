@@ -1409,6 +1409,12 @@ export class MonitoringDisplay {
 
     this.updateSystemDisplay();
     this.loadAvailableVideos();
+
+    // Request fresh state to restore game clock, active cues, and spotify displays
+    // (updateSessionDisplay re-renders the template, clearing dynamic state)
+    if (this._currentSession?.status === 'active') {
+      this._requestInitialState();
+    }
   }
 
   /**
