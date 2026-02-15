@@ -753,7 +753,7 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 **BluetoothController:** Scan for speakers, pair/unpair, connect/disconnect. Events: `bluetooth:device`, `bluetooth:scan`.
 
-**AudioController:** Route VLC audio between HDMI and Bluetooth sinks. Events: `audio:routing`, `audio:routing:fallback`.
+**AudioController:** Route audio streams between HDMI, Bluetooth, and combine-bt sinks. Phase 3: per-stream routing dropdowns (video/spotify/sound independently routable). Events: `audio:routing`, `audio:routing:fallback`.
 
 **LightingController:** Activate Home Assistant scenes, refresh scene list. Events: `lighting:scene`, `lighting:status`.
 
@@ -767,7 +767,7 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 **MonitoringDisplay updates:** Game clock display (elapsed time), cue/sound event toast notifications, Quick Fire cue grid, Standing Cues list with enable/disable toggles.
 
-**MonitoringDisplay** handles all environment and show control status display updates (BT device list, audio routing indicator, lighting scene list, game clock, cues, sounds). Uses `data-action` attributes wired in `domEventBindings.js`. Phase 2 additions: `_handleCueStatus()` renders active cues with progress bars and pause/resume/stop buttons (`#active-cues-list` container, `.active-cue-item[data-cue-id]` elements), `_handleCueConflict()` shows video conflict alerts, `_handleSpotifyStatus()` + `_renderNowPlaying()` show Spotify connection state in `#now-playing-section`.
+**MonitoringDisplay** handles all environment and show control status display updates (BT device list, audio routing indicator, lighting scene list, game clock, cues, sounds). Uses `data-action` attributes wired in `domEventBindings.js`. Phase 2 additions: `_handleCueStatus()` renders active cues with progress bars and pause/resume/stop buttons (`#active-cues-list` container, `.active-cue-item[data-cue-id]` elements), `_handleCueConflict()` shows video conflict alerts, `_handleSpotifyStatus()` + `_renderNowPlaying()` show Spotify connection state in `#now-playing-section`. Phase 3 additions: `_renderAudioRoutingDropdowns(audioData)` renders per-stream routing dropdowns (video/spotify/sound) replacing the single radio-button toggle. Dropdown container: `#audio-routing-dropdowns`. Each dropdown sends `audio:route:set` with `{stream, sink}`.
 
 **GOTCHA**: `MonitoringDisplay.refreshAllDisplays()` re-renders the template, destroying dynamic DOM state (active cue elements, now-playing). It calls `_requestInitialState()` afterward to restore state from the backend.
 
