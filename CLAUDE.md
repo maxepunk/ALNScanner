@@ -338,6 +338,7 @@ ALNScanner/
 │   │   ├── MonitoringDisplay.js    # Game Activity + environment + show control status
 │   │   ├── SessionManager.js
 │   │   ├── SoundController.js      # Phase 1: Sound playback control
+│   │   ├── SpotifyController.js   # Phase 2: Spotify status display
 │   │   ├── SystemMonitor.js
 │   │   ├── VideoController.js
 │   │   └── utils/
@@ -435,7 +436,7 @@ ALNScanner/
 
 **Network Layer ([src/network/](src/network/)):**
 - [orchestratorClient.js](src/network/orchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
-- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list includes environment control events (`bluetooth:device`, `bluetooth:scan`, `audio:routing`, `audio:routing:fallback`, `lighting:scene`, `lighting:status`) and Phase 1 events (`gameclock:status`, `cue:fired`, `cue:completed`, `cue:error`, `sound:status`, `cue:status`)
+- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list includes environment control events (`bluetooth:device`, `bluetooth:scan`, `audio:routing`, `audio:routing:fallback`, `lighting:scene`, `lighting:status`), Phase 1 events (`gameclock:status`, `cue:fired`, `cue:completed`, `cue:error`, `sound:status`, `cue:status`), and Phase 2 events (`cue:conflict`, `spotify:status`)
 - [connectionManager.js](src/network/connectionManager.js) - Auth, connection state, retry logic
 - [networkedSession.js](src/network/networkedSession.js) - Service factory and lifecycle orchestrator
 - [networkedQueueManager.js](src/network/networkedQueueManager.js) - Offline transaction queue
@@ -460,6 +461,7 @@ ALNScanner/
 - [AudioController.js](src/admin/AudioController.js) - Audio routing control (HDMI/Bluetooth via PipeWire)
 - [BluetoothController.js](src/admin/BluetoothController.js) - BT speaker scan/pair/connect/disconnect
 - [LightingController.js](src/admin/LightingController.js) - Home Assistant scene activation/refresh
+- [SpotifyController.js](src/admin/SpotifyController.js) - Spotify status display in admin panel (Phase 2)
 
 **Utils Layer ([src/utils/](src/utils/)):**
 - [jwtUtils.js](src/utils/jwtUtils.js) - Shared JWT token validation (expiry check with 60s buffer)
@@ -633,6 +635,9 @@ screenUpdateManager.registerContainer('admin-score-board', {
 - `bluetooth:device` / `bluetooth:scan` - BT device state and scan status
 - `audio:routing` / `audio:routing:fallback` - Audio route changes and HDMI fallback
 - `lighting:scene` / `lighting:status` - Scene activation and HA connection status
+- `cue:status` - Compound cue lifecycle (running/paused/stopped with progress)
+- `cue:conflict` - Video conflict detected during compound cue
+- `spotify:status` - Spotify playback state (connected, state, volume, pausedByGameClock)
 
 **Event Envelope Pattern (AsyncAPI Decision #2):**
 ```javascript
@@ -762,7 +767,9 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 **MonitoringDisplay updates:** Game clock display (elapsed time), cue/sound event toast notifications, Quick Fire cue grid, Standing Cues list with enable/disable toggles.
 
-**MonitoringDisplay** handles all environment and show control status display updates (BT device list, audio routing indicator, lighting scene list, game clock, cues, sounds). Uses `data-action` attributes wired in `domEventBindings.js`.
+**MonitoringDisplay** handles all environment and show control status display updates (BT device list, audio routing indicator, lighting scene list, game clock, cues, sounds). Uses `data-action` attributes wired in `domEventBindings.js`. Phase 2 additions: `_handleCueStatus()` renders active cues with progress bars and pause/resume/stop buttons (`#active-cues-list` container, `.active-cue-item[data-cue-id]` elements), `_handleCueConflict()` shows video conflict alerts, `_handleSpotifyStatus()` + `_renderNowPlaying()` show Spotify connection state in `#now-playing-section`.
+
+**GOTCHA**: `MonitoringDisplay.refreshAllDisplays()` re-renders the template, destroying dynamic DOM state (active cue elements, now-playing). It calls `_requestInitialState()` afterward to restore state from the backend.
 
 ### SystemMonitor
 
