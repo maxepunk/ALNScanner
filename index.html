@@ -438,27 +438,18 @@
                 </div>
             </section>
 
-            <!-- Audio Output Section (Networked mode only - Phase 0 Environment Control) -->
+            <!-- Audio Output Section (Networked mode only - Phase 3 Per-Stream Routing) -->
             <section class="admin-section" data-requires="networked" id="audio-output-section">
                 <h3>Audio Output <span id="bt-speaker-count" class="section-badge"></span></h3>
 
-                <!-- Video Audio Route Toggle -->
-                <div class="audio-output-toggle">
-                    <label class="radio-toggle">
-                        <input type="radio" name="audioOutput" value="hdmi" checked
-                               data-action="admin.setAudioRoute" data-stream="video">
-                        <span>HDMI</span>
-                    </label>
-                    <label class="radio-toggle">
-                        <input type="radio" name="audioOutput" value="bluetooth"
-                               data-action="admin.setAudioRoute" data-stream="video">
-                        <span>Bluetooth</span>
-                    </label>
+                <!-- Per-Stream Routing Dropdowns (Phase 3: populated by MonitoringDisplay) -->
+                <div id="audio-routing-dropdowns">
+                    <!-- Dynamically rendered by MonitoringDisplay._renderAudioRoutingDropdowns() -->
                 </div>
 
                 <!-- BT Fallback Warning (hidden by default) -->
                 <div id="bt-warning" class="alert alert-warning" style="display:none;">
-                    No Bluetooth speaker connected — video audio will use HDMI
+                    No Bluetooth speaker connected — audio will use HDMI
                 </div>
 
                 <!-- Bluetooth Speakers -->

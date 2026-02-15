@@ -342,26 +342,22 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
   // audio:routing HANDLER
   // ============================================
 
-  describe('audio:routing handler', () => {
-    let hdmiRadio;
-    let btRadio;
+  describe('audio:routing handler (Phase 3: per-stream dropdowns)', () => {
+    let videoDropdown;
     let btWarning;
 
     beforeEach(() => {
-      // Create radio buttons
-      hdmiRadio = document.createElement('input');
-      hdmiRadio.type = 'radio';
-      hdmiRadio.name = 'audioOutput';
-      hdmiRadio.value = 'hdmi';
-      hdmiRadio.checked = true;
-      document.body.appendChild(hdmiRadio);
-
-      btRadio = document.createElement('input');
-      btRadio.type = 'radio';
-      btRadio.name = 'audioOutput';
-      btRadio.value = 'bluetooth';
-      btRadio.checked = false;
-      document.body.appendChild(btRadio);
+      // Create per-stream dropdown (Phase 3 UI)
+      videoDropdown = document.createElement('select');
+      videoDropdown.dataset.stream = 'video';
+      videoDropdown.dataset.action = 'admin.setAudioRoute';
+      videoDropdown.innerHTML = `
+        <option value="hdmi">HDMI</option>
+        <option value="bluez_output.AA_BB_CC_DD_EE_FF.1">BT Speaker</option>
+        <option value="bluetooth">Bluetooth</option>
+      `;
+      videoDropdown.value = 'hdmi';
+      document.body.appendChild(videoDropdown);
 
       btWarning = document.createElement('div');
       btWarning.id = 'bt-warning';
@@ -369,43 +365,37 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       document.body.appendChild(btWarning);
     });
 
-    it('should select bluetooth radio when sinkType is bluetooth (routing:applied)', () => {
+    it('should update dropdown to BT sink when routing:applied received', () => {
       dispatchMessage('audio:routing', {
         stream: 'video',
         sink: 'bluez_output.AA_BB_CC_DD_EE_FF.1',
         sinkType: 'bluetooth'
       });
 
-      expect(btRadio.checked).toBe(true);
-      expect(hdmiRadio.checked).toBe(false);
+      expect(videoDropdown.value).toBe('bluez_output.AA_BB_CC_DD_EE_FF.1');
     });
 
-    it('should select bluetooth radio from logical name (routing:changed)', () => {
+    it('should update dropdown from logical sink name (routing:changed)', () => {
       dispatchMessage('audio:routing', {
         stream: 'video',
         sink: 'bluetooth'
       });
 
-      expect(btRadio.checked).toBe(true);
-      expect(hdmiRadio.checked).toBe(false);
+      expect(videoDropdown.value).toBe('bluetooth');
     });
 
-    it('should select hdmi radio when sinkType is hdmi', () => {
+    it('should update dropdown to hdmi when sinkType is hdmi', () => {
       // First switch to bluetooth
-      dispatchMessage('audio:routing', {
-        stream: 'video',
-        sink: 'bluetooth'
-      });
+      videoDropdown.value = 'bluetooth';
 
       // Then switch to HDMI
       dispatchMessage('audio:routing', {
         stream: 'video',
-        sink: 'alsa_output.hdmi-stereo',
+        sink: 'hdmi',
         sinkType: 'hdmi'
       });
 
-      expect(hdmiRadio.checked).toBe(true);
-      expect(btRadio.checked).toBe(false);
+      expect(videoDropdown.value).toBe('hdmi');
     });
 
     it('should hide fallback warning when routing succeeds', () => {
@@ -432,9 +422,6 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
           sink: null
         });
       }).not.toThrow();
-
-      // Should default to HDMI when sink is null
-      expect(hdmiRadio.checked).toBe(true);
     });
   });
 
@@ -442,10 +429,9 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
   // audio:routing:fallback HANDLER
   // ============================================
 
-  describe('audio:routing:fallback handler', () => {
+  describe('audio:routing:fallback handler (Phase 3: per-stream dropdowns)', () => {
     let btWarning;
-    let hdmiRadio;
-    let btRadio;
+    let videoDropdown;
 
     beforeEach(() => {
       btWarning = document.createElement('div');
@@ -453,25 +439,22 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       btWarning.style.display = 'none';
       document.body.appendChild(btWarning);
 
-      hdmiRadio = document.createElement('input');
-      hdmiRadio.type = 'radio';
-      hdmiRadio.name = 'audioOutput';
-      hdmiRadio.value = 'hdmi';
-      document.body.appendChild(hdmiRadio);
-
-      btRadio = document.createElement('input');
-      btRadio.type = 'radio';
-      btRadio.name = 'audioOutput';
-      btRadio.value = 'bluetooth';
-      btRadio.checked = true;
-      document.body.appendChild(btRadio);
+      // Create per-stream dropdown (Phase 3 UI)
+      videoDropdown = document.createElement('select');
+      videoDropdown.dataset.stream = 'video';
+      videoDropdown.innerHTML = `
+        <option value="hdmi">HDMI</option>
+        <option value="bluetooth">Bluetooth</option>
+      `;
+      videoDropdown.value = 'bluetooth';
+      document.body.appendChild(videoDropdown);
     });
 
     it('should show warning with reason text', () => {
       dispatchMessage('audio:routing:fallback', {
         stream: 'video',
         reason: 'Bluetooth speaker disconnected',
-        sink: 'alsa_output.hdmi-stereo'
+        sink: 'hdmi'
       });
 
       expect(btWarning.style.display).toBe('block');
@@ -482,20 +465,20 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       dispatchMessage('audio:routing:fallback', {
         stream: 'video',
         reason: null,
-        sink: 'alsa_output.hdmi-stereo'
+        sink: 'hdmi'
       });
 
       expect(btWarning.textContent).toContain('unknown');
     });
 
-    it('should reset radio selection to HDMI', () => {
+    it('should update dropdown to fallback sink', () => {
       dispatchMessage('audio:routing:fallback', {
         stream: 'video',
         reason: 'Speaker lost',
-        sink: 'alsa_output.hdmi-stereo'
+        sink: 'hdmi'
       });
 
-      expect(hdmiRadio.checked).toBe(true);
+      expect(videoDropdown.value).toBe('hdmi');
     });
 
     it('should not throw with null payload', () => {
@@ -506,8 +489,7 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
 
     it('should not throw when DOM elements are missing', () => {
       btWarning.remove();
-      hdmiRadio.remove();
-      btRadio.remove();
+      videoDropdown.remove();
 
       expect(() => {
         dispatchMessage('audio:routing:fallback', {
@@ -728,8 +710,6 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
     let scanSpinner;
     let sceneGrid;
     let notConnected;
-    let hdmiRadio;
-    let btRadio;
 
     beforeEach(() => {
       // BT device list
@@ -752,19 +732,10 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       scanSpinner.style.display = 'none';
       document.body.appendChild(scanSpinner);
 
-      // Audio radios
-      hdmiRadio = document.createElement('input');
-      hdmiRadio.type = 'radio';
-      hdmiRadio.name = 'audioOutput';
-      hdmiRadio.value = 'hdmi';
-      hdmiRadio.checked = true;
-      document.body.appendChild(hdmiRadio);
-
-      btRadio = document.createElement('input');
-      btRadio.type = 'radio';
-      btRadio.name = 'audioOutput';
-      btRadio.value = 'bluetooth';
-      document.body.appendChild(btRadio);
+      // Audio routing dropdowns container (Phase 3)
+      const audioRoutingContainer = document.createElement('div');
+      audioRoutingContainer.id = 'audio-routing-dropdowns';
+      document.body.appendChild(audioRoutingContainer);
 
       // Lighting section
       const lightingSection = document.createElement('div');
@@ -815,20 +786,27 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       expect(btSpeakerCount.textContent).toBe('2');
     });
 
-    it('should update audio routing radio from sync:full', () => {
+    it('should render per-stream routing dropdowns from sync:full (Phase 3)', () => {
       dispatchMessage('sync:full', {
         session: null,
         environment: {
           audio: {
             routes: {
-              video: { sink: 'bluetooth' }
-            }
+              video: { sink: 'bluetooth', fallback: 'hdmi' },
+              spotify: { sink: 'hdmi', fallback: 'hdmi' },
+              sound: { sink: 'hdmi', fallback: 'hdmi' }
+            },
+            availableSinks: [
+              { name: 'hdmi', label: 'HDMI' },
+              { name: 'bluetooth', label: 'Bluetooth' }
+            ]
           }
         }
       });
 
-      expect(btRadio.checked).toBe(true);
-      expect(hdmiRadio.checked).toBe(false);
+      const videoDropdown = document.querySelector('[data-stream="video"]');
+      expect(videoDropdown).not.toBeNull();
+      expect(videoDropdown.value).toBe('bluetooth');
     });
 
     it('should update lighting status from sync:full', () => {

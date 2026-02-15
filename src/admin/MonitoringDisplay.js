@@ -417,25 +417,20 @@ export class MonitoringDisplay {
   }
 
   /**
-   * Handle audio routing change
+   * Handle audio routing change (Phase 3: per-stream dropdowns)
    * @param {Object} payload - { stream, sink, sinkType? }
-   *   routing:changed sends { stream, sink } (user's literal input)
-   *   routing:applied sends { stream, sink, sinkType } (resolved)
    */
   _handleAudioRouting(payload) {
     if (!payload) return;
     Debug.log(`[MonitoringDisplay] audio:routing: ${payload.stream} -> ${payload.sink} (type: ${payload.sinkType || 'unknown'})`);
 
-    // Use sinkType when available (from routing:applied), fall back to sink name
-    const isBluetooth = payload.sinkType
-      ? payload.sinkType === 'bluetooth'
-      : payload.sink === 'bluetooth';
-
-    // Update radio button selection
-    const radios = document.querySelectorAll('input[name="audioOutput"]');
-    radios.forEach(radio => {
-      radio.checked = radio.value === (isBluetooth ? 'bluetooth' : 'hdmi');
-    });
+    // Phase 3: Update per-stream dropdown selection
+    if (payload.stream) {
+      const dropdown = document.querySelector(`select[data-stream="${payload.stream}"]`);
+      if (dropdown) {
+        dropdown.value = payload.sink;
+      }
+    }
 
     // Hide fallback warning when routing succeeds
     const btWarning = document.getElementById('bt-warning');
@@ -443,7 +438,7 @@ export class MonitoringDisplay {
   }
 
   /**
-   * Handle audio fallback to HDMI
+   * Handle audio fallback (Phase 3: update per-stream dropdown)
    * @param {Object} payload - { stream, reason, sink }
    */
   _handleAudioFallback(payload) {
@@ -457,9 +452,13 @@ export class MonitoringDisplay {
       btWarning.style.display = 'block';
     }
 
-    // Reset radio to HDMI
-    const hdmiRadio = document.querySelector('input[name="audioOutput"][value="hdmi"]');
-    if (hdmiRadio) hdmiRadio.checked = true;
+    // Phase 3: Update affected stream dropdown to fallback sink
+    if (payload.stream) {
+      const dropdown = document.querySelector(`select[data-stream="${payload.stream}"]`);
+      if (dropdown && payload.sink) {
+        dropdown.value = payload.sink;
+      }
+    }
   }
 
   /**
@@ -524,6 +523,57 @@ export class MonitoringDisplay {
       const count = list.querySelectorAll('.bt-device-item').length;
       badge.textContent = count > 0 ? String(count) : '';
     }
+  }
+
+  // ============================================
+  // PHASE 3: PER-STREAM AUDIO ROUTING DROPDOWNS
+  // ============================================
+
+  /**
+   * Stream display labels for the routing dropdowns
+   * @private
+   */
+  static STREAM_LABELS = {
+    video: 'Video Audio',
+    spotify: 'Spotify Music',
+    sound: 'Sound Effects'
+  };
+
+  /**
+   * Render per-stream audio routing dropdowns from environment.audio data
+   * Replaces Phase 0 HDMI/Bluetooth radio buttons with three <select> dropdowns.
+   * @param {Object} audioData - { routes: {...}, availableSinks: [...] }
+   * @private
+   */
+  _renderAudioRoutingDropdowns(audioData) {
+    const container = document.getElementById('audio-routing-dropdowns');
+    if (!container) return;
+
+    const routes = audioData.routes || {};
+    const sinks = audioData.availableSinks || [];
+    const streams = ['video', 'spotify', 'sound'];
+
+    container.innerHTML = streams.map(stream => {
+      const currentSink = routes[stream]?.sink || '';
+      const label = MonitoringDisplay.STREAM_LABELS[stream] || stream;
+
+      const options = sinks.map(sink => {
+        const selected = sink.name === currentSink ? ' selected' : '';
+        return `<option value="${this.escapeHtml(sink.name)}"${selected}>${this.escapeHtml(sink.label)}</option>`;
+      }).join('');
+
+      return `
+        <div class="audio-route-row">
+          <label class="audio-route-label" for="audio-route-${stream}">${this.escapeHtml(label)}</label>
+          <select id="audio-route-${stream}"
+                  class="audio-route-select"
+                  data-stream="${stream}"
+                  data-action="admin.setAudioRoute">
+            ${options}
+          </select>
+        </div>
+      `;
+    }).join('');
   }
 
   // ============================================
@@ -1371,12 +1421,9 @@ export class MonitoringDisplay {
       });
     }
 
-    // Audio routing
-    if (environment.audio?.routes?.video) {
-      this._handleAudioRouting({
-        stream: 'video',
-        sink: environment.audio.routes.video.sink
-      });
+    // Audio routing (Phase 3: per-stream dropdowns)
+    if (environment.audio) {
+      this._renderAudioRoutingDropdowns(environment.audio);
     }
 
     // Lighting
