@@ -358,7 +358,23 @@ export class MonitoringDisplay {
     const list = document.getElementById('bt-device-list');
     if (!list) return;
 
-    if (type === 'paired' || type === 'connected') {
+    if (type === 'discovered') {
+      // Show discovered device with Pair button (hide empty state)
+      const emptyState = list.querySelector('.empty-state');
+      if (emptyState) emptyState.style.display = 'none';
+
+      let item = list.querySelector(`[data-bt-address="${device.address}"]`);
+      if (!item) {
+        item = document.createElement('div');
+        item.className = 'bt-device-item bt-device-item--discovered';
+        item.dataset.btAddress = device.address;
+        list.appendChild(item);
+      }
+      item.innerHTML = `
+        <span class="bt-device-name">${this.escapeHtml(device.name || device.address)}</span>
+        <button class="btn btn-xs" data-action="admin.pairBtDevice" data-bt-address="${device.address}">Pair</button>
+      `;
+    } else if (type === 'paired' || type === 'connected') {
       // Add or update device in list
       let item = list.querySelector(`[data-bt-address="${device.address}"]`);
       if (!item) {
@@ -371,7 +387,10 @@ export class MonitoringDisplay {
       item.className = isConnected ? 'bt-device-item bt-device-item--connected' : 'bt-device-item';
       item.innerHTML = `
         <span class="bt-device-name">${this.escapeHtml(device.name || device.address)}</span>
-        <span class="bt-device-status">${isConnected ? 'Connected' : 'Paired'}</span>
+        ${isConnected
+          ? '<span class="bt-device-status">Connected</span>'
+          : `<button class="btn btn-xs" data-action="admin.connectBtDevice" data-bt-address="${device.address}">Connect</button>`
+        }
       `;
     } else if (type === 'disconnected') {
       const item = list.querySelector(`[data-bt-address="${device.address}"]`);
@@ -384,7 +403,6 @@ export class MonitoringDisplay {
       const item = list.querySelector(`[data-bt-address="${device.address}"]`);
       if (item) item.remove();
     }
-    // 'discovered' events are intentionally ignored in Phase 0 — future scan results UI
 
     this._updateBtSpeakerCount();
   }
@@ -402,6 +420,13 @@ export class MonitoringDisplay {
     const scanSpinner = document.getElementById('bt-scan-status');
 
     if (payload.scanning) {
+      // Clear discovered (unpaired) devices from previous scan
+      const list = document.getElementById('bt-device-list');
+      if (list) {
+        list.querySelectorAll('.bt-device-item--discovered').forEach(el => el.remove());
+        const emptyState = list.querySelector('.empty-state');
+        if (emptyState) emptyState.style.display = '';
+      }
       if (scanBtn) {
         scanBtn.textContent = 'Stop Scan';
         scanBtn.dataset.action = 'admin.stopBtScan';
@@ -558,7 +583,7 @@ export class MonitoringDisplay {
       const label = MonitoringDisplay.STREAM_LABELS[stream] || stream;
 
       const options = sinks.map(sink => {
-        const selected = sink.name === currentSink ? ' selected' : '';
+        const selected = (sink.name === currentSink || sink.type === currentSink) ? ' selected' : '';
         return `<option value="${this.escapeHtml(sink.name)}"${selected}>${this.escapeHtml(sink.label)}</option>`;
       }).join('');
 
@@ -642,9 +667,9 @@ export class MonitoringDisplay {
           </div>
           <div class="standing-cue-item__actions">
             ${isDisabled ?
-              `<button class="btn btn-sm btn-success" data-action="admin.enableCue" data-cue-id="${this.escapeHtml(cue.id)}">Enable</button>` :
-              `<button class="btn btn-sm btn-secondary" data-action="admin.disableCue" data-cue-id="${this.escapeHtml(cue.id)}">Disable</button>`
-            }
+          `<button class="btn btn-sm btn-success" data-action="admin.enableCue" data-cue-id="${this.escapeHtml(cue.id)}">Enable</button>` :
+          `<button class="btn btn-sm btn-secondary" data-action="admin.disableCue" data-cue-id="${this.escapeHtml(cue.id)}">Disable</button>`
+        }
           </div>
         </div>
       `;
@@ -689,9 +714,9 @@ export class MonitoringDisplay {
           </div>
           <div class="active-cue-item__actions">
             ${isPaused ?
-              `<button class="btn btn-sm btn-primary" data-action="admin.resumeCue" data-cue-id="${this.escapeHtml(cueId)}">Resume</button>` :
-              `<button class="btn btn-sm btn-secondary" data-action="admin.pauseCue" data-cue-id="${this.escapeHtml(cueId)}">Pause</button>`
-            }
+          `<button class="btn btn-sm btn-primary" data-action="admin.resumeCue" data-cue-id="${this.escapeHtml(cueId)}">Resume</button>` :
+          `<button class="btn btn-sm btn-secondary" data-action="admin.pauseCue" data-cue-id="${this.escapeHtml(cueId)}">Pause</button>`
+        }
             <button class="btn btn-sm btn-danger" data-action="admin.stopCue" data-cue-id="${this.escapeHtml(cueId)}">Stop</button>
           </div>
         </div>
@@ -738,9 +763,9 @@ export class MonitoringDisplay {
         <div class="now-playing__controls">
           <button class="btn btn-sm btn-icon" data-action="admin.spotifyPrevious" title="Previous">⏮</button>
           ${isPlaying ?
-            `<button class="btn btn-sm btn-icon" data-action="admin.spotifyPause" title="Pause">⏸</button>` :
-            `<button class="btn btn-sm btn-icon" data-action="admin.spotifyPlay" title="Play">▶</button>`
-          }
+        `<button class="btn btn-sm btn-icon" data-action="admin.spotifyPause" title="Pause">⏸</button>` :
+        `<button class="btn btn-sm btn-icon" data-action="admin.spotifyPlay" title="Play">▶</button>`
+      }
           <button class="btn btn-sm btn-icon" data-action="admin.spotifyNext" title="Next">⏭</button>
           <span class="volume-indicator">🔊 ${volume}%</span>
         </div>
@@ -858,14 +883,52 @@ export class MonitoringDisplay {
   }
 
   /**
-   * Handle cue:conflict event - show conflict toast (Phase 2)
-   * @param {Object} payload - {cueId, reason, currentVideo}
+   * Handle cue:conflict event - show interactive conflict banner (Phase 2)
+   * Displays Override/Cancel buttons for GM resolution.
+   * Auto-dismisses after autoCancelMs (mirrors backend auto-cancel timer).
+   * @param {Object} payload - {cueId, reason, currentVideo, autoCancelMs}
    * @private
    */
   _handleCueConflict(payload) {
-    const { cueId, reason, currentVideo } = payload;
-    const message = `Cue Conflict: ${cueId} - ${reason}${currentVideo ? ` (current: ${currentVideo})` : ''}`;
-    this.showToast(message, 'warning', 10000);
+    const { cueId, reason, currentVideo, autoCancelMs = 10000 } = payload;
+    const cueLabel = this._findCueLabel(cueId) || cueId;
+
+    // Render conflict banner in a dedicated container (above active cues)
+    const container = document.getElementById('cue-conflict-container');
+    if (!container) {
+      // Fallback to toast if container not in DOM
+      const message = `Cue Conflict: ${cueId} - ${reason}${currentVideo ? ` (current: ${currentVideo})` : ''}`;
+      this.showToast(message, 'warning', autoCancelMs);
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="cue-conflict-banner" data-cue-id="${this.escapeHtml(cueId)}">
+        <div class="cue-conflict-banner__info">
+          <span class="cue-conflict-banner__icon">⚠️</span>
+          <div class="cue-conflict-banner__text">
+            <strong>Video Conflict</strong>
+            <p>"${this.escapeHtml(cueLabel)}" wants to play video, but "${this.escapeHtml(currentVideo || 'a video')}" is playing.</p>
+          </div>
+        </div>
+        <div class="cue-conflict-banner__actions">
+          <button class="btn btn-sm btn-warning"
+                  data-action="admin.resolveConflictCue"
+                  data-cue-id="${this.escapeHtml(cueId)}"
+                  data-decision="override">Override</button>
+          <button class="btn btn-sm btn-secondary"
+                  data-action="admin.resolveConflictCue"
+                  data-cue-id="${this.escapeHtml(cueId)}"
+                  data-decision="cancel">Cancel</button>
+        </div>
+      </div>
+    `;
+
+    // Auto-dismiss after autoCancelMs (mirrors backend auto-cancel timer)
+    setTimeout(() => {
+      const banner = container.querySelector(`[data-cue-id="${cueId}"]`);
+      if (banner) banner.remove();
+    }, autoCancelMs);
   }
 
   /**

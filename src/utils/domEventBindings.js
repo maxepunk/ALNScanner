@@ -65,6 +65,14 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
         }
         break;
       }
+      case 'resolveConflictCue': {
+        const cueId = actionElement.dataset.cueId;
+        const decision = actionElement.dataset.decision;
+        if (cueId && decision) {
+          adminController.getModule('cueController').resolveConflict(cueId, decision);
+        }
+        break;
+      }
       case 'spotifyPlay':
         adminController.getModule('spotifyController').play();
         break;
@@ -83,6 +91,16 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
       case 'stopBtScan':
         adminController.getModule('bluetoothController').stopScan();
         break;
+      case 'pairBtDevice': {
+        const address = actionElement.dataset.btAddress;
+        if (address) adminController.getModule('bluetoothController').pairDevice(address);
+        break;
+      }
+      case 'connectBtDevice': {
+        const address = actionElement.dataset.btAddress;
+        if (address) adminController.getModule('bluetoothController').connectDevice(address);
+        break;
+      }
       case 'setAudioRoute': {
         const stream = actionElement.dataset.stream || 'video';
         const sink = actionElement.value;
@@ -121,7 +139,7 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
     const [target, method] = action.split('.');
 
     try {
-      switch(target) {
+      switch (target) {
         case 'app':
           if (typeof app[method] === 'function') {
             app[method](arg);

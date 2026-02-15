@@ -80,6 +80,17 @@ export class CueController {
   }
 
   /**
+   * Resolve a video conflict for a pending compound cue (Phase 2)
+   * @param {string} cueId - Conflicted cue identifier
+   * @param {string} decision - 'override' (stop video, start cue) or 'cancel' (discard cue)
+   * @param {number} [timeout=5000] - Command timeout in milliseconds
+   * @returns {Promise<Object>} Command acknowledgment
+   */
+  async resolveConflict(cueId, decision, timeout = 5000) {
+    return sendCommand(this.connection, 'cue:conflict:resolve', { cueId, decision }, timeout);
+  }
+
+  /**
    * Cleanup (no persistent listeners)
    */
   destroy() {

@@ -75,6 +75,70 @@
 }
 
 /* ============================================
+   CUE CONFLICT BANNER - Override/Cancel UI
+   Phase 2: Shown when compound cue has video conflict
+   ============================================ */
+.cue-conflict-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: rgba(245, 158, 11, 0.12);
+  border: var(--border-width) solid rgba(245, 158, 11, 0.4);
+  border-left: 3px solid var(--color-accent-warning);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-3);
+  animation: conflict-slide-in var(--duration-normal) var(--ease-default);
+}
+
+.cue-conflict-banner__info {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex: 1;
+}
+
+.cue-conflict-banner__icon {
+  font-size: var(--text-lg);
+  flex-shrink: 0;
+}
+
+.cue-conflict-banner__text {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+
+.cue-conflict-banner__text strong {
+  display: block;
+  color: var(--color-accent-warning);
+  margin-bottom: var(--space-1);
+}
+
+.cue-conflict-banner__text p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.cue-conflict-banner__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+@keyframes conflict-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================
    BLUETOOTH SPEAKERS HEADER
    ============================================ */
 .bt-speakers-header {
@@ -150,6 +214,17 @@
 .bt-device-item--connected .bt-device-status {
   color: var(--color-accent-success);
   font-weight: var(--weight-semibold);
+}
+
+/* Discovered state - dim accent, shown during scan results */
+.bt-device-item--discovered {
+  border-left-color: var(--color-border);
+  opacity: 0.85;
+}
+
+.bt-device-item--discovered .btn {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-3);
 }
 
 /* ============================================
