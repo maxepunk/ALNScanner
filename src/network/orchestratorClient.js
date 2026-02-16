@@ -271,7 +271,8 @@ export class OrchestratorClient extends EventTarget {
       'cue:error',               // Phase 1: Cue action failed
       'cue:conflict',            // Phase 2: Compound cue video conflict detection
       'sound:status',            // Phase 1: Sound playback status
-      'spotify:status'           // Phase 2: Spotify playback status
+      'spotify:status',          // Phase 2: Spotify playback status
+      'audio:ducking:status'     // Phase 3: Audio ducking state change
     ];
 
     messageTypes.forEach(type => {

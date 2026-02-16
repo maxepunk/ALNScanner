@@ -240,7 +240,8 @@ describe('OrchestratorClient - Dumb Pipe', () => {
         'audio:routing',
         'audio:routing:fallback',
         'lighting:scene',
-        'lighting:status'
+        'lighting:status',
+        'audio:ducking:status'  // Phase 3: Audio ducking state change
       ];
 
       messageTypes.forEach(type => {
