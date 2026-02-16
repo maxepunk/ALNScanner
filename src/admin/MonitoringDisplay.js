@@ -257,27 +257,11 @@ export class MonitoringDisplay {
       this.teamRegistry.populateFromSession(syncData.session);
     }
 
-    // 3. Environment State
-    if (syncData.environment) {
-      if (syncData.environment.lighting) this.envRenderer.renderLighting(syncData.environment.lighting);
-      if (syncData.environment.audio) {
-        // Update DataManager, which triggers renderer via event
-        this.dataManager.updateAudioState(syncData.environment.audio);
-      }
-      if (syncData.environment.bluetooth) {
-        // Mapping for renderer structure
-        this.envRenderer.renderBluetooth({
-          scanning: syncData.environment.bluetooth.scanning,
-          // Data mapping might be required if payloads differ
-          connectedDevices: [], // Sync payload structure dependent
-          foundedDevices: [],   // Sync payload structure dependent
-          // We will rely on explicit events usually, but for sync we might need to conform
-        });
-        // Actually, _updateEnvironmentFromSync handled this mapping.
-        // Let's reimplement a light adapter here if needed.
-        this._updateEnvironmentFromSync(syncData.environment);
-      }
-    }
+    // 3. Environment State — handled by NetworkedSession → DataManager → event → renderer
+    // NetworkedSession.sync:full handler already calls:
+    //   dataManager.updateAudioState(), updateLightingState(), updateBluetoothState()
+    // which trigger events → MonitoringDisplay._wireDataManagerEvents() → renderers
+    // No direct rendering needed here.
 
     // 4. Cue Engine (Phase 1 & 2)
     if (syncData.cueEngine && syncData.cueEngine.loaded) {
@@ -344,33 +328,6 @@ export class MonitoringDisplay {
     }
   }
 
-  /**
-   * Helper to map sync env data to renderer
-   * @private
-   */
-  _updateEnvironmentFromSync(environment) {
-    // Bluetooth devices mapping
-    if (environment.bluetooth) {
-      const paired = environment.bluetooth.pairedDevices || [];
-      // This is a partial map, explicit events are better.
-      // But for sync, valid enough for list population.
-      this.envRenderer.renderBluetooth({
-        scanning: environment.bluetooth.scanning,
-        connectedDevices: paired.filter(d => d.connected),
-        foundedDevices: [] // Scan results usually ephemeral
-      });
-    }
-
-    // Audio
-    if (environment.audio) {
-      this.envRenderer.renderAudio(environment.audio);
-    }
-
-    // Lighting
-    if (environment.lighting) {
-      this.envRenderer.renderLighting(environment.lighting);
-    }
-  }
 
   /**
    * Manually refresh all displays from cached data

@@ -1,16 +1,15 @@
 /**
- * MonitoringDisplay Environment Event Handler Tests
- * Phase 0: Environment Control
+ * MonitoringDisplay Environment Tests
  *
- * Tests the 6 new environment event handlers added to MonitoringDisplay:
- * - bluetooth:device
- * - bluetooth:scan
- * - audio:routing
- * - audio:routing:fallback
- * - lighting:scene
- * - lighting:status
+ * Tests that MonitoringDisplay correctly handles environment state WITHOUT
+ * duplicate rendering. Environment rendering is now handled by:
+ * NetworkedSession → DataManager.updateXXXState() → event → MonitoringDisplay renderer
  *
- * Also tests _updateEnvironmentFromSync() for sync:full payloads.
+ * MonitoringDisplay's updateAllDisplays() should NOT duplicate these renders.
+ *
+ * NOTE: Individual environment event handler tests (bluetooth:device, lighting:status, etc.)
+ * were removed as those handlers no longer exist in MonitoringDisplay. They've been moved
+ * to NetworkedSession/DataManager event flow.
  */
 
 // Mock Debug BEFORE importing modules
@@ -22,12 +21,11 @@ jest.mock('../../../src/utils/debug.js', () => ({
 }));
 
 import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
-import Debug from '../../../src/utils/debug.js';
 
-describe('MonitoringDisplay - Environment Event Handlers', () => {
+describe('MonitoringDisplay - Environment', () => {
   let display;
   let mockClient;
-  let container;
+  let mockDataManager;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -46,933 +44,83 @@ describe('MonitoringDisplay - Environment Event Handlers', () => {
       })
     );
 
-    // Set up DOM container for test elements
-    container = document.createElement('div');
-    document.body.appendChild(container);
+    // Mock DataManager with required EventTarget methods
+    mockDataManager = {
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      updateAudioState: jest.fn()
+    };
 
     // Create the MonitoringDisplay instance
-    display = new MonitoringDisplay(mockClient, {}, null);
+    display = new MonitoringDisplay(mockClient, mockDataManager, null);
   });
 
   afterEach(() => {
-    display.destroy();
+    if (display) {
+      display.destroy();
+    }
     document.body.innerHTML = '';
   });
 
-  /**
-   * Helper to dispatch a message:received event on the mock client
-   */
-  function dispatchMessage(type, payload) {
-    mockClient.dispatchEvent(new CustomEvent('message:received', {
-      detail: { type, payload }
-    }));
-  }
-
   // ============================================
-  // bluetooth:device HANDLER
+  // updateAllDisplays - no duplicate environment renders (Task 6)
   // ============================================
 
-  describe('bluetooth:device handler', () => {
-    let btDeviceList;
+  describe('updateAllDisplays - no duplicate environment renders', () => {
+    // RATIONALE: NetworkedSession already calls dataManager.updateAudioState,
+    // updateLightingState, updateBluetoothState when handling sync:full.
+    // These methods trigger events that MonitoringDisplay listens to via
+    // _wireDataManagerEvents. updateAllDisplays should NOT duplicate these
+    // calls or directly call renderers — that causes double renders.
 
     beforeEach(() => {
-      btDeviceList = document.createElement('div');
-      btDeviceList.id = 'bt-device-list';
-      document.body.appendChild(btDeviceList);
+      // Clear mock call history from parent beforeEach
+      jest.clearAllMocks();
     });
 
-    it('should add a device on "paired" event', () => {
-      dispatchMessage('bluetooth:device', {
-        type: 'paired',
-        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
-      });
-
-      const item = btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]');
-      expect(item).not.toBeNull();
-      expect(item.querySelector('.bt-device-name').textContent).toBe('Speaker 1');
-      expect(item.querySelector('.bt-device-status').textContent).toBe('Paired');
-    });
-
-    it('should add a device on "connected" event with connected class', () => {
-      dispatchMessage('bluetooth:device', {
-        type: 'connected',
-        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
-      });
-
-      const item = btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]');
-      expect(item).not.toBeNull();
-      expect(item.classList.contains('bt-device-item--connected')).toBe(true);
-      expect(item.querySelector('.bt-device-status').textContent).toBe('Connected');
-    });
-
-    it('should update existing device instead of creating duplicate', () => {
-      // First pair
-      dispatchMessage('bluetooth:device', {
-        type: 'paired',
-        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
-      });
-
-      // Then connect same device
-      dispatchMessage('bluetooth:device', {
-        type: 'connected',
-        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
-      });
-
-      const items = btDeviceList.querySelectorAll('[data-bt-address="AA:BB:CC:DD:EE:FF"]');
-      expect(items.length).toBe(1);
-      expect(items[0].querySelector('.bt-device-status').textContent).toBe('Connected');
-    });
-
-    it('should update device status to "Paired" on disconnect', () => {
-      // First add device
-      dispatchMessage('bluetooth:device', {
-        type: 'connected',
-        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
-      });
-
-      // Then disconnect
-      dispatchMessage('bluetooth:device', {
-        type: 'disconnected',
-        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
-      });
-
-      const item = btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]');
-      expect(item).not.toBeNull();
-      expect(item.querySelector('.bt-device-status').textContent).toBe('Paired');
-      expect(item.classList.contains('bt-device-item--connected')).toBe(false);
-    });
-
-    it('should remove device on "unpaired" event', () => {
-      // First add device
-      dispatchMessage('bluetooth:device', {
-        type: 'paired',
-        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
-      });
-
-      expect(btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]')).not.toBeNull();
-
-      // Then unpair
-      dispatchMessage('bluetooth:device', {
-        type: 'unpaired',
-        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
-      });
-
-      expect(btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]')).toBeNull();
-    });
-
-    it('should use address as name when name is missing', () => {
-      dispatchMessage('bluetooth:device', {
-        type: 'paired',
-        device: { address: 'AA:BB:CC:DD:EE:FF', name: null }
-      });
-
-      const item = btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:FF"]');
-      expect(item.querySelector('.bt-device-name').textContent).toBe('AA:BB:CC:DD:EE:FF');
-    });
-
-    it('should not throw with null payload', () => {
-      expect(() => {
-        dispatchMessage('bluetooth:device', null);
-      }).not.toThrow();
-    });
-
-    it('should not throw when bt-device-list element is missing', () => {
-      btDeviceList.remove();
-
-      expect(() => {
-        dispatchMessage('bluetooth:device', {
-          type: 'paired',
-          device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker' }
-        });
-      }).not.toThrow();
-    });
-
-    it('should handle disconnect for non-existent device gracefully', () => {
-      expect(() => {
-        dispatchMessage('bluetooth:device', {
-          type: 'disconnected',
-          device: { address: 'XX:XX:XX:XX:XX:XX', name: 'Ghost' }
-        });
-      }).not.toThrow();
-    });
-  });
-
-  // ============================================
-  // _updateBtSpeakerCount HELPER
-  // ============================================
-
-  describe('_updateBtSpeakerCount', () => {
-    let btDeviceList;
-    let btSpeakerCount;
-
-    beforeEach(() => {
-      btDeviceList = document.createElement('div');
-      btDeviceList.id = 'bt-device-list';
-      document.body.appendChild(btDeviceList);
-
-      btSpeakerCount = document.createElement('span');
-      btSpeakerCount.id = 'bt-speaker-count';
-      document.body.appendChild(btSpeakerCount);
-    });
-
-    it('should update badge count after adding devices', () => {
-      dispatchMessage('bluetooth:device', {
-        type: 'paired',
-        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
-      });
-
-      expect(btSpeakerCount.textContent).toBe('1');
-    });
-
-    it('should show empty string for zero devices', () => {
-      // Add then remove device
-      dispatchMessage('bluetooth:device', {
-        type: 'paired',
-        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker 1' }
-      });
-
-      dispatchMessage('bluetooth:device', {
-        type: 'unpaired',
-        device: { address: 'AA:BB:CC:DD:EE:FF' }
-      });
-
-      expect(btSpeakerCount.textContent).toBe('');
-    });
-
-    it('should count multiple devices correctly', () => {
-      dispatchMessage('bluetooth:device', {
-        type: 'paired',
-        device: { address: 'AA:BB:CC:DD:EE:01', name: 'Speaker 1' }
-      });
-
-      dispatchMessage('bluetooth:device', {
-        type: 'paired',
-        device: { address: 'AA:BB:CC:DD:EE:02', name: 'Speaker 2' }
-      });
-
-      expect(btSpeakerCount.textContent).toBe('2');
-    });
-  });
-
-  // ============================================
-  // bluetooth:scan HANDLER
-  // ============================================
-
-  describe('bluetooth:scan handler', () => {
-    let scanBtn;
-    let scanSpinner;
-
-    beforeEach(() => {
-      scanBtn = document.createElement('button');
-      scanBtn.id = 'btn-bt-scan';
-      scanBtn.textContent = 'Scan for Speakers';
-      scanBtn.dataset.action = 'admin.startBtScan';
-      document.body.appendChild(scanBtn);
-
-      scanSpinner = document.createElement('span');
-      scanSpinner.id = 'bt-scan-status';
-      scanSpinner.style.display = 'none';
-      document.body.appendChild(scanSpinner);
-    });
-
-    it('should update button to "Stop Scan" when scanning starts', () => {
-      dispatchMessage('bluetooth:scan', {
-        scanning: true
-      });
-
-      expect(scanBtn.textContent).toBe('Stop Scan');
-      expect(scanBtn.dataset.action).toBe('admin.stopBtScan');
-    });
-
-    it('should show spinner when scanning starts', () => {
-      dispatchMessage('bluetooth:scan', {
-        scanning: true
-      });
-
-      expect(scanSpinner.style.display).toBe('inline-block');
-    });
-
-    it('should update button to "Scan for Speakers" when scanning stops', () => {
-      // Start scan first
-      dispatchMessage('bluetooth:scan', {
-        scanning: true
-      });
-
-      // Stop scan
-      dispatchMessage('bluetooth:scan', {
-        scanning: false
-      });
-
-      expect(scanBtn.textContent).toBe('Scan for Speakers');
-      expect(scanBtn.dataset.action).toBe('admin.startBtScan');
-    });
-
-    it('should hide spinner when scanning stops', () => {
-      dispatchMessage('bluetooth:scan', {
-        scanning: true
-      });
-
-      dispatchMessage('bluetooth:scan', {
-        scanning: false
-      });
-
-      expect(scanSpinner.style.display).toBe('none');
-    });
-
-    it('should not throw with null payload', () => {
-      expect(() => {
-        dispatchMessage('bluetooth:scan', null);
-      }).not.toThrow();
-    });
-
-    it('should not throw when DOM elements are missing', () => {
-      scanBtn.remove();
-      scanSpinner.remove();
-
-      expect(() => {
-        dispatchMessage('bluetooth:scan', {
-          scanning: true,
-          event: 'started'
-        });
-      }).not.toThrow();
-    });
-  });
-
-  // ============================================
-  // audio:routing HANDLER
-  // ============================================
-
-  describe('audio:routing handler (Phase 3: per-stream dropdowns)', () => {
-    let videoDropdown;
-    let btWarning;
-
-    beforeEach(() => {
-      // Create per-stream dropdown (Phase 3 UI)
-      videoDropdown = document.createElement('select');
-      videoDropdown.dataset.stream = 'video';
-      videoDropdown.dataset.action = 'admin.setAudioRoute';
-      videoDropdown.innerHTML = `
-        <option value="hdmi">HDMI</option>
-        <option value="bluez_output.AA_BB_CC_DD_EE_FF.1">BT Speaker</option>
-        <option value="bluetooth">Bluetooth</option>
-      `;
-      videoDropdown.value = 'hdmi';
-      document.body.appendChild(videoDropdown);
-
-      btWarning = document.createElement('div');
-      btWarning.id = 'bt-warning';
-      btWarning.style.display = 'none';
-      document.body.appendChild(btWarning);
-    });
-
-    it('should update dropdown to BT sink when routing:applied received', () => {
-      dispatchMessage('audio:routing', {
-        stream: 'video',
-        sink: 'bluez_output.AA_BB_CC_DD_EE_FF.1',
-        sinkType: 'bluetooth'
-      });
-
-      expect(videoDropdown.value).toBe('bluez_output.AA_BB_CC_DD_EE_FF.1');
-    });
-
-    it('should update dropdown from logical sink name (routing:changed)', () => {
-      dispatchMessage('audio:routing', {
-        stream: 'video',
-        sink: 'bluetooth'
-      });
-
-      expect(videoDropdown.value).toBe('bluetooth');
-    });
-
-    it('should update dropdown to hdmi when sinkType is hdmi', () => {
-      // First switch to bluetooth
-      videoDropdown.value = 'bluetooth';
-
-      // Then switch to HDMI
-      dispatchMessage('audio:routing', {
-        stream: 'video',
-        sink: 'hdmi',
-        sinkType: 'hdmi'
-      });
-
-      expect(videoDropdown.value).toBe('hdmi');
-    });
-
-    it('should hide fallback warning when routing succeeds', () => {
-      btWarning.style.display = 'block';
-
-      dispatchMessage('audio:routing', {
-        stream: 'video',
-        sink: 'bluetooth'
-      });
-
-      expect(btWarning.style.display).toBe('none');
-    });
-
-    it('should not throw with null payload', () => {
-      expect(() => {
-        dispatchMessage('audio:routing', null);
-      }).not.toThrow();
-    });
-
-    it('should handle null sink gracefully', () => {
-      expect(() => {
-        dispatchMessage('audio:routing', {
-          stream: 'video',
-          sink: null
-        });
-      }).not.toThrow();
-    });
-  });
-
-  // ============================================
-  // audio:routing:fallback HANDLER
-  // ============================================
-
-  describe('audio:routing:fallback handler (Phase 3: per-stream dropdowns)', () => {
-    let btWarning;
-    let videoDropdown;
-
-    beforeEach(() => {
-      btWarning = document.createElement('div');
-      btWarning.id = 'bt-warning';
-      btWarning.style.display = 'none';
-      document.body.appendChild(btWarning);
-
-      // Create per-stream dropdown (Phase 3 UI)
-      videoDropdown = document.createElement('select');
-      videoDropdown.dataset.stream = 'video';
-      videoDropdown.innerHTML = `
-        <option value="hdmi">HDMI</option>
-        <option value="bluetooth">Bluetooth</option>
-      `;
-      videoDropdown.value = 'bluetooth';
-      document.body.appendChild(videoDropdown);
-    });
-
-    it('should show warning with reason text', () => {
-      dispatchMessage('audio:routing:fallback', {
-        stream: 'video',
-        reason: 'Bluetooth speaker disconnected',
-        sink: 'hdmi'
-      });
-
-      expect(btWarning.style.display).toBe('block');
-      expect(btWarning.textContent).toContain('Bluetooth speaker disconnected');
-    });
-
-    it('should show "unknown" when reason is missing', () => {
-      dispatchMessage('audio:routing:fallback', {
-        stream: 'video',
-        reason: null,
-        sink: 'hdmi'
-      });
-
-      expect(btWarning.textContent).toContain('unknown');
-    });
-
-    it('should update dropdown to fallback sink', () => {
-      dispatchMessage('audio:routing:fallback', {
-        stream: 'video',
-        reason: 'Speaker lost',
-        sink: 'hdmi'
-      });
-
-      expect(videoDropdown.value).toBe('hdmi');
-    });
-
-    it('should not throw with null payload', () => {
-      expect(() => {
-        dispatchMessage('audio:routing:fallback', null);
-      }).not.toThrow();
-    });
-
-    it('should not throw when DOM elements are missing', () => {
-      btWarning.remove();
-      videoDropdown.remove();
-
-      expect(() => {
-        dispatchMessage('audio:routing:fallback', {
-          stream: 'video',
-          reason: 'test',
-          sink: 'hdmi'
-        });
-      }).not.toThrow();
-    });
-  });
-
-  // ============================================
-  // lighting:scene HANDLER
-  // ============================================
-
-  describe('lighting:scene handler', () => {
-    let tiles;
-
-    beforeEach(() => {
-      // Create scene tiles
-      const grid = document.createElement('div');
-      grid.id = 'lighting-scenes';
-
-      const tile1 = document.createElement('button');
-      tile1.className = 'scene-tile scene-tile--active';
-      tile1.dataset.sceneId = 'scene_pregame';
-      tile1.textContent = 'Pre-Game';
-      grid.appendChild(tile1);
-
-      const tile2 = document.createElement('button');
-      tile2.className = 'scene-tile';
-      tile2.dataset.sceneId = 'scene_gameplay';
-      tile2.textContent = 'Gameplay';
-      grid.appendChild(tile2);
-
-      const tile3 = document.createElement('button');
-      tile3.className = 'scene-tile';
-      tile3.dataset.sceneId = 'scene_endgame';
-      tile3.textContent = 'End Game';
-      grid.appendChild(tile3);
-
-      document.body.appendChild(grid);
-      tiles = grid.querySelectorAll('.scene-tile');
-    });
-
-    it('should activate the correct scene tile', () => {
-      dispatchMessage('lighting:scene', {
-        sceneId: 'scene_gameplay'
-      });
-
-      tiles = document.querySelectorAll('.scene-tile');
-      expect(tiles[0].classList.contains('scene-tile--active')).toBe(false);
-      expect(tiles[1].classList.contains('scene-tile--active')).toBe(true);
-      expect(tiles[2].classList.contains('scene-tile--active')).toBe(false);
-    });
-
-    it('should deactivate all tiles when scene does not match', () => {
-      dispatchMessage('lighting:scene', {
-        sceneId: 'nonexistent_scene'
-      });
-
-      tiles = document.querySelectorAll('.scene-tile');
-      tiles.forEach(tile => {
-        expect(tile.classList.contains('scene-tile--active')).toBe(false);
-      });
-    });
-
-    it('should not throw with null payload', () => {
-      expect(() => {
-        dispatchMessage('lighting:scene', null);
-      }).not.toThrow();
-    });
-  });
-
-  // ============================================
-  // lighting:status HANDLER
-  // ============================================
-
-  describe('lighting:status handler', () => {
-    let lightingSection;
-    let notConnected;
-    let sceneGrid;
-
-    beforeEach(() => {
-      lightingSection = document.createElement('div');
-      lightingSection.id = 'lighting-section';
-      lightingSection.style.display = 'none'; // Hidden by default in HTML
-      document.body.appendChild(lightingSection);
-
-      notConnected = document.createElement('div');
-      notConnected.id = 'lighting-not-connected';
-      notConnected.style.display = 'none';
-      lightingSection.appendChild(notConnected);
-
-      sceneGrid = document.createElement('div');
-      sceneGrid.id = 'lighting-scenes';
-      sceneGrid.style.display = 'grid';
-      lightingSection.appendChild(sceneGrid);
-    });
-
-    it('should make lighting section visible on any status event', () => {
-      expect(lightingSection.style.display).toBe('none');
-
-      dispatchMessage('lighting:status', {
-        connected: false,
-        scenes: [],
-        activeScene: null
-      });
-
-      expect(lightingSection.style.display).toBe('');
-    });
-
-    it('should show "not connected" message when disconnected', () => {
-      dispatchMessage('lighting:status', {
-        connected: false,
-        scenes: [],
-        activeScene: null
-      });
-
-      expect(notConnected.style.display).toBe('block');
-      expect(sceneGrid.style.display).toBe('none');
-    });
-
-    it('should hide "not connected" and show scene grid when connected', () => {
-      dispatchMessage('lighting:status', {
-        connected: true,
-        scenes: [
-          { id: 'scene_pregame', name: 'Pre-Game' },
-          { id: 'scene_gameplay', name: 'Gameplay' }
-        ],
-        activeScene: 'scene_pregame'
-      });
-
-      expect(notConnected.style.display).toBe('none');
-      expect(sceneGrid.style.display).toBe('grid');
-    });
-
-    it('should render scene tiles from scenes array', () => {
-      dispatchMessage('lighting:status', {
-        connected: true,
-        scenes: [
-          { id: 'scene_pregame', name: 'Pre-Game' },
-          { id: 'scene_gameplay', name: 'Gameplay' }
-        ],
-        activeScene: 'scene_pregame'
-      });
-
-      const tiles = sceneGrid.querySelectorAll('.scene-tile');
-      expect(tiles.length).toBe(2);
-      expect(tiles[0].textContent.trim()).toBe('Pre-Game');
-      expect(tiles[1].textContent.trim()).toBe('Gameplay');
-    });
-
-    it('should mark active scene tile with active class', () => {
-      dispatchMessage('lighting:status', {
-        connected: true,
-        scenes: [
-          { id: 'scene_pregame', name: 'Pre-Game' },
-          { id: 'scene_gameplay', name: 'Gameplay' }
-        ],
-        activeScene: 'scene_gameplay'
-      });
-
-      const tiles = sceneGrid.querySelectorAll('.scene-tile');
-      expect(tiles[0].classList.contains('scene-tile--active')).toBe(false);
-      expect(tiles[1].classList.contains('scene-tile--active')).toBe(true);
-    });
-
-    it('should set data-action on scene tiles', () => {
-      dispatchMessage('lighting:status', {
-        connected: true,
-        scenes: [{ id: 'scene_1', name: 'Scene 1' }],
-        activeScene: null
-      });
-
-      const tile = sceneGrid.querySelector('.scene-tile');
-      expect(tile.dataset.action).toBe('admin.activateScene');
-    });
-
-    it('should set data-scene-id on scene tiles', () => {
-      dispatchMessage('lighting:status', {
-        connected: true,
-        scenes: [{ id: 'scene_pregame', name: 'Pre-Game' }],
-        activeScene: null
-      });
-
-      const tile = sceneGrid.querySelector('.scene-tile');
-      expect(tile.dataset.sceneId).toBe('scene_pregame');
-    });
-
-    it('should not throw with null payload', () => {
-      expect(() => {
-        dispatchMessage('lighting:status', null);
-      }).not.toThrow();
-    });
-
-    it('should handle missing DOM elements gracefully', () => {
-      lightingSection.remove();
-
-      expect(() => {
-        dispatchMessage('lighting:status', {
-          connected: true,
-          scenes: [],
-          activeScene: null
-        });
-      }).not.toThrow();
-    });
-  });
-
-  // ============================================
-  // _updateEnvironmentFromSync
-  // ============================================
-
-  describe('_updateEnvironmentFromSync (via sync:full)', () => {
-    let btDeviceList;
-    let btSpeakerCount;
-    let scanBtn;
-    let scanSpinner;
-    let sceneGrid;
-    let notConnected;
-
-    beforeEach(() => {
-      // BT device list
-      btDeviceList = document.createElement('div');
-      btDeviceList.id = 'bt-device-list';
-      document.body.appendChild(btDeviceList);
-
-      btSpeakerCount = document.createElement('span');
-      btSpeakerCount.id = 'bt-speaker-count';
-      document.body.appendChild(btSpeakerCount);
-
-      // BT scan controls
-      scanBtn = document.createElement('button');
-      scanBtn.id = 'btn-bt-scan';
-      scanBtn.textContent = 'Scan for Speakers';
-      document.body.appendChild(scanBtn);
-
-      scanSpinner = document.createElement('span');
-      scanSpinner.id = 'bt-scan-status';
-      scanSpinner.style.display = 'none';
-      document.body.appendChild(scanSpinner);
-
-      // Audio routing dropdowns container (Phase 3)
-      const audioRoutingContainer = document.createElement('div');
-      audioRoutingContainer.id = 'audio-routing-dropdowns';
-      document.body.appendChild(audioRoutingContainer);
-
-      // Lighting section
-      const lightingSection = document.createElement('div');
-      lightingSection.id = 'lighting-section';
-      document.body.appendChild(lightingSection);
-
-      notConnected = document.createElement('div');
-      notConnected.id = 'lighting-not-connected';
-      notConnected.style.display = 'none';
-      lightingSection.appendChild(notConnected);
-
-      sceneGrid = document.createElement('div');
-      sceneGrid.id = 'lighting-scenes';
-      lightingSection.appendChild(sceneGrid);
-
-      // Session status container (needed by updateAllDisplays)
-      const sessionContainer = document.createElement('div');
-      sessionContainer.id = 'session-status-container';
-      document.body.appendChild(sessionContainer);
-    });
-
-    it('should populate BT devices from sync:full environment data', () => {
-      dispatchMessage('sync:full', {
-        session: null,
+    it('should NOT call dataManager.updateAudioState from updateAllDisplays', () => {
+      // NetworkedSession already calls this — updateAllDisplays should not duplicate
+      display.updateAllDisplays({
+        session: { id: 's1', status: 'active', name: 'Test' },
         environment: {
-          bluetooth: {
-            pairedDevices: [
-              { address: 'AA:BB:CC:DD:EE:01', name: 'Speaker 1', connected: true },
-              { address: 'AA:BB:CC:DD:EE:02', name: 'Speaker 2', connected: false }
-            ],
-            scanning: false
-          },
-          audio: {
-            routes: {
-              video: { sink: 'bluetooth' }
-            }
-          },
-          lighting: {
-            connected: true,
-            scenes: [{ id: 'scene_1', name: 'Scene 1' }],
-            activeScene: 'scene_1'
-          }
+          audio: { routes: { video: { sink: 'hdmi' } }, availableSinks: [] },
+          lighting: { connected: true, activeScene: null, scenes: [] },
+          bluetooth: { scanning: false, pairedDevices: [] }
         }
       });
 
-      const devices = btDeviceList.querySelectorAll('.bt-device-item');
-      expect(devices.length).toBe(2);
-      expect(btSpeakerCount.textContent).toBe('2');
+      expect(mockDataManager.updateAudioState).not.toHaveBeenCalled();
     });
 
-    it('should render per-stream routing dropdowns from sync:full (Phase 3)', () => {
-      dispatchMessage('sync:full', {
+    it('should NOT call envRenderer.renderLighting directly from updateAllDisplays', () => {
+      const renderSpy = jest.spyOn(display.envRenderer, 'renderLighting');
+
+      display.updateAllDisplays({
         session: null,
         environment: {
-          audio: {
-            routes: {
-              video: { sink: 'bluetooth', fallback: 'hdmi' },
-              spotify: { sink: 'hdmi', fallback: 'hdmi' },
-              sound: { sink: 'hdmi', fallback: 'hdmi' }
-            },
-            availableSinks: [
-              { name: 'hdmi', label: 'HDMI' },
-              { name: 'bluetooth', label: 'Bluetooth' }
-            ]
-          }
+          lighting: { connected: true, activeScene: null, scenes: [] }
         }
       });
 
-      const videoDropdown = document.querySelector('[data-stream="video"]');
-      expect(videoDropdown).not.toBeNull();
-      expect(videoDropdown.value).toBe('bluetooth');
+      expect(renderSpy).not.toHaveBeenCalled();
     });
 
-    it('should update lighting status from sync:full', () => {
-      dispatchMessage('sync:full', {
+    it('should NOT call envRenderer.renderBluetooth directly from updateAllDisplays', () => {
+      const renderSpy = jest.spyOn(display.envRenderer, 'renderBluetooth');
+
+      display.updateAllDisplays({
         session: null,
         environment: {
-          lighting: {
-            connected: true,
-            scenes: [
-              { id: 'scene_pregame', name: 'Pre-Game' },
-              { id: 'scene_gameplay', name: 'Gameplay' }
-            ],
-            activeScene: 'scene_gameplay'
-          }
+          bluetooth: { scanning: false, pairedDevices: [] }
         }
       });
 
-      expect(notConnected.style.display).toBe('none');
-      expect(sceneGrid.style.display).toBe('grid');
-      const tiles = sceneGrid.querySelectorAll('.scene-tile');
-      expect(tiles.length).toBe(2);
-      expect(tiles[1].classList.contains('scene-tile--active')).toBe(true);
+      expect(renderSpy).not.toHaveBeenCalled();
     });
 
-    it('should update bluetooth scan state from sync:full', () => {
-      dispatchMessage('sync:full', {
-        session: null,
-        environment: {
-          bluetooth: {
-            pairedDevices: [],
-            scanning: true
-          }
-        }
-      });
-
-      expect(scanBtn.textContent).toBe('Stop Scan');
-      expect(scanSpinner.style.display).toBe('inline-block');
-    });
-
-    it('should handle sync:full without environment field', () => {
-      expect(() => {
-        dispatchMessage('sync:full', {
-          session: null
-          // no environment field
-        });
-      }).not.toThrow();
-    });
-
-    it('should handle sync:full with partial environment data', () => {
-      expect(() => {
-        dispatchMessage('sync:full', {
-          session: null,
-          environment: {
-            bluetooth: {
-              pairedDevices: [],
-              scanning: false
-            }
-            // no audio, no lighting
-          }
-        });
-      }).not.toThrow();
-    });
-
-    it('should show lighting disconnected when connected is false in sync:full', () => {
-      dispatchMessage('sync:full', {
-        session: null,
-        environment: {
-          lighting: {
-            connected: false,
-            scenes: [],
-            activeScene: null
-          }
-        }
-      });
-
-      expect(notConnected.style.display).toBe('block');
-      expect(sceneGrid.style.display).toBe('none');
-    });
-
-    it('should clear BT device list before populating from sync:full', () => {
-      // Pre-populate with stale data
-      const staleItem = document.createElement('div');
-      staleItem.className = 'bt-device-item';
-      staleItem.dataset.btAddress = 'STALE:DEVICE';
-      btDeviceList.appendChild(staleItem);
-
-      dispatchMessage('sync:full', {
-        session: null,
-        environment: {
-          bluetooth: {
-            pairedDevices: [
-              { address: 'AA:BB:CC:DD:EE:01', name: 'Fresh Speaker', connected: false }
-            ],
-            scanning: false
-          }
-        }
-      });
-
-      const devices = btDeviceList.querySelectorAll('.bt-device-item');
-      expect(devices.length).toBe(1);
-      expect(btDeviceList.querySelector('[data-bt-address="STALE:DEVICE"]')).toBeNull();
-      expect(btDeviceList.querySelector('[data-bt-address="AA:BB:CC:DD:EE:01"]')).not.toBeNull();
-    });
-  });
-
-  // ============================================
-  // Debug logging
-  // ============================================
-
-  describe('Debug logging', () => {
-    it('should log bluetooth:device events', () => {
-      const btDeviceList = document.createElement('div');
-      btDeviceList.id = 'bt-device-list';
-      document.body.appendChild(btDeviceList);
-
-      dispatchMessage('bluetooth:device', {
-        type: 'paired',
-        device: { address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker' }
-      });
-
-      expect(Debug.log).toHaveBeenCalledWith(
-        expect.stringContaining('bluetooth:device')
-      );
-    });
-
-    it('should log bluetooth:scan events', () => {
-      dispatchMessage('bluetooth:scan', {
-        scanning: true
-      });
-
-      expect(Debug.log).toHaveBeenCalledWith(
-        expect.stringContaining('bluetooth:scan')
-      );
-    });
-
-    it('should log audio:routing events', () => {
-      dispatchMessage('audio:routing', {
-        stream: 'video',
-        sink: 'test_sink'
-      });
-
-      expect(Debug.log).toHaveBeenCalledWith(
-        expect.stringContaining('audio:routing')
-      );
-    });
-
-    it('should log lighting:scene events', () => {
-      dispatchMessage('lighting:scene', {
-        sceneId: 'test_scene'
-      });
-
-      expect(Debug.log).toHaveBeenCalledWith(
-        expect.stringContaining('lighting:scene')
-      );
-    });
-
-    it('should log lighting:status events', () => {
-      dispatchMessage('lighting:status', {
-        connected: true,
-        scenes: [],
-        activeScene: null
-      });
-
-      expect(Debug.log).toHaveBeenCalledWith(
-        expect.stringContaining('lighting:status')
-      );
+    it('should NOT have _updateEnvironmentFromSync method anymore', () => {
+      // Method was deleted as it's no longer needed - NetworkedSession handles this
+      expect(display._updateEnvironmentFromSync).toBeUndefined();
     });
   });
 });
