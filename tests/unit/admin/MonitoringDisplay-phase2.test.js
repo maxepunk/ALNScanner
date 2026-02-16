@@ -195,6 +195,8 @@ describe('MonitoringDisplay - Phase 2', () => {
       const nowPlaying = document.getElementById('now-playing-section');
       expect(nowPlaying.textContent).toContain('Noir Jazz');
       expect(nowPlaying.textContent).toContain('Various Artists');
+      // Should show pause button when playing (not play)
+      expect(nowPlaying.querySelector('[data-action="admin.spotifyPause"]')).toBeTruthy();
     });
 
     it('should show paused state in Now Playing', () => {
@@ -212,7 +214,11 @@ describe('MonitoringDisplay - Phase 2', () => {
       mockClient.dispatchEvent(event);
 
       const nowPlaying = document.getElementById('now-playing-section');
-      expect(nowPlaying.textContent).toContain('Paused');
+      // Should show track info
+      expect(nowPlaying.textContent).toContain('Noir Jazz');
+      expect(nowPlaying.textContent).toContain('Various Artists');
+      // Should show play button when paused (not pause)
+      expect(nowPlaying.querySelector('[data-action="admin.spotifyPlay"]')).toBeTruthy();
     });
 
     it('should show disconnected state when not connected', () => {
@@ -230,7 +236,7 @@ describe('MonitoringDisplay - Phase 2', () => {
       mockClient.dispatchEvent(event);
 
       const nowPlaying = document.getElementById('now-playing-section');
-      expect(nowPlaying.textContent).toContain('disconnected');
+      expect(nowPlaying.textContent).toContain('Disconnected');
     });
 
     it('should show transport controls when connected and playing', () => {
