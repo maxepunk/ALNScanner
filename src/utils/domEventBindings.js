@@ -101,6 +101,11 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
         if (address) adminController.getModule('bluetoothController').connectDevice(address);
         break;
       }
+      case 'disconnectBtDevice': {
+        const address = actionElement.dataset.btAddress;
+        if (address) adminController.getModule('bluetoothController').disconnectDevice(address);
+        break;
+      }
       case 'setAudioRoute': {
         const stream = actionElement.dataset.stream || 'video';
         const sink = actionElement.value;
