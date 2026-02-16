@@ -219,6 +219,21 @@ export class NetworkedSession extends EventTarget {
           if (payload.playerScans) {
             this.dataManager.setPlayerScansFromServer(payload.playerScans);
           }
+
+          // Update Session State (Phase 3)
+          if (payload.session) {
+            this.dataManager.updateSessionState(payload.session);
+          } else {
+            // Handle null session (e.g. server restart) to reset state
+            this.dataManager.updateSessionState(null);
+          }
+
+          // Update Environment State (Phase 3)
+          if (payload.environment) {
+            if (payload.environment.audio) this.dataManager.updateAudioState(payload.environment.audio);
+            if (payload.environment.lighting) this.dataManager.updateLightingState(payload.environment.lighting);
+            if (payload.environment.bluetooth) this.dataManager.updateBluetoothState(payload.environment.bluetooth);
+          }
           break;
 
         case 'session:update':
@@ -228,6 +243,8 @@ export class NetworkedSession extends EventTarget {
           } else {
             this._handleSessionBoundary(payload.id);
           }
+          // Update session state for UI (SessionRenderer)
+          this.dataManager.updateSessionState(payload);
           break;
 
         case 'transaction:new':
@@ -256,6 +273,54 @@ export class NetworkedSession extends EventTarget {
           this.dispatchEvent(new CustomEvent('group:completed', {
             detail: payload
           }));
+          break;
+
+        // Phase 1: Video State Routing
+        case 'video:status':
+        case 'video:progress':
+          this.dataManager.updateVideoState(payload);
+          break;
+
+        // Phase 2: Cue State Routing
+        case 'cue:fired':
+          this.dataManager.updateCueStatus({ cueId: payload.cueId, state: 'running' });
+          break;
+        case 'cue:completed':
+          this.dataManager.updateCueStatus({ cueId: payload.cueId, state: 'completed' });
+          break;
+        case 'cue:error':
+          this.dataManager.updateCueStatus({ cueId: payload.cueId, state: 'error' });
+          break;
+        case 'cue:status':
+          // payload includes { cueId, state, progress, duration }
+          this.dataManager.updateCueStatus(payload);
+          break;
+        case 'cue:conflict':
+          this.dataManager.handleCueConflict(payload);
+          break;
+
+        // Phase 3: Environment State Routing
+        case 'lighting:scene':
+        case 'lighting:status':
+          this.dataManager.updateLightingState(payload);
+          break;
+
+        case 'audio:routing':
+          // payload includes { stream, sink }
+          this.dataManager.updateAudioState(payload);
+          break;
+        case 'audio:ducking:status':
+          // payload includes { stream, ducked, volume }
+          this.dataManager.updateAudioDucking(payload);
+          break;
+
+        case 'bluetooth:scan':
+          // payload: { scanning: boolean }
+          this.dataManager.updateBluetoothScan(payload);
+          break;
+        case 'bluetooth:device':
+          // payload: { type: 'connected'|'disconnected'|'discovered', device }
+          this.dataManager.updateBluetoothDevice(payload);
           break;
       }
     };

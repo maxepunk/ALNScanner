@@ -60,6 +60,18 @@ describe('NetworkedSession', () => {
       removeTransaction: jest.fn(),
       clearBackendScores: jest.fn(),
       updateTeamScoreFromBackend: jest.fn(),
+      updateSessionState: jest.fn(),
+      setScannedTokensFromServer: jest.fn(),
+      setPlayerScansFromServer: jest.fn(),
+      updateVideoState: jest.fn(),
+      updateCueStatus: jest.fn(),
+      handleCueConflict: jest.fn(),
+      updateLightingState: jest.fn(),
+      updateAudioState: jest.fn(),
+      updateAudioDucking: jest.fn(),
+      updateBluetoothScan: jest.fn(),
+      updateBluetoothDevice: jest.fn(),
+      handlePlayerScan: jest.fn(),
     };
 
     // Mock constructors
@@ -623,6 +635,24 @@ describe('NetworkedSession', () => {
         messageHandler({ detail: { type: 'session:update', payload } });
 
         expect(mockDataManager.resetForNewSession).not.toHaveBeenCalled();
+      });
+
+      it('should call dataManager.updateSessionState on session:update', () => {
+        const payload = { id: 'session-1', status: 'paused', name: 'Test' };
+
+        messageHandler({ detail: { type: 'session:update', payload } });
+
+        expect(mockDataManager.updateSessionState).toHaveBeenCalledWith(payload);
+      });
+
+      it('should still handle boundary detection on session:update', () => {
+        mockDataManager.currentSessionId = 'old-session-123';
+        const payload = { id: 'new-session-id', status: 'active', name: 'Test' };
+
+        messageHandler({ detail: { type: 'session:update', payload } });
+
+        expect(mockDataManager.resetForNewSession).toHaveBeenCalledWith('new-session-id');
+        expect(mockDataManager.updateSessionState).toHaveBeenCalledWith(payload);
       });
     });
 
