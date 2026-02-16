@@ -701,5 +701,24 @@ describe('NetworkedSession', () => {
         expect(mockDataManager.setScannedTokensFromServer).toHaveBeenCalledWith(deviceScannedTokens);
       });
     });
+
+    describe('audio:routing:fallback handling', () => {
+      it('should call dataManager.updateAudioState on audio:routing:fallback', () => {
+        const payload = { stream: 'video', actualSink: 'hdmi-stereo' };
+        messageHandler({ detail: { type: 'audio:routing:fallback', payload } });
+        expect(mockDataManager.updateAudioState).toHaveBeenCalledWith(payload);
+      });
+    });
+
+    describe('sound:status handling', () => {
+      it('should dispatch sound:status event', () => {
+        const handler = jest.fn();
+        session.addEventListener('sound:status', handler);
+        const payload = { type: 'started', file: 'attention.wav' };
+        messageHandler({ detail: { type: 'sound:status', payload } });
+        expect(handler).toHaveBeenCalled();
+        expect(handler.mock.calls[0][0].detail).toEqual(payload);
+      });
+    });
   });
 });

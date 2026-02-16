@@ -309,6 +309,10 @@ export class NetworkedSession extends EventTarget {
           // payload includes { stream, sink }
           this.dataManager.updateAudioState(payload);
           break;
+        case 'audio:routing:fallback':
+          // BT speaker dropped — audio fell back to HDMI
+          this.dataManager.updateAudioState(payload);
+          break;
         case 'audio:ducking:status':
           // payload includes { stream, ducked, volume }
           this.dataManager.updateAudioDucking(payload);
@@ -321,6 +325,13 @@ export class NetworkedSession extends EventTarget {
         case 'bluetooth:device':
           // payload: { type: 'connected'|'disconnected'|'discovered', device }
           this.dataManager.updateBluetoothDevice(payload);
+          break;
+
+        case 'sound:status':
+          // Sound effect playback status (started/completed/stopped)
+          this.dispatchEvent(new CustomEvent('sound:status', {
+            detail: payload
+          }));
           break;
       }
     };
