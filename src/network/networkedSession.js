@@ -318,6 +318,13 @@ export class NetworkedSession extends EventTarget {
           this.dataManager.updateAudioDucking(payload);
           break;
 
+        case 'audio:sinks':
+          // Sink list changed (BT speaker connect/disconnect) — refresh dropdown
+          if (payload.availableSinks) {
+            this.dataManager.updateAudioState({ availableSinks: payload.availableSinks });
+          }
+          break;
+
         case 'bluetooth:scan':
           // payload: { scanning: boolean }
           this.dataManager.updateBluetoothScan(payload);

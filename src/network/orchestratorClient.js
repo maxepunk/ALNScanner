@@ -272,7 +272,8 @@ export class OrchestratorClient extends EventTarget {
       'cue:conflict',            // Phase 2: Compound cue video conflict detection
       'sound:status',            // Phase 1: Sound playback status
       'spotify:status',          // Phase 2: Spotify playback status
-      'audio:ducking:status'     // Phase 3: Audio ducking state change
+      'audio:ducking:status',    // Phase 3: Audio ducking state change
+      'audio:sinks'              // Phase 3: PipeWire sink added/removed (refresh dropdown)
     ];
 
     messageTypes.forEach(type => {

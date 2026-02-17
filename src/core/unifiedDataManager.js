@@ -1004,7 +1004,7 @@ export class UnifiedDataManager extends EventTarget {
 
   /**
    * Update Lighting State
-   * @param {Object} payload - { connected, sceneId, sceneName, type: 'refreshed', scenes }
+   * @param {Object} payload - { connected, sceneId, sceneName, scenes }
    */
   updateLightingState(payload) {
     const { lighting } = this.environmentState;
@@ -1020,7 +1020,7 @@ export class UnifiedDataManager extends EventTarget {
       changed = true;
     }
 
-    if (payload.type === 'refreshed' && Array.isArray(payload.scenes)) {
+    if (Array.isArray(payload.scenes)) {
       lighting.scenes = payload.scenes;
       changed = true;
     }

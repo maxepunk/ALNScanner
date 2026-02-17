@@ -396,4 +396,43 @@ describe('UnifiedDataManager', () => {
       expect(stats).toEqual({ count: 0, totalValue: 0, totalScore: 0 });
     });
   });
+
+  describe('updateLightingState - sync:full scenes (no type field)', () => {
+    beforeEach(() => {
+      manager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+    });
+
+    it('should accept scenes array even without type=refreshed', () => {
+      const syncFullLightingPayload = {
+        connected: true,
+        scenes: [
+          { id: 'scene-1', name: 'Ambient' },
+          { id: 'scene-2', name: 'Dramatic' }
+        ],
+        activeScene: { id: 'scene-1', name: 'Ambient' }
+      };
+
+      manager.updateLightingState(syncFullLightingPayload);
+
+      expect(manager.environmentState.lighting.connected).toBe(true);
+      expect(manager.environmentState.lighting.scenes).toHaveLength(2);
+      expect(manager.environmentState.lighting.scenes[0].id).toBe('scene-1');
+    });
+
+    it('should still accept scenes with type=refreshed (existing behavior)', () => {
+      const refreshPayload = {
+        type: 'refreshed',
+        connected: true,
+        scenes: [{ id: 'scene-3', name: 'Party' }]
+      };
+
+      manager.updateLightingState(refreshPayload);
+
+      expect(manager.environmentState.lighting.scenes).toHaveLength(1);
+      expect(manager.environmentState.lighting.scenes[0].id).toBe('scene-3');
+    });
+  });
 });
