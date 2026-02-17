@@ -97,7 +97,8 @@ describe('TeamRegistry', () => {
         expect(result.success).toBe(true);
         expect(mockOrchestratorClient.sendCommand).toHaveBeenCalledWith(
           'session:addTeam',
-          { teamId: 'Team Alpha' }
+          { teamId: 'Team Alpha' },
+          10000
         );
       });
 

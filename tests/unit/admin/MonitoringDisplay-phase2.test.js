@@ -16,11 +16,8 @@ describe('MonitoringDisplay - Phase 2', () => {
     mockClient = new EventTarget();
     mockClient.socket = { connected: true, emit: jest.fn() };
 
-    // Mock DataManager
-    mockDataManager = {
-      addEventListener: jest.fn(),
-      removeEventListener: jest.fn()
-    };
+    // Mock DataManager (real EventTarget for cue-state:updated wiring)
+    mockDataManager = new EventTarget();
 
     // Create display instance
     display = new MonitoringDisplay(mockClient, mockDataManager);
@@ -59,11 +56,14 @@ describe('MonitoringDisplay - Phase 2', () => {
       };
       display.updateAllDisplays(syncData);
 
-      // Then update it via cue:status event
-      const event = new CustomEvent('message:received', {
-        detail: { type: 'cue:status', payload: { cueId: 'opening', state: 'running', progress: 45, duration: 120 } }
-      });
-      mockClient.dispatchEvent(event);
+      // Then update it via DataManager cue-state:updated event
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: {
+          cues: new Map([['opening', { id: 'opening', label: 'Opening Sequence', quickFire: true }]]),
+          activeCues: new Map([['opening', { cueId: 'opening', state: 'running', progress: 0.45, duration: 120 }]]),
+          disabledCues: new Set()
+        }
+      }));
 
       // Verify progress indicator updated
       const activeCuesList = document.getElementById('active-cues-list');
@@ -85,11 +85,14 @@ describe('MonitoringDisplay - Phase 2', () => {
       let activeCuesList = document.getElementById('active-cues-list');
       expect(activeCuesList.textContent).toContain('Opening Sequence');
 
-      // Then complete it
-      const event = new CustomEvent('message:received', {
-        detail: { type: 'cue:completed', payload: { cueId: 'opening' } }
-      });
-      mockClient.dispatchEvent(event);
+      // Then complete it via DataManager (cue removed from activeCues)
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: {
+          cues: new Map([['opening', { id: 'opening', label: 'Opening Sequence', quickFire: true }]]),
+          activeCues: new Map(), // Empty = cue completed/removed
+          disabledCues: new Set()
+        }
+      }));
 
       // Verify it's removed
       activeCuesList = document.getElementById('active-cues-list');

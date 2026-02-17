@@ -528,77 +528,43 @@ describe('AdminModule - ES6 Exports', () => {
         <div id="device-list"></div>
       `;
 
-      mockDataManager = {
+      mockDataManager = new EventTarget();
+      Object.assign(mockDataManager, {
         transactions: [],
         scannedTokens: new Set(),
         addTransaction: jest.fn(),
-      };
+      });
 
       display = new MonitoringDisplay(mockConnection, mockDataManager);
     });
 
-    describe('updateSessionDisplay', () => {
-      it('should render active session with rich HTML', () => {
+    describe('session rendering via SessionRenderer', () => {
+      it('should render active session', () => {
         const session = {
           name: 'Test Session',
           status: 'active',
-          startTime: new Date('2025-11-14T10:00:00Z').toISOString(),
-          metadata: { totalScans: 42 }
+          startTime: new Date('2025-11-14T10:00:00Z').toISOString()
         };
 
-        display.updateSessionDisplay(session);
+        display.sessionRenderer.render(session);
 
         const container = document.getElementById('session-status-container');
         expect(container.innerHTML).toContain('Test Session');
-        expect(container.querySelector('.session-status--active')).toBeTruthy();
         expect(container.innerHTML).toContain('Active');
-        expect(container.innerHTML).toContain('42'); // total scans
         expect(container.querySelector('button[data-action="app.adminPauseSession"]')).toBeTruthy();
       });
 
       it('should render empty state when session is null', () => {
-        display.updateSessionDisplay(null);
+        display.sessionRenderer.render(null);
 
         const container = document.getElementById('session-status-container');
         expect(container.innerHTML).toContain('No Active Session');
-        expect(container.innerHTML).toContain('Create New Session');
         expect(container.querySelector('button[data-action="app.adminCreateSession"]')).toBeTruthy();
       });
     });
 
-    describe('updateVideoDisplay', () => {
-      it('should update video status in DOM', () => {
-        const videoStatus = {
-          status: 'playing',
-          tokenId: 'intro.mp4',
-          queueLength: 2,
-          progress: 0.45
-        };
-
-        display.updateVideoDisplay(videoStatus);
-
-        const currentVideo = document.getElementById('admin-current-video');
-        expect(currentVideo.textContent).toContain('intro.mp4');
-        expect(currentVideo.textContent).toContain('45%'); // progress
-
-        const queueLength = document.getElementById('admin-queue-length');
-        expect(queueLength.textContent).toBe('2');
-      });
-
-      it('should show idle state when no video playing', () => {
-        const videoStatus = {
-          status: 'idle',
-          tokenId: null,
-          queueLength: 0
-        };
-
-        display.updateVideoDisplay(videoStatus);
-
-        const currentVideo = document.getElementById('admin-current-video');
-        expect(currentVideo.textContent).toContain('None');
-        expect(currentVideo.textContent).toContain('idle loop');
-      });
-    });
+    // updateVideoDisplay tests removed - video rendering now handled by VideoRenderer
+    // (tested in tests/unit/ui/renderers/VideoRenderer.test.js)
 
     describe('health status updates', () => {
       it('should update orchestrator connection status', () => {

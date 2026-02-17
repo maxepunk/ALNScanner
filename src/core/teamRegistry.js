@@ -361,7 +361,8 @@ class TeamRegistry extends EventTarget {
         try {
             const response = await this.orchestratorClient.sendCommand(
                 'session:addTeam',
-                { teamId: teamName }
+                { teamId: teamName },
+                10000 // Increased timeout for reliability
             );
 
             if (response.success) {

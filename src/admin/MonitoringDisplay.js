@@ -15,6 +15,7 @@ export class MonitoringDisplay {
     this.dataManager = dataManager;
     this.teamRegistry = teamRegistry;
     this.devices = [];
+    this._currentIdleMode = 'IDLE_LOOP';
 
     // Renderers
     this.cueRenderer = new CueRenderer();
@@ -118,6 +119,27 @@ export class MonitoringDisplay {
       // --- Renderers handled via DataManager Events ---
       // lighting:*, audio:*, bluetooth:*, cue:* -> Handled by NetworkedSession -> DM -> Event -> Renderer
 
+      // --- Toast / Ephemeral Notifications ---
+      case 'cue:fired':
+        this.showToast(`Cue fired: ${payload.cueId}`, 'info', 3000);
+        break;
+
+      case 'cue:error':
+        this.showToast(`Cue error: ${payload.cueId} — ${payload.error || payload.action}`, 'error', 5000);
+        break;
+
+      case 'cue:conflict':
+        this.showToast(
+          `Cue conflict: ${payload.cueId} — ${payload.reason || 'Video conflict'}`,
+          'warning',
+          10000
+        );
+        break;
+
+      case 'sound:status':
+        // Informational only — no-op for now
+        break;
+
       // --- Legacy / Unrefactored ---
       case 'transaction:new':
       case 'transaction:deleted':
@@ -125,8 +147,15 @@ export class MonitoringDisplay {
         break;
 
       case 'display:mode':
-        // Still handled locally for now
         this._handleDisplayMode(payload);
+        break;
+
+      case 'video:status':
+        this._handleVideoStatus(payload);
+        break;
+
+      case 'audio:routing:fallback':
+        this._handleAudioFallback(payload);
         break;
 
       case 'video:queue:update':
@@ -185,12 +214,64 @@ export class MonitoringDisplay {
   }
 
   _handleDisplayMode(payload) {
-    // Legacy display mode toggle logic
-    // ... (kept minimal for brevity, assume existing logic matches if needed)
+    this._currentIdleMode = payload.mode;
+
+    const nowShowingVal = document.getElementById('now-showing-value');
+    const nowShowingIcon = document.getElementById('now-showing-icon');
     const btnIdle = document.getElementById('btn-idle-loop');
     const btnScore = document.getElementById('btn-scoreboard');
+
+    if (payload.mode === 'SCOREBOARD') {
+      if (nowShowingVal) nowShowingVal.textContent = 'Scoreboard';
+      if (nowShowingIcon) nowShowingIcon.textContent = '🏆';
+    } else {
+      if (nowShowingVal) nowShowingVal.textContent = 'Idle Loop';
+      if (nowShowingIcon) nowShowingIcon.textContent = '🔄';
+    }
+
     if (btnIdle) btnIdle.classList.toggle('active', payload.mode === 'IDLE_LOOP');
     if (btnScore) btnScore.classList.toggle('active', payload.mode === 'SCOREBOARD');
+  }
+
+  _handleVideoStatus(payload) {
+    const nowShowingVal = document.getElementById('now-showing-value');
+    const nowShowingIcon = document.getElementById('now-showing-icon');
+    const returnsContainer = document.getElementById('returns-to-container');
+    const returnsMode = document.getElementById('returns-to-mode');
+    const pendingCount = document.getElementById('pending-queue-count');
+
+    if (payload.status === 'playing' && payload.tokenId) {
+      if (nowShowingVal) nowShowingVal.textContent = `${payload.tokenId}.mp4`;
+      if (nowShowingIcon) nowShowingIcon.textContent = '▶️';
+      if (returnsContainer) returnsContainer.style.display = 'block';
+      if (returnsMode) {
+        returnsMode.textContent = this._currentIdleMode === 'SCOREBOARD' ? 'Scoreboard' : 'Idle Loop';
+      }
+    } else {
+      // Restore idle mode display
+      const mode = this._currentIdleMode || 'IDLE_LOOP';
+      if (nowShowingVal) nowShowingVal.textContent = mode === 'SCOREBOARD' ? 'Scoreboard' : 'Idle Loop';
+      if (nowShowingIcon) nowShowingIcon.textContent = mode === 'SCOREBOARD' ? '🏆' : '🔄';
+      if (returnsContainer) returnsContainer.style.display = 'none';
+    }
+
+    if (pendingCount && payload.queueLength !== undefined) {
+      pendingCount.textContent = String(payload.queueLength);
+    }
+  }
+
+  _handleAudioFallback(payload) {
+    if (!payload) return;
+    const btWarning = document.getElementById('bt-warning');
+    if (btWarning) {
+      btWarning.style.display = 'block';
+      btWarning.textContent = payload.reason || 'Audio route fallback';
+    }
+    // Update dropdown to show fallback sink
+    if (payload.stream && payload.sink) {
+      const dropdown = document.querySelector(`select[data-stream="${payload.stream}"]`);
+      if (dropdown) dropdown.value = payload.sink;
+    }
   }
 
   updateQueueDisplay(payload) {
@@ -266,9 +347,9 @@ export class MonitoringDisplay {
     // 4. Cue Engine (Phase 1 & 2)
     if (syncData.cueEngine && syncData.cueEngine.loaded) {
       this.cueRenderer.render({
-        cues: new Map(syncData.cueEngine.cues.map(c => [c.id, c])),
-        activeCues: new Map(syncData.cueEngine.activeCues.map(c => [c.cueId, c])),
-        disabledCues: new Set(syncData.cueEngine.disabledCues)
+        cues: new Map((syncData.cueEngine.cues || []).map(c => [c.id, c])),
+        activeCues: new Map((syncData.cueEngine.activeCues || []).map(c => [c.cueId, c])),
+        disabledCues: new Set(syncData.cueEngine.disabledCues || [])
       });
     }
 
@@ -287,6 +368,12 @@ export class MonitoringDisplay {
 
     // 7. System Status
     this.updateSystemDisplay();
+    if (syncData.systemStatus?.vlc) {
+      const vlcElem = document.getElementById('vlc-status');
+      if (vlcElem) {
+        vlcElem.className = `status-dot status-dot--${syncData.systemStatus.vlc}`;
+      }
+    }
 
     // 8. Legacy / Phase 4 TODOs
     if (syncData.recentTransactions) {

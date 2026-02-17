@@ -47,6 +47,54 @@ export class UnifiedDataManager extends EventTarget {
 
     // Session tracking for boundary detection
     this.currentSessionId = null;
+
+    // Ephemeral state (video, cues, etc.)
+    this.videoState = {
+      nowPlaying: null,
+      isPlaying: false,
+      progress: 0,
+      duration: 0
+    };
+
+    // Phase 2: Cue State
+    this.cueState = {
+      cues: new Map(),        // Static definitions: id -> { name, type, ... }
+      activeCues: new Map(),  // Running cues: Map<cueId, { state, progress, duration }>
+      disabledCues: new Set() // Manually disabled: Set<cueId>
+    };
+
+    // Phase 3: Environment State
+    this.environmentState = {
+      lighting: {
+        connected: false,
+        activeScene: null,
+        scenes: []
+      },
+      audio: {
+        routes: {}, // stream -> sink
+        ducking: {}, // stream -> { ducked, volume }
+        availableSinks: [] // list of sink objects
+      },
+      bluetooth: {
+        scanning: false,
+        foundedDevices: [], // Discovered during scan
+        pairedDevices: [],
+        connectedDevices: []
+      }
+    };
+
+    // Phase 3: Session State (Reactive)
+    this.sessionState = {
+      id: null,
+      name: null,
+      status: 'disconnected',
+      teams: [],
+      metadata: {}
+    };
+
+    // Bind methods
+    // this.handleUpdate = this.handleUpdate.bind(this); // Removed: unused
+    // this.handleSync = this.handleSync.bind(this); // Removed: unused
   }
 
   /**
@@ -797,6 +845,56 @@ export class UnifiedDataManager extends EventTarget {
     this._log(`Synced ${tokens.length} scanned tokens from server`);
   }
 
+  // ============================================================================
+  // EPHEMERAL STATE MANAGEMENT - New State Store Pattern
+  // ============================================================================
+
+  /**
+   * Get current video state
+   * @returns {Object} { nowPlaying, isPlaying, progress, duration }
+   */
+  getVideoState() {
+    return { ...this.videoState };
+  }
+
+  /**
+   * Update video state and emit event
+   * @param {Object} payload - Partial video state
+   */
+  updateVideoState(payload) {
+    // Phase 1: Map backend payload to UI state
+    // Backend sends: { status: 'playing'|'paused'|'idle', tokenId, progress, duration }
+    // UI expects: { isPlaying: boolean, nowPlaying: string (filename/name), progress: number, duration: number }
+
+    const newState = { ...this.videoState, ...payload };
+
+    // 1. Map status to isPlaying
+    if (payload.status) {
+      newState.isPlaying = (payload.status === 'playing' || payload.status === 'loading');
+    }
+
+    // 2. Map tokenId to nowPlaying (filename)
+    if (payload.tokenId) {
+      // TokenManager uses findToken which returns { token, matchedId }
+      const result = this.tokenManager?.findToken(payload.tokenId);
+      const token = result?.token;
+
+      if (token) {
+        newState.nowPlaying = token.video || token.name || 'Unknown Video';
+      } else {
+        newState.nowPlaying = `Token: ${payload.tokenId}`;
+      }
+    } else if (payload.status === 'idle') {
+      newState.nowPlaying = null; // Clear title on idle
+    }
+
+    this.videoState = newState;
+
+    this.dispatchEvent(new CustomEvent('video-state:updated', {
+      detail: this.getVideoState()
+    }));
+  }
+
   /**
    * Clear all backend scores
    * Called by NetworkedSession on 'scores:reset'
@@ -812,5 +910,288 @@ export class UnifiedDataManager extends EventTarget {
 
     // Emit event for UI updates
     this.dispatchEvent(new CustomEvent('scores:cleared'));
+  }
+
+  // ============================================================================
+  // PHASE 2: CUE STATE MANAGEMENT
+  // ============================================================================
+
+  /**
+   * Get current cue state
+   * @returns {Object} { cues: Map, activeCues: Set, disabledCues: Set }
+   */
+  getCueState() {
+    return {
+      cues: this.cueState.cues,
+      activeCues: this.cueState.activeCues,
+      disabledCues: this.cueState.disabledCues
+    };
+  }
+
+  /**
+   * Load static cue definitions
+   * @param {Array} cues - Array of cue objects
+   */
+  loadCues(cues) {
+    this.cueState.cues.clear();
+    if (Array.isArray(cues)) {
+      cues.forEach(cue => {
+        this.cueState.cues.set(cue.id, cue);
+      });
+    }
+    this._log(`Loaded ${this.cueState.cues.size} cue definitions`);
+  }
+
+  /**
+   * Update cue status (started, completed, paused, etc.)
+   * @param {Object} payload - { cueId, state, progress, duration }
+   */
+  updateCueStatus(payload) {
+    const { cueId, state } = payload;
+
+    // Update active map based on state
+    if (state === 'running' || state === 'paused') {
+      this.cueState.activeCues.set(cueId, payload);
+    } else if (state === 'completed' || state === 'stopped' || state === 'idle' || state === 'error') {
+      this.cueState.activeCues.delete(cueId);
+    }
+
+    this._dispatchCueUpdate();
+    this._log(`Cue status updated: ${cueId} -> ${state}`);
+  }
+
+  /**
+   * Update cue configuration (enable/disable)
+   * @param {Object} payload - { cueId, enabled }
+   */
+  updateCueConfig(payload) {
+    const { cueId, enabled } = payload;
+
+    if (enabled) {
+      this.cueState.disabledCues.delete(cueId);
+    } else {
+      this.cueState.disabledCues.add(cueId);
+    }
+
+    this._dispatchCueUpdate();
+    this._log(`Cue config updated: ${cueId} -> enabled=${enabled}`);
+  }
+
+  /**
+   * Handle cue conflict event
+   * @param {Object} payload - { cueId, conflictType, details }
+   */
+  handleCueConflict(payload) {
+    this.dispatchEvent(new CustomEvent('cue:conflict', {
+      detail: payload
+    }));
+    this._log(`Cue conflict reported: ${payload.cueId} (${payload.conflictType})`);
+  }
+
+  /**
+   * Helper to dispatch cue state update
+   * @private
+   */
+  _dispatchCueUpdate() {
+    this.dispatchEvent(new CustomEvent('cue-state:updated', {
+      detail: this.getCueState()
+    }));
+  }
+
+  // ============================================================================
+  // PHASE 3: ENVIRONMENT & SESSION STATE MANAGEMENT
+  // ============================================================================
+
+  /**
+   * Update Lighting State
+   * @param {Object} payload - { connected, sceneId, sceneName, type: 'refreshed', scenes }
+   */
+  updateLightingState(payload) {
+    const { lighting } = this.environmentState;
+    let changed = false;
+
+    if (payload.connected !== undefined && lighting.connected !== payload.connected) {
+      lighting.connected = payload.connected;
+      changed = true;
+    }
+
+    if (payload.sceneId) {
+      lighting.activeScene = { id: payload.sceneId, name: payload.sceneName || payload.sceneId };
+      changed = true;
+    }
+
+    if (payload.type === 'refreshed' && Array.isArray(payload.scenes)) {
+      lighting.scenes = payload.scenes;
+      changed = true;
+    }
+
+    if (changed) {
+      this.dispatchEvent(new CustomEvent('lighting-state:updated', {
+        detail: { lighting: { ...lighting } }
+      }));
+    }
+  }
+
+  /**
+   * Update Audio Routing State
+   * @param {Object} payload - { stream, sink }
+   */
+  updateAudioState(payload) {
+    let changed = false;
+
+    if (payload.availableSinks) {
+      this.environmentState.audio.availableSinks = payload.availableSinks;
+      changed = true;
+    }
+
+    if (payload.routes) {
+      this.environmentState.audio.routes = { ...payload.routes };
+      changed = true;
+    }
+
+    if (payload.stream && payload.sink) {
+      this.environmentState.audio.routes[payload.stream] = payload.sink;
+      changed = true;
+    }
+
+    if (changed) {
+      this.dispatchEvent(new CustomEvent('audio-state:updated', {
+        detail: { audio: { ...this.environmentState.audio } }
+      }));
+    }
+  }
+
+  /**
+   * Update Audio Ducking Status
+   * @param {Object} payload - { stream, ducked, volume }
+   */
+  updateAudioDucking(payload) {
+    if (payload.stream) {
+      this.environmentState.audio.ducking[payload.stream] = {
+        ducked: payload.ducked,
+        volume: payload.volume
+      };
+      this.dispatchEvent(new CustomEvent('audio-state:updated', {
+        detail: { audio: { ...this.environmentState.audio } }
+      }));
+    }
+  }
+
+  /**
+   * Update Bluetooth Scanning Status
+   * @param {Object} payload - { scanning }
+   */
+  updateBluetoothScan(payload) {
+    if (payload.scanning !== undefined) {
+      this.environmentState.bluetooth.scanning = payload.scanning;
+      // Clear founded devices on scan start? Maybe prefer manual clear.
+      // For now, just update status.
+      this.dispatchEvent(new CustomEvent('bluetooth-state:updated', {
+        detail: { bluetooth: { ...this.environmentState.bluetooth } }
+      }));
+    }
+  }
+
+  /**
+   * Update Bluetooth Device List
+   * @param {Object} payload - { type: 'discovered'|'connected'|'paired'|..., device }
+   */
+  updateBluetoothDevice(payload) {
+    const { type, device } = payload;
+    const btState = this.environmentState.bluetooth;
+
+    if (!device || !device.address) return;
+
+    if (type === 'discovered') {
+      // Add or update in foundedDevices
+      const idx = btState.foundedDevices.findIndex(d => d.address === device.address);
+      if (idx >= 0) {
+        btState.foundedDevices[idx] = device;
+      } else {
+        btState.foundedDevices.push(device);
+      }
+    } else if (type === 'connected') {
+      // Add to connectedDevices
+      const idx = btState.connectedDevices.findIndex(d => d.address === device.address);
+      if (idx >= 0) {
+        btState.connectedDevices[idx] = device;
+      } else {
+        btState.connectedDevices.push(device);
+      }
+    } else if (type === 'disconnected') {
+      // Remove from connectedDevices
+      btState.connectedDevices = btState.connectedDevices.filter(d => d.address !== device.address);
+    } else if (type === 'paired') {
+      // Add to pairedDevices
+      const idx = btState.pairedDevices.findIndex(d => d.address === device.address);
+      if (idx >= 0) {
+        btState.pairedDevices[idx] = device;
+      } else {
+        btState.pairedDevices.push(device);
+      }
+    } else if (type === 'unpaired') {
+      // Remove from pairedDevices AND connectedDevices
+      btState.pairedDevices = btState.pairedDevices.filter(d => d.address !== device.address);
+      btState.connectedDevices = btState.connectedDevices.filter(d => d.address !== device.address);
+    }
+
+    this.dispatchEvent(new CustomEvent('bluetooth-state:updated', {
+      detail: { bluetooth: { ...btState } }
+    }));
+  }
+
+  /**
+   * Update full Bluetooth state (from sync:full)
+   * @param {Object} payload - { scanning, pairedDevices, connectedDevices }
+   */
+  updateBluetoothState(payload) {
+    if (!payload) return;
+
+    const btState = this.environmentState.bluetooth;
+    let changed = false;
+
+    if (payload.scanning !== undefined) {
+      btState.scanning = payload.scanning;
+      changed = true;
+    }
+
+    if (Array.isArray(payload.pairedDevices)) {
+      btState.pairedDevices = payload.pairedDevices; // Replace entire list
+      changed = true;
+    }
+
+    if (Array.isArray(payload.connectedDevices)) {
+      btState.connectedDevices = payload.connectedDevices; // Replace entire list
+      changed = true;
+    }
+
+    // Merge discovered devices if needed, or keep existing ephemeral ones
+    // Usually sync:full doesn't send discovered devices (unless we add it to defaults)
+
+    if (changed) {
+      this.dispatchEvent(new CustomEvent('bluetooth-state:updated', {
+        detail: { bluetooth: { ...btState } }
+      }));
+    }
+  }
+
+  /**
+   * Update Session State
+   * @param {Object} payload - Session object
+   */
+  updateSessionState(payload) {
+    this.sessionState = {
+      ...this.sessionState,
+      ...payload
+    };
+
+    // Also update tracking property for consistency
+    if (payload.id) {
+      this.currentSessionId = payload.id;
+    }
+
+    this.dispatchEvent(new CustomEvent('session-state:updated', {
+      detail: { session: this.sessionState }
+    }));
   }
 }

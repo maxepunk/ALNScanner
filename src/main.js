@@ -38,7 +38,8 @@ import { ConnectionWizard, QueueStatusManager, setupCleanupHandlers } from './ui
 import { bindDOMEvents } from './utils/domEventBindings.js';
 
 // Import ScreenUpdateManager for centralized event routing (Phase 3)
-import { ScreenUpdateManager } from './ui/ScreenUpdateManager.js';
+import ScreenUpdateManager from './ui/ScreenUpdateManager.js';
+import { VideoRenderer } from './ui/renderers/VideoRenderer.js';
 
 /**
  * Create service instances with proper dependency injection
@@ -208,6 +209,19 @@ screenUpdateManager.registerContainer('session-status-container', {
   }
 });
 
+// Video Control Panel (admin panel) - Phase 1: Video State
+// Instantiates VideoRenderer on demand or keeps a reference if needed.
+// Since VideoRenderer captures DOM elements in constructor, we should instantiate it once if DOM is ready,
+// OR instantiate it inside the handler if we want to be safe about DOM presence.
+// Given main.js architecture, we can instantiate it once.
+const videoRenderer = new VideoRenderer();
+screenUpdateManager.registerContainer('video-control-panel', {
+  'video-state:updated': (eventData, container) => {
+    // eventData is the video state { nowPlaying, isPlaying, ... }
+    videoRenderer.render(eventData);
+  }
+});
+
 // ============================================================================
 // CONNECT TO DATA SOURCES
 // ============================================================================
@@ -222,7 +236,8 @@ screenUpdateManager.connectToDataSource(DataManager, [
   'game-state:updated',
   'team-score:updated',
   'player-scan:added',  // Game Activity: token lifecycle tracking
-  'session:updated'     // Phase 3: Session lifecycle events for admin panel
+  'session:updated',     // Phase 3: Session lifecycle events for admin panel
+  'video-state:updated'  // Phase 1: Video state
 ]);
 
 /**

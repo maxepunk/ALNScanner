@@ -371,8 +371,8 @@ class UIManager {
     }
 
     // Calculate duration
-    const startTime = new Date(session.startTime);
-    const duration = this._formatDuration(Date.now() - startTime.getTime());
+    const startTime = session.startTime ? new Date(session.startTime) : null;
+    const duration = startTime ? this._formatDuration(Date.now() - startTime.getTime()) : '—';
 
     // Paused session
     if (session.status === 'paused') {
@@ -384,7 +384,7 @@ class UIManager {
             <span class="session-status__badge session-status__badge--paused">Paused</span>
           </h4>
           <div class="session-status__details">
-            <span>Started: ${startTime.toLocaleTimeString()}</span>
+            <span>Started: ${startTime ? startTime.toLocaleTimeString() : '—'}</span>
             <span>Duration: ${duration}</span>
           </div>
           <div class="session-status__actions">

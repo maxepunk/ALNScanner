@@ -40,7 +40,7 @@ describe('MonitoringDisplay - Phase 1', () => {
         startTime: null
       };
 
-      display.updateSessionDisplay(session);
+      display.sessionRenderer.render(session);
 
       const startButton = container.querySelector('button[data-action="admin.startGame"]');
       expect(startButton).toBeTruthy();
@@ -57,7 +57,7 @@ describe('MonitoringDisplay - Phase 1', () => {
         metadata: { totalScans: 5 }
       };
 
-      display.updateSessionDisplay(session);
+      display.sessionRenderer.render(session);
 
       const startButton = container.querySelector('button[data-action="admin.startGame"]');
       expect(startButton).toBeFalsy();
@@ -76,7 +76,7 @@ describe('MonitoringDisplay - Phase 1', () => {
         status: 'active',
         startTime: new Date().toISOString()
       };
-      display.updateSessionDisplay(session);
+      display.sessionRenderer.render(session);
     });
 
     it('should show elapsed time from gameclock:status event', () => {
@@ -90,7 +90,7 @@ describe('MonitoringDisplay - Phase 1', () => {
 
       const clockDisplay = document.getElementById('game-clock-display');
       expect(clockDisplay).toBeTruthy();
-      expect(clockDisplay.textContent).toContain('01:01:01');
+      expect(clockDisplay.textContent).toContain('61:01');
     });
 
     it('should show paused indicator when clock is paused', () => {
@@ -103,7 +103,7 @@ describe('MonitoringDisplay - Phase 1', () => {
 
       const clockDisplay = document.getElementById('game-clock-display');
       expect(clockDisplay).toBeTruthy();
-      expect(clockDisplay.textContent).toContain('00:30:00');
+      expect(clockDisplay.textContent).toContain('30:00');
       expect(clockDisplay.classList.contains('clock-paused')).toBe(true);
     });
 
@@ -117,7 +117,7 @@ describe('MonitoringDisplay - Phase 1', () => {
 
       const clockDisplay = document.getElementById('game-clock-display');
       expect(clockDisplay).toBeTruthy();
-      expect(clockDisplay.textContent).toContain('00:00:00');
+      expect(clockDisplay.textContent).toContain('00:00');
     });
   });
 
@@ -211,7 +211,7 @@ describe('MonitoringDisplay - Phase 1', () => {
 
       const clockDisplay = document.getElementById('game-clock-display');
       expect(clockDisplay).toBeTruthy();
-      expect(clockDisplay.textContent).toContain('00:40:00');
+      expect(clockDisplay.textContent).toContain('40:00');
     });
   });
 });

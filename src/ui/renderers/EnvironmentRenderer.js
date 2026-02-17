@@ -133,6 +133,11 @@ export class EnvironmentRenderer {
                 const dropdown = document.querySelector(`select[data-stream="${stream}"]`);
                 if (dropdown) {
                     dropdown.value = sink;
+                    // If sink doesn't match any option (e.g. 'hdmi' when only 'auto_null' exists),
+                    // value becomes '' — fall back to first available option
+                    if (!dropdown.value && dropdown.options.length > 0) {
+                        dropdown.value = dropdown.options[0].value;
+                    }
                 }
             });
         }
@@ -162,7 +167,7 @@ export class EnvironmentRenderer {
                 <label>${stream.label}</label>
                 <select class="form-select" data-stream="${stream.id}" data-action="admin.setAudioRoute">
                     ${sinks.map(sink => `
-                        <option value="${sink.name}">${sink.description || sink.name}</option>
+                        <option value="${sink.name}">${sink.label || sink.description || sink.name}</option>
                     `).join('')}
                 </select>
             </div>

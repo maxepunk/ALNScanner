@@ -43,7 +43,9 @@ export class BluetoothController {
    * @returns {Promise<Object>} Pair response
    */
   async pairDevice(address) {
-    return sendCommand(this.connection, 'bluetooth:pair', { address });
+    // Backend pairing can take up to 22s (10s connect + 12s scan buffer)
+    // We use 45s to be safe
+    return sendCommand(this.connection, 'bluetooth:pair', { address }, 45000);
   }
 
   /**
@@ -52,7 +54,7 @@ export class BluetoothController {
    * @returns {Promise<Object>} Unpair response
    */
   async unpairDevice(address) {
-    return sendCommand(this.connection, 'bluetooth:unpair', { address });
+    return sendCommand(this.connection, 'bluetooth:unpair', { address }, 15000);
   }
 
   /**
@@ -61,7 +63,9 @@ export class BluetoothController {
    * @returns {Promise<Object>} Connect response
    */
   async connectDevice(address) {
-    return sendCommand(this.connection, 'bluetooth:connect', { address });
+    // Backend connect uses 10s timeout by default
+    // We use 30s to be safe
+    return sendCommand(this.connection, 'bluetooth:connect', { address }, 30000);
   }
 
   /**
@@ -70,7 +74,7 @@ export class BluetoothController {
    * @returns {Promise<Object>} Disconnect response
    */
   async disconnectDevice(address) {
-    return sendCommand(this.connection, 'bluetooth:disconnect', { address });
+    return sendCommand(this.connection, 'bluetooth:disconnect', { address }, 15000);
   }
 
   /**

@@ -23,6 +23,7 @@ import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
 describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
   let display;
   let mockClient;
+  let mockDataManager;
 
   const availableSinks = [
     { name: 'hdmi', label: 'HDMI' },
@@ -61,8 +62,11 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       <div id="bt-warning" style="display:none;"></div>
     `;
 
+    // Create real EventTarget for DataManager wiring
+    mockDataManager = new EventTarget();
+
     // Create the MonitoringDisplay instance
-    display = new MonitoringDisplay(mockClient, {}, null);
+    display = new MonitoringDisplay(mockClient, mockDataManager, null);
   });
 
   afterEach(() => {
@@ -80,18 +84,24 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
   }
 
   /**
-   * Helper to dispatch sync:full with Phase 3 audio data
+   * Helper to dispatch audio state via DataManager (new architecture)
    */
   function syncWithAudioRouting(routes = defaultRoutes, sinks = availableSinks) {
-    dispatchMessage('sync:full', {
-      session: null,
-      environment: {
+    // Flatten routes from { stream: { sink, fallback } } to { stream: sink }
+    const flatRoutes = {};
+    Object.entries(routes).forEach(([stream, config]) => {
+      flatRoutes[stream] = typeof config === 'string' ? config : config.sink;
+    });
+
+    mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
+      detail: {
         audio: {
-          routes,
-          availableSinks: sinks
+          routes: flatRoutes,
+          availableSinks: sinks,
+          ducking: {}
         }
       }
-    });
+    }));
   }
 
   // ============================================
@@ -189,30 +199,27 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     });
 
     it('should update video dropdown when audio:routing event received', () => {
-      dispatchMessage('audio:routing', {
-        stream: 'video',
-        sink: 'bluez_output.AA'
-      });
+      mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
+        detail: { audio: { routes: { video: 'bluez_output.AA' }, availableSinks, ducking: {} } }
+      }));
 
       const videoDropdown = document.querySelector('[data-stream="video"]');
       expect(videoDropdown.value).toBe('bluez_output.AA');
     });
 
     it('should update spotify dropdown when audio:routing event received', () => {
-      dispatchMessage('audio:routing', {
-        stream: 'spotify',
-        sink: 'hdmi'
-      });
+      mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
+        detail: { audio: { routes: { spotify: 'hdmi' }, availableSinks, ducking: {} } }
+      }));
 
       const spotifyDropdown = document.querySelector('[data-stream="spotify"]');
       expect(spotifyDropdown.value).toBe('hdmi');
     });
 
     it('should update sound dropdown when audio:routing event received', () => {
-      dispatchMessage('audio:routing', {
-        stream: 'sound',
-        sink: 'bluez_output.BB'
-      });
+      mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
+        detail: { audio: { routes: { sound: 'bluez_output.BB' }, availableSinks, ducking: {} } }
+      }));
 
       const soundDropdown = document.querySelector('[data-stream="sound"]');
       expect(soundDropdown.value).toBe('bluez_output.BB');
@@ -220,10 +227,9 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
 
     it('should not throw when stream dropdown does not exist', () => {
       expect(() => {
-        dispatchMessage('audio:routing', {
-          stream: 'nonexistent',
-          sink: 'hdmi'
-        });
+        mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
+          detail: { audio: { routes: { nonexistent: 'hdmi' }, availableSinks, ducking: {} } }
+        }));
       }).not.toThrow();
     });
 
@@ -231,10 +237,9 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       const btWarning = document.getElementById('bt-warning');
       btWarning.style.display = 'block';
 
-      dispatchMessage('audio:routing', {
-        stream: 'video',
-        sink: 'combine-bt'
-      });
+      mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
+        detail: { audio: { routes: { video: 'combine-bt' }, availableSinks, ducking: {} } }
+      }));
 
       expect(btWarning.style.display).toBe('none');
     });
@@ -302,10 +307,9 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
         syncWithAudioRouting(defaultRoutes, []);
       }).not.toThrow();
 
-      // Dropdowns should exist but have no options
+      // No dropdowns rendered when no sinks available
       const videoDropdown = document.querySelector('[data-stream="video"]');
-      expect(videoDropdown).toBeTruthy();
-      expect(videoDropdown.options.length).toBe(0);
+      expect(videoDropdown).toBeFalsy();
     });
 
     it('should handle null payload for audio:routing', () => {

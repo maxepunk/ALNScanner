@@ -105,7 +105,8 @@ describe('BluetoothController - Bluetooth Device Control', () => {
       expect(sendCommand).toHaveBeenCalledWith(
         mockConnection,
         'bluetooth:pair',
-        { address: 'AA:BB:CC:DD:EE:FF' }
+        { address: 'AA:BB:CC:DD:EE:FF' },
+        45000
       );
     });
 
@@ -125,7 +126,8 @@ describe('BluetoothController - Bluetooth Device Control', () => {
       expect(sendCommand).toHaveBeenCalledWith(
         mockConnection,
         'bluetooth:unpair',
-        { address: 'AA:BB:CC:DD:EE:FF' }
+        { address: 'AA:BB:CC:DD:EE:FF' },
+        15000
       );
     });
 
@@ -145,7 +147,8 @@ describe('BluetoothController - Bluetooth Device Control', () => {
       expect(sendCommand).toHaveBeenCalledWith(
         mockConnection,
         'bluetooth:connect',
-        { address: 'AA:BB:CC:DD:EE:FF' }
+        { address: 'AA:BB:CC:DD:EE:FF' },
+        30000
       );
     });
 
@@ -165,7 +168,8 @@ describe('BluetoothController - Bluetooth Device Control', () => {
       expect(sendCommand).toHaveBeenCalledWith(
         mockConnection,
         'bluetooth:disconnect',
-        { address: 'AA:BB:CC:DD:EE:FF' }
+        { address: 'AA:BB:CC:DD:EE:FF' },
+        15000
       );
     });
 
