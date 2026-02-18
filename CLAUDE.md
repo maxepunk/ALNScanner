@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+Last verified: 2026-02-06
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Repository Purpose
@@ -17,6 +19,7 @@ ALN-TokenData/
     aln-tools.js       # Shared utilities (config, NFC, token loading)
   tokens.json          # Token definitions (synced from Notion)
   tokens.json.backup   # Manual backup
+  scoring-config.json  # Shared scoring values (loaded by backend + GM Scanner)
   tag-writer.html      # NFC tag programming tool
   token-checkin.html   # Token inventory check-in tool
 ```
@@ -27,7 +30,7 @@ ALN-TokenData/
 {
   "tokenId": {
     "image": "assets/images/{tokenId}.bmp" | null,
-    "audio": "assets/audio/{tokenId}.wav" | null,
+    "audio": "assets/audio/{tokenId}.wav|.mp3" | null,
     "video": "{tokenId}.mp4" | null,
     "processingImage": "assets/images/{tokenId}.bmp" | null,
     "SF_RFID": "tokenId",
@@ -141,15 +144,12 @@ sleep(ms)
 formatRelativeTime(date)
 ```
 
-## Scoring Values (Reference)
+## Scoring Config (`scoring-config.json`)
 
-Token values are calculated by consuming applications:
+Single source of truth for scoring values, loaded at runtime by both the backend (`backend/src/config/index.js`) and GM Scanner (`ALNScanner/src/core/scoring.js`). Contains `baseValues` (rating -> dollar amount) and `typeMultipliers` (memory type -> multiplier). Formula:
 
 ```
-tokenScore = BASE_VALUES[SF_ValueRating] × TYPE_MULTIPLIERS[SF_MemoryType]
-
-BASE_VALUES: {1: $10000, 2: $25000, 3: $50000, 4: $75000, 5: $150000}
-TYPE_MULTIPLIERS: {Personal: 1x, Business: 3x, Technical: 5x}
+tokenScore = baseValues[SF_ValueRating] × typeMultipliers[SF_MemoryType]
 ```
 
 ## Editing tokens.json
