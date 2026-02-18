@@ -69,7 +69,7 @@ export class CueRenderer {
   _renderStandingCuesList(cuesMap, disabledCuesSet) {
     if (!this.standingListEl) return;
 
-    const standingCues = Array.from(cuesMap.values()).filter(cue => cue.trigger && !cue.quickFire);
+    const standingCues = Array.from(cuesMap.values()).filter(cue => cue.triggerType && !cue.quickFire);
 
     if (standingCues.length === 0) {
       this.standingListEl.innerHTML = '<p class="empty-state">No standing cues configured</p>';
@@ -79,12 +79,13 @@ export class CueRenderer {
     this.standingListEl.innerHTML = standingCues.map(cue => {
       const isDisabled = disabledCuesSet.has(cue.id) || cue.enabled === false;
       const statusClass = isDisabled ? 'standing-cue-item--disabled' : 'standing-cue-item--enabled';
+      const triggerLabel = cue.triggerType === 'clock' ? '\u23F1 clock' : '\u26A1 event';
 
       return `
         <div class="standing-cue-item ${statusClass}">
           <div class="standing-cue-item__info">
             <span class="standing-cue-item__label">${this._escapeHtml(cue.label || cue.id)}</span>
-            <span class="standing-cue-item__trigger">${this._escapeHtml(cue.trigger)}</span>
+            <span class="standing-cue-item__trigger">${this._escapeHtml(triggerLabel)}</span>
           </div>
           <div class="standing-cue-item__actions">
             ${isDisabled ?

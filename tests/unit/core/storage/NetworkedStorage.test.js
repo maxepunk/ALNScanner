@@ -364,6 +364,34 @@ describe('NetworkedStorage Strategy', () => {
       expect(storage.backendScores.get('001')).toEqual({ currentScore: 50000 });
     });
 
+    it('should reset backend scores to zero (preserving team entries)', () => {
+      storage.setBackendScores('001', {
+        currentScore: 50000, baseScore: 40000, bonusPoints: 10000,
+        tokensScanned: 3, completedGroups: ['GroupA'], adminAdjustments: [{ delta: 5000 }]
+      });
+      storage.setBackendScores('002', {
+        currentScore: 75000, baseScore: 75000, bonusPoints: 0,
+        tokensScanned: 5, completedGroups: [], adminAdjustments: []
+      });
+
+      const resetTeamIds = storage.resetBackendScores();
+
+      expect(resetTeamIds).toEqual(['001', '002']);
+      expect(storage.backendScores.size).toBe(2);
+      expect(storage.backendScores.get('001').currentScore).toBe(0);
+      expect(storage.backendScores.get('001').baseScore).toBe(0);
+      expect(storage.backendScores.get('001').bonusPoints).toBe(0);
+      expect(storage.backendScores.get('001').tokensScanned).toBe(0);
+      expect(storage.backendScores.get('001').completedGroups).toEqual([]);
+      expect(storage.backendScores.get('002').currentScore).toBe(0);
+    });
+
+    it('should clear backend scores (remove all entries)', () => {
+      storage.setBackendScores('001', { currentScore: 50000 });
+      storage.clearBackendScores();
+      expect(storage.backendScores.size).toBe(0);
+    });
+
     it('should set scanned tokens', () => {
       storage.setScannedTokens(['token1', 'token2']);
       expect(storage.scannedTokens.has('token1')).toBe(true);

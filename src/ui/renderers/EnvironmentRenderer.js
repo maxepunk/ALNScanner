@@ -179,7 +179,7 @@ export class EnvironmentRenderer {
      * @param {Object} btState - { scanning, foundedDevices, connectedDevices, pairedDevices }
      */
     renderBluetooth(btState) {
-        const { scanning, foundedDevices, connectedDevices } = btState;
+        const { scanning, foundedDevices = [], connectedDevices = [] } = btState;
 
         // 1. Scan Button State
         if (this.btScanBtn) {

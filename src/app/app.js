@@ -1235,42 +1235,45 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       this.uiManager.renderGameActivity(gameActivityContainer, { showSummary: true, showFilters: true });
     }
 
-    // Fallback scoreboard for standalone mode (no WebSocket connection)
-    // In networked mode, scores are rendered by ScreenUpdateManager container handlers
-    if (!this.viewController?.adminInstances?.monitoring) {
-      const scoreBoard = document.getElementById('admin-score-board');
-      if (scoreBoard) {
-        const teams = {};
-        this.dataManager.getTransactions().forEach(tx => {
-          if (!teams[tx.teamId]) {
-            teams[tx.teamId] = {
-              score: 0,
-              count: 0
-            };
-          }
-          teams[tx.teamId].count++;
-          // Use each transaction's mode, not the current setting
-          if (tx.mode === 'blackmarket') {
-            const score = this.dataManager.calculateTokenValue(tx);
-            teams[tx.teamId].score += score;
-          }
-        });
+    // Render admin scoreboard from current data.
+    // ScreenUpdateManager container handlers only fire on events — if the admin
+    // panel wasn't visible when score events fired, the scoreboard is empty.
+    // Always render current scores when switching to admin view.
+    const scoreBoard = document.getElementById('admin-score-board');
+    if (scoreBoard && this.viewController?.adminInstances?.monitoring) {
+      this.uiManager.renderScoreboard(scoreBoard);
+    } else if (scoreBoard) {
+      // Fallback scoreboard for standalone mode (no WebSocket connection)
+      const teams = {};
+      this.dataManager.getTransactions().forEach(tx => {
+        if (!teams[tx.teamId]) {
+          teams[tx.teamId] = {
+            score: 0,
+            count: 0
+          };
+        }
+        teams[tx.teamId].count++;
+        // Use each transaction's mode, not the current setting
+        if (tx.mode === 'blackmarket') {
+          const score = this.dataManager.calculateTokenValue(tx);
+          teams[tx.teamId].score += score;
+        }
+      });
 
-        // Display scores
-        let html = '<table class="score-table"><tr><th>Team</th><th>Tokens</th><th>Score</th></tr>';
-        Object.keys(teams).forEach(teamId => {
-          html += `<tr>
-            <td style="cursor: pointer; color: #007bff; text-decoration: underline;"
-                data-action="app.showTeamDetails" data-arg="${teamId}">
-              ${teamId}
-            </td>
-            <td>${teams[teamId].count}</td>
-            <td>${teams[teamId].score.toLocaleString()}</td>
-          </tr>`;
-        });
-        html += '</table>';
-        scoreBoard.innerHTML = html;
-      }
+      // Display scores
+      let html = '<table class="score-table"><tr><th>Team</th><th>Tokens</th><th>Score</th></tr>';
+      Object.keys(teams).forEach(teamId => {
+        html += `<tr>
+          <td style="cursor: pointer; color: #007bff; text-decoration: underline;"
+              data-action="app.showTeamDetails" data-arg="${teamId}">
+            ${teamId}
+          </td>
+          <td>${teams[teamId].count}</td>
+          <td>${teams[teamId].score.toLocaleString()}</td>
+        </tr>`;
+      });
+      html += '</table>';
+      scoreBoard.innerHTML = html;
     }
   }
 

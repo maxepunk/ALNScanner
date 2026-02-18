@@ -151,5 +151,19 @@ describe('UnifiedDataManager - Environment & Session State', () => {
             dataManager.updateSessionState({ id: '1' });
             expect(listener).toHaveBeenCalled();
         });
+
+        it('should handle null payload (no active session)', () => {
+            dataManager.updateSessionState({ id: 'sess-1', name: 'Old' });
+            dataManager.updateSessionState(null);
+            expect(dataManager.sessionState).toEqual({});
+            expect(dataManager.currentSessionId).toBeNull();
+        });
+
+        it('should emit session-state:updated on null payload', () => {
+            const listener = jest.fn();
+            dataManager.addEventListener('session-state:updated', listener);
+            dataManager.updateSessionState(null);
+            expect(listener).toHaveBeenCalled();
+        });
     });
 });

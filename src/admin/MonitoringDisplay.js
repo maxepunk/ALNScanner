@@ -380,7 +380,7 @@ export class MonitoringDisplay {
       // Clear and rebuild log
       const log = document.getElementById('admin-transaction-log');
       if (log) log.innerHTML = '';
-      syncData.recentTransactions.slice(-10).reverse().forEach(tx => this.updateTransactionDisplay(tx));
+      syncData.recentTransactions.slice(-10).reverse().forEach(tx => this._updateTransactionLog({ transaction: tx }, 'transaction:new'));
     }
     if (syncData.devices) {
       this._setDeviceList(syncData.devices);

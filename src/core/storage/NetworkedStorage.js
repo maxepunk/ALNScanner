@@ -349,7 +349,28 @@ export class NetworkedStorage extends IStorageStrategy {
   }
 
   /**
-   * Clear all backend scores
+   * Reset all backend scores to zero (preserves team entries)
+   * @returns {Array<string>} Team IDs that were reset
+   */
+  resetBackendScores() {
+    const teamIds = Array.from(this.backendScores.keys());
+    for (const teamId of teamIds) {
+      const scoreData = this.backendScores.get(teamId);
+      this.backendScores.set(teamId, {
+        ...scoreData,
+        currentScore: 0,
+        baseScore: 0,
+        bonusPoints: 0,
+        tokensScanned: 0,
+        completedGroups: [],
+        adminAdjustments: []
+      });
+    }
+    return teamIds;
+  }
+
+  /**
+   * Clear all backend scores (removes all entries)
    */
   clearBackendScores() {
     this.backendScores.clear();

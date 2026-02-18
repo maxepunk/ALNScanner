@@ -38,7 +38,7 @@ describe('MonitoringDisplay - Show Control', () => {
           cues: [
             { id: 'tension-hit', label: 'Tension Hit', icon: 'warning', quickFire: true, enabled: true },
             { id: 'business-sale', label: 'Business Deal', icon: 'dollar', quickFire: true, enabled: true },
-            { id: 'standing-cue', label: 'Standing Cue', quickFire: false, trigger: 'event:*', enabled: true }
+            { id: 'standing-cue', label: 'Standing Cue', quickFire: false, triggerType: 'event', enabled: true }
           ]
         }
       };
@@ -58,7 +58,7 @@ describe('MonitoringDisplay - Show Control', () => {
         cueEngine: {
           loaded: true,
           cues: [
-            { id: 'standing-only', label: 'Standing Only', quickFire: false, trigger: 'event:*' }
+            { id: 'standing-only', label: 'Standing Only', quickFire: false, triggerType: 'event' }
           ]
         }
       };
@@ -90,8 +90,8 @@ describe('MonitoringDisplay - Show Control', () => {
         cueEngine: {
           loaded: true,
           cues: [
-            { id: 'tech-discovered', label: 'Tech Discovered', trigger: 'event:transaction.type=Technical', enabled: true },
-            { id: 'group-complete', label: 'Group Complete', trigger: 'event:group.completed', enabled: false }
+            { id: 'tech-discovered', label: 'Tech Discovered', triggerType: 'event', enabled: true },
+            { id: 'group-complete', label: 'Group Complete', triggerType: 'event', enabled: false }
           ],
           disabledCues: ['group-complete']
         }
@@ -135,8 +135,8 @@ describe('MonitoringDisplay - Show Control', () => {
         cueEngine: {
           loaded: true,
           cues: [
-            { id: 'enabled-cue', label: 'Enabled Cue', trigger: 'event:*', enabled: true },
-            { id: 'disabled-cue', label: 'Disabled Cue', trigger: 'event:*', enabled: false }
+            { id: 'enabled-cue', label: 'Enabled Cue', triggerType: 'event', enabled: true },
+            { id: 'disabled-cue', label: 'Disabled Cue', triggerType: 'event', enabled: false }
           ],
           disabledCues: ['disabled-cue']
         }
@@ -164,7 +164,7 @@ describe('MonitoringDisplay - Show Control', () => {
           loaded: true,
           cues: [
             { id: 'quick-1', label: 'Quick 1', quickFire: true },
-            { id: 'standing-1', label: 'Standing 1', trigger: 'event:*' }
+            { id: 'standing-1', label: 'Standing 1', triggerType: 'event' }
           ]
         }
       };

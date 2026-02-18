@@ -221,10 +221,13 @@ export class NetworkedSession extends EventTarget {
           }
 
           // Update Session State (Phase 3)
+          // Only update if session field is explicitly present in payload.
+          // A missing session field (e.g. from a partial sync:full after score reset)
+          // should NOT null out an active session — that's a different semantic than
+          // an explicit session: null (server restart with no active session).
           if (payload.session) {
             this.dataManager.updateSessionState(payload.session);
-          } else {
-            // Handle null session (e.g. server restart) to reset state
+          } else if ('session' in payload && payload.session === null) {
             this.dataManager.updateSessionState(null);
           }
 

@@ -896,8 +896,10 @@ export class UnifiedDataManager extends EventTarget {
   }
 
   /**
-   * Clear all backend scores
+   * Reset all backend scores to zero
    * Called by NetworkedSession on 'scores:reset'
+   * Preserves team entries so the scoreboard shows teams with $0
+   * (sync:full follows immediately to confirm state)
    */
   clearBackendScores() {
     if (!this._networkedStrategy) {
@@ -905,11 +907,19 @@ export class UnifiedDataManager extends EventTarget {
       return;
     }
 
-    this._networkedStrategy.clearBackendScores();
-    this._log('Backend scores cleared');
+    const resetTeamIds = this._networkedStrategy.resetBackendScores();
+    this._log(`Backend scores reset to zero for ${resetTeamIds.length} teams`);
 
-    // Emit event for UI updates
-    this.dispatchEvent(new CustomEvent('scores:cleared'));
+    // Emit team-score:updated for each team so the scoreboard re-renders with $0
+    for (const teamId of resetTeamIds) {
+      this.dispatchEvent(new CustomEvent('team-score:updated', {
+        detail: {
+          teamId,
+          scoreData: { teamId, currentScore: 0 },
+          transactions: this.getTeamTransactions(teamId)
+        }
+      }));
+    }
   }
 
   // ============================================================================
@@ -1177,9 +1187,18 @@ export class UnifiedDataManager extends EventTarget {
 
   /**
    * Update Session State
-   * @param {Object} payload - Session object
+   * @param {Object|null} payload - Session object, or null to clear session
    */
   updateSessionState(payload) {
+    if (!payload) {
+      this.sessionState = {};
+      this.currentSessionId = null;
+      this.dispatchEvent(new CustomEvent('session-state:updated', {
+        detail: { session: this.sessionState }
+      }));
+      return;
+    }
+
     this.sessionState = {
       ...this.sessionState,
       ...payload

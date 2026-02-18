@@ -27,7 +27,7 @@ ALNScanner is the **Game Master (GM) Scanner** for "About Last Night" - a PWA fo
 - Dual operation modes: Networked (WebSocket) OR Standalone (offline)
 - Two game modes: Detective (star ratings) OR Black Market (currency)
 - Android Chrome/Edge 89+ required for NFC
-- Automated testing: Jest (886 unit tests) + Playwright (E2E)
+- Automated testing: Jest (926 unit tests) + Playwright (E2E)
 - Automated deployment to GitHub Pages
 
 ## Development Commands
@@ -45,7 +45,7 @@ npm run build         # Output to dist/
 npm run preview       # Test production build locally
 
 # Run tests
-npm test              # Jest unit tests (L1: 886 tests, ~15-30s)
+npm test              # Jest unit tests (L1: 926 tests, ~15-30s)
 npm run test:e2e      # Playwright E2E tests (L2: scanner only, ~2-3 min)
 npm run test:all      # All tests (L1 + L2)
 
@@ -145,7 +145,7 @@ The scanner uses a 3-tier testing strategy:
 - **Purpose**: Verify individual components work correctly in isolation
 - **Run**: `npm test`
 - **Duration**: ~15-30s
-- **Coverage**: 886 tests across all modules (app, core, network, ui, utils)
+- **Coverage**: 926 tests across all modules (app, core, network, ui, utils)
 
 **L2: Scanner E2E Tests (No Orchestrator)**
 - **Location**: `tests/e2e/specs/`
@@ -254,7 +254,7 @@ localStorage.setItem('aln_auth_token', createValidToken());
 
 **Local Verification** (`./verify-merge-ready.sh`):
 - 8-phase pre-merge checklist
-- Runs all L1 tests (886/886 passing)
+- Runs all L1 tests (926/926 passing)
 - Verifies production build succeeds
 - Checks bundle size (<10MB)
 - Validates critical files present
@@ -363,6 +363,11 @@ ALNScanner/
 │   │   ├── uiManager.js
 │   │   ├── settings.js
 │   │   ├── ScreenUpdateManager.js  # Phase 3: Centralized event routing
+│   │   ├── renderers/              # Admin panel UI renderers
+│   │   │   ├── CueRenderer.js      # Active cues + Quick Fire grid
+│   │   │   ├── EnvironmentRenderer.js  # BT/Audio/Lighting status
+│   │   │   ├── SessionRenderer.js  # Session/team UI components
+│   │   │   └── VideoRenderer.js    # Video queue/now-playing display
 │   │   └── connectionWizard.js
 │   ├── styles/            # CSS architecture (Phase 1 refactor + environment.css)
 │   └── utils/             # Utilities
