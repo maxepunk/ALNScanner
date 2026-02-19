@@ -1013,6 +1013,61 @@ class App {
     }
   }
 
+  /**
+   * Download session report as markdown file.
+   * Gathers data from current sync:full state and token database.
+   */
+  async downloadSessionReport() {
+    try {
+      const { SessionReportGenerator } = await import('../core/sessionReportGenerator.js');
+
+      const sessionData = this.dataManager.getSessionData();
+      const scores = this.dataManager.getTeamScores();
+      const transactions = this.dataManager.getTransactions();
+      const playerScans = this.dataManager.getPlayerScans();
+      const tokenDatabase = this.tokenManager?.database || {};
+
+      if (!sessionData) {
+        this.uiManager.showError('No session data available for report.');
+        return;
+      }
+
+      const generator = new SessionReportGenerator(tokenDatabase);
+      const markdown = generator.generate({
+        session: sessionData,
+        scores,
+        transactions,
+        playerScans
+      });
+
+      // Generate filename
+      const date = sessionData.startTime
+        ? new Date(sessionData.startTime).toISOString().split('T')[0]
+        : 'unknown';
+      const safeName = (sessionData.name || 'session')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+      const filename = `session-report-${safeName}-${date}.md`;
+
+      // Trigger browser download
+      const blob = new Blob([markdown], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      this.uiManager.showToast('Report downloaded', 'info');
+    } catch (error) {
+      console.error('Failed to generate session report:', error);
+      this.uiManager.showError('Failed to generate report.');
+    }
+  }
+
   async adminResetAndCreateNew() {
     // Step 0: Confirm with user
     const confirmReset = confirm(

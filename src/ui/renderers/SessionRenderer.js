@@ -201,6 +201,9 @@ export class SessionRenderer {
                         <p>Session completed.</p>
                      </div>
                     <div class="session-controls">
+                        <button class="btn btn-secondary" data-action="app.downloadSessionReport">
+                            Download Report
+                        </button>
                         <button class="btn btn-primary" data-action="app.adminResetAndCreateNew">
                             Reset & New Session
                         </button>

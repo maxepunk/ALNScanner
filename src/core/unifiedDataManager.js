@@ -296,6 +296,22 @@ export class UnifiedDataManager extends EventTarget {
   }
 
   /**
+   * Get session data for report generation
+   * @returns {Object|null} Session state object
+   */
+  getSessionData() {
+    return this.sessionState?.id ? this.sessionState : null;
+  }
+
+  /**
+   * Get player scans from networked storage
+   * @returns {Array} Player scan records
+   */
+  getPlayerScans() {
+    return this._networkedStrategy?.playerScans || [];
+  }
+
+  /**
    * Adjust team score
    * @param {string} teamId - Team ID
    * @param {number} delta - Score adjustment

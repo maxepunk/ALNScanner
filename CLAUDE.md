@@ -435,6 +435,7 @@ ALNScanner/
 - [gameActivityBuilder.js](src/core/gameActivityBuilder.js) - Shared game activity builder (used by LocalStorage + NetworkedStorage)
 - [tokenManager.js](src/core/tokenManager.js) - Token database loading, fuzzy matching, group inventory
 - [teamRegistry.js](src/core/teamRegistry.js) - Team state management for standalone mode
+- [sessionReportGenerator.js](src/core/sessionReportGenerator.js) - Markdown session report generator (networked mode, download on session end)
 - [storage/IStorageStrategy.js](src/core/storage/IStorageStrategy.js) - Interface for storage implementations
 - [storage/LocalStorage.js](src/core/storage/LocalStorage.js) - Standalone mode: localStorage persistence, group completion
 - [storage/NetworkedStorage.js](src/core/storage/NetworkedStorage.js) - Networked mode: WebSocket sync
@@ -782,6 +783,17 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 - Backend connectivity
 - VLC connection status
 - System resource monitoring
+
+### Session Report (SessionReportGenerator)
+
+When a session ends, the "Download Report" button generates a markdown file containing:
+- Session summary (teams, scores, duration, transaction counts)
+- Detective Evidence Log (tokens exposed, with character owner and evidence summary)
+- Black Market Transactions (tokens buried, with scoring breakdown)
+- Player Activity (scan timeline, most active devices, tokens never turned in)
+
+Data sourced entirely from `sync:full` payload + local token database (`data/tokens.json`).
+Standalone mode: Not supported (no player scan data available).
 
 ## Debugging
 
