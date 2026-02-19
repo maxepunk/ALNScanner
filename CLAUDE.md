@@ -37,7 +37,8 @@ ALN-TokenData/
     "SF_ValueRating": 1-5,
     "SF_MemoryType": "Personal" | "Business" | "Technical",
     "SF_Group": "Group Name (xN)" | "",
-    "summary": "Optional description text"
+    "summary": "Optional description text",
+    "owner": "Character Name" | null
   }
 }
 ```
@@ -47,6 +48,7 @@ ALN-TokenData/
 - `SF_Group` format: `"Group Name (xN)"` where N is the group size multiplier
 - `video` tokens use `processingImage` as placeholder during playback
 - Asset paths are relative to the consuming application's asset directory
+- `owner`: Character who owns this memory, resolved from Notion Elements→Characters Owner relation during sync (role prefix stripped)
 
 ## Data Flow
 
