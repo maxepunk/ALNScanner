@@ -1,15 +1,5 @@
 import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
-
-/**
- * Convert raw sync:full cueEngine data to DM event detail format (Maps/Sets)
- */
-function cueStateFromSync(cueEngine) {
-  return {
-    cues: new Map((cueEngine.cues || []).map(c => [c.id, c])),
-    activeCues: new Map((cueEngine.activeCues || []).map(c => [c.cueId, c])),
-    disabledCues: new Set(cueEngine.disabledCues || [])
-  };
-}
+import { cueStateFromSync } from './helpers/cueTestUtils.js';
 
 describe('MonitoringDisplay - Show Control', () => {
   let display, mockClient, mockDataManager;

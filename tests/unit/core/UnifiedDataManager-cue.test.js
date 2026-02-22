@@ -76,6 +76,20 @@ describe('UnifiedDataManager - Cue State', () => {
         expect(state.activeCues.has('tension-hit')).toBe(false);
     });
 
+    test('syncCueState handles partially missing fields gracefully', () => {
+        // Only cues provided — activeCues and disabledCues omitted
+        dataManager.syncCueState({
+            loaded: true,
+            cues: [{ id: 'solo-cue', label: 'Solo', quickFire: true }]
+        });
+
+        const state = dataManager.getCueState();
+        expect(state.cues.size).toBe(1);
+        expect(state.cues.get('solo-cue').label).toBe('Solo');
+        expect(state.activeCues.size).toBe(0);
+        expect(state.disabledCues.size).toBe(0);
+    });
+
     // --- Existing cue state tests (updated to use syncCueState) ---
 
     test('should load static cue definitions via syncCueState', () => {

@@ -521,6 +521,15 @@ export class UnifiedDataManager extends EventTarget {
       this._networkedStrategy.setSessionId?.(sessionId);
     }
 
+    // Clear ephemeral state from previous session
+    this.cueState.cues.clear();
+    this.cueState.activeCues.clear();
+    this.cueState.disabledCues.clear();
+    this.spotifyState = {
+      connected: false, state: 'stopped', volume: 100,
+      pausedByGameClock: false, track: null
+    };
+
     this._log(`Reset for new session: ${sessionId || 'none'}`);
     this.dispatchEvent(new CustomEvent('data:cleared'));
   }
