@@ -21,6 +21,7 @@
 @import './components.css';
 @import './components/environment.css';
 @import './components/show-control.css';
+@import './components/spotify.css';
 
 /* Layout System */
 @import './layout.css';
