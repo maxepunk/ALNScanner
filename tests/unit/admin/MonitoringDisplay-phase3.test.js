@@ -245,38 +245,8 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     });
   });
 
-  // ============================================
-  // FALLBACK HANDLING
-  // ============================================
-
-  describe('audio:routing:fallback with dropdowns', () => {
-    beforeEach(() => {
-      syncWithAudioRouting();
-    });
-
-    it('should show fallback warning', () => {
-      dispatchMessage('audio:routing:fallback', {
-        stream: 'video',
-        reason: 'Bluetooth speaker disconnected',
-        sink: 'hdmi'
-      });
-
-      const btWarning = document.getElementById('bt-warning');
-      expect(btWarning.style.display).toBe('block');
-      expect(btWarning.textContent).toContain('Bluetooth speaker disconnected');
-    });
-
-    it('should update the affected stream dropdown to fallback sink', () => {
-      dispatchMessage('audio:routing:fallback', {
-        stream: 'video',
-        reason: 'Speaker lost',
-        sink: 'hdmi'
-      });
-
-      const videoDropdown = document.querySelector('[data-stream="video"]');
-      expect(videoDropdown.value).toBe('hdmi');
-    });
-  });
+  // audio:routing:fallback tests removed — now handled by EnvironmentRenderer via DM pipeline
+  // (see tests/unit/ui/renderers/EnvironmentRenderer.test.js)
 
   // ============================================
   // EDGE CASES
@@ -315,12 +285,6 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     it('should handle null payload for audio:routing', () => {
       expect(() => {
         dispatchMessage('audio:routing', null);
-      }).not.toThrow();
-    });
-
-    it('should handle null payload for audio:routing:fallback', () => {
-      expect(() => {
-        dispatchMessage('audio:routing:fallback', null);
       }).not.toThrow();
     });
 

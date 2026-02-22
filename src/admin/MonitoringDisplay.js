@@ -74,12 +74,6 @@ export class MonitoringDisplay {
     }
   }
 
-  _sendMessage(type, payload) {
-    if (this.client?.socket?.connected) {
-      this.client.socket.emit(type, payload);
-    }
-  }
-
   /**
    * Handle incoming WebSocket messages
    * @private
@@ -137,22 +131,9 @@ export class MonitoringDisplay {
         // Informational only — no-op for now
         break;
 
-      // --- Legacy / Unrefactored ---
-      case 'transaction:new':
-      case 'transaction:deleted':
-        this._updateTransactionLog(payload, type);
-        break;
-
+      // --- Legacy handlers awaiting Phase 4 DM migration ---
       case 'display:mode':
         this._handleDisplayMode(payload);
-        break;
-
-      case 'video:status':
-        this._handleVideoStatus(payload);
-        break;
-
-      case 'audio:routing:fallback':
-        this._handleAudioFallback(payload);
         break;
 
       case 'video:queue:update':
@@ -180,34 +161,6 @@ export class MonitoringDisplay {
     this._renderDeviceList();
   }
 
-  _updateTransactionLog(payload, type) {
-    const transaction = payload.transaction || (type === 'transaction:deleted' ? payload : null);
-    if (!transaction) return;
-
-    const log = document.getElementById('admin-transaction-log');
-    if (!log) return;
-
-    if (type === 'transaction:deleted') {
-      const el = log.querySelector(`[data-transaction-id="${payload.transactionId}"]`);
-      if (el) el.remove();
-      return;
-    }
-
-    // Add new
-    const txTime = transaction.timestamp ? new Date(transaction.timestamp).toLocaleTimeString() : '-';
-    const html = `
-        <div class="transaction-item" data-transaction-id="${transaction.id}">
-            <span class="tx-time">${txTime}</span>
-            <span class="tx-team">${transaction.teamId}</span>
-            <span class="tx-token">${transaction.tokenId}</span>
-            <span class="tx-type">${transaction.memoryType || 'UNKNOWN'}</span>
-        </div>`;
-    log.insertAdjacentHTML('afterbegin', html);
-
-    // Limit to 10
-    while (log.children.length > 10) log.lastElementChild.remove();
-  }
-
   _handleDisplayMode(payload) {
     this._currentIdleMode = payload.mode;
 
@@ -228,59 +181,12 @@ export class MonitoringDisplay {
     if (btnScore) btnScore.classList.toggle('active', payload.mode === 'SCOREBOARD');
   }
 
-  _handleVideoStatus(payload) {
-    const nowShowingVal = document.getElementById('now-showing-value');
-    const nowShowingIcon = document.getElementById('now-showing-icon');
-    const returnsContainer = document.getElementById('returns-to-container');
-    const returnsMode = document.getElementById('returns-to-mode');
-    const pendingCount = document.getElementById('pending-queue-count');
-
-    if (payload.status === 'playing' && payload.tokenId) {
-      if (nowShowingVal) nowShowingVal.textContent = `${payload.tokenId}.mp4`;
-      if (nowShowingIcon) nowShowingIcon.textContent = '▶️';
-      if (returnsContainer) returnsContainer.style.display = 'block';
-      if (returnsMode) {
-        returnsMode.textContent = this._currentIdleMode === 'SCOREBOARD' ? 'Scoreboard' : 'Idle Loop';
-      }
-    } else {
-      // Restore idle mode display
-      const mode = this._currentIdleMode || 'IDLE_LOOP';
-      if (nowShowingVal) nowShowingVal.textContent = mode === 'SCOREBOARD' ? 'Scoreboard' : 'Idle Loop';
-      if (nowShowingIcon) nowShowingIcon.textContent = mode === 'SCOREBOARD' ? '🏆' : '🔄';
-      if (returnsContainer) returnsContainer.style.display = 'none';
-    }
-
-    if (pendingCount && payload.queueLength !== undefined) {
-      pendingCount.textContent = String(payload.queueLength);
-    }
-  }
-
-  _handleAudioFallback(payload) {
-    if (!payload) return;
-    const btWarning = document.getElementById('bt-warning');
-    if (btWarning) {
-      btWarning.style.display = 'block';
-      btWarning.textContent = payload.reason || 'Audio route fallback';
-    }
-    // Update dropdown to show fallback sink
-    if (payload.stream && payload.sink) {
-      const dropdown = document.querySelector(`select[data-stream="${payload.stream}"]`);
-      if (dropdown) dropdown.value = payload.sink;
-    }
-  }
-
   updateQueueDisplay(payload) {
     if (this.videoRenderer) {
       this.videoRenderer.renderQueue(payload.items || []);
     }
   }
 
-  // _renderNowPlaying removed — replaced by SpotifyRenderer via DM event pipeline
-
-  // Load available videos helper (kept)
-  loadAvailableVideos() {
-    // ... implementation matches previous ...
-  }
   // ============================================
   // AGGREGATE UPDATE METHODS
   // ============================================
@@ -338,12 +244,6 @@ export class MonitoringDisplay {
     }
 
     // 8. Legacy / Phase 4 TODOs
-    if (syncData.recentTransactions) {
-      // Clear and rebuild log
-      const log = document.getElementById('admin-transaction-log');
-      if (log) log.innerHTML = '';
-      syncData.recentTransactions.slice(-10).reverse().forEach(tx => this._updateTransactionLog({ transaction: tx }, 'transaction:new'));
-    }
     if (syncData.devices) {
       this._setDeviceList(syncData.devices);
     }
@@ -384,7 +284,6 @@ export class MonitoringDisplay {
   refreshAllDisplays() {
     Debug.log('[MonitoringDisplay] refreshAllDisplays called');
     this.updateSystemDisplay();
-    this.loadAvailableVideos();
     this._requestInitialState();
   }
 
@@ -408,24 +307,6 @@ export class MonitoringDisplay {
       orchestratorElem.className = `status-dot status-dot--${status}`;
       orchestratorElem.title = status;
     }
-  }
-
-  escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  formatClockTime(secondsSeconds) {
-    // Delegate to SessionRenderer static-like logic or keep redundancy for now?
-    // Keeping redundancy for legacy calls within this file, but generally prefer renderer
-    if (secondsSeconds === null || secondsSeconds === undefined || secondsSeconds < 0) return '00:00:00';
-    const totalSeconds = Math.floor(secondsSeconds);
-    const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-    const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-    const s = String(totalSeconds % 60).padStart(2, '0');
-    return `${h}:${m}:${s}`;
   }
 
   showToast(message, type = 'info', duration = 3000) {

@@ -634,45 +634,8 @@ describe('AdminModule - ES6 Exports', () => {
         expect(document.getElementById('btn-idle-loop').classList.contains('active')).toBe(true);
       });
 
-      it('should show video info and Returns To when video:status playing', () => {
-        // First set idle mode to SCOREBOARD
-        mockConnection.dispatchEvent(new CustomEvent('message:received', {
-          detail: { type: 'display:mode', payload: { mode: 'SCOREBOARD' } }
-        }));
-
-        // Then video starts playing
-        mockConnection.dispatchEvent(new CustomEvent('message:received', {
-          detail: {
-            type: 'video:status',
-            payload: { status: 'playing', tokenId: 'jaw001', queueLength: 2 }
-          }
-        }));
-
-        expect(document.getElementById('now-showing-value').textContent).toBe('jaw001.mp4');
-        expect(document.getElementById('now-showing-icon').textContent).toBe('▶️');
-        expect(document.getElementById('returns-to-container').style.display).toBe('block');
-        expect(document.getElementById('returns-to-mode').textContent).toBe('Scoreboard');
-        expect(document.getElementById('pending-queue-count').textContent).toBe('2');
-      });
-
-      it('should restore idle mode display when video:status idle', () => {
-        // Set to scoreboard mode
-        mockConnection.dispatchEvent(new CustomEvent('message:received', {
-          detail: { type: 'display:mode', payload: { mode: 'SCOREBOARD' } }
-        }));
-
-        // Video plays then goes idle
-        mockConnection.dispatchEvent(new CustomEvent('message:received', {
-          detail: { type: 'video:status', payload: { status: 'playing', tokenId: 'test' } }
-        }));
-        mockConnection.dispatchEvent(new CustomEvent('message:received', {
-          detail: { type: 'video:status', payload: { status: 'idle', queueLength: 0 } }
-        }));
-
-        expect(document.getElementById('now-showing-value').textContent).toBe('Scoreboard');
-        expect(document.getElementById('now-showing-icon').textContent).toBe('🏆');
-        expect(document.getElementById('returns-to-container').style.display).toBe('none');
-      });
+      // video:status tests removed — now handled by VideoRenderer via DM pipeline
+      // (see tests/unit/ui/renderers/VideoRenderer.test.js)
     });
   });
 });
