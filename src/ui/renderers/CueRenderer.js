@@ -202,5 +202,3 @@ export class CueRenderer {
     }, autoCancelMs);
   }
 }
-
-export default CueRenderer;

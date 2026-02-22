@@ -6,7 +6,26 @@
  * exposing global window.App, window.DataManager, etc.
  */
 
+/** Trailing debounce — fires after `delayMs` of no calls */
+function debounce(fn, delayMs) {
+  let timer = null;
+  return function(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delayMs);
+  };
+}
+
 export function bindDOMEvents(app, dataManager, settings, debug, uiManager, connectionWizard, queueStatusManager) {
+
+  // Debounced volume setter — prevents dbus-send subprocess pile-up and
+  // slider DOM destruction during drag (SpotifyRenderer.render replaces innerHTML).
+  // 150ms trailing debounce: fires when user pauses or releases slider.
+  const debouncedSpotifyVolume = debounce((volume) => {
+    const adminController = app.networkedSession?.getService('adminController');
+    if (adminController?.initialized) {
+      adminController.getModule('spotifyController').setVolume(volume);
+    }
+  }, 150);
 
   /**
    * Handle admin.* actions — routes to AdminController modules
@@ -94,7 +113,7 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
       case 'spotifySetVolume': {
         const volume = parseInt(actionElement.value, 10);
         if (!isNaN(volume)) {
-          adminController.getModule('spotifyController').setVolume(volume);
+          debouncedSpotifyVolume(volume);
         }
         break;
       }
