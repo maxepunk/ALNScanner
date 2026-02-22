@@ -87,6 +87,15 @@ export class SpotifyController {
   }
 
   /**
+   * Reconnect to Spotify (re-check D-Bus connection)
+   * @param {number} [timeout=5000]
+   * @returns {Promise<Object>}
+   */
+  async reconnect(timeout = 5000) {
+    return sendCommand(this.connection, 'spotify:reconnect', {}, timeout);
+  }
+
+  /**
    * Verify cache status of offline playlists
    * @param {number} [timeout=10000] - Command timeout in milliseconds (longer for cache checks)
    * @returns {Promise<Object>} Command acknowledgment with cache status

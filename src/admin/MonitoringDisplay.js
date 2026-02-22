@@ -3,6 +3,7 @@ import { CueRenderer } from '../ui/renderers/CueRenderer.js';
 import { EnvironmentRenderer } from '../ui/renderers/EnvironmentRenderer.js';
 import { SessionRenderer } from '../ui/renderers/SessionRenderer.js';
 import { VideoRenderer } from '../ui/renderers/VideoRenderer.js';
+import { SpotifyRenderer } from '../ui/renderers/SpotifyRenderer.js';
 
 export class MonitoringDisplay {
   /**
@@ -22,6 +23,7 @@ export class MonitoringDisplay {
     this.envRenderer = new EnvironmentRenderer();
     this.sessionRenderer = new SessionRenderer();
     this.videoRenderer = new VideoRenderer();
+    this.spotifyRenderer = new SpotifyRenderer();
 
     // Bind handler for cleanup
     this._messageHandler = this._handleMessage.bind(this);
@@ -58,11 +60,7 @@ export class MonitoringDisplay {
     });
 
     // Spotify State
-    this.dataManager.addEventListener('spotify-state:updated', (e) => {
-      if (this.spotifyRenderer) {
-        this.spotifyRenderer.render(e.detail);
-      }
-    });
+    this.dataManager.addEventListener('spotify-state:updated', (e) => this.spotifyRenderer.render(e.detail));
   }
 
   /**

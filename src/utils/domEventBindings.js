@@ -85,6 +85,19 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
       case 'spotifyPrevious':
         adminController.getModule('spotifyController').previous();
         break;
+      case 'spotifyStop':
+        adminController.getModule('spotifyController').stop();
+        break;
+      case 'spotifyReconnect':
+        adminController.getModule('spotifyController').reconnect();
+        break;
+      case 'spotifySetVolume': {
+        const volume = parseInt(actionElement.value, 10);
+        if (!isNaN(volume)) {
+          adminController.getModule('spotifyController').setVolume(volume);
+        }
+        break;
+      }
       case 'startBtScan':
         adminController.getModule('bluetoothController').startScan();
         break;
@@ -211,6 +224,23 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
     } catch (error) {
       debug.log(`Action handler error: ${action} - ${error.message}`, true);
       console.error(`Action handler error: ${action}`, error);
+    }
+  });
+
+  // Handle input events for range sliders with data-action (real-time volume feedback)
+  document.addEventListener('input', (event) => {
+    const actionElement = event.target.closest('[data-action]');
+    if (!actionElement || actionElement.type !== 'range') return;
+
+    const action = actionElement.dataset.action;
+    const [target, method] = action.split('.');
+
+    try {
+      if (target === 'admin') {
+        handleAdminAction(method, actionElement);
+      }
+    } catch (error) {
+      debug.log(`Action handler error: ${action} - ${error.message}`, true);
     }
   });
 
