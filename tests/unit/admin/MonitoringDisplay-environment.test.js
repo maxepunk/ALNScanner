@@ -36,14 +36,6 @@ describe('MonitoringDisplay - Environment', () => {
     mockClient.socket = { connected: true, emit: jest.fn() };
     mockClient.config = { url: 'http://localhost:3000' };
 
-    // Mock fetch for loadAvailableVideos
-    global.fetch = jest.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ tokens: {} })
-      })
-    );
-
     // Mock DataManager with required EventTarget methods
     mockDataManager = {
       addEventListener: jest.fn(),

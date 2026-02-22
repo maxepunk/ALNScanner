@@ -523,7 +523,6 @@ describe('AdminModule - ES6 Exports', () => {
         <div id="orchestrator-status" class="status-dot"></div>
         <div id="vlc-status" class="status-dot"></div>
         <div id="admin-score-board"></div>
-        <div id="admin-transaction-log"></div>
         <div id="device-count"></div>
         <div id="device-list"></div>
       `;
@@ -603,9 +602,6 @@ describe('AdminModule - ES6 Exports', () => {
         document.body.innerHTML += `
           <span id="now-showing-value">Idle Loop</span>
           <span id="now-showing-icon">🔄</span>
-          <div id="returns-to-container" style="display: none;">
-            Returns to: <span id="returns-to-mode">Idle Loop</span>
-          </div>
           <button id="btn-idle-loop" class="btn-toggle"></button>
           <button id="btn-scoreboard" class="btn-toggle"></button>
           <span id="pending-queue-count">0</span>

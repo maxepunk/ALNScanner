@@ -47,14 +47,6 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     mockClient.socket = { connected: true, emit: jest.fn() };
     mockClient.config = { url: 'http://localhost:3000' };
 
-    // Mock fetch for loadAvailableVideos
-    global.fetch = jest.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ tokens: {} })
-      })
-    );
-
     // Set up DOM with required elements
     document.body.innerHTML = `
       <div id="session-status-container"></div>

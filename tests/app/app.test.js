@@ -240,7 +240,6 @@ describe('App', () => {
       <div id="resultGroup"></div>
       <div id="resultValue"></div>
       <div id="admin-score-board"></div>
-      <div id="admin-transaction-log"></div>
       <input id="manual-video-input" />
       <input id="scoreAdjustmentInput" />
       <input id="scoreAdjustmentReason" />
