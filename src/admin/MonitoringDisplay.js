@@ -76,6 +76,14 @@ export class MonitoringDisplay {
 
   /**
    * Handle incoming WebSocket messages
+   *
+   * NOTE: State-bearing events (cue, spotify, environment, session, video, transactions)
+   * are handled by the NetworkedSession → DataManager → event → Renderer pipeline.
+   * This handler only processes:
+   *   1. Ephemeral notifications (toasts for cue:fired/error/conflict)
+   *   2. Legacy handlers awaiting Phase 4 DM migration (display:mode, devices, video queue)
+   *   3. sync:full aggregate update (system status, game clock, devices)
+   *   4. session:overtime (ephemeral — not state)
    * @private
    */
   _handleMessage(event) {
@@ -145,12 +153,13 @@ export class MonitoringDisplay {
   }
 
   // ============================================
-  // LEGACY / AD-HOC HANDLERS (To be refactored in Phase 4)
+  // LEGACY HANDLERS — Phase 4 DM migration candidates
+  // display:mode → needs DM.updateDisplayMode()
+  // device:connected/disconnected → needs DM.updateDeviceList()
+  // video:queue:update → needs DM.updateVideoQueue()
   // ============================================
 
   _updateDeviceList(payload, type) {
-    // Simple local list management for now
-    // Phase 4: Move Connected Devices to DM
     if (type === 'device:connected') {
       const idx = this.devices.findIndex(d => d.deviceId === payload.deviceId);
       if (idx === -1) this.devices.push(payload);
