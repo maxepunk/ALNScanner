@@ -63,6 +63,15 @@ export class UnifiedDataManager extends EventTarget {
       disabledCues: new Set() // Manually disabled: Set<cueId>
     };
 
+    // Phase 2: Spotify State
+    this.spotifyState = {
+      connected: false,
+      state: 'stopped',
+      volume: 100,
+      pausedByGameClock: false,
+      track: null
+    };
+
     // Phase 3: Environment State
     this.environmentState = {
       lighting: {
@@ -1035,6 +1044,29 @@ export class UnifiedDataManager extends EventTarget {
   _dispatchCueUpdate() {
     this.dispatchEvent(new CustomEvent('cue-state:updated', {
       detail: this.getCueState()
+    }));
+  }
+
+  // ============================================================================
+  // SPOTIFY STATE MANAGEMENT
+  // ============================================================================
+
+  /**
+   * Get current Spotify state
+   * @returns {Object} { connected, state, volume, pausedByGameClock, track }
+   */
+  getSpotifyState() {
+    return { ...this.spotifyState };
+  }
+
+  /**
+   * Update Spotify state (merges partial updates)
+   * @param {Object} payload - Partial or full spotify state
+   */
+  updateSpotifyState(payload) {
+    Object.assign(this.spotifyState, payload);
+    this.dispatchEvent(new CustomEvent('spotify-state:updated', {
+      detail: this.getSpotifyState()
     }));
   }
 

@@ -57,13 +57,12 @@ export class MonitoringDisplay {
       }
     });
 
-    // Game Clock (if managed via DM, otherwise direct event)
-    // Currently gameclock is direct event. We should port it to DM later?
-    // For now, handle via _handleMessage -> DM -> Event or Direct.
-    // Let's stick to Direct for clock since it's high freq?
-    // Actually, consistency says convert to DM event.
-    // But DM doesn't have gameClockState yet in my impl. 
-    // So I will keep direct clock handling in _handleMessage but delegate to SessionRenderer.
+    // Spotify State
+    this.dataManager.addEventListener('spotify-state:updated', (e) => {
+      if (this.spotifyRenderer) {
+        this.spotifyRenderer.render(e.detail);
+      }
+    });
   }
 
   /**
@@ -162,9 +161,7 @@ export class MonitoringDisplay {
         this.updateQueueDisplay(payload);
         break;
 
-      case 'spotify:status': // Still legacy render
-        this._renderNowPlaying(payload);
-        break;
+      // spotify:status — Handled by NetworkedSession → DM.updateSpotifyState() → event → SpotifyRenderer
     }
   }
 
@@ -280,34 +277,7 @@ export class MonitoringDisplay {
     }
   }
 
-  _renderNowPlaying(spotifyState) {
-    // Legacy Spotify Render
-    const section = document.getElementById('now-playing-section');
-    if (!section) return;
-
-    if (!spotifyState || !spotifyState.connected) {
-      section.innerHTML = '<div class="now-playing--disconnected">Spotify Disconnected</div>';
-      return;
-    }
-
-    const isPlaying = spotifyState.state === 'playing';
-    const playPauseBtn = isPlaying
-      ? '<button class="btn btn-sm btn-icon" data-action="admin.spotifyPause" title="Pause">&#10074;&#10074;</button>'
-      : '<button class="btn btn-sm btn-icon" data-action="admin.spotifyPlay" title="Play">&#9654;</button>';
-
-    section.innerHTML = `
-        <div class="now-playing--connected">
-            <div class="now-playing__track">
-                <strong>${spotifyState.track?.title || ''}</strong>
-                <span>${spotifyState.track?.artist || ''}</span>
-            </div>
-            <div class="now-playing__controls">
-                <button class="btn btn-sm btn-icon" data-action="admin.spotifyPrevious" title="Previous">&#9664;&#9664;</button>
-                ${playPauseBtn}
-                <button class="btn btn-sm btn-icon" data-action="admin.spotifyNext" title="Next">&#9654;&#9654;</button>
-            </div>
-        </div>`;
-  }
+  // _renderNowPlaying removed — replaced by SpotifyRenderer via DM event pipeline
 
   // Load available videos helper (kept)
   loadAvailableVideos() {
@@ -357,9 +327,8 @@ export class MonitoringDisplay {
     }
 
     // 6. Spotify
-    if (syncData.spotify) {
-      this._renderNowPlaying(syncData.spotify);
-    }
+    // Handled by NetworkedSession → DM.updateSpotifyState() → 'spotify-state:updated' event → SpotifyRenderer
+    // No direct rendering needed here.
 
     // 7. System Status
     this.updateSystemDisplay();

@@ -242,6 +242,11 @@ export class NetworkedSession extends EventTarget {
           if (payload.cueEngine) {
             this.dataManager.syncCueState(payload.cueEngine);
           }
+
+          // Sync Spotify State (Phase 2)
+          if (payload.spotify) {
+            this.dataManager.updateSpotifyState(payload.spotify);
+          }
           break;
 
         case 'session:update':
@@ -305,6 +310,11 @@ export class NetworkedSession extends EventTarget {
           break;
         case 'cue:conflict':
           this.dataManager.handleCueConflict(payload);
+          break;
+
+        // Phase 2: Spotify State Routing
+        case 'spotify:status':
+          this.dataManager.updateSpotifyState(payload);
           break;
 
         // Phase 3: Environment State Routing
