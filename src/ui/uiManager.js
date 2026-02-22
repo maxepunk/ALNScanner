@@ -409,7 +409,7 @@ class UIManager {
           <span class="session-status__badge session-status__badge--active">Active</span>
         </h4>
         <div class="session-status__details">
-          <span>Started: ${startTime.toLocaleTimeString()}</span>
+          <span>Started: ${startTime ? startTime.toLocaleTimeString() : '—'}</span>
           <span>Duration: ${duration}</span>
         </div>
         <div class="session-status__actions">

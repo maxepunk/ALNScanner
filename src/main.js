@@ -197,17 +197,8 @@ screenUpdateManager.registerContainer('admin-game-activity', {
   }
 });
 
-// Session Status container (admin panel) - Phase 3: Session lifecycle display
-screenUpdateManager.registerContainer('session-status-container', {
-  'session:updated': (eventData, container) => {
-    Debug.log('[main.js] Updating session-status-container (session updated)');
-    UIManager.renderSessionStatus(container);
-  },
-  'data:cleared': (eventData, container) => {
-    Debug.log('[main.js] Session reset - re-rendering session-status-container');
-    UIManager.renderSessionStatus(container);
-  }
-});
+// Session Status container: Handled by MonitoringDisplay._wireDataManagerEvents() → SessionRenderer
+// (removed competing ScreenUpdateManager registration that crashed on null startTime for setup sessions)
 
 // Video Control Panel (admin panel) - Phase 1: Video State
 // Instantiates VideoRenderer on demand or keeps a reference if needed.
@@ -236,7 +227,6 @@ screenUpdateManager.connectToDataSource(DataManager, [
   'game-state:updated',
   'team-score:updated',
   'player-scan:added',  // Game Activity: token lifecycle tracking
-  'session:updated',     // Phase 3: Session lifecycle events for admin panel
   'video-state:updated'  // Phase 1: Video state
 ]);
 
