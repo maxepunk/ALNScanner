@@ -51,4 +51,11 @@ describe('SpotifyController', () => {
       mockClient, 'spotify:cache:verify', {}, 10000
     );
   });
+
+  it('should send spotify:reconnect', async () => {
+    await controller.reconnect();
+    expect(sendCommand).toHaveBeenCalledWith(
+      mockClient, 'spotify:reconnect', {}, 5000
+    );
+  });
 });

@@ -145,6 +145,9 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
     const actionElement = event.target.closest('[data-action]');
     if (!actionElement) return;
 
+    // Skip range inputs — handled by 'input' event listener
+    if (actionElement.type === 'range') return;
+
     // Prevent default action for links (e.g., <a href="#" data-action="...">)
     if (actionElement.tagName === 'A') {
       event.preventDefault();
