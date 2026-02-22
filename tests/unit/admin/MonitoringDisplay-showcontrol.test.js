@@ -1,5 +1,16 @@
 import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
 
+/**
+ * Convert raw sync:full cueEngine data to DM event detail format (Maps/Sets)
+ */
+function cueStateFromSync(cueEngine) {
+  return {
+    cues: new Map((cueEngine.cues || []).map(c => [c.id, c])),
+    activeCues: new Map((cueEngine.activeCues || []).map(c => [c.cueId, c])),
+    disabledCues: new Set(cueEngine.disabledCues || [])
+  };
+}
+
 describe('MonitoringDisplay - Show Control', () => {
   let display, mockClient, mockDataManager;
 
@@ -15,11 +26,8 @@ describe('MonitoringDisplay - Show Control', () => {
     mockClient = new EventTarget();
     mockClient.socket = { connected: true, emit: jest.fn() };
 
-    // Mock DataManager
-    mockDataManager = {
-      addEventListener: jest.fn(),
-      removeEventListener: jest.fn()
-    };
+    // Mock DataManager (real EventTarget so _wireDataManagerEvents() wiring works)
+    mockDataManager = new EventTarget();
 
     // Create display instance
     display = new MonitoringDisplay(mockClient, mockDataManager);
@@ -32,18 +40,19 @@ describe('MonitoringDisplay - Show Control', () => {
 
   describe('Quick Fire grid', () => {
     it('should render tiles for cues with quickFire: true', () => {
-      const syncData = {
-        cueEngine: {
-          loaded: true,
-          cues: [
-            { id: 'tension-hit', label: 'Tension Hit', icon: 'warning', quickFire: true, enabled: true },
-            { id: 'business-sale', label: 'Business Deal', icon: 'dollar', quickFire: true, enabled: true },
-            { id: 'standing-cue', label: 'Standing Cue', quickFire: false, triggerType: 'event', enabled: true }
-          ]
-        }
+      const cueEngine = {
+        loaded: true,
+        cues: [
+          { id: 'tension-hit', label: 'Tension Hit', icon: 'warning', quickFire: true, enabled: true },
+          { id: 'business-sale', label: 'Business Deal', icon: 'dollar', quickFire: true, enabled: true },
+          { id: 'standing-cue', label: 'Standing Cue', quickFire: false, triggerType: 'event', enabled: true }
+        ]
       };
 
-      display.updateAllDisplays(syncData);
+      // Simulate DM cue-state:updated event (what NetworkedSession → DM.syncCueState() triggers)
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: cueStateFromSync(cueEngine)
+      }));
 
       const grid = document.getElementById('quick-fire-grid');
       const tiles = grid.querySelectorAll('[data-action="admin.fireCue"]');
@@ -54,50 +63,51 @@ describe('MonitoringDisplay - Show Control', () => {
     });
 
     it('should show "No Quick Fire cues" message when grid is empty', () => {
-      const syncData = {
-        cueEngine: {
-          loaded: true,
-          cues: [
-            { id: 'standing-only', label: 'Standing Only', quickFire: false, triggerType: 'event' }
-          ]
-        }
+      const cueEngine = {
+        loaded: true,
+        cues: [
+          { id: 'standing-only', label: 'Standing Only', quickFire: false, triggerType: 'event' }
+        ]
       };
 
-      display.updateAllDisplays(syncData);
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: cueStateFromSync(cueEngine)
+      }));
 
       const grid = document.getElementById('quick-fire-grid');
       expect(grid.textContent).toContain('No Quick Fire cues');
     });
 
     it('should not render anything when cueEngine is not loaded', () => {
-      const syncData = {
-        cueEngine: {
-          loaded: false,
-          cues: []
-        }
+      const cueEngine = {
+        loaded: false,
+        cues: []
       };
 
-      display.updateAllDisplays(syncData);
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: cueStateFromSync(cueEngine)
+      }));
 
       const grid = document.getElementById('quick-fire-grid');
-      expect(grid.innerHTML).toBe('');
+      // Empty cues map → "No Quick Fire cues" message
+      expect(grid.textContent).toContain('No Quick Fire cues');
     });
   });
 
   describe('Standing Cues list', () => {
     it('should render standing cues with enable/disable toggles', () => {
-      const syncData = {
-        cueEngine: {
-          loaded: true,
-          cues: [
-            { id: 'tech-discovered', label: 'Tech Discovered', triggerType: 'event', enabled: true },
-            { id: 'group-complete', label: 'Group Complete', triggerType: 'event', enabled: false }
-          ],
-          disabledCues: ['group-complete']
-        }
+      const cueEngine = {
+        loaded: true,
+        cues: [
+          { id: 'tech-discovered', label: 'Tech Discovered', triggerType: 'event', enabled: true },
+          { id: 'group-complete', label: 'Group Complete', triggerType: 'event', enabled: false }
+        ],
+        disabledCues: ['group-complete']
       };
 
-      display.updateAllDisplays(syncData);
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: cueStateFromSync(cueEngine)
+      }));
 
       const list = document.getElementById('standing-cues-list');
       const cueItems = list.querySelectorAll('.standing-cue-item');
@@ -115,34 +125,34 @@ describe('MonitoringDisplay - Show Control', () => {
     });
 
     it('should show "No standing cues" message when list is empty', () => {
-      const syncData = {
-        cueEngine: {
-          loaded: true,
-          cues: [
-            { id: 'quick-fire-only', label: 'Quick Fire Only', quickFire: true }
-          ]
-        }
+      const cueEngine = {
+        loaded: true,
+        cues: [
+          { id: 'quick-fire-only', label: 'Quick Fire Only', quickFire: true }
+        ]
       };
 
-      display.updateAllDisplays(syncData);
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: cueStateFromSync(cueEngine)
+      }));
 
       const list = document.getElementById('standing-cues-list');
       expect(list.textContent).toContain('No standing cues');
     });
 
     it('should highlight disabled cues differently', () => {
-      const syncData = {
-        cueEngine: {
-          loaded: true,
-          cues: [
-            { id: 'enabled-cue', label: 'Enabled Cue', triggerType: 'event', enabled: true },
-            { id: 'disabled-cue', label: 'Disabled Cue', triggerType: 'event', enabled: false }
-          ],
-          disabledCues: ['disabled-cue']
-        }
+      const cueEngine = {
+        loaded: true,
+        cues: [
+          { id: 'enabled-cue', label: 'Enabled Cue', triggerType: 'event', enabled: true },
+          { id: 'disabled-cue', label: 'Disabled Cue', triggerType: 'event', enabled: false }
+        ],
+        disabledCues: ['disabled-cue']
       };
 
-      display.updateAllDisplays(syncData);
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: cueStateFromSync(cueEngine)
+      }));
 
       const list = document.getElementById('standing-cues-list');
       const items = list.querySelectorAll('.standing-cue-item');
@@ -157,20 +167,19 @@ describe('MonitoringDisplay - Show Control', () => {
   });
 
   describe('cue engine integration', () => {
-    it('should handle sync:full with cueEngine data', () => {
-      const syncData = {
-        session: { id: 'test', status: 'active' },
-        cueEngine: {
-          loaded: true,
-          cues: [
-            { id: 'quick-1', label: 'Quick 1', quickFire: true },
-            { id: 'standing-1', label: 'Standing 1', triggerType: 'event' }
-          ]
-        }
+    it('should handle cue-state:updated event with cue data', () => {
+      const cueEngine = {
+        loaded: true,
+        cues: [
+          { id: 'quick-1', label: 'Quick 1', quickFire: true },
+          { id: 'standing-1', label: 'Standing 1', triggerType: 'event' }
+        ]
       };
 
       // Should not throw
-      expect(() => display.updateAllDisplays(syncData)).not.toThrow();
+      expect(() => mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: cueStateFromSync(cueEngine)
+      }))).not.toThrow();
 
       const grid = document.getElementById('quick-fire-grid');
       const list = document.getElementById('standing-cues-list');

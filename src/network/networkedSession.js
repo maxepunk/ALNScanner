@@ -237,6 +237,11 @@ export class NetworkedSession extends EventTarget {
             if (payload.environment.lighting) this.dataManager.updateLightingState(payload.environment.lighting);
             if (payload.environment.bluetooth) this.dataManager.updateBluetoothState(payload.environment.bluetooth);
           }
+
+          // Sync Cue Engine State (Phase 1 & 2)
+          if (payload.cueEngine) {
+            this.dataManager.syncCueState(payload.cueEngine);
+          }
           break;
 
         case 'session:update':

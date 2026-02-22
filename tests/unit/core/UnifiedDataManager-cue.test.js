@@ -22,13 +22,69 @@ describe('UnifiedDataManager - Cue State', () => {
         });
     });
 
-    test('should load static cue definitions', () => {
+    const mockCueEngine = {
+        loaded: true,
+        cues: [
+            { id: 'tension-hit', label: 'Tension Hit', quickFire: true, icon: 'tension' },
+            { id: 'clock-warning', label: '30 Min Warning', triggerType: 'clock', quickFire: false }
+        ],
+        activeCues: [
+            { cueId: 'tension-hit', state: 'running', progress: 0.5, duration: 3 }
+        ],
+        disabledCues: ['clock-warning']
+    };
+
+    // --- syncCueState tests (sync:full integration) ---
+
+    test('syncCueState loads definitions, active cues, and disabled cues', () => {
+        dataManager.syncCueState(mockCueEngine);
+
+        const state = dataManager.getCueState();
+        expect(state.cues.size).toBe(2);
+        expect(state.cues.get('tension-hit').quickFire).toBe(true);
+        expect(state.activeCues.size).toBe(1);
+        expect(state.activeCues.get('tension-hit').state).toBe('running');
+        expect(state.disabledCues.has('clock-warning')).toBe(true);
+    });
+
+    test('syncCueState dispatches cue-state:updated event', (done) => {
+        dataManager.addEventListener('cue-state:updated', (e) => {
+            expect(e.detail.cues.size).toBe(2);
+            done();
+        });
+        dataManager.syncCueState(mockCueEngine);
+    });
+
+    test('syncCueState with loaded:false clears cue state', () => {
+        dataManager.syncCueState(mockCueEngine); // Load first
+        dataManager.syncCueState({ loaded: false, cues: [], activeCues: [], disabledCues: [] });
+
+        const state = dataManager.getCueState();
+        expect(state.cues.size).toBe(0);
+        expect(state.activeCues.size).toBe(0);
+    });
+
+    test('cue definitions persist after updateCueStatus', () => {
+        dataManager.syncCueState(mockCueEngine);
+        dataManager.updateCueStatus({ cueId: 'tension-hit', state: 'completed' });
+
+        const state = dataManager.getCueState();
+        // Definitions MUST still be there
+        expect(state.cues.size).toBe(2);
+        expect(state.cues.get('tension-hit').quickFire).toBe(true);
+        // But active cues should reflect the completion
+        expect(state.activeCues.has('tension-hit')).toBe(false);
+    });
+
+    // --- Existing cue state tests (updated to use syncCueState) ---
+
+    test('should load static cue definitions via syncCueState', () => {
         const cues = [
             { id: 'cue1', name: 'Intro', type: 'quickfire' },
             { id: 'cue2', name: 'Victory', type: 'compound' }
         ];
 
-        dataManager.loadCues(cues);
+        dataManager.syncCueState({ loaded: true, cues, activeCues: [], disabledCues: [] });
 
         const state = dataManager.getCueState();
         expect(state.cues.size).toBe(2);
@@ -38,7 +94,7 @@ describe('UnifiedDataManager - Cue State', () => {
 
     test('should update active cues on start/stop events', () => {
         // Setup known cues
-        dataManager.loadCues([{ id: 'cue1', name: 'Test Cue' }]);
+        dataManager.syncCueState({ loaded: true, cues: [{ id: 'cue1', name: 'Test Cue' }], activeCues: [], disabledCues: [] });
 
         const eventSpy = jest.fn();
         dataManager.addEventListener('cue-state:updated', eventSpy);
@@ -62,7 +118,7 @@ describe('UnifiedDataManager - Cue State', () => {
     });
 
     test('should manage disabled cues (enable/disable)', () => {
-        dataManager.loadCues([{ id: 'cue1', name: 'Test Cue' }]);
+        dataManager.syncCueState({ loaded: true, cues: [{ id: 'cue1', name: 'Test Cue' }], activeCues: [], disabledCues: [] });
 
         // 1. Disable Cue
         dataManager.updateCueConfig({ cueId: 'cue1', enabled: false });

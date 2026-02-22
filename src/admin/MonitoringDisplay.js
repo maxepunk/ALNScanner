@@ -330,8 +330,8 @@ export class MonitoringDisplay {
     Debug.log('[MonitoringDisplay] updateAllDisplays (Sync Full)', syncData);
 
     // 1. Session State
-    // Always render session state, even if null (to show "Create Session" button)
-    this.sessionRenderer.render(syncData.session || null);
+    // Handled by NetworkedSession → DM.updateSessionState() → 'session-state:updated' event → SessionRenderer
+    // No direct rendering needed here.
 
     // 2. Team Registry (Logic)
     if (syncData.session && this.teamRegistry) {
@@ -345,13 +345,8 @@ export class MonitoringDisplay {
     // No direct rendering needed here.
 
     // 4. Cue Engine (Phase 1 & 2)
-    if (syncData.cueEngine && syncData.cueEngine.loaded) {
-      this.cueRenderer.render({
-        cues: new Map((syncData.cueEngine.cues || []).map(c => [c.id, c])),
-        activeCues: new Map((syncData.cueEngine.activeCues || []).map(c => [c.cueId, c])),
-        disabledCues: new Set(syncData.cueEngine.disabledCues || [])
-      });
-    }
+    // Handled by NetworkedSession → DM.syncCueState() → 'cue-state:updated' event → CueRenderer
+    // No direct rendering needed here.
 
     // 5. Game Clock
     if (syncData.gameClock) {

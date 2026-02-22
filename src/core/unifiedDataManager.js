@@ -955,17 +955,31 @@ export class UnifiedDataManager extends EventTarget {
   }
 
   /**
-   * Load static cue definitions
-   * @param {Array} cues - Array of cue objects
+   * Sync full cue state from sync:full payload.
+   * Loads definitions, active cues, and disabled cues in one atomic update.
+   * @param {Object} cueEngine - { loaded, cues[], activeCues[], disabledCues[] }
    */
-  loadCues(cues) {
+  syncCueState(cueEngine) {
+    // Clear and reload definitions
     this.cueState.cues.clear();
-    if (Array.isArray(cues)) {
-      cues.forEach(cue => {
-        this.cueState.cues.set(cue.id, cue);
-      });
+    if (cueEngine.loaded && Array.isArray(cueEngine.cues)) {
+      cueEngine.cues.forEach(cue => this.cueState.cues.set(cue.id, cue));
     }
-    this._log(`Loaded ${this.cueState.cues.size} cue definitions`);
+
+    // Sync active cues
+    this.cueState.activeCues.clear();
+    if (Array.isArray(cueEngine.activeCues)) {
+      cueEngine.activeCues.forEach(ac => this.cueState.activeCues.set(ac.cueId, ac));
+    }
+
+    // Sync disabled cues
+    this.cueState.disabledCues.clear();
+    if (Array.isArray(cueEngine.disabledCues)) {
+      cueEngine.disabledCues.forEach(id => this.cueState.disabledCues.add(id));
+    }
+
+    this._log(`Synced cue state: ${this.cueState.cues.size} definitions, ${this.cueState.activeCues.size} active, ${this.cueState.disabledCues.size} disabled`);
+    this._dispatchCueUpdate();
   }
 
   /**

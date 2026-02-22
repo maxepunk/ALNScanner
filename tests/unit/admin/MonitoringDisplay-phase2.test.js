@@ -1,5 +1,16 @@
 import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
 
+/**
+ * Convert raw sync:full cueEngine data to DM event detail format (Maps/Sets)
+ */
+function cueStateFromSync(cueEngine) {
+  return {
+    cues: new Map((cueEngine.cues || []).map(c => [c.id, c])),
+    activeCues: new Map((cueEngine.activeCues || []).map(c => [c.cueId, c])),
+    disabledCues: new Set(cueEngine.disabledCues || [])
+  };
+}
+
 describe('MonitoringDisplay - Phase 2', () => {
   let display, mockClient, mockDataManager, container;
 
@@ -31,30 +42,30 @@ describe('MonitoringDisplay - Phase 2', () => {
 
   describe('cue:status (compound cue progress)', () => {
     it('should render active compound cue in Active Cues list', () => {
-      const syncData = {
-        cueEngine: {
-          loaded: true,
-          cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
-          activeCues: [{ cueId: 'opening', state: 'running', progress: 30, duration: 120 }]
-        }
+      const cueEngine = {
+        loaded: true,
+        cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
+        activeCues: [{ cueId: 'opening', state: 'running', progress: 30, duration: 120 }]
       };
 
-      display.updateAllDisplays(syncData);
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: cueStateFromSync(cueEngine)
+      }));
 
       const activeCuesList = document.getElementById('active-cues-list');
       expect(activeCuesList.textContent).toContain('Opening Sequence');
     });
 
     it('should update compound cue progress from cue:status event', () => {
-      // First set up an active cue
-      const syncData = {
-        cueEngine: {
-          loaded: true,
-          cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
-          activeCues: [{ cueId: 'opening', state: 'running', progress: 30, duration: 120 }]
-        }
+      // First set up an active cue via DM event
+      const cueEngine = {
+        loaded: true,
+        cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
+        activeCues: [{ cueId: 'opening', state: 'running', progress: 30, duration: 120 }]
       };
-      display.updateAllDisplays(syncData);
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: cueStateFromSync(cueEngine)
+      }));
 
       // Then update it via DataManager cue-state:updated event
       mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
@@ -71,15 +82,15 @@ describe('MonitoringDisplay - Phase 2', () => {
     });
 
     it('should remove compound cue when cue:completed received', () => {
-      // First add an active cue
-      const syncData = {
-        cueEngine: {
-          loaded: true,
-          cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
-          activeCues: [{ cueId: 'opening', state: 'running', progress: 30, duration: 120 }]
-        }
+      // First add an active cue via DM event
+      const cueEngine = {
+        loaded: true,
+        cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
+        activeCues: [{ cueId: 'opening', state: 'running', progress: 30, duration: 120 }]
       };
-      display.updateAllDisplays(syncData);
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: cueStateFromSync(cueEngine)
+      }));
 
       // Verify it's there
       let activeCuesList = document.getElementById('active-cues-list');
@@ -100,15 +111,15 @@ describe('MonitoringDisplay - Phase 2', () => {
     });
 
     it('should show pause/stop/resume buttons for active cues', () => {
-      const syncData = {
-        cueEngine: {
-          loaded: true,
-          cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
-          activeCues: [{ cueId: 'opening', state: 'running', progress: 30, duration: 120 }]
-        }
+      const cueEngine = {
+        loaded: true,
+        cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
+        activeCues: [{ cueId: 'opening', state: 'running', progress: 30, duration: 120 }]
       };
 
-      display.updateAllDisplays(syncData);
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: cueStateFromSync(cueEngine)
+      }));
 
       const activeCuesList = document.getElementById('active-cues-list');
       expect(activeCuesList.querySelector('[data-action="admin.pauseCue"]')).toBeTruthy();
@@ -116,15 +127,15 @@ describe('MonitoringDisplay - Phase 2', () => {
     });
 
     it('should show resume button when cue is paused', () => {
-      const syncData = {
-        cueEngine: {
-          loaded: true,
-          cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
-          activeCues: [{ cueId: 'opening', state: 'paused', progress: 30, duration: 120 }]
-        }
+      const cueEngine = {
+        loaded: true,
+        cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
+        activeCues: [{ cueId: 'opening', state: 'paused', progress: 30, duration: 120 }]
       };
 
-      display.updateAllDisplays(syncData);
+      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
+        detail: cueStateFromSync(cueEngine)
+      }));
 
       const activeCuesList = document.getElementById('active-cues-list');
       expect(activeCuesList.querySelector('[data-action="admin.resumeCue"]')).toBeTruthy();
