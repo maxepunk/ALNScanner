@@ -47,8 +47,8 @@ export class SpotifyRenderer {
       <div class="spotify spotify--connected ${isPlaying ? 'spotify--playing' : 'spotify--paused'}">
         ${state.pausedByGameClock ? '<div class="spotify__clock-paused">Paused by Game Clock</div>' : ''}
         <div class="spotify__track">
-          <span class="spotify__track-title">${this._escape(title)}</span>
-          ${artist ? `<span class="spotify__track-artist">${this._escape(artist)}</span>` : ''}
+          <span class="spotify__track-title">${this._escapeHtml(title)}</span>
+          ${artist ? `<span class="spotify__track-artist">${this._escapeHtml(artist)}</span>` : ''}
         </div>
         <div class="spotify__controls">
           <button class="btn btn-sm btn-icon" data-action="admin.spotifyPrevious" title="Previous">&#9664;&#9664;</button>
@@ -71,12 +71,13 @@ export class SpotifyRenderer {
     `;
   }
 
-  _escape(str) {
+  _escapeHtml(str) {
     if (!str) return '';
     return String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 }

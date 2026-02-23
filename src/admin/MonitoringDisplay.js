@@ -37,30 +37,36 @@ export class MonitoringDisplay {
   }
 
   /**
-   * Wire DataManager events to Renderers
+   * Wire DataManager events to Renderers.
+   * Stores listener references in this._dmListeners for cleanup in destroy().
    * @private
    */
   _wireDataManagerEvents() {
+    this._dmListeners = [];
+    const on = (event, handler) => {
+      this.dataManager.addEventListener(event, handler);
+      this._dmListeners.push({ event, handler });
+    };
+
     // Cue State
-    this.dataManager.addEventListener('cue-state:updated', (e) => this.cueRenderer.render(e.detail));
-    this.dataManager.addEventListener('cue:conflict', (e) => this.cueRenderer.renderConflict(e.detail));
+    on('cue-state:updated', (e) => this.cueRenderer.render(e.detail));
+    on('cue:conflict', (e) => this.cueRenderer.renderConflict(e.detail));
 
     // Environment State
-    this.dataManager.addEventListener('lighting-state:updated', (e) => this.envRenderer.renderLighting(e.detail.lighting));
-    this.dataManager.addEventListener('audio-state:updated', (e) => this.envRenderer.renderAudio(e.detail.audio));
-    this.dataManager.addEventListener('bluetooth-state:updated', (e) => this.envRenderer.renderBluetooth(e.detail.bluetooth));
+    on('lighting-state:updated', (e) => this.envRenderer.renderLighting(e.detail.lighting));
+    on('audio-state:updated', (e) => this.envRenderer.renderAudio(e.detail.audio));
+    on('bluetooth-state:updated', (e) => this.envRenderer.renderBluetooth(e.detail.bluetooth));
 
     // Session State
-    this.dataManager.addEventListener('session-state:updated', (e) => {
+    on('session-state:updated', (e) => {
       this.sessionRenderer.render(e.detail.session);
-      // Team Registry sync still needed for dropdowns elsewhere
       if (this.teamRegistry) {
         this.teamRegistry.populateFromSession(e.detail.session);
       }
     });
 
     // Spotify State
-    this.dataManager.addEventListener('spotify-state:updated', (e) => this.spotifyRenderer.render(e.detail));
+    on('spotify-state:updated', (e) => this.spotifyRenderer.render(e.detail));
   }
 
   /**
@@ -281,7 +287,7 @@ export class MonitoringDisplay {
     if (listEl) {
       if (this.devices.length === 0) listEl.innerHTML = '<p class="text-muted text-sm">No devices</p>';
       else listEl.innerHTML = this.devices.map(d => `
-            <div class="device-item"><span>${d.deviceId}</span><span class="device-type">${d.type}</span></div>
+            <div class="device-item"><span>${this._escapeHtml(d.deviceId)}</span><span class="device-type">${this._escapeHtml(d.type)}</span></div>
          `).join('');
     }
   }
@@ -318,6 +324,16 @@ export class MonitoringDisplay {
     }
   }
 
+  _escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   showToast(message, type = 'info', duration = 3000) {
     // Keep toast logic
     const colors = {
@@ -341,6 +357,12 @@ export class MonitoringDisplay {
   destroy() {
     if (this.client && this._messageHandler) {
       this.client.removeEventListener('message:received', this._messageHandler);
+    }
+    if (this._dmListeners) {
+      for (const { event, handler } of this._dmListeners) {
+        this.dataManager.removeEventListener(event, handler);
+      }
+      this._dmListeners = null;
     }
   }
 } // End Class MonitoringDisplay

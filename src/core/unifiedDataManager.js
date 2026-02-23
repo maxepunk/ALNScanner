@@ -101,9 +101,6 @@ export class UnifiedDataManager extends EventTarget {
       metadata: {}
     };
 
-    // Bind methods
-    // this.handleUpdate = this.handleUpdate.bind(this); // Removed: unused
-    // this.handleSync = this.handleSync.bind(this); // Removed: unused
   }
 
   /**
@@ -528,6 +525,18 @@ export class UnifiedDataManager extends EventTarget {
     this.spotifyState = {
       connected: false, state: 'stopped', volume: 100,
       pausedByGameClock: false, track: null
+    };
+    this.videoState = {
+      nowPlaying: null, isPlaying: false, progress: 0, duration: 0
+    };
+    this.environmentState.lighting = {
+      connected: false, activeScene: null, scenes: []
+    };
+    this.environmentState.audio = {
+      routes: {}, ducking: {}, availableSinks: []
+    };
+    this.environmentState.bluetooth = {
+      scanning: false, foundedDevices: [], pairedDevices: [], connectedDevices: []
     };
 
     this._log(`Reset for new session: ${sessionId || 'none'}`);
@@ -962,7 +971,7 @@ export class UnifiedDataManager extends EventTarget {
 
   /**
    * Get current cue state
-   * @returns {Object} { cues: Map, activeCues: Set, disabledCues: Set }
+   * @returns {Object} { cues: Map, activeCues: Map, disabledCues: Set }
    */
   getCueState() {
     return {
