@@ -36,7 +36,7 @@ export class EnvironmentRenderer {
      * @param {Object} state - Environment state object
      * @param {Object} state.lighting - { connected, activeScene, scenes }
      * @param {Object} state.audio - { routes, ducking }
-     * @param {Object} state.bluetooth - { scanning, foundedDevices, connectedDevices }
+     * @param {Object} state.bluetooth - { scanning, discoveredDevices, connectedDevices }
      */
     render(state) {
         if (!state) return;
@@ -157,10 +157,10 @@ export class EnvironmentRenderer {
 
     /**
      * Render Bluetooth State
-     * @param {Object} btState - { scanning, foundedDevices, connectedDevices, pairedDevices }
+     * @param {Object} btState - { scanning, discoveredDevices, connectedDevices, pairedDevices }
      */
     renderBluetooth(btState) {
-        const { scanning, foundedDevices = [], connectedDevices = [] } = btState;
+        const { scanning, discoveredDevices = [], connectedDevices = [] } = btState;
 
         // 1. Scan Button State
         if (this.btScanBtn) {
@@ -182,7 +182,7 @@ export class EnvironmentRenderer {
             // Merge all relevant devices for display
             // We prioritize connected, then discovered (founded)
             // Note: DataManager might not have full paired list unless we sync it. 
-            // Assuming connectedDevices and foundedDevices are the main source for now.
+            // Assuming connectedDevices and discoveredDevices are the main source for now.
 
             const allDevices = [];
 
@@ -201,9 +201,9 @@ export class EnvironmentRenderer {
                 });
             }
 
-            // 3. Add discovered (founded) devices
+            // 3. Add discovered devices
             // Only add if not already in list (as connected or paired)
-            foundedDevices.forEach(d => {
+            discoveredDevices.forEach(d => {
                 const isKnown = allDevices.some(ad => ad.address === d.address);
                 if (!isKnown) {
                     allDevices.push({ ...d, status: 'discovered' });

@@ -250,7 +250,7 @@ export class OrchestratorClient extends EventTarget {
       'device:connected',
       'device:disconnected',
       'group:completed',
-      'display:mode',  // Phase 4.2: Display control events
+      'display:mode',  // Display control events (HDMI idle loop vs scoreboard)
       'video:progress',      // Video playback progress (1s interval)
       'video:queue:update',  // Video queue changes
       'gm:command:ack',

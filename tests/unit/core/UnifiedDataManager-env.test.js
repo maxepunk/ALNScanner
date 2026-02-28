@@ -92,7 +92,7 @@ describe('UnifiedDataManager - Environment & Session State', () => {
         it('should initialize with default bluetooth state', () => {
             expect(dataManager.environmentState.bluetooth).toEqual({
                 scanning: false,
-                foundedDevices: [], // for discovery
+                discoveredDevices: [], // for discovery
                 pairedDevices: [],
                 connectedDevices: []
             });
@@ -107,8 +107,8 @@ describe('UnifiedDataManager - Environment & Session State', () => {
             const device = { address: 'AA:BB:CC', name: 'Speaker' };
             dataManager.updateBluetoothDevice({ type: 'discovered', device });
 
-            // Should create entries in foundedDevices (checking dedup logic if we impl it)
-            expect(dataManager.environmentState.bluetooth.foundedDevices).toContainEqual(device);
+            // Should create entries in discoveredDevices (checking dedup logic if we impl it)
+            expect(dataManager.environmentState.bluetooth.discoveredDevices).toContainEqual(device);
         });
 
         it('should update connected devices', () => {

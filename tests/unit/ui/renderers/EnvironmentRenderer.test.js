@@ -35,7 +35,7 @@ describe('EnvironmentRenderer', () => {
             renderer.renderBluetooth({
                 scanning: false,
                 connectedDevices: [{ address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker' }],
-                foundedDevices: []
+                discoveredDevices: []
             });
 
             const disconnectBtn = document.querySelector('[data-action="admin.disconnectBtDevice"]');
@@ -47,7 +47,7 @@ describe('EnvironmentRenderer', () => {
             renderer.renderBluetooth({
                 scanning: false,
                 connectedDevices: [],
-                foundedDevices: [],
+                discoveredDevices: [],
                 pairedDevices: [{ address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker' }]
             });
 
@@ -60,7 +60,7 @@ describe('EnvironmentRenderer', () => {
             renderer.renderBluetooth({
                 scanning: false,
                 connectedDevices: [],
-                foundedDevices: [{ address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker' }]
+                discoveredDevices: [{ address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker' }]
             });
 
             const pairBtn = document.querySelector('[data-action="admin.pairBtDevice"]');
@@ -72,7 +72,7 @@ describe('EnvironmentRenderer', () => {
             renderer.renderBluetooth({
                 scanning: false,
                 connectedDevices: [],
-                foundedDevices: []
+                discoveredDevices: []
             });
 
             expect(btDeviceList.innerHTML).toContain('No devices found');
@@ -84,7 +84,7 @@ describe('EnvironmentRenderer', () => {
             renderer.renderBluetooth({
                 scanning: true,
                 connectedDevices: [],
-                foundedDevices: []
+                discoveredDevices: []
             });
 
             expect(btnScan.textContent).toBe('Stop Scan');
@@ -93,7 +93,7 @@ describe('EnvironmentRenderer', () => {
             renderer.renderBluetooth({
                 scanning: false,
                 connectedDevices: [],
-                foundedDevices: []
+                discoveredDevices: []
             });
 
             expect(btnScan.textContent).toBe('Scan for Speakers');

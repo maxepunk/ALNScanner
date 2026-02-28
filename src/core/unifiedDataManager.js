@@ -86,7 +86,7 @@ export class UnifiedDataManager extends EventTarget {
       },
       bluetooth: {
         scanning: false,
-        foundedDevices: [], // Discovered during scan
+        discoveredDevices: [], // Discovered during scan
         pairedDevices: [],
         connectedDevices: []
       }
@@ -539,7 +539,7 @@ export class UnifiedDataManager extends EventTarget {
       routes: {}, ducking: {}, availableSinks: []
     };
     this.environmentState.bluetooth = {
-      scanning: false, foundedDevices: [], pairedDevices: [], connectedDevices: []
+      scanning: false, discoveredDevices: [], pairedDevices: [], connectedDevices: []
     };
 
     this._log(`Reset for new session: ${sessionId || 'none'}`);
@@ -1230,12 +1230,12 @@ export class UnifiedDataManager extends EventTarget {
     if (!device || !device.address) return;
 
     if (type === 'discovered') {
-      // Add or update in foundedDevices
-      const idx = btState.foundedDevices.findIndex(d => d.address === device.address);
+      // Add or update in discoveredDevices
+      const idx = btState.discoveredDevices.findIndex(d => d.address === device.address);
       if (idx >= 0) {
-        btState.foundedDevices[idx] = device;
+        btState.discoveredDevices[idx] = device;
       } else {
-        btState.foundedDevices.push(device);
+        btState.discoveredDevices.push(device);
       }
     } else if (type === 'connected') {
       // Add to connectedDevices
