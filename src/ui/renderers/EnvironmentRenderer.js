@@ -9,7 +9,6 @@ export class EnvironmentRenderer {
     constructor() {
         // Lighting Elements
         this.lightingSection = document.getElementById('lighting-section');
-        this.lightingNotConnected = document.getElementById('lighting-not-connected');
         this.sceneGrid = document.getElementById('lighting-scenes');
 
         // Audio Elements
@@ -58,9 +57,7 @@ export class EnvironmentRenderer {
         this.lightingSection.style.display = ''; // Show section
 
         if (!connected) {
-            // Phase 4: No separate "not connected" banner — HealthRenderer shows service status.
-            // Show the scene grid with an empty state message instead.
-            if (this.lightingNotConnected) this.lightingNotConnected.style.display = 'none';
+            // HealthRenderer shows service status; scene grid shows empty state.
             if (this.sceneGrid) {
                 this.sceneGrid.style.display = 'grid';
                 this.sceneGrid.innerHTML = '<p class="empty-state">Lighting unavailable</p>';
@@ -68,7 +65,6 @@ export class EnvironmentRenderer {
             return;
         }
 
-        if (this.lightingNotConnected) this.lightingNotConnected.style.display = 'none';
         if (this.sceneGrid) {
             this.sceneGrid.style.display = 'grid';
 
@@ -93,28 +89,8 @@ export class EnvironmentRenderer {
 
     /**
      * Render Audio Routing State
-     * @param {Object} audioState - { routes, ducking }
-     * Note: This renderer usually needs the list of available sinks too.
-     * However, payload usually triggers update. If we want to strictly render from state,
-     * we need `availableSinks` which might be static or passed in state.
-     * 
-     * UnifiedDataManager.environmentState.audio.routes only has current routes.
-     * We need available sinks to render the dropdown options.
-     * 
-     * Strategy: We'll assume the dropdowns are constructed elsewhere OR 
-     * we need to fetch available sinks separately. 
-     * 
-     * Actually, MonitoringDisplay currently constructs dropdowns from `sync:full` payload which includes `availableSinks`.
-     * UnifiedDataManager should probably store `availableSinks` in `environmentState.audio` too.
-     * 
-     * For now, we will update the VALUES of existing dropdowns.
-     * If dropdowns don't exist, we can't render them without sink list.
-     * 
-     * Let's check if UnifiedDataManager stores availableSinks.
-     * It does NOT currently. It updates routes.
-     * 
-     * We will stick to updating values of existing dropdowns for now,
-     * as re-rendering options requires the sink list.
+     * @param {Object} audioState - { routes, availableSinks, ducking }
+     * Rebuilds dropdowns when availableSinks are provided; otherwise updates existing dropdown values.
      */
     renderAudio(audioState) {
         const { routes, availableSinks } = audioState;

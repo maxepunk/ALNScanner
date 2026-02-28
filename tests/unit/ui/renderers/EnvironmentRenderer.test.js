@@ -16,7 +16,6 @@ describe('EnvironmentRenderer', () => {
         // Setup Mock DOM
         document.body.innerHTML = `
             <div id="lighting-section" style="display: none;">
-                <div id="lighting-not-connected" style="display: none;"></div>
                 <div id="lighting-scenes" style="display: none;"></div>
             </div>
             <div id="audio-routing-dropdowns"></div>

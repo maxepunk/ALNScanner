@@ -15,48 +15,6 @@
   margin-bottom: var(--space-4);
 }
 
-.audio-route-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.audio-route-label {
-  flex: 0 0 120px;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  color: var(--color-text-secondary);
-}
-
-.audio-route-select {
-  flex: 1;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-sm);
-  background: var(--color-bg-secondary);
-  border: var(--border-width) solid var(--color-border);
-  color: var(--color-text-primary);
-  border-radius: var(--radius-md);
-  min-height: var(--btn-height-sm);
-  cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-default);
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: 32px;
-}
-
-.audio-route-select:hover {
-  border-color: var(--color-text-muted);
-}
-
-.audio-route-select:focus {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
-  border-color: var(--color-accent-primary);
-}
-
 /* ============================================
    ALERT BANNERS
    ============================================ */
@@ -72,70 +30,6 @@
   background: rgba(245, 158, 11, 0.1);
   color: var(--color-accent-warning);
   border-color: rgba(245, 158, 11, 0.3);
-}
-
-/* ============================================
-   CUE HELD BANNER - Release/Discard UI
-   Phase 3: Shown when cue is held (service down or video busy)
-   ============================================ */
-.cue-held-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background: rgba(245, 158, 11, 0.12);
-  border: var(--border-width) solid rgba(245, 158, 11, 0.4);
-  border-left: 3px solid var(--color-accent-warning);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--space-3);
-  animation: held-slide-in var(--duration-normal) var(--ease-default);
-}
-
-.cue-held-banner__info {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  flex: 1;
-}
-
-.cue-held-banner__icon {
-  font-size: var(--text-lg);
-  flex-shrink: 0;
-}
-
-.cue-held-banner__text {
-  font-size: var(--text-sm);
-  color: var(--color-text-primary);
-}
-
-.cue-held-banner__text strong {
-  display: block;
-  color: var(--color-accent-warning);
-  margin-bottom: var(--space-1);
-}
-
-.cue-held-banner__text p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  line-height: var(--leading-normal);
-}
-
-.cue-held-banner__actions {
-  display: flex;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
-@keyframes held-slide-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* ============================================
@@ -277,15 +171,6 @@
   color: var(--color-text-primary);
 }
 
-.scene-tile__icon {
-  font-size: var(--text-lg);
-}
-
-.scene-tile__label {
-  font-size: var(--text-xs);
-  line-height: var(--leading-tight);
-}
-
 /* ============================================
    SPINNER (Small inline) - for scan state
    ============================================ */
@@ -328,12 +213,3 @@
   display: none;
 }
 
-.section-badge--connected {
-  background: rgba(34, 197, 94, 0.15);
-  color: var(--color-accent-success);
-}
-
-.section-badge--error {
-  background: rgba(239, 68, 68, 0.15);
-  color: var(--color-accent-error);
-}

@@ -18,7 +18,6 @@ export class MonitoringDisplay {
     this.dataManager = dataManager;
     this.teamRegistry = teamRegistry;
     this.devices = [];
-    this._currentIdleMode = 'IDLE_LOOP';
 
     // Renderers
     this.cueRenderer = new CueRenderer();
@@ -103,10 +102,10 @@ export class MonitoringDisplay {
    * NOTE: State-bearing events (cue, spotify, environment, session, video, transactions)
    * are handled by the NetworkedSession → DataManager → event → Renderer pipeline.
    * This handler only processes:
-   *   1. Ephemeral notifications (toasts for cue:fired/error/conflict)
-   *   2. Legacy handlers awaiting Phase 4 DM migration (display:mode, devices, video queue)
+   *   1. Ephemeral notifications (toasts for cue:fired/error)
+   *   2. Legacy handlers not yet in DM pipeline (display:mode, devices, video queue)
    *   3. sync:full aggregate update (system status, game clock, devices)
-   *   4. session:overtime (ephemeral — not state)
+   *   4. session:overtime (ephemeral)
    * @private
    */
   _handleMessage(event) {
@@ -152,11 +151,7 @@ export class MonitoringDisplay {
 
       // cue:held toast removed (Phase 4 — held items rendered by HeldItemsRenderer)
 
-      case 'sound:status':
-        // Informational only — no-op for now
-        break;
-
-      // --- Legacy handlers awaiting Phase 4 DM migration ---
+      // --- Legacy handlers not yet migrated to DataManager ---
       case 'display:mode':
         this._handleDisplayMode(payload);
         break;
@@ -170,10 +165,7 @@ export class MonitoringDisplay {
   }
 
   // ============================================
-  // LEGACY HANDLERS — Phase 4 DM migration candidates
-  // display:mode → needs DM.updateDisplayMode()
-  // device:connected/disconnected → needs DM.updateDeviceList()
-  // video:queue:update → needs DM.updateVideoQueue()
+  // LEGACY HANDLERS — not yet migrated to DataManager event pipeline
   // ============================================
 
   _updateDeviceList(payload, type) {
@@ -188,8 +180,6 @@ export class MonitoringDisplay {
   }
 
   _handleDisplayMode(payload) {
-    this._currentIdleMode = payload.mode;
-
     const nowShowingVal = document.getElementById('now-showing-value');
     const nowShowingIcon = document.getElementById('now-showing-icon');
     const btnIdle = document.getElementById('btn-idle-loop');
@@ -229,26 +219,14 @@ export class MonitoringDisplay {
 
     Debug.log('[MonitoringDisplay] updateAllDisplays (Sync Full)', syncData);
 
-    // 1. Session State
-    // Handled by NetworkedSession → DM.updateSessionState() → 'session-state:updated' event → SessionRenderer
-    // No direct rendering needed here.
+    // Session, environment, cue engine, and spotify state handled by DM event pipeline
 
-    // 2. Team Registry (Logic)
+    // Team Registry
     if (syncData.session && this.teamRegistry) {
       this.teamRegistry.populateFromSession(syncData.session);
     }
 
-    // 3. Environment State — handled by NetworkedSession → DataManager → event → renderer
-    // NetworkedSession.sync:full handler already calls:
-    //   dataManager.updateAudioState(), updateLightingState(), updateBluetoothState()
-    // which trigger events → MonitoringDisplay._wireDataManagerEvents() → renderers
-    // No direct rendering needed here.
-
-    // 4. Cue Engine (Phase 1 & 2)
-    // Handled by NetworkedSession → DM.syncCueState() → 'cue-state:updated' event → CueRenderer
-    // No direct rendering needed here.
-
-    // 5. Game Clock
+    // Game Clock
     if (syncData.gameClock) {
       this.sessionRenderer.renderGameClock({
         state: syncData.gameClock.status,
@@ -256,14 +234,10 @@ export class MonitoringDisplay {
       });
     }
 
-    // 6. Spotify
-    // Handled by NetworkedSession → DM.updateSpotifyState() → 'spotify-state:updated' event → SpotifyRenderer
-    // No direct rendering needed here.
-
-    // 7. System Status — replaced by HealthRenderer (Phase 4)
+    // Orchestrator connection dot (per-service health is in HealthRenderer)
     this.updateSystemDisplay();
 
-    // 8. Devices
+    // Devices
     if (syncData.devices) {
       this._setDeviceList(syncData.devices);
     }

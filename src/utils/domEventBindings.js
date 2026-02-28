@@ -169,7 +169,6 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
         safeAdminAction(adminController.getModule('audioController').setVideoOutput(sink, stream), 'setAudioRoute');
         break;
       }
-      // lightingRetry removed — Phase 4 HealthRenderer handles service health
       case 'activateScene': {
         const sceneId = actionElement.dataset.sceneId;
         if (sceneId) {

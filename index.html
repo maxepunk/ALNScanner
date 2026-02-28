@@ -354,12 +354,6 @@
                     </div>
                 </div>
 
-                <!-- Legacy display info (kept for backwards compatibility) -->
-                <div id="video-info" class="info-row" style="display: none;">
-                    <span>Current: <span id="admin-current-video">None</span></span>
-                    <span>Queue: <span id="admin-queue-length">0</span></span>
-                </div>
-
                 <!-- Video Progress Bar -->
                 <div id="video-progress-container" style="margin: 15px 0; display: none;">
                     <div class="progress-bar">
@@ -464,22 +458,14 @@
                     <!-- Populated dynamically by MonitoringDisplay -->
                     <p class="empty-state">No speakers found. Put your speaker in pairing mode and tap Scan.</p>
                 </div>
-                <div id="bt-unavailable" style="display:none;">
-                    Bluetooth adapter not available
-                </div>
             </section>
 
             <!-- Lighting Section (Networked mode only - Phase 0 Environment Control) -->
             <section class="admin-section" data-requires="networked" id="lighting-section" style="display:none;">
-                <h3>Lighting <span id="ha-connection-status" class="section-badge"></span></h3>
+                <h3>Lighting</h3>
                 <div id="lighting-scenes" class="scene-grid">
                     <!-- Populated dynamically by MonitoringDisplay -->
                 </div>
-                <div id="lighting-no-scenes" style="display:none;">
-                    No scenes configured in Home Assistant
-                </div>
-                <!-- Phase 4: lighting-not-connected removed — HealthRenderer shows service status -->
-                <!-- Lighting unavailable state shown inline in scene grid by EnvironmentRenderer -->
             </section>
 
             <!-- Health Dashboard (Phase 4 — replaces System Status) -->
@@ -525,9 +511,6 @@
 
     </div> <!-- End of container -->
 
-    <!-- Debug Panel (Legacy, replaced by debug-view) -->
-    <!-- Debug toggle moved to tabs -->
-
     <!-- ============================================
          ES6 MODULE ENTRY POINT
          Vite handles all module loading
@@ -540,63 +523,7 @@
     <!-- Socket.io v4 Client Library (auto-served by orchestrator at /socket.io/socket.io.js) -->
     <script src="/socket.io/socket.io.js"></script>
 
-    <!-- ============================================
-         CONNECTION WIZARD (ES6 MODULES)
-         ============================================ -->
-    <!--
-         Connection wizard functionality moved to ES6 module:
-         src/ui/connectionWizard.js
-
-         Functions now available via ConnectionWizard class:
-         - scanForServers()
-         - handleConnectionSubmit()
-         - cancelNetworkedMode()
-         - showConnectionWizard()
-
-         Use data-action attributes for event binding:
-         - data-action="connectionWizard.scanForServers"
-         - data-action="connectionWizard.handleConnectionSubmit"
-         - etc.
-
-         See src/utils/domEventBindings.js for event delegation.
-    -->
-
-    <!-- ============================================
-         WEBSOCKET CONTRACT TESTS (TDD)
-         ============================================ -->
-    <!-- QUnit Testing Framework -->
-    <link rel="stylesheet" href="https://code.jquery.com/qunit/qunit-2.20.0.css">
-    <script src="https://code.jquery.com/qunit/qunit-2.20.0.js"></script>
-
-    <!-- Test Container -->
-    <div id="websocket-tests" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 10000; overflow: auto;">
-        <div style="padding: 20px;">
-            <h2>WebSocket Integration Tests</h2>
-            <button onclick="document.getElementById('websocket-tests').style.display='none'" style="position: absolute; top: 20px; right: 20px; padding: 10px; background: #ff4444; color: white; border: none; border-radius: 5px; cursor: pointer;">Close</button>
-            <div id="qunit"></div>
-            <div id="qunit-fixture"></div>
-        </div>
-    </div>
-
-    <!-- ============================================
-         PHASE 2.4 (P1.4): CLEANUP ON PAGE UNLOAD
-         ============================================ -->
-    <!--
-         Cleanup handler moved to ES6 module:
-         src/ui/connectionWizard.js - setupCleanupHandlers()
-
-         Automatically initialized in src/main.js
-    -->
-
-    <!-- P2.2.3: Queue Status Indicator Update Logic (Event-Driven) -->
-    <!--
-         Queue status indicator logic moved to ES6 module:
-         src/ui/connectionWizard.js - QueueStatusManager class
-
-         Automatically initialized in src/main.js with event-driven updates.
-    -->
-
-    <!-- P2.2.3: Queue Status Indicator -->
+    <!-- Queue Status Indicator -->
     <div id="queueStatusIndicator" class="queue-indicator" title="Offline scans queued for upload">
         <span class="queue-icon">📤</span>
         <span class="queue-count" id="queueCount">0</span>

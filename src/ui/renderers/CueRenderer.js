@@ -156,6 +156,4 @@ export class CueRenderer {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
   }
-
-  // renderHeldItem() removed in Phase 4 — replaced by HeldItemsRenderer
 }

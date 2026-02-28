@@ -457,8 +457,6 @@ describe('AdminModule - ES6 Exports', () => {
       // Mock DOM structure matching actual index.html admin panel
       document.body.innerHTML = `
         <div id="session-status-container"></div>
-        <div id="admin-current-video"></div>
-        <div id="admin-queue-length"></div>
         <div id="orchestrator-status" class="status-dot"></div>
         <div id="vlc-status" class="status-dot"></div>
         <div id="admin-score-board"></div>
