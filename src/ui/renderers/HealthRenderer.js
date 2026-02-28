@@ -1,3 +1,5 @@
+import { escapeHtml } from '../../utils/escapeHtml.js';
+
 /**
  * HealthRenderer - Centralized Service Health Dashboard
  * Phase 4: Replaces SystemMonitor + scattered health indicators
@@ -62,9 +64,9 @@ export class HealthRenderer {
       const isDown = s.status !== 'healthy';
       return `
         <div class="health-service ${isDown ? 'health-service--down' : 'health-service--ok'}">
-          <div class="health-service__name">${this._escapeHtml(s.name)}</div>
+          <div class="health-service__name">${escapeHtml(s.name)}</div>
           <div class="health-service__status">${s.status}</div>
-          ${s.message ? `<div class="health-service__message">${this._escapeHtml(s.message)}</div>` : ''}
+          ${s.message ? `<div class="health-service__message">${escapeHtml(s.message)}</div>` : ''}
           ${isDown ? `<button class="btn btn-sm" data-action="admin.serviceCheck" data-service-id="${s.id}">Check Now</button>` : ''}
         </div>
       `;
@@ -83,13 +85,4 @@ export class HealthRenderer {
     `;
   }
 
-  _escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
 }

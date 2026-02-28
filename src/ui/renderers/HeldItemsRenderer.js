@@ -1,3 +1,5 @@
+import { escapeHtml } from '../../utils/escapeHtml.js';
+
 /**
  * HeldItemsRenderer - Unified Held Items Queue
  * Phase 4: Replaces CueRenderer.renderHeldItem() with unified cue+video queue
@@ -64,16 +66,16 @@ export class HeldItemsRenderer {
       const duration = this._formatDuration(item.heldAt);
 
       return `
-        <div class="held-item held-item--${typeBadge}" data-held-id="${this._escapeHtml(item.id)}">
+        <div class="held-item held-item--${typeBadge}" data-held-id="${escapeHtml(item.id)}">
           <span class="held-item__type">${typeBadge}</span>
           <div class="held-item__info">
-            <span class="held-item__description">${this._escapeHtml(description)}</span>
-            <span class="held-item__reason">${this._escapeHtml(item.reason || '')}</span>
+            <span class="held-item__description">${escapeHtml(description)}</span>
+            <span class="held-item__reason">${escapeHtml(item.reason || '')}</span>
           </div>
           <span class="held-item__duration" data-held-at="${item.heldAt || ''}">${duration}</span>
           <div class="held-item__actions">
-            <button class="btn btn-sm btn-warning" data-action="admin.releaseHeld" data-held-id="${this._escapeHtml(item.id)}">Release</button>
-            <button class="btn btn-sm btn-secondary" data-action="admin.discardHeld" data-held-id="${this._escapeHtml(item.id)}">Discard</button>
+            <button class="btn btn-sm btn-warning" data-action="admin.releaseHeld" data-held-id="${escapeHtml(item.id)}">Release</button>
+            <button class="btn btn-sm btn-secondary" data-action="admin.discardHeld" data-held-id="${escapeHtml(item.id)}">Discard</button>
           </div>
         </div>
       `;
@@ -128,13 +130,4 @@ export class HeldItemsRenderer {
     this._items.clear();
   }
 
-  _escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
 }

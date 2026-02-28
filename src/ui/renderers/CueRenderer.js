@@ -1,3 +1,5 @@
+import { escapeHtml } from '../../utils/escapeHtml.js';
+
 /**
  * CueRenderer - DOM Rendering for Cue System
  * Handles Quick Fire Grid, Standing Cues List, and Active Cues List
@@ -50,11 +52,11 @@ export class CueRenderer {
         <button 
           class="cue-tile cue-tile--${icon}" 
           data-action="admin.fireCue" 
-          data-cue-id="${this._escapeHtml(cue.id)}"
-          title="${this._escapeHtml(label)}"
+          data-cue-id="${escapeHtml(cue.id)}"
+          title="${escapeHtml(label)}"
         >
           <span class="cue-tile__icon cue-icon--${icon}"></span>
-          <span class="cue-tile__label">${this._escapeHtml(label)}</span>
+          <span class="cue-tile__label">${escapeHtml(label)}</span>
         </button>
       `;
     }).join('');
@@ -84,13 +86,13 @@ export class CueRenderer {
       return `
         <div class="standing-cue-item ${statusClass}">
           <div class="standing-cue-item__info">
-            <span class="standing-cue-item__label">${this._escapeHtml(cue.label || cue.id)}</span>
-            <span class="standing-cue-item__trigger">${this._escapeHtml(triggerLabel)}</span>
+            <span class="standing-cue-item__label">${escapeHtml(cue.label || cue.id)}</span>
+            <span class="standing-cue-item__trigger">${escapeHtml(triggerLabel)}</span>
           </div>
           <div class="standing-cue-item__actions">
             ${isDisabled ?
-          `<button class="btn btn-sm btn-success" data-action="admin.enableCue" data-cue-id="${this._escapeHtml(cue.id)}">Enable</button>` :
-          `<button class="btn btn-sm btn-secondary" data-action="admin.disableCue" data-cue-id="${this._escapeHtml(cue.id)}">Disable</button>`
+          `<button class="btn btn-sm btn-success" data-action="admin.enableCue" data-cue-id="${escapeHtml(cue.id)}">Enable</button>` :
+          `<button class="btn btn-sm btn-secondary" data-action="admin.disableCue" data-cue-id="${escapeHtml(cue.id)}">Disable</button>`
         }
           </div>
         </div>
@@ -122,9 +124,9 @@ export class CueRenderer {
       const cueLabel = cueDef ? (cueDef.label || cueDef.name || cueId) : cueId;
 
       return `
-        <div class="active-cue-item" data-cue-id="${this._escapeHtml(cueId)}">
+        <div class="active-cue-item" data-cue-id="${escapeHtml(cueId)}">
           <div class="active-cue-item__header">
-            <span class="active-cue-item__label">${this._escapeHtml(cueLabel)}</span>
+            <span class="active-cue-item__label">${escapeHtml(cueLabel)}</span>
             <span class="active-cue-item__state ${isPaused ? 'state-paused' : 'state-running'}">
               ${isPaused ? 'Paused' : 'Running'}
             </span>
@@ -137,23 +139,14 @@ export class CueRenderer {
           </div>
           <div class="active-cue-item__actions">
             ${isPaused ?
-          `<button class="btn btn-sm btn-primary" data-action="admin.resumeCue" data-cue-id="${this._escapeHtml(cueId)}">Resume</button>` :
-          `<button class="btn btn-sm btn-secondary" data-action="admin.pauseCue" data-cue-id="${this._escapeHtml(cueId)}">Pause</button>`
+          `<button class="btn btn-sm btn-primary" data-action="admin.resumeCue" data-cue-id="${escapeHtml(cueId)}">Resume</button>` :
+          `<button class="btn btn-sm btn-secondary" data-action="admin.pauseCue" data-cue-id="${escapeHtml(cueId)}">Pause</button>`
         }
-            <button class="btn btn-sm btn-danger" data-action="admin.stopCue" data-cue-id="${this._escapeHtml(cueId)}">Stop</button>
+            <button class="btn btn-sm btn-danger" data-action="admin.stopCue" data-cue-id="${escapeHtml(cueId)}">Stop</button>
           </div>
         </div>
       `;
     }).join('');
   }
 
-  _escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
 }

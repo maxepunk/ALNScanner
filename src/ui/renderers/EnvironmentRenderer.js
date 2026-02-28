@@ -1,3 +1,5 @@
+import { escapeHtml } from '../../utils/escapeHtml.js';
+
 /**
  * EnvironmentRenderer
  * Handles rendering of environment state (Lighting, Audio, Bluetooth) in the Admin Panel.
@@ -71,10 +73,8 @@ export class EnvironmentRenderer {
             // Render Grid
             this.sceneGrid.innerHTML = scenes.map(scene => {
                 const isActive = activeScene && (scene.id === activeScene.id);
-
-                // Escape logic inline for simplicity or helper
-                const safeId = this._escapeHtml(scene.id);
-                const safeName = this._escapeHtml(scene.name);
+                const safeId = escapeHtml(scene.id);
+                const safeName = escapeHtml(scene.name);
 
                 return `
           <button class="scene-tile ${isActive ? 'scene-tile--active' : ''}"
@@ -224,8 +224,8 @@ export class EnvironmentRenderer {
     }
 
     _renderDeviceItem(device) {
-        const safeName = this._escapeHtml(device.name || device.address);
-        const safeAddress = this._escapeHtml(device.address);
+        const safeName = escapeHtml(device.name || device.address);
+        const safeAddress = escapeHtml(device.address);
         const isConnected = device.status === 'connected';
         const isPaired = device.status === 'paired' || isConnected; // Connected implies paired usually
 
@@ -278,13 +278,4 @@ export class EnvironmentRenderer {
     `;
     }
 
-    _escapeHtml(str) {
-        if (!str) return '';
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
 }

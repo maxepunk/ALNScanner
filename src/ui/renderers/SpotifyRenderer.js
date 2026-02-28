@@ -1,3 +1,5 @@
+import { escapeHtml } from '../../utils/escapeHtml.js';
+
 /**
  * SpotifyRenderer - DOM Rendering for Spotify Status & Controls
  * Follows same pattern as CueRenderer, EnvironmentRenderer, etc.
@@ -34,8 +36,8 @@ export class SpotifyRenderer {
       <div class="spotify spotify--connected ${isPlaying ? 'spotify--playing' : 'spotify--paused'}">
         ${state.pausedByGameClock ? '<div class="spotify__clock-paused">Paused by Game Clock</div>' : ''}
         <div class="spotify__track">
-          <span class="spotify__track-title">${this._escapeHtml(title)}</span>
-          ${artist ? `<span class="spotify__track-artist">${this._escapeHtml(artist)}</span>` : ''}
+          <span class="spotify__track-title">${escapeHtml(title)}</span>
+          ${artist ? `<span class="spotify__track-artist">${escapeHtml(artist)}</span>` : ''}
         </div>
         <div class="spotify__controls">
           <button class="btn btn-sm btn-icon" data-action="admin.spotifyPrevious" title="Previous"${disabled}>&#9664;&#9664;</button>
@@ -82,13 +84,4 @@ export class SpotifyRenderer {
     }
   }
 
-  _escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
 }

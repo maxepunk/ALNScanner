@@ -1,4 +1,5 @@
 import Debug from '../utils/debug.js';
+import { escapeHtml } from '../utils/escapeHtml.js';
 import { CueRenderer } from '../ui/renderers/CueRenderer.js';
 import { EnvironmentRenderer } from '../ui/renderers/EnvironmentRenderer.js';
 import { SessionRenderer } from '../ui/renderers/SessionRenderer.js';
@@ -266,7 +267,7 @@ export class MonitoringDisplay {
     if (listEl) {
       if (this.devices.length === 0) listEl.innerHTML = '<p class="text-muted text-sm">No devices</p>';
       else listEl.innerHTML = this.devices.map(d => `
-            <div class="device-item"><span>${this._escapeHtml(d.deviceId)}</span><span class="device-type">${this._escapeHtml(d.type)}</span></div>
+            <div class="device-item"><span>${escapeHtml(d.deviceId)}</span><span class="device-type">${escapeHtml(d.type)}</span></div>
          `).join('');
     }
   }
@@ -301,16 +302,6 @@ export class MonitoringDisplay {
       orchestratorElem.className = `status-dot status-dot--${status}`;
       orchestratorElem.title = status;
     }
-  }
-
-  _escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
   }
 
   showToast(message, type = 'info', duration = 3000) {
