@@ -269,7 +269,11 @@ export class OrchestratorClient extends EventTarget {
       'cue:status',              // Phase 2: Compound cue progress
       'cue:completed',           // Phase 1: Cue action sequence completed
       'cue:error',               // Phase 1: Cue action failed
-      'cue:conflict',            // Phase 2: Compound cue video conflict detection
+      'held:added',              // Phase 4: Held item added (cue or video)
+      'held:released',           // Phase 4: Held item released
+      'held:discarded',          // Phase 4: Held item discarded
+      'held:recoverable',        // Phase 4: Held items recoverable (service came back)
+      'service:health',          // Phase 4: Service health updates
       'sound:status',            // Phase 1: Sound playback status
       'spotify:status',          // Phase 2: Spotify playback status
       'audio:ducking:status',    // Phase 3: Audio ducking state change

@@ -241,7 +241,12 @@ describe('OrchestratorClient - Dumb Pipe', () => {
         'audio:routing:fallback',
         'lighting:scene',
         'lighting:status',
-        'audio:ducking:status'  // Phase 3: Audio ducking state change
+        'audio:ducking:status',  // Phase 3: Audio ducking state change
+        'held:added',            // Phase 4: Held item added (cue or video)
+        'held:released',         // Phase 4: Held item released
+        'held:discarded',        // Phase 4: Held item discarded
+        'held:recoverable',      // Phase 4: Held items recoverable
+        'service:health'         // Phase 4: Service health updates
       ];
 
       messageTypes.forEach(type => {

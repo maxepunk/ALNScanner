@@ -15,28 +15,15 @@ export class SpotifyRenderer {
     if (!this.container) return;
 
     if (!state || !state.connected) {
-      this._renderDisconnected();
+      this._renderConnected({ ...state, state: 'stopped', _disabled: true });
       return;
     }
 
     this._renderConnected(state);
   }
 
-  _renderDisconnected() {
-    this.container.innerHTML = `
-      <div class="spotify spotify--disconnected">
-        <div class="spotify__status">
-          <span class="spotify__status-icon">&#9679;</span>
-          <span class="spotify__status-text">Spotify Disconnected</span>
-        </div>
-        <button class="btn btn-sm" data-action="admin.spotifyReconnect">
-          Reconnect
-        </button>
-      </div>
-    `;
-  }
-
   _renderConnected(state) {
+    const disabled = state._disabled ? ' disabled' : '';
     const isPlaying = state.state === 'playing';
     const track = state.track || {};
     const title = track.title || 'No track';
@@ -51,13 +38,13 @@ export class SpotifyRenderer {
           ${artist ? `<span class="spotify__track-artist">${this._escapeHtml(artist)}</span>` : ''}
         </div>
         <div class="spotify__controls">
-          <button class="btn btn-sm btn-icon" data-action="admin.spotifyPrevious" title="Previous">&#9664;&#9664;</button>
+          <button class="btn btn-sm btn-icon" data-action="admin.spotifyPrevious" title="Previous"${disabled}>&#9664;&#9664;</button>
           ${isPlaying
-            ? '<button class="btn btn-sm btn-icon" data-action="admin.spotifyPause" title="Pause">&#10074;&#10074;</button>'
-            : '<button class="btn btn-sm btn-icon" data-action="admin.spotifyPlay" title="Play">&#9654;</button>'
+            ? `<button class="btn btn-sm btn-icon" data-action="admin.spotifyPause" title="Pause"${disabled}>&#10074;&#10074;</button>`
+            : `<button class="btn btn-sm btn-icon" data-action="admin.spotifyPlay" title="Play"${disabled}>&#9654;</button>`
           }
-          <button class="btn btn-sm btn-icon" data-action="admin.spotifyNext" title="Next">&#9654;&#9654;</button>
-          <button class="btn btn-sm btn-icon" data-action="admin.spotifyStop" title="Stop">&#9632;</button>
+          <button class="btn btn-sm btn-icon" data-action="admin.spotifyNext" title="Next"${disabled}>&#9654;&#9654;</button>
+          <button class="btn btn-sm btn-icon" data-action="admin.spotifyStop" title="Stop"${disabled}>&#9632;</button>
         </div>
         <div class="spotify__volume">
           <label class="spotify__volume-label">Vol</label>
@@ -69,6 +56,30 @@ export class SpotifyRenderer {
         </div>
       </div>
     `;
+  }
+
+  /**
+   * Render ducking status indicator
+   * @param {Object} duckingState - { ducked, volume, activeSources }
+   */
+  renderDucking(duckingState) {
+    if (!this.container) return;
+
+    let indicator = document.getElementById('spotify-ducking-indicator');
+    if (!indicator) {
+      indicator = document.createElement('div');
+      indicator.id = 'spotify-ducking-indicator';
+      indicator.className = 'spotify__ducking-indicator';
+      this.container.appendChild(indicator);
+    }
+
+    if (duckingState?.ducked) {
+      const sources = duckingState.activeSources?.join(', ') || 'system';
+      indicator.textContent = `Volume reduced (${sources} playing)`;
+      indicator.style.display = 'block';
+    } else {
+      indicator.style.display = 'none';
+    }
   }
 
   _escapeHtml(str) {

@@ -17,13 +17,22 @@ function debounce(fn, delayMs) {
 
 export function bindDOMEvents(app, dataManager, settings, debug, uiManager, connectionWizard, queueStatusManager) {
 
+  /** Catch rejected promises from fire-and-forget admin actions */
+  function safeAdminAction(actionPromise, actionName) {
+    if (actionPromise && typeof actionPromise.catch === 'function') {
+      actionPromise.catch(err => {
+        debug.log(`Command failed: ${actionName} — ${err.message}`, true);
+      });
+    }
+  }
+
   // Debounced volume setter — prevents dbus-send subprocess pile-up and
   // slider DOM destruction during drag (SpotifyRenderer.render replaces innerHTML).
   // 150ms trailing debounce: fires when user pauses or releases slider.
   const debouncedSpotifyVolume = debounce((volume) => {
     const adminController = app.networkedSession?.getService('adminController');
     if (adminController?.initialized) {
-      adminController.getModule('spotifyController').setVolume(volume);
+      safeAdminAction(adminController.getModule('spotifyController').setVolume(volume), 'spotifySetVolume');
     }
   }, 150);
 
@@ -40,76 +49,92 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
 
     switch (method) {
       case 'startGame':
-        adminController.getModule('sessionManager').startGame();
+        safeAdminAction(adminController.getModule('sessionManager').startGame(), 'startGame');
         break;
       case 'fireCue': {
         const cueId = actionElement.dataset.cueId;
         if (cueId) {
-          adminController.getModule('cueController').fireCue(cueId);
+          safeAdminAction(adminController.getModule('cueController').fireCue(cueId), 'fireCue');
         }
         break;
       }
       case 'enableCue': {
         const cueId = actionElement.dataset.cueId;
         if (cueId) {
-          adminController.getModule('cueController').enableCue(cueId);
+          safeAdminAction(adminController.getModule('cueController').enableCue(cueId), 'enableCue');
         }
         break;
       }
       case 'disableCue': {
         const cueId = actionElement.dataset.cueId;
         if (cueId) {
-          adminController.getModule('cueController').disableCue(cueId);
+          safeAdminAction(adminController.getModule('cueController').disableCue(cueId), 'disableCue');
         }
         break;
       }
       case 'pauseCue': {
         const cueId = actionElement.dataset.cueId;
         if (cueId) {
-          adminController.getModule('cueController').pauseCue(cueId);
+          safeAdminAction(adminController.getModule('cueController').pauseCue(cueId), 'pauseCue');
         }
         break;
       }
       case 'stopCue': {
         const cueId = actionElement.dataset.cueId;
         if (cueId) {
-          adminController.getModule('cueController').stopCue(cueId);
+          safeAdminAction(adminController.getModule('cueController').stopCue(cueId), 'stopCue');
         }
         break;
       }
       case 'resumeCue': {
         const cueId = actionElement.dataset.cueId;
         if (cueId) {
-          adminController.getModule('cueController').resumeCue(cueId);
+          safeAdminAction(adminController.getModule('cueController').resumeCue(cueId), 'resumeCue');
         }
         break;
       }
-      case 'resolveConflictCue': {
-        const cueId = actionElement.dataset.cueId;
-        const decision = actionElement.dataset.decision;
-        if (cueId && decision) {
-          adminController.getModule('cueController').resolveConflict(cueId, decision);
+      case 'releaseHeld': {
+        const heldId = actionElement.dataset.heldId;
+        if (heldId) {
+          safeAdminAction(adminController.getModule('cueController').releaseHeld(heldId), 'releaseHeld');
         }
         break;
       }
+      case 'discardHeld': {
+        const heldId = actionElement.dataset.heldId;
+        if (heldId) {
+          safeAdminAction(adminController.getModule('cueController').discardHeld(heldId), 'discardHeld');
+        }
+        break;
+      }
+      case 'releaseAllHeld':
+        safeAdminAction(adminController.getModule('cueController').releaseAllHeld(), 'releaseAllHeld');
+        break;
+      case 'discardAllHeld':
+        safeAdminAction(adminController.getModule('cueController').discardAllHeld(), 'discardAllHeld');
+        break;
       case 'spotifyPlay':
-        adminController.getModule('spotifyController').play();
+        safeAdminAction(adminController.getModule('spotifyController').play(), 'spotifyPlay');
         break;
       case 'spotifyPause':
-        adminController.getModule('spotifyController').pause();
+        safeAdminAction(adminController.getModule('spotifyController').pause(), 'spotifyPause');
         break;
       case 'spotifyNext':
-        adminController.getModule('spotifyController').next();
+        safeAdminAction(adminController.getModule('spotifyController').next(), 'spotifyNext');
         break;
       case 'spotifyPrevious':
-        adminController.getModule('spotifyController').previous();
+        safeAdminAction(adminController.getModule('spotifyController').previous(), 'spotifyPrevious');
         break;
       case 'spotifyStop':
-        adminController.getModule('spotifyController').stop();
+        safeAdminAction(adminController.getModule('spotifyController').stop(), 'spotifyStop');
         break;
-      case 'spotifyReconnect':
-        adminController.getModule('spotifyController').reconnect();
+      case 'serviceCheck': {
+        // Routes through spotifyController.checkService() which sends generic 'service:check' command.
+        // Works for all services (vlc, lighting, etc.) — spotifyController is just the host module.
+        const serviceId = actionElement.getAttribute('data-service-id');
+        safeAdminAction(adminController.getModule('spotifyController').checkService(serviceId), 'serviceCheck');
         break;
+      }
       case 'spotifySetVolume': {
         const volume = parseInt(actionElement.value, 10);
         if (!isNaN(volume)) {
@@ -118,39 +143,37 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
         break;
       }
       case 'startBtScan':
-        adminController.getModule('bluetoothController').startScan();
+        safeAdminAction(adminController.getModule('bluetoothController').startScan(), 'startBtScan');
         break;
       case 'stopBtScan':
-        adminController.getModule('bluetoothController').stopScan();
+        safeAdminAction(adminController.getModule('bluetoothController').stopScan(), 'stopBtScan');
         break;
       case 'pairBtDevice': {
         const address = actionElement.dataset.btAddress;
-        if (address) adminController.getModule('bluetoothController').pairDevice(address);
+        if (address) safeAdminAction(adminController.getModule('bluetoothController').pairDevice(address), 'pairBtDevice');
         break;
       }
       case 'connectBtDevice': {
         const address = actionElement.dataset.btAddress;
-        if (address) adminController.getModule('bluetoothController').connectDevice(address);
+        if (address) safeAdminAction(adminController.getModule('bluetoothController').connectDevice(address), 'connectBtDevice');
         break;
       }
       case 'disconnectBtDevice': {
         const address = actionElement.dataset.btAddress;
-        if (address) adminController.getModule('bluetoothController').disconnectDevice(address);
+        if (address) safeAdminAction(adminController.getModule('bluetoothController').disconnectDevice(address), 'disconnectBtDevice');
         break;
       }
       case 'setAudioRoute': {
         const stream = actionElement.dataset.stream || 'video';
         const sink = actionElement.value;
-        adminController.getModule('audioController').setVideoOutput(sink, stream);
+        safeAdminAction(adminController.getModule('audioController').setVideoOutput(sink, stream), 'setAudioRoute');
         break;
       }
-      case 'lightingRetry':
-        adminController.getModule('lightingController').refreshScenes();
-        break;
+      // lightingRetry removed — Phase 4 HealthRenderer handles service health
       case 'activateScene': {
         const sceneId = actionElement.dataset.sceneId;
         if (sceneId) {
-          adminController.getModule('lightingController').activateScene(sceneId);
+          safeAdminAction(adminController.getModule('lightingController').activateScene(sceneId), 'activateScene');
         }
         break;
       }

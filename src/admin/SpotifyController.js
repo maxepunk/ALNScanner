@@ -87,12 +87,13 @@ export class SpotifyController {
   }
 
   /**
-   * Reconnect to Spotify (re-check D-Bus connection)
+   * Trigger on-demand health check for a service
+   * @param {string} serviceId - Service to check (e.g., 'spotify')
    * @param {number} [timeout=5000]
    * @returns {Promise<Object>}
    */
-  async reconnect(timeout = 5000) {
-    return sendCommand(this.connection, 'spotify:reconnect', {}, timeout);
+  async checkService(serviceId, timeout = 5000) {
+    return sendCommand(this.connection, 'service:check', { serviceId }, timeout);
   }
 
   /**

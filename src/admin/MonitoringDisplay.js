@@ -4,6 +4,8 @@ import { EnvironmentRenderer } from '../ui/renderers/EnvironmentRenderer.js';
 import { SessionRenderer } from '../ui/renderers/SessionRenderer.js';
 import { VideoRenderer } from '../ui/renderers/VideoRenderer.js';
 import { SpotifyRenderer } from '../ui/renderers/SpotifyRenderer.js';
+import { HealthRenderer } from '../ui/renderers/HealthRenderer.js';
+import { HeldItemsRenderer } from '../ui/renderers/HeldItemsRenderer.js';
 
 export class MonitoringDisplay {
   /**
@@ -24,6 +26,8 @@ export class MonitoringDisplay {
     this.sessionRenderer = new SessionRenderer();
     this.videoRenderer = new VideoRenderer();
     this.spotifyRenderer = new SpotifyRenderer();
+    this.healthRenderer = new HealthRenderer();
+    this.heldItemsRenderer = new HeldItemsRenderer();
 
     // Bind handler for cleanup
     this._messageHandler = this._handleMessage.bind(this);
@@ -50,11 +54,21 @@ export class MonitoringDisplay {
 
     // Cue State
     on('cue-state:updated', (e) => this.cueRenderer.render(e.detail));
-    on('cue:conflict', (e) => this.cueRenderer.renderConflict(e.detail));
+    on('held-items:updated', (e) => this.heldItemsRenderer.render(e.detail));
+
+    // Service Health (Phase 4)
+    on('service-health:updated', (e) => this.healthRenderer.render(e.detail));
 
     // Environment State
     on('lighting-state:updated', (e) => this.envRenderer.renderLighting(e.detail.lighting));
-    on('audio-state:updated', (e) => this.envRenderer.renderAudio(e.detail.audio));
+    on('audio-state:updated', (e) => {
+      this.envRenderer.renderAudio(e.detail.audio);
+      // Forward ducking state to SpotifyRenderer (ducking is stored in audio.ducking.spotify)
+      const spotifyDucking = e.detail.audio?.ducking?.spotify;
+      if (spotifyDucking) {
+        this.spotifyRenderer.renderDucking(spotifyDucking);
+      }
+    });
     on('bluetooth-state:updated', (e) => this.envRenderer.renderBluetooth(e.detail.bluetooth));
 
     // Session State
@@ -64,6 +78,9 @@ export class MonitoringDisplay {
         this.teamRegistry.populateFromSession(e.detail.session);
       }
     });
+
+    // Video State
+    on('video-state:updated', (e) => this.videoRenderer.render(e.detail));
 
     // Spotify State
     on('spotify-state:updated', (e) => this.spotifyRenderer.render(e.detail));
@@ -133,13 +150,7 @@ export class MonitoringDisplay {
         this.showToast(`Cue error: ${payload.cueId} — ${payload.error || payload.action}`, 'error', 5000);
         break;
 
-      case 'cue:conflict':
-        this.showToast(
-          `Cue conflict: ${payload.cueId} — ${payload.reason || 'Video conflict'}`,
-          'warning',
-          10000
-        );
-        break;
+      // cue:held toast removed (Phase 4 — held items rendered by HeldItemsRenderer)
 
       case 'sound:status':
         // Informational only — no-op for now
@@ -249,16 +260,10 @@ export class MonitoringDisplay {
     // Handled by NetworkedSession → DM.updateSpotifyState() → 'spotify-state:updated' event → SpotifyRenderer
     // No direct rendering needed here.
 
-    // 7. System Status
+    // 7. System Status — replaced by HealthRenderer (Phase 4)
     this.updateSystemDisplay();
-    if (syncData.systemStatus?.vlc) {
-      const vlcElem = document.getElementById('vlc-status');
-      if (vlcElem) {
-        vlcElem.className = `status-dot status-dot--${syncData.systemStatus.vlc}`;
-      }
-    }
 
-    // 8. Legacy / Phase 4 TODOs
+    // 8. Devices
     if (syncData.devices) {
       this._setDeviceList(syncData.devices);
     }
@@ -363,6 +368,9 @@ export class MonitoringDisplay {
         this.dataManager.removeEventListener(event, handler);
       }
       this._dmListeners = null;
+    }
+    if (this.heldItemsRenderer) {
+      this.heldItemsRenderer.destroy();
     }
   }
 } // End Class MonitoringDisplay

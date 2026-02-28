@@ -133,54 +133,54 @@ describe('MonitoringDisplay - Phase 2', () => {
     });
   });
 
-  describe('cue:conflict', () => {
-    it('should show conflict toast with Override and Cancel buttons', () => {
-      // Mock showToast method
-      display.showToast = jest.fn();
+  // cue:held toast tests removed — Phase 4 replaces toasts with HeldItemsRenderer
+  // spotify:status tests moved to SpotifyRenderer.test.js
+  // DM state management tested in UnifiedDataManager-spotify.test.js
 
-      const event = new CustomEvent('message:received', {
-        detail: {
-          type: 'cue:conflict',
-          payload: {
-            cueId: 'evidence-reel',
-            reason: 'Video conflict',
-            currentVideo: 'opening.mp4'
-          }
-        }
-      });
-      mockClient.dispatchEvent(event);
+  describe('video-state:updated wiring', () => {
+    it('should route video-state:updated to videoRenderer.render', () => {
+      const renderSpy = jest.spyOn(display.videoRenderer, 'render');
+      const videoState = { nowPlaying: 'test.mp4', isPlaying: true, progress: 0.5 };
 
-      // Toast should be called with warning type and contain cue ID
-      expect(display.showToast).toHaveBeenCalledWith(
-        expect.stringContaining('evidence-reel'),
-        'warning',
-        expect.any(Number)
-      );
-    });
+      mockDataManager.dispatchEvent(new CustomEvent('video-state:updated', {
+        detail: videoState
+      }));
 
-    it('should include conflict reason in toast message', () => {
-      display.showToast = jest.fn();
-
-      const event = new CustomEvent('message:received', {
-        detail: {
-          type: 'cue:conflict',
-          payload: {
-            cueId: 'evidence-reel',
-            reason: 'Video conflict',
-            currentVideo: 'opening.mp4'
-          }
-        }
-      });
-      mockClient.dispatchEvent(event);
-
-      expect(display.showToast).toHaveBeenCalledWith(
-        expect.stringContaining('Video conflict'),
-        'warning',
-        expect.any(Number)
-      );
+      expect(renderSpy).toHaveBeenCalledWith(videoState);
     });
   });
 
-  // spotify:status tests moved to SpotifyRenderer.test.js
-  // DM state management tested in UnifiedDataManager-spotify.test.js
+  describe('Phase 4: HealthRenderer wiring', () => {
+    it('should create healthRenderer instance', () => {
+      expect(display.healthRenderer).toBeDefined();
+    });
+
+    it('should route service-health:updated to healthRenderer.render', () => {
+      const renderSpy = jest.spyOn(display.healthRenderer, 'render');
+      const healthData = { serviceHealth: { vlc: { status: 'down', message: 'Connection refused' } } };
+
+      mockDataManager.dispatchEvent(new CustomEvent('service-health:updated', {
+        detail: healthData
+      }));
+
+      expect(renderSpy).toHaveBeenCalledWith(healthData);
+    });
+  });
+
+  describe('Phase 4: HeldItemsRenderer wiring', () => {
+    it('should create heldItemsRenderer instance', () => {
+      expect(display.heldItemsRenderer).toBeDefined();
+    });
+
+    it('should route held-items:updated to heldItemsRenderer.render', () => {
+      const renderSpy = jest.spyOn(display.heldItemsRenderer, 'render');
+      const heldData = { action: 'held', id: 'held-cue-1', type: 'cue', reason: 'video_busy' };
+
+      mockDataManager.dispatchEvent(new CustomEvent('held-items:updated', {
+        detail: heldData
+      }));
+
+      expect(renderSpy).toHaveBeenCalledWith(heldData);
+    });
+  });
 });

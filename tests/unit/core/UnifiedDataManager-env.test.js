@@ -71,10 +71,11 @@ describe('UnifiedDataManager - Environment & Session State', () => {
         });
 
         it('should update ducking status', () => {
-            dataManager.updateAudioDucking({ stream: 'spotify', ducked: true, volume: 50 });
+            dataManager.updateAudioDucking({ stream: 'spotify', ducked: true, volume: 50, activeSources: ['video'] });
             expect(dataManager.environmentState.audio.ducking['spotify']).toEqual({
                 ducked: true,
-                volume: 50
+                volume: 50,
+                activeSources: ['video']
             });
         });
 

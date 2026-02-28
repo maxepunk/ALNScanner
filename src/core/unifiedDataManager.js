@@ -92,6 +92,9 @@ export class UnifiedDataManager extends EventTarget {
       }
     };
 
+    // Phase 4: Service Health State
+    this.serviceHealth = {};
+
     // Phase 3: Session State (Reactive)
     this.sessionState = {
       id: null,
@@ -1045,14 +1048,47 @@ export class UnifiedDataManager extends EventTarget {
   }
 
   /**
-   * Handle cue conflict event
-   * @param {Object} payload - { cueId, conflictType, details }
+   * Handle held item updates (held:added, held:released, held:discarded, held:recoverable)
+   * @param {Object} payload - Held item data from backend
+   * @param {string} action - 'held', 'released', 'discarded', or 'recoverable'
    */
-  handleCueConflict(payload) {
-    this.dispatchEvent(new CustomEvent('cue:conflict', {
-      detail: payload
+  updateHeldItems(payload, action) {
+    this.dispatchEvent(new CustomEvent('held-items:updated', {
+      detail: { ...payload, action }
     }));
-    this._log(`Cue conflict reported: ${payload.cueId} (${payload.conflictType})`);
+    this._log(`Held item ${action}: ${payload.cueId || payload.heldId || payload.id || `count=${payload.heldCount}`}`);
+  }
+
+  /**
+   * Handle individual service health update (service:health event)
+   * @param {Object} data - { serviceId, status, message, timestamp }
+   */
+  updateServiceHealth(data) {
+    this.serviceHealth[data.serviceId] = {
+      status: data.status,
+      message: data.message,
+      timestamp: data.timestamp || new Date().toISOString()
+    };
+    this.dispatchEvent(new CustomEvent('service-health:updated', {
+      detail: { serviceHealth: this.serviceHealth }
+    }));
+    this._log(`Service health: ${data.serviceId} → ${data.status}`);
+  }
+
+  /**
+   * Bulk-sync service health from sync:full payload (single event dispatch)
+   * @param {Object} healthMap - { serviceId: { status, message, timestamp? } }
+   */
+  syncServiceHealth(healthMap) {
+    Object.assign(this.serviceHealth, healthMap);
+    // Ensure all entries have timestamps
+    for (const h of Object.values(this.serviceHealth)) {
+      if (!h.timestamp) h.timestamp = new Date().toISOString();
+    }
+    this.dispatchEvent(new CustomEvent('service-health:updated', {
+      detail: { serviceHealth: this.serviceHealth }
+    }));
+    this._log(`Service health synced: ${Object.keys(healthMap).join(', ')}`);
   }
 
   /**
@@ -1159,7 +1195,8 @@ export class UnifiedDataManager extends EventTarget {
     if (payload.stream) {
       this.environmentState.audio.ducking[payload.stream] = {
         ducked: payload.ducked,
-        volume: payload.volume
+        volume: payload.volume,
+        activeSources: payload.activeSources || []
       };
       this.dispatchEvent(new CustomEvent('audio-state:updated', {
         detail: { audio: { ...this.environmentState.audio } }

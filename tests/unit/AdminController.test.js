@@ -25,13 +25,6 @@ jest.mock('../../src/admin/VideoController.js', () => ({
   }))
 }));
 
-jest.mock('../../src/admin/SystemMonitor.js', () => ({
-  SystemMonitor: jest.fn().mockImplementation(() => ({
-    destroy: jest.fn(),
-    refresh: jest.fn()
-  }))
-}));
-
 jest.mock('../../src/admin/AdminOperations.js', () => ({
   AdminOperations: jest.fn().mockImplementation(() => ({
     destroy: jest.fn()
@@ -67,7 +60,6 @@ jest.mock('../../src/admin/LightingController.js', () => ({
 import AdminController from '../../src/app/adminController.js';
 import { SessionManager } from '../../src/admin/SessionManager.js';
 import { VideoController } from '../../src/admin/VideoController.js';
-import { SystemMonitor } from '../../src/admin/SystemMonitor.js';
 import { AdminOperations } from '../../src/admin/AdminOperations.js';
 import { MonitoringDisplay } from '../../src/admin/MonitoringDisplay.js';
 import { BluetoothController } from '../../src/admin/BluetoothController.js';
@@ -116,7 +108,6 @@ describe('AdminController - Admin Module Lifecycle', () => {
 
       expect(SessionManager).toHaveBeenCalledWith(mockClient);
       expect(VideoController).toHaveBeenCalledWith(mockClient);
-      expect(SystemMonitor).toHaveBeenCalledWith(mockClient);
       expect(AdminOperations).toHaveBeenCalledWith(mockClient);
       expect(MonitoringDisplay).toHaveBeenCalled();
       expect(BluetoothController).toHaveBeenCalledWith(mockClient);
@@ -132,7 +123,6 @@ describe('AdminController - Admin Module Lifecycle', () => {
       expect(controller.modules).toBeDefined();
       expect(controller.modules.sessionManager).toBeDefined();
       expect(controller.modules.videoController).toBeDefined();
-      expect(controller.modules.systemMonitor).toBeDefined();
       expect(controller.modules.adminOperations).toBeDefined();
       expect(controller.modules.monitoringDisplay).toBeDefined();
       expect(controller.modules.bluetoothController).toBeDefined();
@@ -147,7 +137,6 @@ describe('AdminController - Admin Module Lifecycle', () => {
       // Should only be called once
       expect(SessionManager).toHaveBeenCalledTimes(1);
       expect(VideoController).toHaveBeenCalledTimes(1);
-      expect(SystemMonitor).toHaveBeenCalledTimes(1);
       expect(AdminOperations).toHaveBeenCalledTimes(1);
       expect(MonitoringDisplay).toHaveBeenCalledTimes(1);
       expect(BluetoothController).toHaveBeenCalledTimes(1);
@@ -241,7 +230,6 @@ describe('AdminController - Admin Module Lifecycle', () => {
 
       expect(modules.sessionManager.destroy).toHaveBeenCalled();
       expect(modules.videoController.destroy).toHaveBeenCalled();
-      expect(modules.systemMonitor.destroy).toHaveBeenCalled();
       expect(modules.adminOperations.destroy).toHaveBeenCalled();
       expect(modules.monitoringDisplay.destroy).toHaveBeenCalled();
       expect(modules.bluetoothController.destroy).toHaveBeenCalled();
@@ -315,7 +303,6 @@ describe('AdminController - Admin Module Lifecycle', () => {
 
       expect(() => controller.getModule('sessionManager')).not.toThrow();
       expect(() => controller.getModule('videoController')).not.toThrow();
-      expect(() => controller.getModule('systemMonitor')).not.toThrow();
       expect(() => controller.getModule('adminOperations')).not.toThrow();
       expect(() => controller.getModule('monitoringDisplay')).not.toThrow();
       expect(() => controller.getModule('bluetoothController')).not.toThrow();

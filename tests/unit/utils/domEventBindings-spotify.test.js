@@ -2,7 +2,7 @@
  * domEventBindings - Spotify Action Tests
  *
  * Tests the admin.spotify* data-action routing including:
- * - spotifyStop, spotifyReconnect (click actions)
+ * - spotifyStop, serviceCheck (click actions)
  * - spotifySetVolume (input event on range slider, debounced)
  * - Range input click guard (click on range is ignored)
  */
@@ -17,7 +17,7 @@ describe('domEventBindings - spotify actions', () => {
     stop: jest.fn(),
     next: jest.fn(),
     previous: jest.fn(),
-    reconnect: jest.fn(),
+    checkService: jest.fn(),
     setVolume: jest.fn()
   };
 
@@ -88,16 +88,17 @@ describe('domEventBindings - spotify actions', () => {
     });
   });
 
-  describe('admin.spotifyReconnect', () => {
-    it('should call spotifyController.reconnect()', () => {
+  describe('admin.serviceCheck', () => {
+    it('should call spotifyController.checkService with service id from data attribute', () => {
       const btn = document.createElement('button');
-      btn.dataset.action = 'admin.spotifyReconnect';
+      btn.dataset.action = 'admin.serviceCheck';
+      btn.setAttribute('data-service-id', 'spotify');
       document.body.appendChild(btn);
 
       clickAction(btn);
 
       expect(mockAdminController.getModule).toHaveBeenCalledWith('spotifyController');
-      expect(mockSpotifyController.reconnect).toHaveBeenCalled();
+      expect(mockSpotifyController.checkService).toHaveBeenCalledWith('spotify');
     });
   });
 

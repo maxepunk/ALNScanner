@@ -250,7 +250,6 @@ class App {
           sessionManager: adminController.getModule('sessionManager'),
           videoController: adminController.getModule('videoController'),
           displayController: adminController.getModule('displayController'),
-          systemMonitor: adminController.getModule('systemMonitor'),
           adminOps: adminController.getModule('adminOperations'),
           monitoring: adminController.getModule('monitoringDisplay')
         };

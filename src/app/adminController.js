@@ -17,7 +17,6 @@
 import { SessionManager } from '../admin/SessionManager.js';
 import { VideoController } from '../admin/VideoController.js';
 import { DisplayController } from '../admin/DisplayController.js';
-import { SystemMonitor } from '../admin/SystemMonitor.js';
 import { AdminOperations } from '../admin/AdminOperations.js';
 import { MonitoringDisplay } from '../admin/MonitoringDisplay.js';
 import { BluetoothController } from '../admin/BluetoothController.js';
@@ -54,7 +53,6 @@ export class AdminController extends EventTarget {
       sessionManager: new SessionManager(this.client),
       videoController: new VideoController(this.client),
       displayController: new DisplayController(this.client),
-      systemMonitor: new SystemMonitor(this.client),
       adminOperations: new AdminOperations(this.client),
       monitoringDisplay: new MonitoringDisplay(this.client, this.dataManager, this.teamRegistry),
       bluetoothController: new BluetoothController(this.client),
@@ -71,7 +69,7 @@ export class AdminController extends EventTarget {
 
   /**
    * Get specific admin module
-   * @param {string} name - Module name (sessionManager, videoController, systemMonitor, etc.)
+   * @param {string} name - Module name (sessionManager, videoController, monitoringDisplay, etc.)
    * @returns {Object} Module instance
    * @throws {Error} If not initialized
    */

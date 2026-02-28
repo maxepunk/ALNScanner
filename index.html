@@ -417,8 +417,10 @@
                     </div>
                 </div>
 
-                <!-- Cue Conflict Banner (Phase 2 - populated by MonitoringDisplay._handleCueConflict()) -->
-                <div id="cue-conflict-container"></div>
+                <!-- Held Items (Phase 4 — replaces #cue-held-container) -->
+                <div id="held-items-container">
+                    <!-- Populated by HeldItemsRenderer -->
+                </div>
 
                 <!-- Active Compound Cues (Phase 2 - populated by MonitoringDisplay) -->
                 <div class="subsection">
@@ -476,24 +478,17 @@
                 <div id="lighting-no-scenes" style="display:none;">
                     No scenes configured in Home Assistant
                 </div>
-                <div id="lighting-not-connected" style="display:none;">
-                    Home Assistant not connected
-                    <button class="btn btn-sm" data-action="admin.lightingRetry">Retry</button>
-                </div>
+                <!-- Phase 4: lighting-not-connected removed — HealthRenderer shows service status -->
+                <!-- Lighting unavailable state shown inline in scene grid by EnvironmentRenderer -->
             </section>
 
-            <!-- System Status Section (Networked mode only - requires WebSocket) -->
-            <section class="admin-section" data-requires="networked">
-                <h3>System Status</h3>
-                <div class="status-grid">
-                    <div class="status-item">
-                        <span>Orchestrator:</span>
-                        <span id="orchestrator-status" class="status-dot">●</span>
-                    </div>
-                    <div class="status-item">
-                        <span>VLC:</span>
-                        <span id="vlc-status" class="status-dot">●</span>
-                    </div>
+            <!-- Health Dashboard (Phase 4 — replaces System Status) -->
+            <section class="admin-section" data-requires="networked" id="health-dashboard-section">
+                <h3>Service Health</h3>
+                <div id="health-dashboard">
+                    <!-- Populated by HealthRenderer -->
+                </div>
+                <div class="status-grid" style="margin-top: 0.5rem;">
                     <div class="status-item">
                         <span>Devices:</span>
                         <span id="device-count">0</span>

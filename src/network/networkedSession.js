@@ -247,6 +247,18 @@ export class NetworkedSession extends EventTarget {
           if (payload.spotify) {
             this.dataManager.updateSpotifyState(payload.spotify);
           }
+
+          // Sync Service Health (Phase 4) — bulk sync, single event
+          if (payload.serviceHealth) {
+            this.dataManager.syncServiceHealth(payload.serviceHealth);
+          }
+
+          // Sync Held Items (Phase 4) — restore held items on reconnect
+          if (payload.heldItems && payload.heldItems.length > 0) {
+            for (const item of payload.heldItems) {
+              this.dataManager.updateHeldItems(item, 'held');
+            }
+          }
           break;
 
         case 'session:update':
@@ -308,8 +320,23 @@ export class NetworkedSession extends EventTarget {
           // payload includes { cueId, state, progress, duration }
           this.dataManager.updateCueStatus(payload);
           break;
-        case 'cue:conflict':
-          this.dataManager.handleCueConflict(payload);
+        // Phase 4: Unified held item events
+        case 'held:added':
+          this.dataManager.updateHeldItems(payload, 'held');
+          break;
+        case 'held:released':
+          this.dataManager.updateHeldItems(payload, 'released');
+          break;
+        case 'held:discarded':
+          this.dataManager.updateHeldItems(payload, 'discarded');
+          break;
+        case 'held:recoverable':
+          this.dataManager.updateHeldItems(payload, 'recoverable');
+          break;
+
+        // Phase 4: Service health updates
+        case 'service:health':
+          this.dataManager.updateServiceHealth(payload);
           break;
 
         // Phase 2: Spotify State Routing

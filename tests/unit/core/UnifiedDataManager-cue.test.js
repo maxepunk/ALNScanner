@@ -147,20 +147,21 @@ describe('UnifiedDataManager - Cue State', () => {
         expect(state.disabledCues.has('cue1')).toBe(false);
     });
 
-    test('should emit conflict event', () => {
-        const conflictPayload = {
+    test('should emit held-items:updated event', () => {
+        const heldPayload = {
+            id: 'held-cue-1',
             cueId: 'cue2',
-            conflictType: 'video_active',
-            details: 'Video is currently playing'
+            reason: 'video_busy',
+            blockedBy: [],
         };
 
         const eventSpy = jest.fn();
-        dataManager.addEventListener('cue:conflict', eventSpy);
+        dataManager.addEventListener('held-items:updated', eventSpy);
 
-        dataManager.handleCueConflict(conflictPayload);
+        dataManager.updateHeldItems(heldPayload, 'held');
 
         expect(eventSpy).toHaveBeenCalledWith(expect.objectContaining({
-            detail: conflictPayload
+            detail: { ...heldPayload, action: 'held' }
         }));
     });
 

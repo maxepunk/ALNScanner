@@ -65,13 +65,14 @@ describe('NetworkedSession', () => {
       setPlayerScansFromServer: jest.fn(),
       updateVideoState: jest.fn(),
       updateCueStatus: jest.fn(),
-      handleCueConflict: jest.fn(),
+      updateHeldItems: jest.fn(),
       updateLightingState: jest.fn(),
       updateAudioState: jest.fn(),
       updateAudioDucking: jest.fn(),
       updateBluetoothScan: jest.fn(),
       updateBluetoothDevice: jest.fn(),
       handlePlayerScan: jest.fn(),
+      updateServiceHealth: jest.fn(),
     };
 
     // Mock constructors
@@ -546,6 +547,24 @@ describe('NetworkedSession', () => {
       expect(mockDataManager.updateTeamScoreFromBackend).toHaveBeenCalledWith(scores[1]);
     });
 
+    it('should restore held items from sync:full payload on reconnect', () => {
+      const heldItems = [
+        { id: 'held-cue-1', type: 'cue', cueId: 'cue-1', reason: 'video_busy', heldAt: new Date().toISOString() },
+        { id: 'held-video-1', type: 'video', reason: 'service_down', heldAt: new Date().toISOString() }
+      ];
+
+      messageHandler({ detail: { type: 'sync:full', payload: { heldItems } } });
+
+      expect(mockDataManager.updateHeldItems).toHaveBeenCalledTimes(2);
+      expect(mockDataManager.updateHeldItems).toHaveBeenCalledWith(heldItems[0], 'held');
+      expect(mockDataManager.updateHeldItems).toHaveBeenCalledWith(heldItems[1], 'held');
+    });
+
+    it('should skip held items sync when heldItems is empty array', () => {
+      messageHandler({ detail: { type: 'sync:full', payload: { heldItems: [] } } });
+      expect(mockDataManager.updateHeldItems).not.toHaveBeenCalled();
+    });
+
     it('should update DataManager on sync:full event with transactions', () => {
       const recentTransactions = [
         { id: 'tx1', tokenId: 'token1' },
@@ -579,6 +598,37 @@ describe('NetworkedSession', () => {
       messageHandler({ detail: { type: 'scores:reset', payload: {} } });
 
       expect(mockDataManager.clearBackendScores).toHaveBeenCalled();
+    });
+
+    // Phase 4: Unified held:* event routing
+    it('should route held:added to dataManager.updateHeldItems', () => {
+      const payload = { id: 'held-cue-1', type: 'cue', cueId: 'cue-1', reason: 'video_busy' };
+      messageHandler({ detail: { type: 'held:added', payload } });
+      expect(mockDataManager.updateHeldItems).toHaveBeenCalledWith(payload, 'held');
+    });
+
+    it('should route held:released to dataManager.updateHeldItems', () => {
+      const payload = { heldId: 'held-cue-1', type: 'cue' };
+      messageHandler({ detail: { type: 'held:released', payload } });
+      expect(mockDataManager.updateHeldItems).toHaveBeenCalledWith(payload, 'released');
+    });
+
+    it('should route held:discarded to dataManager.updateHeldItems', () => {
+      const payload = { heldId: 'held-cue-1', type: 'cue' };
+      messageHandler({ detail: { type: 'held:discarded', payload } });
+      expect(mockDataManager.updateHeldItems).toHaveBeenCalledWith(payload, 'discarded');
+    });
+
+    it('should route held:recoverable to dataManager.updateHeldItems', () => {
+      const payload = { heldCount: 2 };
+      messageHandler({ detail: { type: 'held:recoverable', payload } });
+      expect(mockDataManager.updateHeldItems).toHaveBeenCalledWith(payload, 'recoverable');
+    });
+
+    it('should route service:health to dataManager.updateServiceHealth', () => {
+      const payload = { serviceId: 'vlc', status: 'down', message: 'Connection refused' };
+      messageHandler({ detail: { type: 'service:health', payload } });
+      expect(mockDataManager.updateServiceHealth).toHaveBeenCalledWith(payload);
     });
 
     it('should not call dataManager methods for unhandled event types', () => {

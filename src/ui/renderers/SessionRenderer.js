@@ -9,6 +9,9 @@ export class SessionRenderer {
     constructor() {
         this.container = document.getElementById('session-status-container');
         this.lastStatus = null;
+        this._clockTimer = null;
+        this._lastElapsed = null;
+        this._clockState = null;
     }
 
     /**
@@ -21,14 +24,21 @@ export class SessionRenderer {
         // Determine generalized state for template selection
         // 'no-session' | 'setup' | 'active' | 'paused' | 'ended'
         let viewState = 'no-session';
-        if (sessionState) {
-            viewState = sessionState.status || 'setup';
+        if (sessionState && sessionState.status) {
+            viewState = sessionState.status;
         }
 
         // Only re-render DOM structure if state type changed
         if (this.lastStatus !== viewState) {
             this.container.innerHTML = this._getTemplate(viewState, sessionState);
             this.lastStatus = viewState;
+
+            // Restore cached clock state after template re-render.
+            // gameclock:status may arrive before session:update, so the clock
+            // display gets wiped by the template swap. Re-apply cached value.
+            if (this._lastElapsed !== null && this._clockState !== null) {
+                this.renderGameClock({ state: this._clockState, elapsed: this._lastElapsed });
+            }
         }
 
         // Update dynamic values (Name, Time, etc.)
@@ -36,7 +46,7 @@ export class SessionRenderer {
         const nameEl = document.getElementById('session-name');
         const statusEl = document.getElementById('session-status-badge');
 
-        if (sessionState) {
+        if (sessionState && sessionState.status) {
             if (nameEl) nameEl.textContent = sessionState.name || 'Untitled Session';
 
             if (statusEl) {
@@ -58,7 +68,10 @@ export class SessionRenderer {
     }
 
     /**
-     * Render Game Clock
+     * Render Game Clock with client-side ticking.
+     * Backend only broadcasts gameclock:status on start/pause/resume (not every tick).
+     * A local setInterval increments the display each second while running,
+     * syncing back to the authoritative backend value on each status event.
      * @param {Object} clockState - { state, elapsed }
      */
     renderGameClock(clockState) {
@@ -66,13 +79,42 @@ export class SessionRenderer {
         if (!display) return;
 
         const { state, elapsed } = clockState;
-        const formattedTime = this._formatClockTime(elapsed);
 
-        display.textContent = formattedTime;
+        // Always clear existing timer first (prevents duplicates)
+        this._stopClockTimer();
+
+        // Store state for timer callback
+        this._lastElapsed = elapsed;
+        this._clockState = state;
+
+        // Always update display immediately with the received value (syncs to backend)
+        display.textContent = this._formatClockTime(this._lastElapsed);
 
         // Update styling
         display.classList.remove('clock-running', 'clock-paused', 'clock-stopped');
         display.classList.add(`clock-${state}`);
+
+        // If running, start client-side timer to increment every second
+        if (state === 'running') {
+            this._clockTimer = setInterval(() => {
+                this._lastElapsed++;
+                const el = document.getElementById('game-clock-display');
+                if (el) {
+                    el.textContent = this._formatClockTime(this._lastElapsed);
+                }
+            }, 1000);
+        }
+    }
+
+    /**
+     * Stop the client-side clock timer.
+     * @private
+     */
+    _stopClockTimer() {
+        if (this._clockTimer) {
+            clearInterval(this._clockTimer);
+            this._clockTimer = null;
+        }
     }
 
     /**

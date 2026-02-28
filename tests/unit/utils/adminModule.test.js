@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { SessionManager } from '../../../src/admin/SessionManager.js';
 import { VideoController } from '../../../src/admin/VideoController.js';
-import { SystemMonitor } from '../../../src/admin/SystemMonitor.js';
 import { AdminOperations } from '../../../src/admin/AdminOperations.js';
 import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
 import { DisplayController } from '../../../src/admin/DisplayController.js';
@@ -309,67 +308,7 @@ describe('AdminModule - ES6 Exports', () => {
     }, 6000);
   });
 
-  describe('SystemMonitor', () => {
-    beforeEach(() => {
-      global.fetch = jest.fn();
-    });
-
-    it('should initialize with null health states', () => {
-      const monitor = new SystemMonitor(mockConnection);
-      expect(monitor.backendHealth).toBeNull();
-      expect(monitor.vlcHealth).toBeNull();
-    });
-
-    describe('checkHealth', () => {
-      it('should return healthy when backend responds ok', async () => {
-        const monitor = new SystemMonitor(mockConnection);
-
-        global.fetch.mockResolvedValue({ ok: true });
-
-        const result = await monitor.checkHealth();
-        expect(result).toBe('healthy');
-        expect(monitor.backendHealth).toBe('healthy');
-      });
-
-      it('should return unhealthy when backend response not ok', async () => {
-        const monitor = new SystemMonitor(mockConnection);
-
-        global.fetch.mockResolvedValue({ ok: false });
-
-        const result = await monitor.checkHealth();
-        expect(result).toBe('unhealthy');
-      });
-
-      it('should throw and set error state when fetch fails', async () => {
-        const monitor = new SystemMonitor(mockConnection);
-
-        global.fetch.mockRejectedValue(new Error('Network error'));
-
-        await expect(monitor.checkHealth()).rejects.toThrow('Network error');
-        expect(monitor.backendHealth).toBe('error');
-      });
-    });
-
-    // SystemMonitor checkVLC() and refresh() - DEPRECATED (removed 11/14/2025)
-    //
-    // These methods were never implemented and are unnecessary in the event-driven architecture.
-    //
-    // WHY DEPRECATED:
-    // 1. VLC health monitoring: Handled via WebSocket sync:full events in MonitoringDisplay
-    //    - See: MonitoringDisplay._handleSyncFull() (adminModule.js:963-972)
-    //    - Backend broadcasts VLC status: syncData.systemStatus.vlc
-    //    - UI updates automatically via event listeners
-    //
-    // 2. Manual refresh(): Not needed - UI auto-updates from WebSocket broadcasts
-    //    - message:received event triggers MonitoringDisplay updates
-    //    - No polling overhead, real-time updates
-    //    - Event-driven pattern is architecturally superior
-    //
-    // REPLACEMENT:
-    // - VLC status: Listen to sync:full broadcasts (real-time, no HTTP polling)
-    // - Health checks: SystemMonitor.checkHealth() for backend (HTTP fetch OK)
-    // - UI updates: Automatic via MonitoringDisplay event listeners
-  });
+  // SystemMonitor — DELETED (Phase 4). Replaced by event-driven HealthRenderer.
 
   describe('AdminOperations', () => {
     it('should send system restart command', async () => {
@@ -584,16 +523,7 @@ describe('AdminModule - ES6 Exports', () => {
         expect(orchestratorElem.className).toBe('status-dot status-dot--disconnected');
       });
 
-      it('should update VLC status from sync:full event', () => {
-        const syncData = {
-          systemStatus: { vlc: 'connected' }
-        };
-
-        display.updateAllDisplays(syncData);
-
-        const vlcElem = document.getElementById('vlc-status');
-        expect(vlcElem.className).toBe('status-dot status-dot--connected');
-      });
+      // VLC status from sync:full — removed (Phase 4: replaced by HealthRenderer)
     });
 
     describe('display mode event handling', () => {

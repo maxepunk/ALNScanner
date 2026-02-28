@@ -157,48 +157,5 @@ export class CueRenderer {
       .replace(/'/g, '&#039;');
   }
 
-  /**
-   * Render conflict banner (Phase 2)
-   * @param {Object} payload - {cueId, reason, currentVideo, autoCancelMs}
-   */
-  renderConflict(payload) {
-    const { cueId, reason, currentVideo, autoCancelMs = 10000 } = payload;
-
-    // Use a dedicated container, or fall back to body/toast if needed
-    let container = document.getElementById('cue-conflict-container');
-    if (!container) {
-      console.warn('[CueRenderer] No conflict container found');
-      return;
-    }
-
-    container.innerHTML = `
-          <div class="cue-conflict-banner" data-cue-id="${this._escapeHtml(cueId)}">
-            <div class="cue-conflict-banner__info">
-              <span class="cue-conflict-banner__icon">⚠️</span>
-              <div class="cue-conflict-banner__text">
-                <strong>Video Conflict</strong>
-                <p>Cue wants to play video, but "${this._escapeHtml(currentVideo || 'a video')}" is playing.</p>
-              </div>
-            </div>
-            <div class="cue-conflict-banner__actions">
-              <button class="btn btn-sm btn-warning" data-action="admin.resolveConflictCue" data-decision="override" data-cue-id="${this._escapeHtml(cueId)}">Override</button>
-              <button class="btn btn-sm btn-secondary" data-action="admin.resolveConflictCue" data-decision="cancel" data-cue-id="${this._escapeHtml(cueId)}">Cancel</button>
-            </div>
-            <div class="cue-conflict-banner__timer" style="animation-duration: ${autoCancelMs}ms"></div>
-          </div>
-        `;
-
-    // Auto-dismiss logic should technically be handled by the component or controller, 
-    // but for a simple renderer, we can leave it to the CSS animation or the backend auto-cancel event.
-    // However, if we want to remove the element from DOM after timeout, we need logic.
-    // Backend sends 'cue:conflict:resolved' maybe? 
-    // Phase 2 plan kept it simple. We'll assume the banner stays until resolved or replaced.
-
-    // Actually, MonitoringDisplay had: auto-dismisses after autoCancelMs.
-    // I should replicate that if possible, or rely on next update.
-    setTimeout(() => {
-      const banner = container.querySelector(`.cue-conflict-banner[data-cue-id="${cueId}"]`);
-      if (banner) banner.remove();
-    }, autoCancelMs);
-  }
+  // renderHeldItem() removed in Phase 4 — replaced by HeldItemsRenderer
 }

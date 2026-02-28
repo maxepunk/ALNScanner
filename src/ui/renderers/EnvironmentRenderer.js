@@ -58,8 +58,13 @@ export class EnvironmentRenderer {
         this.lightingSection.style.display = ''; // Show section
 
         if (!connected) {
-            if (this.lightingNotConnected) this.lightingNotConnected.style.display = 'block';
-            if (this.sceneGrid) this.sceneGrid.style.display = 'none';
+            // Phase 4: No separate "not connected" banner — HealthRenderer shows service status.
+            // Show the scene grid with an empty state message instead.
+            if (this.lightingNotConnected) this.lightingNotConnected.style.display = 'none';
+            if (this.sceneGrid) {
+                this.sceneGrid.style.display = 'grid';
+                this.sceneGrid.innerHTML = '<p class="empty-state">Lighting unavailable</p>';
+            }
             return;
         }
 

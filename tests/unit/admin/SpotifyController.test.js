@@ -52,10 +52,10 @@ describe('SpotifyController', () => {
     );
   });
 
-  it('should send spotify:reconnect', async () => {
-    await controller.reconnect();
+  it('should send service:check with serviceId', async () => {
+    await controller.checkService('spotify');
     expect(sendCommand).toHaveBeenCalledWith(
-      mockClient, 'spotify:reconnect', {}, 5000
+      mockClient, 'service:check', { serviceId: 'spotify' }, 5000
     );
   });
 });

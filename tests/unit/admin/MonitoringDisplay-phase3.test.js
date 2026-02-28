@@ -322,6 +322,42 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
   // BACKWARD COMPATIBILITY
   // ============================================
 
+  describe('ducking indicator wiring', () => {
+    it('should forward spotify ducking state to SpotifyRenderer.renderDucking', () => {
+      const renderDuckingSpy = jest.spyOn(display.spotifyRenderer, 'renderDucking');
+
+      mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
+        detail: {
+          audio: {
+            routes: {},
+            availableSinks: [],
+            ducking: {
+              spotify: { ducked: true, volume: 20 }
+            }
+          }
+        }
+      }));
+
+      expect(renderDuckingSpy).toHaveBeenCalledWith({ ducked: true, volume: 20 });
+    });
+
+    it('should not call renderDucking when no spotify ducking data present', () => {
+      const renderDuckingSpy = jest.spyOn(display.spotifyRenderer, 'renderDucking');
+
+      mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
+        detail: {
+          audio: {
+            routes: {},
+            availableSinks: [],
+            ducking: {}
+          }
+        }
+      }));
+
+      expect(renderDuckingSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('backward compatibility with Phase 0 radio buttons', () => {
     it('should still handle sync:full with Phase 0 audio format (no availableSinks)', () => {
       // Phase 0 format: just routes.video.sink without availableSinks

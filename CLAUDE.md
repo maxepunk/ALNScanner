@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-02-14
+Last verified: 2026-02-27
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -339,7 +339,6 @@ ALNScanner/
 │   │   ├── SessionManager.js
 │   │   ├── SoundController.js      # Phase 1: Sound playback control
 │   │   ├── SpotifyController.js   # Phase 2: Spotify status display
-│   │   ├── SystemMonitor.js
 │   │   ├── VideoController.js
 │   │   └── utils/
 │   ├── core/              # Core business logic
@@ -366,6 +365,8 @@ ALNScanner/
 │   │   ├── renderers/              # Admin panel UI renderers
 │   │   │   ├── CueRenderer.js      # Active cues + Quick Fire grid
 │   │   │   ├── EnvironmentRenderer.js  # BT/Audio/Lighting status
+│   │   │   ├── HealthRenderer.js      # Service health dashboard (Phase 4)
+│   │   │   ├── HeldItemsRenderer.js   # Held cues/videos queue (Phase 4)
 │   │   │   ├── SessionRenderer.js  # Session/team UI components
 │   │   │   └── VideoRenderer.js    # Video queue/now-playing display
 │   │   └── connectionWizard.js
@@ -442,7 +443,7 @@ ALNScanner/
 
 **Network Layer ([src/network/](src/network/)):**
 - [orchestratorClient.js](src/network/orchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
-- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list includes environment control events (`bluetooth:device`, `bluetooth:scan`, `audio:routing`, `audio:routing:fallback`, `lighting:scene`, `lighting:status`), Phase 1 events (`gameclock:status`, `cue:fired`, `cue:completed`, `cue:error`, `sound:status`, `cue:status`), and Phase 2 events (`cue:conflict`, `spotify:status`)
+- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list includes environment control events (`bluetooth:device`, `bluetooth:scan`, `audio:routing`, `audio:routing:fallback`, `lighting:scene`, `lighting:status`), Phase 1 events (`gameclock:status`, `cue:fired`, `cue:completed`, `cue:error`, `sound:status`, `cue:status`), Phase 2 events (`spotify:status`), and Phase 4 events (`held:added`, `held:released`, `held:discarded`, `held:recoverable`, `service:health`)
 - [connectionManager.js](src/network/connectionManager.js) - Auth, connection state, retry logic
 - [networkedSession.js](src/network/networkedSession.js) - Service factory and lifecycle orchestrator
 - [networkedQueueManager.js](src/network/networkedQueueManager.js) - Offline transaction queue
@@ -462,7 +463,6 @@ ALNScanner/
 - [SessionManager.js](src/admin/SessionManager.js) - Session create/pause/resume/end
 - [VideoController.js](src/admin/VideoController.js) - Video queue management
 - [DisplayController.js](src/admin/DisplayController.js) - HDMI display mode toggling (idle loop vs scoreboard)
-- [SystemMonitor.js](src/admin/SystemMonitor.js) - Health checks, system status
 - [AdminOperations.js](src/admin/AdminOperations.js) - Admin action coordination
 - [AudioController.js](src/admin/AudioController.js) - Audio routing control (HDMI/Bluetooth via PipeWire)
 - [BluetoothController.js](src/admin/BluetoothController.js) - BT speaker scan/pair/connect/disconnect
@@ -642,7 +642,8 @@ screenUpdateManager.registerContainer('admin-score-board', {
 - `audio:routing` / `audio:routing:fallback` - Audio route changes and HDMI fallback
 - `lighting:scene` / `lighting:status` - Scene activation and HA connection status
 - `cue:status` - Compound cue lifecycle (running/paused/stopped with progress)
-- `cue:conflict` - Video conflict detected during compound cue
+- `held:added` / `held:released` / `held:discarded` / `held:recoverable` - Unified held item lifecycle (Phase 4)
+- `service:health` - Individual service health updates (Phase 4)
 - `spotify:status` - Spotify playback state (connected, state, volume, pausedByGameClock)
 
 **Event Envelope Pattern (AsyncAPI Decision #2):**
@@ -773,16 +774,17 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 **MonitoringDisplay updates:** Game clock display (elapsed time), cue/sound event toast notifications, Quick Fire cue grid, Standing Cues list with enable/disable toggles.
 
-**MonitoringDisplay** handles all environment and show control status display updates (BT device list, audio routing indicator, lighting scene list, game clock, cues, sounds). Uses `data-action` attributes wired in `domEventBindings.js`. Phase 2 additions: `_handleCueStatus()` renders active cues with progress bars and pause/resume/stop buttons (`#active-cues-list` container, `.active-cue-item[data-cue-id]` elements), `_handleCueConflict()` shows video conflict alerts, `_handleSpotifyStatus()` + `_renderNowPlaying()` show Spotify connection state in `#now-playing-section`. Phase 3 additions: `_renderAudioRoutingDropdowns(audioData)` renders per-stream routing dropdowns (video/spotify/sound) replacing the single radio-button toggle. Dropdown container: `#audio-routing-dropdowns`. Each dropdown sends `audio:route:set` with `{stream, sink}`.
+**MonitoringDisplay** handles all environment and show control status display updates (BT device list, audio routing indicator, lighting scene list, game clock, cues, sounds). Uses `data-action` attributes wired in `domEventBindings.js`. Delegates to specialized renderers: `HealthRenderer` (service health dashboard), `HeldItemsRenderer` (blocked cues/videos queue), `SpotifyRenderer` (playback + ducking), `CueRenderer` (active cues + quick fire), `VideoRenderer` (queue + now playing), `EnvironmentRenderer` (BT/audio/lighting). Phase 2 additions: `_handleCueStatus()` renders active cues with progress bars and pause/resume/stop buttons (`#active-cues-list` container, `.active-cue-item[data-cue-id]` elements), `_handleSpotifyStatus()` + `_renderNowPlaying()` show Spotify state in `#now-playing-section`. Phase 3 additions: `_renderAudioRoutingDropdowns(audioData)` renders per-stream routing dropdowns (video/spotify/sound) replacing the single radio-button toggle. Dropdown container: `#audio-routing-dropdowns`. Each dropdown sends `audio:route:set` with `{stream, sink}`.
 
 **GOTCHA**: `MonitoringDisplay.refreshAllDisplays()` re-renders the template, destroying dynamic DOM state (active cue elements, now-playing). It calls `_requestInitialState()` afterward to restore state from the backend.
 
-### SystemMonitor
+### HealthRenderer (Phase 4)
 
-**Health Checks:**
-- Backend connectivity
-- VLC connection status
-- System resource monitoring
+Renders service health dashboard in admin panel System Status section. Receives `service-health:updated` events via MonitoringDisplay. Shows per-service status (green/red), message, last checked time, and "Check Now" buttons. Collapsed when all healthy, expanded when any service is down. Uses idempotent full-state rendering pattern.
+
+### HeldItemsRenderer (Phase 4)
+
+Renders held items queue (cues/videos blocked by service outage or video conflict). Receives incremental events: `held:added`, `held:released`, `held:discarded`, `held:recoverable`. Maintains internal `_items` Map — stateful incremental pattern (not idempotent). Shows item type, blocked-by services, held duration (live counter), source, and Release/Discard buttons. Bulk "Release All" / "Discard All" at section top.
 
 ### Session Report (SessionReportGenerator)
 

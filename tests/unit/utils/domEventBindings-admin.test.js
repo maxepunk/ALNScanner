@@ -138,17 +138,7 @@ describe('domEventBindings - admin actions', () => {
     });
   });
 
-  describe('admin.lightingRetry', () => {
-    it('should call lightingController.refreshScenes()', () => {
-      const btn = document.createElement('button');
-      btn.dataset.action = 'admin.lightingRetry';
-      document.body.appendChild(btn);
-
-      clickAction(btn);
-
-      expect(mockLightingController.refreshScenes).toHaveBeenCalled();
-    });
-  });
+  // lightingRetry removed — Phase 4 HealthRenderer handles service health
 
   describe('admin.activateScene', () => {
     it('should call lightingController.activateScene with data-scene-id', () => {

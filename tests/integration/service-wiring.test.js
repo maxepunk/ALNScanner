@@ -40,13 +40,6 @@ jest.mock('../../src/admin/VideoController.js', () => ({
   }))
 }));
 
-jest.mock('../../src/admin/SystemMonitor.js', () => ({
-  SystemMonitor: jest.fn().mockImplementation(() => ({
-    destroy: jest.fn(),
-    refresh: jest.fn()
-  }))
-}));
-
 jest.mock('../../src/admin/AdminOperations.js', () => ({
   AdminOperations: jest.fn().mockImplementation(() => ({
     destroy: jest.fn()
@@ -89,10 +82,6 @@ describe('Service Wiring Integration', () => {
         destroy: jest.fn(),
         pause: jest.fn(),
         resume: jest.fn()
-      })),
-      SystemMonitor: jest.fn().mockImplementation(() => ({
-        destroy: jest.fn(),
-        refresh: jest.fn()
       })),
       AdminOperations: jest.fn().mockImplementation(() => ({
         destroy: jest.fn()

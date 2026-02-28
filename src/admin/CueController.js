@@ -80,14 +80,41 @@ export class CueController {
   }
 
   /**
-   * Resolve a video conflict for a pending compound cue (Phase 2)
-   * @param {string} cueId - Conflicted cue identifier
-   * @param {string} decision - 'override' (stop video, start cue) or 'cancel' (discard cue)
+   * Release a held cue (skip current video and start the held cue)
+   * @param {string} heldId - Held item identifier
    * @param {number} [timeout=5000] - Command timeout in milliseconds
    * @returns {Promise<Object>} Command acknowledgment
    */
-  async resolveConflict(cueId, decision, timeout = 5000) {
-    return sendCommand(this.connection, 'cue:conflict:resolve', { cueId, decision }, timeout);
+  async releaseHeld(heldId, timeout = 5000) {
+    return sendCommand(this.connection, 'held:release', { heldId }, timeout);
+  }
+
+  /**
+   * Discard a held cue (cancel it without starting)
+   * @param {string} heldId - Held item identifier
+   * @param {number} [timeout=5000] - Command timeout in milliseconds
+   * @returns {Promise<Object>} Command acknowledgment
+   */
+  async discardHeld(heldId, timeout = 5000) {
+    return sendCommand(this.connection, 'held:discard', { heldId }, timeout);
+  }
+
+  /**
+   * Release all held items (cues + videos)
+   * @param {number} [timeout=5000] - Command timeout in milliseconds
+   * @returns {Promise<Object>} Command acknowledgment
+   */
+  async releaseAllHeld(timeout = 5000) {
+    return sendCommand(this.connection, 'held:release-all', {}, timeout);
+  }
+
+  /**
+   * Discard all held items (cues + videos)
+   * @param {number} [timeout=5000] - Command timeout in milliseconds
+   * @returns {Promise<Object>} Command acknowledgment
+   */
+  async discardAllHeld(timeout = 5000) {
+    return sendCommand(this.connection, 'held:discard-all', {}, timeout);
   }
 
   /**

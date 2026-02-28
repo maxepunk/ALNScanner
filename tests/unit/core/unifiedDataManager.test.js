@@ -397,6 +397,76 @@ describe('UnifiedDataManager', () => {
     });
   });
 
+  describe('updateServiceHealth()', () => {
+    beforeEach(() => {
+      manager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+    });
+
+    it('should store service health state', () => {
+      const data = { serviceId: 'vlc', status: 'down', message: 'Connection refused' };
+      manager.updateServiceHealth(data);
+      expect(manager.serviceHealth.vlc).toEqual({
+        status: 'down',
+        message: 'Connection refused',
+        timestamp: expect.any(String)
+      });
+    });
+
+    it('should dispatch service-health:updated event', (done) => {
+      manager.addEventListener('service-health:updated', (e) => {
+        expect(e.detail.serviceHealth.vlc.status).toBe('healthy');
+        done();
+      });
+      manager.updateServiceHealth({ serviceId: 'vlc', status: 'healthy', message: 'OK' });
+    });
+
+    it('should accumulate multiple service states', () => {
+      manager.updateServiceHealth({ serviceId: 'vlc', status: 'healthy', message: 'OK' });
+      manager.updateServiceHealth({ serviceId: 'spotify', status: 'down', message: 'Not running' });
+      expect(Object.keys(manager.serviceHealth)).toEqual(['vlc', 'spotify']);
+    });
+
+    it('should bulk-sync via syncServiceHealth with single event', (done) => {
+      let eventCount = 0;
+      manager.addEventListener('service-health:updated', () => {
+        eventCount++;
+      });
+      manager.syncServiceHealth({
+        vlc: { status: 'healthy', message: 'OK' },
+        spotify: { status: 'down', message: 'Not running' }
+      });
+      // Only one event should fire for bulk sync
+      setTimeout(() => {
+        expect(eventCount).toBe(1);
+        expect(manager.serviceHealth.vlc.status).toBe('healthy');
+        expect(manager.serviceHealth.spotify.status).toBe('down');
+        // Timestamps auto-filled
+        expect(manager.serviceHealth.vlc.timestamp).toBeDefined();
+        done();
+      }, 10);
+    });
+  });
+
+  describe('updateHeldItems() - recoverable action', () => {
+    beforeEach(() => {
+      manager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+    });
+
+    it('should handle recoverable action', (done) => {
+      manager.addEventListener('held-items:updated', (e) => {
+        expect(e.detail.action).toBe('recoverable');
+        done();
+      });
+      manager.updateHeldItems({ heldCount: 2 }, 'recoverable');
+    });
+  });
+
   describe('updateLightingState - sync:full scenes (no type field)', () => {
     beforeEach(() => {
       manager = new UnifiedDataManager({
