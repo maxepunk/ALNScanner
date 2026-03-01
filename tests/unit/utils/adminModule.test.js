@@ -4,6 +4,7 @@ import { VideoController } from '../../../src/admin/VideoController.js';
 import { AdminOperations } from '../../../src/admin/AdminOperations.js';
 import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
 import { DisplayController } from '../../../src/admin/DisplayController.js';
+import { StateStore } from '../../../src/core/stateStore.js';
 
 /**
  * Testing Anti-Pattern Avoidance:
@@ -451,7 +452,7 @@ describe('AdminModule - ES6 Exports', () => {
     // Tests updated 11/14/2025 to match actual ES6 implementation
     // DOM structure matches index.html admin panel (session-status-container, etc.)
     let display;
-    let mockDataManager;
+    let store;
 
     beforeEach(() => {
       // Mock DOM structure matching actual index.html admin panel
@@ -464,14 +465,9 @@ describe('AdminModule - ES6 Exports', () => {
         <div id="device-list"></div>
       `;
 
-      mockDataManager = new EventTarget();
-      Object.assign(mockDataManager, {
-        transactions: [],
-        scannedTokens: new Set(),
-        addTransaction: jest.fn(),
-      });
+      store = new StateStore();
 
-      display = new MonitoringDisplay(mockConnection, mockDataManager);
+      display = new MonitoringDisplay(mockConnection, store);
     });
 
     describe('session rendering via SessionRenderer', () => {

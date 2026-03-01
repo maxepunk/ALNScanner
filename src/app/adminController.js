@@ -27,11 +27,12 @@ import { SoundController } from '../admin/SoundController.js';
 import { SpotifyController } from '../admin/SpotifyController.js';
 
 export class AdminController extends EventTarget {
-  constructor(client, dataManager, teamRegistry = null) {
+  constructor(client, dataManager, teamRegistry = null, store = null) {
     super();
     this.client = client; // OrchestratorClient reference for admin modules to use
-    this.dataManager = dataManager; // DataManager reference for MonitoringDisplay
+    this.dataManager = dataManager; // DataManager reference (transactions/scoring)
     this.teamRegistry = teamRegistry; // TeamRegistry for team dropdown sync
+    this.store = store; // StateStore for service domain state
     this.modules = null;
     this.initialized = false;
   }
@@ -54,7 +55,7 @@ export class AdminController extends EventTarget {
       videoController: new VideoController(this.client),
       displayController: new DisplayController(this.client),
       adminOperations: new AdminOperations(this.client),
-      monitoringDisplay: new MonitoringDisplay(this.client, this.dataManager, this.teamRegistry),
+      monitoringDisplay: new MonitoringDisplay(this.client, this.store, this.teamRegistry),
       bluetoothController: new BluetoothController(this.client),
       audioController: new AudioController(this.client),
       lightingController: new LightingController(this.client),

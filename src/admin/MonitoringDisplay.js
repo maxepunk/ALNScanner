@@ -10,13 +10,13 @@ import { HeldItemsRenderer } from '../ui/renderers/HeldItemsRenderer.js';
 
 export class MonitoringDisplay {
   /**
-   * @param {Object} connection - OrchestratorClient instance (EventTarget)
-   * @param {Object} dataManager - DataManager instance for cross-view data sync
+   * @param {Object} client - OrchestratorClient instance (EventTarget)
+   * @param {Object} store - StateStore instance for service domain state
    * @param {Object} teamRegistry - TeamRegistry instance for team dropdown sync (optional)
    */
-  constructor(client, dataManager, teamRegistry = null) {
+  constructor(client, store, teamRegistry = null) {
     this.client = client;
-    this.dataManager = dataManager;
+    this.store = store;
     this.teamRegistry = teamRegistry;
     this.devices = [];
 
@@ -33,57 +33,83 @@ export class MonitoringDisplay {
     this._messageHandler = this._handleMessage.bind(this);
     this.client.addEventListener('message:received', this._messageHandler);
 
-    // Wire Up DataManager Events
-    this._wireDataManagerEvents();
+    // Wire store subscriptions (replaces DataManager event subscriptions)
+    this._wireStoreSubscriptions();
 
     // Request initial state
     this._requestInitialState();
   }
 
   /**
-   * Wire DataManager events to Renderers.
-   * Stores listener references in this._dmListeners for cleanup in destroy().
+   * Subscribe renderers to StateStore domains.
+   * Store is populated by networkedSession from service:state and sync:full events.
    * @private
    */
-  _wireDataManagerEvents() {
-    this._dmListeners = [];
-    const on = (event, handler) => {
-      this.dataManager.addEventListener(event, handler);
-      this._dmListeners.push({ event, handler });
+  _wireStoreSubscriptions() {
+    if (!this.store) return;
+
+    this._storeCallbacks = [];
+    const on = (domain, handler) => {
+      this.store.on(domain, handler);
+      this._storeCallbacks.push({ domain, handler });
     };
 
-    // Cue State
-    on('cue-state:updated', (e) => this.cueRenderer.render(e.detail));
-    on('held-items:updated', (e) => this.heldItemsRenderer.render(e.detail));
+    // Cue Engine — transform arrays to Maps/Sets for CueRenderer
+    on('cueengine', (state) => {
+      const cues = new Map();
+      (state.cues || []).forEach(c => cues.set(c.id, c));
+      const activeCues = new Map();
+      (state.activeCues || []).forEach(ac => activeCues.set(ac.cueId, ac));
+      const disabledCues = new Set(state.disabledCues || []);
+      this.cueRenderer.render({ cues, activeCues, disabledCues });
+    });
 
-    // Service Health (Phase 4)
-    on('service-health:updated', (e) => this.healthRenderer.render(e.detail));
+    // Held Items — full snapshot from store
+    on('held', (state) => {
+      this.heldItemsRenderer.renderSnapshot(state?.items || []);
+    });
 
-    // Environment State
-    on('lighting-state:updated', (e) => this.envRenderer.renderLighting(e.detail.lighting));
-    on('audio-state:updated', (e) => {
-      this.envRenderer.renderAudio(e.detail.audio);
-      // Forward ducking state to SpotifyRenderer (ducking is stored in audio.ducking.spotify)
-      const spotifyDucking = e.detail.audio?.ducking?.spotify;
+    // Service Health
+    on('health', (state, prev) => {
+      this.healthRenderer.render(state, prev);
+    });
+
+    // Environment: Lighting
+    on('lighting', (state, prev) => {
+      this.envRenderer.renderLighting(state, prev);
+    });
+
+    // Environment: Audio + ducking forwarding
+    on('audio', (state, prev) => {
+      this.envRenderer.renderAudio(state, prev);
+      const spotifyDucking = state?.ducking?.spotify;
       if (spotifyDucking) {
         this.spotifyRenderer.renderDucking(spotifyDucking);
       }
     });
-    on('bluetooth-state:updated', (e) => this.envRenderer.renderBluetooth(e.detail.bluetooth));
 
-    // Session State
-    on('session-state:updated', (e) => {
-      this.sessionRenderer.render(e.detail.session);
-      if (this.teamRegistry) {
-        this.teamRegistry.populateFromSession(e.detail.session);
-      }
+    // Environment: Bluetooth
+    on('bluetooth', (state, prev) => {
+      this.envRenderer.renderBluetooth(state, prev);
     });
 
-    // Video State
-    on('video-state:updated', (e) => this.videoRenderer.render(e.detail));
+    // Video
+    on('video', (state, prev) => {
+      this.videoRenderer.render(state, prev);
+    });
 
-    // Spotify State
-    on('spotify-state:updated', (e) => this.spotifyRenderer.render(e.detail));
+    // Spotify
+    on('spotify', (state, prev) => {
+      this.spotifyRenderer.render(state, prev);
+    });
+
+    // Game Clock — map 'status' field to 'state' for SessionRenderer
+    on('gameclock', (state, prev) => {
+      this.sessionRenderer.renderGameClock(
+        { state: state.status || state.state, elapsed: state.elapsed },
+        prev ? { state: prev.status || prev.state, elapsed: prev.elapsed } : null
+      );
+    });
   }
 
   /**
@@ -93,20 +119,22 @@ export class MonitoringDisplay {
   _requestInitialState() {
     if (this.client?.socket?.connected) {
       this.client.socket.emit('sync:request');
-      console.log('[MonitoringDisplay] Requested initial state via sync:request');
+      Debug.log('[MonitoringDisplay] Requested initial state via sync:request');
     }
   }
 
   /**
    * Handle incoming WebSocket messages
    *
-   * NOTE: State-bearing events (cue, spotify, environment, session, video, transactions)
-   * are handled by the NetworkedSession → DataManager → event → Renderer pipeline.
-   * This handler only processes:
-   *   1. Ephemeral notifications (toasts for cue:fired/error)
-   *   2. Legacy handlers not yet in DM pipeline (display:mode, devices, video queue)
-   *   3. sync:full aggregate update (system status, game clock, devices)
-   *   4. session:overtime (ephemeral)
+   * Service state (cue, spotify, environment, video, health, gameclock, held)
+   * is handled by service:state → StateStore → store subscriptions → Renderers.
+   *
+   * This handler processes:
+   *   1. session:update → SessionRenderer (session is NOT a store domain)
+   *   2. session:overtime → SessionRenderer.renderOvertime (ephemeral)
+   *   3. sync:full → system status, team registry, devices
+   *   4. Ephemeral notifications (toasts for cue:fired/error)
+   *   5. Legacy handlers (display:mode, devices, video queue)
    * @private
    */
   _handleMessage(event) {
@@ -115,31 +143,26 @@ export class MonitoringDisplay {
     Debug.log(`[MonitoringDisplay] _handleMessage: ${type}`);
 
     switch (type) {
-      // --- Session & System ---
+      // --- Session (not a store domain — UDM/transaction boundary) ---
       case 'session:update':
-      case 'session:overtime':
-        // DM handles state update, which triggers renderer. 
-        // Overtime is distinct.
-        if (type === 'session:overtime') {
-          this.sessionRenderer.renderOvertime(payload);
+        this.sessionRenderer.render(payload);
+        if (this.teamRegistry) {
+          this.teamRegistry.populateFromSession(payload);
         }
+        break;
+
+      case 'session:overtime':
+        this.sessionRenderer.renderOvertime(payload);
         break;
 
       case 'sync:full':
         this.updateAllDisplays(payload);
         break;
 
-      case 'gameclock:status':
-        this.sessionRenderer.renderGameClock(payload);
-        break;
-
       case 'device:connected':
       case 'device:disconnected':
         this._updateDeviceList(payload, type);
         break;
-
-      // --- Renderers handled via DataManager Events ---
-      // lighting:*, audio:*, bluetooth:*, cue:* -> Handled by NetworkedSession -> DM -> Event -> Renderer
 
       // --- Toast / Ephemeral Notifications ---
       case 'cue:fired':
@@ -150,9 +173,7 @@ export class MonitoringDisplay {
         this.showToast(`Cue error: ${payload.cueId} — ${payload.error || payload.action}`, 'error', 5000);
         break;
 
-      // cue:held toast removed (Phase 4 — held items rendered by HeldItemsRenderer)
-
-      // --- Legacy handlers not yet migrated to DataManager ---
+      // --- Legacy handlers ---
       case 'display:mode':
         this._handleDisplayMode(payload);
         break;
@@ -160,13 +181,11 @@ export class MonitoringDisplay {
       case 'video:queue:update':
         this.updateQueueDisplay(payload);
         break;
-
-      // spotify:status — Handled by NetworkedSession → DM.updateSpotifyState() → event → SpotifyRenderer
     }
   }
 
   // ============================================
-  // LEGACY HANDLERS — not yet migrated to DataManager event pipeline
+  // LEGACY HANDLERS
   // ============================================
 
   _updateDeviceList(payload, type) {
@@ -188,10 +207,10 @@ export class MonitoringDisplay {
 
     if (payload.mode === 'SCOREBOARD') {
       if (nowShowingVal) nowShowingVal.textContent = 'Scoreboard';
-      if (nowShowingIcon) nowShowingIcon.textContent = '🏆';
+      if (nowShowingIcon) nowShowingIcon.textContent = '\uD83C\uDFC6';
     } else {
       if (nowShowingVal) nowShowingVal.textContent = 'Idle Loop';
-      if (nowShowingIcon) nowShowingIcon.textContent = '🔄';
+      if (nowShowingIcon) nowShowingIcon.textContent = '\uD83D\uDD04';
     }
 
     if (btnIdle) btnIdle.classList.toggle('active', payload.mode === 'IDLE_LOOP');
@@ -209,33 +228,31 @@ export class MonitoringDisplay {
   // ============================================
 
   /**
-   * Initialize all displays from sync:full event
-   * NOTE: DataManager state updates (resetForNewSession, setScannedTokensFromServer)
-   * are handled by NetworkedSession global listener
-   * 
-   * This method now delegates PURELY to Renderers for UI updates.
+   * Initialize displays from sync:full event.
+   * Service state (gameclock, cue, spotify, environment, video, health, held)
+   * is handled by StateStore subscriptions — sync:full populates the store
+   * in networkedSession, which triggers subscriptions automatically.
+   *
+   * This method handles non-store concerns only:
+   * - Session rendering (session is not a store domain)
+   * - Team registry population
+   * - System status display (connection dot)
+   * - Device list
    */
   updateAllDisplays(syncData) {
     if (!syncData) return;
 
     Debug.log('[MonitoringDisplay] updateAllDisplays (Sync Full)', syncData);
 
-    // Session, environment, cue engine, and spotify state handled by DM event pipeline
-
-    // Team Registry
-    if (syncData.session && this.teamRegistry) {
-      this.teamRegistry.populateFromSession(syncData.session);
+    // Session rendering (not a store domain)
+    if (syncData.session) {
+      this.sessionRenderer.render(syncData.session);
+      if (this.teamRegistry) {
+        this.teamRegistry.populateFromSession(syncData.session);
+      }
     }
 
-    // Game Clock
-    if (syncData.gameClock) {
-      this.sessionRenderer.renderGameClock({
-        state: syncData.gameClock.status,
-        elapsed: syncData.gameClock.elapsed
-      });
-    }
-
-    // Orchestrator connection dot (per-service health is in HealthRenderer)
+    // Orchestrator connection dot
     this.updateSystemDisplay();
 
     // Devices
@@ -252,10 +269,6 @@ export class MonitoringDisplay {
   _setDeviceList(devices) {
     if (!devices) return;
     this.devices = [...devices];
-
-    // DRY: reuse the rendering logic from _updateDeviceList
-    // Ideally we should extract the rendering to a separate method, 
-    // but for this fix we'll just duplicate the render block or call a render method.
     this._renderDeviceList();
   }
 
@@ -305,7 +318,6 @@ export class MonitoringDisplay {
   }
 
   showToast(message, type = 'info', duration = 3000) {
-    // Keep toast logic
     const colors = {
       error: 'var(--color-accent-danger, #dc3545)',
       success: 'var(--color-accent-success, #28a745)',
@@ -328,11 +340,11 @@ export class MonitoringDisplay {
     if (this.client && this._messageHandler) {
       this.client.removeEventListener('message:received', this._messageHandler);
     }
-    if (this._dmListeners) {
-      for (const { event, handler } of this._dmListeners) {
-        this.dataManager.removeEventListener(event, handler);
+    if (this._storeCallbacks && this.store) {
+      for (const { domain, handler } of this._storeCallbacks) {
+        this.store.off(domain, handler);
       }
-      this._dmListeners = null;
+      this._storeCallbacks = null;
     }
     if (this.heldItemsRenderer) {
       this.heldItemsRenderer.destroy();

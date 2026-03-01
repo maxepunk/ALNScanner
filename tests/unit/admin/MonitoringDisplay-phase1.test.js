@@ -1,7 +1,8 @@
 import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
+import { StateStore } from '../../../src/core/stateStore.js';
 
 describe('MonitoringDisplay - Phase 1', () => {
-  let display, mockClient, mockDataManager, container;
+  let display, mockClient, store, container;
 
   beforeEach(() => {
     // Setup DOM
@@ -14,14 +15,11 @@ describe('MonitoringDisplay - Phase 1', () => {
     mockClient = new EventTarget();
     mockClient.socket = { connected: true, emit: jest.fn() };
 
-    // Mock DataManager
-    mockDataManager = {
-      addEventListener: jest.fn(),
-      removeEventListener: jest.fn()
-    };
+    // Real StateStore
+    store = new StateStore();
 
     // Create display instance
-    display = new MonitoringDisplay(mockClient, mockDataManager);
+    display = new MonitoringDisplay(mockClient, store);
     container = document.getElementById('session-status-container');
   });
 
@@ -79,14 +77,8 @@ describe('MonitoringDisplay - Phase 1', () => {
       display.sessionRenderer.render(session);
     });
 
-    it('should show elapsed time from gameclock:status event', () => {
-      const payload = { state: 'running', elapsed: 3661 };
-
-      // Trigger event via mock client
-      const event = new CustomEvent('message:received', {
-        detail: { type: 'gameclock:status', payload }
-      });
-      mockClient.dispatchEvent(event);
+    it('should show elapsed time from store gameclock update', () => {
+      store.update('gameclock', { status: 'running', elapsed: 3661 });
 
       const clockDisplay = document.getElementById('game-clock-display');
       expect(clockDisplay).toBeTruthy();
@@ -94,12 +86,7 @@ describe('MonitoringDisplay - Phase 1', () => {
     });
 
     it('should show paused indicator when clock is paused', () => {
-      const payload = { state: 'paused', elapsed: 1800 };
-
-      const event = new CustomEvent('message:received', {
-        detail: { type: 'gameclock:status', payload }
-      });
-      mockClient.dispatchEvent(event);
+      store.update('gameclock', { status: 'paused', elapsed: 1800 });
 
       const clockDisplay = document.getElementById('game-clock-display');
       expect(clockDisplay).toBeTruthy();
@@ -108,12 +95,7 @@ describe('MonitoringDisplay - Phase 1', () => {
     });
 
     it('should show stopped state when clock is stopped', () => {
-      const payload = { state: 'stopped', elapsed: 0 };
-
-      const event = new CustomEvent('message:received', {
-        detail: { type: 'gameclock:status', payload }
-      });
-      mockClient.dispatchEvent(event);
+      store.update('gameclock', { status: 'stopped', elapsed: 0 });
 
       const clockDisplay = document.getElementById('game-clock-display');
       expect(clockDisplay).toBeTruthy();
@@ -185,33 +167,58 @@ describe('MonitoringDisplay - Phase 1', () => {
     });
   });
 
-  describe('updateAllDisplays with gameClock and cueEngine', () => {
-    it('should restore game clock state from sync:full', () => {
+  describe('updateAllDisplays with session and devices', () => {
+    it('should render session from sync:full', () => {
       const syncData = {
         session: {
           id: 'test-session',
           name: 'Test Game',
           status: 'active',
           startTime: new Date().toISOString()
-        },
-        gameClock: {
-          status: 'running',
-          elapsed: 2400,
-          expectedDuration: 7200
-        },
-        cueEngine: {
-          loaded: true,
-          cues: [
-            { id: 'tension-hit', label: 'Tension Hit', quickFire: true }
-          ]
         }
       };
 
       display.updateAllDisplays(syncData);
 
+      expect(container.querySelector('.session-status--active')).toBeTruthy();
+    });
+
+    it('should NOT render game clock in updateAllDisplays (handled by store)', () => {
+      // Game clock rendering now comes via store subscription, not updateAllDisplays
+      const renderSpy = jest.spyOn(display.sessionRenderer, 'renderGameClock');
+
+      display.updateAllDisplays({
+        session: { id: 's1', status: 'active', name: 'Test' },
+        gameClock: { status: 'running', elapsed: 2400 }
+      });
+
+      expect(renderSpy).not.toHaveBeenCalled();
+    });
+
+    it('should restore game clock from store gameclock domain', () => {
+      // Render session template first (creates #game-clock-display)
+      display.sessionRenderer.render({ name: 'Test', status: 'active' });
+
+      // Then update store (simulates networkedSession populating store from sync:full)
+      store.update('gameclock', { status: 'running', elapsed: 2400 });
+
       const clockDisplay = document.getElementById('game-clock-display');
       expect(clockDisplay).toBeTruthy();
       expect(clockDisplay.textContent).toContain('40:00');
+    });
+  });
+
+  describe('session:update via WebSocket', () => {
+    it('should render session state from session:update message', () => {
+      const event = new CustomEvent('message:received', {
+        detail: {
+          type: 'session:update',
+          payload: { id: 's1', name: 'New Game', status: 'active' }
+        }
+      });
+      mockClient.dispatchEvent(event);
+
+      expect(container.querySelector('.session-status--active')).toBeTruthy();
     });
   });
 });

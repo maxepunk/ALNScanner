@@ -296,7 +296,7 @@ export class LocalStorage extends IStorageStrategy {
     // Persist
     this._saveSession();
 
-    // Emit event for ScreenUpdateManager (badge, stats, screen-specific handlers)
+    // Emit event for UI updates (badge, stats, screen refresh)
     this.dispatchEvent(new CustomEvent('transaction:added', {
       detail: { transaction, teamScore: this.sessionData.teams[transaction.teamId] }
     }));

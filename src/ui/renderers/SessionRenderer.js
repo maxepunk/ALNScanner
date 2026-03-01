@@ -108,11 +108,6 @@ export class SessionRenderer {
    * @param {Object|null} prev - Previous clock state
    */
   renderGameClock(clockState, prev = null) {
-    // Always use getElementById — clock element may exist outside the cached container
-    // scope (e.g., created by template swap or present as standalone element)
-    const display = document.getElementById('game-clock-display');
-    if (!display) return;
-
     const { state, elapsed } = clockState;
 
     // Skip if nothing changed
@@ -121,9 +116,15 @@ export class SessionRenderer {
     // Always clear existing timer first (prevents duplicates)
     this._stopClockTimer();
 
-    // Store state for timer callback and template swap restoration
+    // Cache state for template swap restoration (may be called before DOM is ready,
+    // e.g. store subscription fires before session template renders on sync:full)
     this._lastElapsed = elapsed;
     this._clockState = state;
+
+    // Always use getElementById — clock element may exist outside the cached container
+    // scope (e.g., created by template swap or present as standalone element)
+    const display = document.getElementById('game-clock-display');
+    if (!display) return;
 
     // Update display immediately with received value (syncs to backend)
     display.textContent = this._formatClockTime(this._lastElapsed);

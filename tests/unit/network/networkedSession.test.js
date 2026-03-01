@@ -63,16 +63,7 @@ describe('NetworkedSession', () => {
       updateSessionState: jest.fn(),
       setScannedTokensFromServer: jest.fn(),
       setPlayerScansFromServer: jest.fn(),
-      updateVideoState: jest.fn(),
-      updateCueStatus: jest.fn(),
-      updateHeldItems: jest.fn(),
-      updateLightingState: jest.fn(),
-      updateAudioState: jest.fn(),
-      updateAudioDucking: jest.fn(),
-      updateBluetoothScan: jest.fn(),
-      updateBluetoothDevice: jest.fn(),
       handlePlayerScan: jest.fn(),
-      updateServiceHealth: jest.fn(),
     };
 
     // Mock constructors
@@ -131,8 +122,8 @@ describe('NetworkedSession', () => {
         deviceId: 'GM_TEST',
         debug: console
       });
-      // AdminController receives client, dataManager, and teamRegistry (null for tests)
-      expect(AdminController).toHaveBeenCalledWith(mockClient, expect.any(Object), null);
+      // AdminController receives client, dataManager, teamRegistry (null), and store (null when no store provided)
+      expect(AdminController).toHaveBeenCalledWith(mockClient, expect.any(Object), null, null);
 
       expect(session.services).not.toBeNull();
       expect(session.services.client).toBe(mockClient);
@@ -459,8 +450,8 @@ describe('NetworkedSession', () => {
     it('should pass client to AdminController', async () => {
       await session.initialize();
 
-      // AdminController receives client, dataManager, and teamRegistry (null for tests)
-      expect(AdminController).toHaveBeenCalledWith(mockClient, expect.any(Object), null);
+      // AdminController receives client, dataManager, teamRegistry (null), and store (null when no store provided)
+      expect(AdminController).toHaveBeenCalledWith(mockClient, expect.any(Object), null, null);
     });
   });
 
@@ -547,24 +538,6 @@ describe('NetworkedSession', () => {
       expect(mockDataManager.updateTeamScoreFromBackend).toHaveBeenCalledWith(scores[1]);
     });
 
-    it('should restore held items from sync:full payload on reconnect', () => {
-      const heldItems = [
-        { id: 'held-cue-1', type: 'cue', cueId: 'cue-1', reason: 'video_busy', heldAt: new Date().toISOString() },
-        { id: 'held-video-1', type: 'video', reason: 'service_down', heldAt: new Date().toISOString() }
-      ];
-
-      messageHandler({ detail: { type: 'sync:full', payload: { heldItems } } });
-
-      expect(mockDataManager.updateHeldItems).toHaveBeenCalledTimes(2);
-      expect(mockDataManager.updateHeldItems).toHaveBeenCalledWith(heldItems[0], 'held');
-      expect(mockDataManager.updateHeldItems).toHaveBeenCalledWith(heldItems[1], 'held');
-    });
-
-    it('should skip held items sync when heldItems is empty array', () => {
-      messageHandler({ detail: { type: 'sync:full', payload: { heldItems: [] } } });
-      expect(mockDataManager.updateHeldItems).not.toHaveBeenCalled();
-    });
-
     it('should update DataManager on sync:full event with transactions', () => {
       const recentTransactions = [
         { id: 'tx1', tokenId: 'token1' },
@@ -598,37 +571,6 @@ describe('NetworkedSession', () => {
       messageHandler({ detail: { type: 'scores:reset', payload: {} } });
 
       expect(mockDataManager.clearBackendScores).toHaveBeenCalled();
-    });
-
-    // Phase 4: Unified held:* event routing
-    it('should route held:added to dataManager.updateHeldItems', () => {
-      const payload = { id: 'held-cue-1', type: 'cue', cueId: 'cue-1', reason: 'video_busy' };
-      messageHandler({ detail: { type: 'held:added', payload } });
-      expect(mockDataManager.updateHeldItems).toHaveBeenCalledWith(payload, 'held');
-    });
-
-    it('should route held:released to dataManager.updateHeldItems', () => {
-      const payload = { heldId: 'held-cue-1', type: 'cue' };
-      messageHandler({ detail: { type: 'held:released', payload } });
-      expect(mockDataManager.updateHeldItems).toHaveBeenCalledWith(payload, 'released');
-    });
-
-    it('should route held:discarded to dataManager.updateHeldItems', () => {
-      const payload = { heldId: 'held-cue-1', type: 'cue' };
-      messageHandler({ detail: { type: 'held:discarded', payload } });
-      expect(mockDataManager.updateHeldItems).toHaveBeenCalledWith(payload, 'discarded');
-    });
-
-    it('should route held:recoverable to dataManager.updateHeldItems', () => {
-      const payload = { heldCount: 2 };
-      messageHandler({ detail: { type: 'held:recoverable', payload } });
-      expect(mockDataManager.updateHeldItems).toHaveBeenCalledWith(payload, 'recoverable');
-    });
-
-    it('should route service:health to dataManager.updateServiceHealth', () => {
-      const payload = { serviceId: 'vlc', status: 'down', message: 'Connection refused' };
-      messageHandler({ detail: { type: 'service:health', payload } });
-      expect(mockDataManager.updateServiceHealth).toHaveBeenCalledWith(payload);
     });
 
     it('should not call dataManager methods for unhandled event types', () => {
@@ -752,25 +694,6 @@ describe('NetworkedSession', () => {
       });
     });
 
-    describe('audio:routing:fallback handling', () => {
-      it('should call dataManager.updateAudioState on audio:routing:fallback', () => {
-        const payload = { stream: 'video', actualSink: 'hdmi-stereo' };
-        messageHandler({ detail: { type: 'audio:routing:fallback', payload } });
-        expect(mockDataManager.updateAudioState).toHaveBeenCalledWith(payload);
-      });
-    });
-
-    describe('sound:status handling', () => {
-      it('should dispatch sound:status event', () => {
-        const handler = jest.fn();
-        session.addEventListener('sound:status', handler);
-        const payload = { type: 'started', file: 'attention.wav' };
-        messageHandler({ detail: { type: 'sound:status', payload } });
-        expect(handler).toHaveBeenCalled();
-        expect(handler.mock.calls[0][0].detail).toEqual(payload);
-      });
-    });
-
     describe('service:state → StateStore', () => {
       let mockStore;
       let storeMessageHandler;
@@ -835,14 +758,10 @@ describe('NetworkedSession', () => {
           getAll: jest.fn(() => ({})),
         };
 
-        // Add UDM methods required by sync:full handler
+        // UDM methods required by sync:full session/transaction handling
         mockDataManager.currentSessionId = null;
         mockDataManager.resetForNewSession = jest.fn();
         mockDataManager.setScannedTokensFromServer = jest.fn();
-        mockDataManager.syncCueState = jest.fn();
-        mockDataManager.updateSpotifyState = jest.fn();
-        mockDataManager.syncServiceHealth = jest.fn();
-        mockDataManager.updateBluetoothState = jest.fn();
 
         // Clear prior addEventListener calls so we capture only this session's handler
         mockClient.addEventListener.mockClear();
@@ -948,20 +867,16 @@ describe('NetworkedSession', () => {
         expect(mockStore.update).not.toHaveBeenCalled();
       });
 
-      it('should populate BOTH store and UDM paths from sync:full (dual-path)', () => {
+      it('should populate store (not UDM) for service state from sync:full', () => {
         const payload = {
           spotify: { connected: true, state: 'Playing' },
           serviceHealth: { vlc: { status: 'healthy' } },
         };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        // Store path
+        // Store is sole path for service state
         expect(mockStore.update).toHaveBeenCalledWith('spotify', { connected: true, state: 'Playing' });
         expect(mockStore.update).toHaveBeenCalledWith('health', { vlc: { status: 'healthy' } });
-
-        // UDM path (existing event handlers still fire)
-        expect(mockDataManager.updateSpotifyState).toHaveBeenCalledWith({ connected: true, state: 'Playing' });
-        expect(mockDataManager.syncServiceHealth).toHaveBeenCalledWith({ vlc: { status: 'healthy' } });
       });
     });
 

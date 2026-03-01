@@ -159,47 +159,36 @@ In networked mode, the app has 3 views accessible via tab buttons:
 
 **Visibility:** View tabs hidden in standalone mode.
 
-## Event Routing (ScreenUpdateManager)
+## Event Routing
 
-The ScreenUpdateManager routes DataManager events to the correct UI updates.
+Two independent event paths handle UI updates:
+
+**1. Transaction/scoring events** — DataManager emits events (`transaction:added`, `team-score:updated`, etc.) handled by simple `addEventListener` calls in `main.js`. Handlers self-guard with null checks on DOM elements (no screen scoping needed).
+
+**2. Service domain state** — `service:state` WebSocket events populate StateStore. MonitoringDisplay subscribes to store domains and delegates to specialized renderers (VideoRenderer, CueRenderer, HealthRenderer, etc.).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Event Flow                                │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│   UnifiedDataManager emits 'transaction:added'               │
-│         │                                                    │
-│         ▼                                                    │
-│   ScreenUpdateManager.onDataUpdate()                         │
-│         │                                                    │
-│         ├─── 1. Run ALL global handlers                      │
-│         │         • updateHistoryBadge()                     │
-│         │         • updateSessionStats()                     │
-│         │                                                    │
-│         ├─── 2. Run container handlers (if DOM element)      │
-│         │         • scoreboardContainer → renderScoreboard() │
-│         │         • admin-score-board → renderScoreboard()   │
-│         │         • admin-game-activity → renderActivity()   │
-│         │                                                    │
-│         └─── 3. Run screen handler (if screen active)        │
-│                   • historyScreen → renderGameActivity()     │
-│                   • teamDetailsScreen → renderTeamDetails()  │
+│   Transaction path:                                          │
+│   DataManager emits 'transaction:added'                      │
+│     → main.js listeners:                                     │
+│         • updateHistoryBadge() + updateSessionStats()        │
+│         • refreshHistoryScreen() (null-guarded)              │
+│         • refreshScoreboards() (null-guarded)                │
+│         • refreshAdminGameActivity() (null-guarded)          │
+│                                                              │
+│   Service state path:                                        │
+│   service:state WebSocket → StateStore.update(domain, state) │
+│     → MonitoringDisplay store subscriptions                  │
+│         • renderer.render(state, prev)                       │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Handler Types
-
-| Type | Runs When | Example |
-|------|-----------|---------|
-| Global | Always (every event) | Update history badge |
-| Container | DOM element with ID exists | Update scoreboards |
-| Screen | That screen has `.active` class | Refresh visible content |
-
-**Key File:** `src/ui/ScreenUpdateManager.js`
-
-**Wiring Location:** `src/main.js` (lines 82-259)
+**Key Files:** `src/main.js` (transaction event wiring), `src/admin/MonitoringDisplay.js` (store subscriptions)
 
 ## Initialization Sequence
 
@@ -298,8 +287,9 @@ Result screen uses "tap anywhere" instead of Continue button:
 
 | Concept | Implementation File |
 |---------|-------------------|
-| Event-to-screen routing | `src/ui/ScreenUpdateManager.js` |
-| Event wiring | `src/main.js` |
+| Transaction event wiring | `src/main.js` |
+| Service state subscriptions | `src/admin/MonitoringDisplay.js` |
+| State container | `src/core/stateStore.js` |
 | Data-action delegation | `src/utils/domEventBindings.js` |
 
 ### Initialization

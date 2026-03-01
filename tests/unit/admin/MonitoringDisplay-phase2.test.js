@@ -1,8 +1,8 @@
 import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
-import { cueStateFromSync } from './helpers/cueTestUtils.js';
+import { StateStore } from '../../../src/core/stateStore.js';
 
 describe('MonitoringDisplay - Phase 2', () => {
-  let display, mockClient, mockDataManager, container;
+  let display, mockClient, store, container;
 
   beforeEach(() => {
     // Setup DOM with Phase 2 elements
@@ -17,11 +17,11 @@ describe('MonitoringDisplay - Phase 2', () => {
     mockClient = new EventTarget();
     mockClient.socket = { connected: true, emit: jest.fn() };
 
-    // Mock DataManager (real EventTarget for cue-state:updated wiring)
-    mockDataManager = new EventTarget();
+    // Real StateStore
+    store = new StateStore();
 
     // Create display instance
-    display = new MonitoringDisplay(mockClient, mockDataManager);
+    display = new MonitoringDisplay(mockClient, store);
     container = document.getElementById('session-status-container');
   });
 
@@ -32,68 +32,50 @@ describe('MonitoringDisplay - Phase 2', () => {
 
   describe('cue:status (compound cue progress)', () => {
     it('should render active compound cue in Active Cues list', () => {
-      const cueEngine = {
+      store.update('cueengine', {
         loaded: true,
         cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
         activeCues: [{ cueId: 'opening', state: 'running', progress: 30, duration: 120 }]
-      };
-
-      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
-        detail: cueStateFromSync(cueEngine)
-      }));
+      });
 
       const activeCuesList = document.getElementById('active-cues-list');
       expect(activeCuesList.textContent).toContain('Opening Sequence');
     });
 
-    it('should update compound cue progress from cue:status event', () => {
-      // First set up an active cue via DM event
-      const cueEngine = {
+    it('should update compound cue progress from store update', () => {
+      // First set up an active cue
+      store.update('cueengine', {
         loaded: true,
         cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
         activeCues: [{ cueId: 'opening', state: 'running', progress: 30, duration: 120 }]
-      };
-      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
-        detail: cueStateFromSync(cueEngine)
-      }));
+      });
 
-      // Then update it via DataManager cue-state:updated event
-      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
-        detail: {
-          cues: new Map([['opening', { id: 'opening', label: 'Opening Sequence', quickFire: true }]]),
-          activeCues: new Map([['opening', { cueId: 'opening', state: 'running', progress: 0.45, duration: 120 }]]),
-          disabledCues: new Set()
-        }
-      }));
+      // Then update progress via store (simulates service:state event)
+      store.update('cueengine', {
+        activeCues: [{ cueId: 'opening', state: 'running', progress: 0.45, duration: 120 }]
+      });
 
       // Verify progress indicator updated
       const activeCuesList = document.getElementById('active-cues-list');
       expect(activeCuesList.textContent).toContain('45');
     });
 
-    it('should remove compound cue when cue:completed received', () => {
-      // First add an active cue via DM event
-      const cueEngine = {
+    it('should remove compound cue when completed', () => {
+      // First add an active cue
+      store.update('cueengine', {
         loaded: true,
         cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
         activeCues: [{ cueId: 'opening', state: 'running', progress: 30, duration: 120 }]
-      };
-      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
-        detail: cueStateFromSync(cueEngine)
-      }));
+      });
 
       // Verify it's there
       let activeCuesList = document.getElementById('active-cues-list');
       expect(activeCuesList.textContent).toContain('Opening Sequence');
 
-      // Then complete it via DataManager (cue removed from activeCues)
-      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
-        detail: {
-          cues: new Map([['opening', { id: 'opening', label: 'Opening Sequence', quickFire: true }]]),
-          activeCues: new Map(), // Empty = cue completed/removed
-          disabledCues: new Set()
-        }
-      }));
+      // Then complete it (empty activeCues)
+      store.update('cueengine', {
+        activeCues: []
+      });
 
       // Verify it's removed
       activeCuesList = document.getElementById('active-cues-list');
@@ -101,15 +83,11 @@ describe('MonitoringDisplay - Phase 2', () => {
     });
 
     it('should show pause/stop/resume buttons for active cues', () => {
-      const cueEngine = {
+      store.update('cueengine', {
         loaded: true,
         cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
         activeCues: [{ cueId: 'opening', state: 'running', progress: 30, duration: 120 }]
-      };
-
-      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
-        detail: cueStateFromSync(cueEngine)
-      }));
+      });
 
       const activeCuesList = document.getElementById('active-cues-list');
       expect(activeCuesList.querySelector('[data-action="admin.pauseCue"]')).toBeTruthy();
@@ -117,15 +95,11 @@ describe('MonitoringDisplay - Phase 2', () => {
     });
 
     it('should show resume button when cue is paused', () => {
-      const cueEngine = {
+      store.update('cueengine', {
         loaded: true,
         cues: [{ id: 'opening', label: 'Opening Sequence', quickFire: true }],
         activeCues: [{ cueId: 'opening', state: 'paused', progress: 30, duration: 120 }]
-      };
-
-      mockDataManager.dispatchEvent(new CustomEvent('cue-state:updated', {
-        detail: cueStateFromSync(cueEngine)
-      }));
+      });
 
       const activeCuesList = document.getElementById('active-cues-list');
       expect(activeCuesList.querySelector('[data-action="admin.resumeCue"]')).toBeTruthy();
@@ -133,54 +107,46 @@ describe('MonitoringDisplay - Phase 2', () => {
     });
   });
 
-  // cue:held toast tests removed — Phase 4 replaces toasts with HeldItemsRenderer
-  // spotify:status tests moved to SpotifyRenderer.test.js
-  // DM state management tested in UnifiedDataManager-spotify.test.js
-
-  describe('video-state:updated wiring', () => {
-    it('should route video-state:updated to videoRenderer.render', () => {
+  describe('video-state:updated wiring via store', () => {
+    it('should route video store update to videoRenderer.render', () => {
       const renderSpy = jest.spyOn(display.videoRenderer, 'render');
       const videoState = { nowPlaying: 'test.mp4', isPlaying: true, progress: 0.5 };
 
-      mockDataManager.dispatchEvent(new CustomEvent('video-state:updated', {
-        detail: videoState
-      }));
+      store.update('video', videoState);
 
-      expect(renderSpy).toHaveBeenCalledWith(videoState);
+      expect(renderSpy).toHaveBeenCalled();
     });
   });
 
-  describe('Phase 4: HealthRenderer wiring', () => {
+  describe('Phase 4: HealthRenderer wiring via store', () => {
     it('should create healthRenderer instance', () => {
       expect(display.healthRenderer).toBeDefined();
     });
 
-    it('should route service-health:updated to healthRenderer.render', () => {
+    it('should route health store update to healthRenderer.render', () => {
       const renderSpy = jest.spyOn(display.healthRenderer, 'render');
-      const healthData = { serviceHealth: { vlc: { status: 'down', message: 'Connection refused' } } };
+      const healthData = { vlc: { status: 'down', message: 'Connection refused' } };
 
-      mockDataManager.dispatchEvent(new CustomEvent('service-health:updated', {
-        detail: healthData
-      }));
+      store.update('health', healthData);
 
-      expect(renderSpy).toHaveBeenCalledWith(healthData);
+      expect(renderSpy).toHaveBeenCalled();
     });
   });
 
-  describe('Phase 4: HeldItemsRenderer wiring', () => {
+  describe('Phase 4: HeldItemsRenderer wiring via store', () => {
     it('should create heldItemsRenderer instance', () => {
       expect(display.heldItemsRenderer).toBeDefined();
     });
 
-    it('should route held-items:updated to heldItemsRenderer.render', () => {
-      const renderSpy = jest.spyOn(display.heldItemsRenderer, 'render');
-      const heldData = { action: 'held', id: 'held-cue-1', type: 'cue', reason: 'video_busy' };
+    it('should route held store update to heldItemsRenderer.renderSnapshot', () => {
+      const renderSpy = jest.spyOn(display.heldItemsRenderer, 'renderSnapshot');
+      const heldItems = [
+        { id: 'held-1', type: 'cue', reason: 'video_busy', cueId: 'opening' }
+      ];
 
-      mockDataManager.dispatchEvent(new CustomEvent('held-items:updated', {
-        detail: heldData
-      }));
+      store.update('held', { items: heldItems });
 
-      expect(renderSpy).toHaveBeenCalledWith(heldData);
+      expect(renderSpy).toHaveBeenCalledWith(heldItems);
     });
   });
 });

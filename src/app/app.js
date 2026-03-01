@@ -1291,8 +1291,8 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     }
 
     // Render admin scoreboard from current data.
-    // ScreenUpdateManager container handlers only fire on events — if the admin
-    // panel wasn't visible when score events fired, the scoreboard is empty.
+    // DataManager event listeners only fire on events — if the admin panel
+    // wasn't visible when score events fired, the scoreboard is empty.
     // Always render current scores when switching to admin view.
     const scoreBoard = document.getElementById('admin-score-board');
     if (scoreBoard && this.viewController?.adminInstances?.monitoring) {

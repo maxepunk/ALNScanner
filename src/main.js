@@ -8,13 +8,8 @@
  * Architecture:
  * - Import all modules (singleton instances)
  * - Create App with dependency injection
+ * - Wire DataManager event listeners for UI updates
  * - Initialize application
- * - Expose minimal window globals for HTML onclick handlers (temporary until Phase 9)
- *
- * Phase 3 Changes:
- * - Introduced ScreenUpdateManager for centralized event-to-screen routing
- * - Removed window.__app hack (app context passed via ScreenUpdateManager)
- * - Declarative screen update registration
  */
 
 // Import core dependencies
@@ -38,16 +33,13 @@ import { App } from './app/app.js';
 import { ConnectionWizard, QueueStatusManager, setupCleanupHandlers } from './ui/connectionWizard.js';
 import { bindDOMEvents } from './utils/domEventBindings.js';
 
-// Import ScreenUpdateManager for centralized event routing (Phase 3)
-import ScreenUpdateManager from './ui/ScreenUpdateManager.js';
-import { VideoRenderer } from './ui/renderers/VideoRenderer.js';
 
 /**
  * Create service instances with proper dependency injection
  *
  * Architecture: Event-Driven Coordination (no direct cross-dependencies)
  * - UnifiedDataManager emits events (transaction:added, data:cleared, etc.)
- * - ScreenUpdateManager routes events to appropriate UI updates
+ * - DataManager event listeners update UI (badges, screens, scoreboards)
  * - Event wiring happens in main.js (centralized)
  *
  * Phase 2: UnifiedDataManager replaces both DataManager and StandaloneDataManager
@@ -75,51 +67,13 @@ const UIManager = new UIManagerClass({
   // sessionModeManager, app set later by App
 });
 
-/**
- * Create ScreenUpdateManager for centralized event-to-screen routing
- * Replaces scattered event handlers with declarative registration
- */
-const screenUpdateManager = new ScreenUpdateManager({
-  uiManager: UIManager,
-  dataManager: DataManager,
-  debug: Debug
-});
-
 // ============================================================================
-// GLOBAL HANDLERS - Always run regardless of active screen
+// DataManager Event Listeners — UI updates on data changes
+// No screen/container scoping needed: handlers self-guard with null checks,
+// and differential rendering makes updating invisible DOM cheap.
 // ============================================================================
 
-// Transaction added: Update badge and stats globally
-screenUpdateManager.registerGlobalHandler('transaction:added', () => {
-  UIManager.updateHistoryBadge();
-  UIManager.updateSessionStats();
-});
-
-// Transaction deleted: Update badge and stats globally
-screenUpdateManager.registerGlobalHandler('transaction:deleted', () => {
-  UIManager.updateHistoryBadge();
-  UIManager.updateSessionStats();
-});
-
-// Data cleared: Update badge
-screenUpdateManager.registerGlobalHandler('data:cleared', () => {
-  UIManager.updateHistoryBadge();
-});
-
-// Game state updated: Update badge and stats
-screenUpdateManager.registerGlobalHandler('game-state:updated', () => {
-  UIManager.updateHistoryBadge();
-  UIManager.updateSessionStats();
-});
-
-
-// ============================================================================
-// SCREEN-SPECIFIC HANDLERS - Only run when that screen is active
-// ============================================================================
-// NOTE: Screen handlers receive (eventData, app). Use defensive destructuring
-// when accessing eventData properties: `const { prop } = eventData || {}`
-
-// History screen: Re-render game activity when data changes
+// Helper: refresh history screen content
 const refreshHistoryScreen = (includeStats = true) => {
   if (includeStats) UIManager.updateHistoryStats();
   const historyContainer = document.getElementById('historyContainer');
@@ -128,111 +82,80 @@ const refreshHistoryScreen = (includeStats = true) => {
   }
 };
 
-screenUpdateManager.registerScreen('history', {
-  'transaction:added': () => refreshHistoryScreen(),
-  'transaction:deleted': () => refreshHistoryScreen(),
-  'player-scan:added': () => refreshHistoryScreen(false)
-});
-
-// Team details screen: Re-render team data when transactions change
-screenUpdateManager.registerScreen('teamDetails', {
-  'transaction:added': (_eventData, app) => {
-    // _eventData unused - we fetch fresh data for current team
-    const currentTeamId = app?.currentInterventionTeamId;
-    if (currentTeamId) {
-      Debug.log(`[main.js] Team details active - re-rendering for team ${currentTeamId}`);
-      const transactions = DataManager.getTeamTransactions(currentTeamId);
-      UIManager.renderTeamDetails(currentTeamId, transactions);
-    }
-  },
-  'transaction:deleted': (_eventData, app) => {
-    // _eventData unused - we fetch fresh data for current team
-    const currentTeamId = app?.currentInterventionTeamId;
-    if (currentTeamId) {
-      Debug.log(`[main.js] Team details active - re-rendering after deletion for team ${currentTeamId}`);
-      const transactions = DataManager.getTeamTransactions(currentTeamId);
-      UIManager.renderTeamDetails(currentTeamId, transactions);
-    }
-  },
-  'team-score:updated': (eventData, app) => {
-    // Defensive destructuring for eventData
-    const { teamId, transactions } = eventData || {};
-    const currentTeamId = app?.currentInterventionTeamId;
-    if (currentTeamId && currentTeamId === teamId) {
-      Debug.log(`[main.js] Team details active - score update for team ${teamId}`);
-      UIManager.renderTeamDetails(teamId, transactions);
-    }
+// Helper: refresh team details if viewing a team
+const refreshTeamDetails = () => {
+  const currentTeamId = app?.currentInterventionTeamId;
+  if (currentTeamId) {
+    const transactions = DataManager.getTeamTransactions(currentTeamId);
+    UIManager.renderTeamDetails(currentTeamId, transactions);
   }
-});
-
-// ============================================================================
-// CONTAINER HANDLERS (run for ANY container present in DOM, regardless of screen)
-// ============================================================================
-
-// Scoreboard containers - both use UIManager.renderScoreboard() for consistent rendering
-// scoreboardContainer: Full scoreboard screen (scanner-view)
-// admin-score-board: Admin panel inline scoreboard (admin-view)
-const scoreboardContainerHandlers = {
-  'team-score:updated': (_eventData, container) => UIManager.renderScoreboard(container),
-  'scores:cleared': (_eventData, container) => { container.innerHTML = ''; },
-  'data:cleared': (_eventData, container) => { container.innerHTML = ''; }
 };
 
-screenUpdateManager.registerContainer('scoreboardContainer', scoreboardContainerHandlers);
-screenUpdateManager.registerContainer('admin-score-board', scoreboardContainerHandlers);
+// Helper: refresh both scoreboard containers (scanner-view + admin-view)
+const refreshScoreboards = () => {
+  for (const id of ['scoreboardContainer', 'admin-score-board']) {
+    const el = document.getElementById(id);
+    if (el) UIManager.renderScoreboard(el);
+  }
+};
 
-// Game Activity container (admin panel) - unified token lifecycle display
-screenUpdateManager.registerContainer('admin-game-activity', {
-  'transaction:added': (eventData, container) => {
-    Debug.log('[main.js] Updating admin-game-activity (transaction added)');
-    UIManager.renderGameActivity(container, { showSummary: true, showFilters: true });
-  },
-  'transaction:deleted': (eventData, container) => {
-    Debug.log('[main.js] Updating admin-game-activity (transaction deleted)');
-    UIManager.renderGameActivity(container, { showSummary: true, showFilters: true });
-  },
-  'player-scan:added': (eventData, container) => {
-    Debug.log('[main.js] Updating admin-game-activity (player scan)');
-    UIManager.renderGameActivity(container, { showSummary: true, showFilters: true });
-  },
-  'data:cleared': (eventData, container) => {
-    Debug.log('[main.js] Session reset - clearing admin-game-activity');
-    container.innerHTML = '';
+// Helper: clear both scoreboard containers
+const clearScoreboards = () => {
+  for (const id of ['scoreboardContainer', 'admin-score-board']) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  }
+};
+
+// Helper: refresh admin game activity
+const refreshAdminGameActivity = () => {
+  const container = document.getElementById('admin-game-activity');
+  if (container) UIManager.renderGameActivity(container, { showSummary: true, showFilters: true });
+};
+
+DataManager.addEventListener('transaction:added', () => {
+  UIManager.updateHistoryBadge();
+  UIManager.updateSessionStats();
+  refreshHistoryScreen();
+  refreshTeamDetails();
+  refreshAdminGameActivity();
+});
+
+DataManager.addEventListener('transaction:deleted', () => {
+  UIManager.updateHistoryBadge();
+  UIManager.updateSessionStats();
+  refreshHistoryScreen();
+  refreshTeamDetails();
+  refreshAdminGameActivity();
+});
+
+DataManager.addEventListener('data:cleared', () => {
+  UIManager.updateHistoryBadge();
+  clearScoreboards();
+  const adminActivity = document.getElementById('admin-game-activity');
+  if (adminActivity) adminActivity.innerHTML = '';
+});
+
+DataManager.addEventListener('game-state:updated', () => {
+  UIManager.updateHistoryBadge();
+  UIManager.updateSessionStats();
+});
+
+DataManager.addEventListener('team-score:updated', (e) => {
+  refreshScoreboards();
+  const { teamId, transactions } = e.detail || {};
+  const currentTeamId = app?.currentInterventionTeamId;
+  if (currentTeamId && currentTeamId === teamId) {
+    UIManager.renderTeamDetails(teamId, transactions);
   }
 });
 
-// Session Status container: Handled by MonitoringDisplay._wireDataManagerEvents() → SessionRenderer
-// (removed competing ScreenUpdateManager registration that crashed on null startTime for setup sessions)
+DataManager.addEventListener('scores:cleared', clearScoreboards);
 
-// Video Control Panel (admin panel) - Phase 1: Video State
-// Instantiates VideoRenderer on demand or keeps a reference if needed.
-// Since VideoRenderer captures DOM elements in constructor, we should instantiate it once if DOM is ready,
-// OR instantiate it inside the handler if we want to be safe about DOM presence.
-// Given main.js architecture, we can instantiate it once.
-const videoRenderer = new VideoRenderer();
-screenUpdateManager.registerContainer('video-control-panel', {
-  'video-state:updated': (eventData, container) => {
-    // eventData is the video state { nowPlaying, isPlaying, ... }
-    videoRenderer.render(eventData);
-  }
+DataManager.addEventListener('player-scan:added', () => {
+  refreshHistoryScreen(false); // no stats — player scans don't affect scoring
+  refreshAdminGameActivity();
 });
-
-// ============================================================================
-// CONNECT TO DATA SOURCES
-// ============================================================================
-
-// Connect ScreenUpdateManager to UnifiedDataManager events
-// Phase 2: Single connection - UnifiedDataManager emits all events
-screenUpdateManager.connectToDataSource(DataManager, [
-  'transaction:added',
-  'transaction:deleted',
-  'scores:cleared',
-  'data:cleared',
-  'game-state:updated',
-  'team-score:updated',
-  'player-scan:added',  // Game Activity: token lifecycle tracking
-  'video-state:updated'  // Phase 1: Video state
-]);
 
 /**
  * Create App instance with dependency injection
@@ -255,9 +178,6 @@ const app = new App({
 
 // Wire app reference for getSessionStats (same pattern as UIManager at app.js:79)
 DataManager.app = app;
-
-// Set app context for screen handlers that need it (replaces window.__app hack)
-screenUpdateManager.setAppContext(app);
 
 // TeamRegistry dependencies (sessionModeManager, orchestratorClient) are wired
 // by App.selectGameMode() after mode selection - not here in main.js

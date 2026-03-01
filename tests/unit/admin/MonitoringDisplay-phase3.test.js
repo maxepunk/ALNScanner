@@ -3,11 +3,11 @@
  * Per-stream routing dropdowns (Video Audio, Spotify Music, Sound Effects)
  *
  * Tests:
- * - Rendering per-stream dropdowns from availableSinks
+ * - Rendering per-stream dropdowns from store audio state
  * - Setting correct selected option from route state
- * - Updating dropdowns via audio:routing events
- * - Handling fallback display
- * - sync:full with Phase 3 environment.audio payload
+ * - Updating dropdowns via store audio updates
+ * - Handling edge cases
+ * - Ducking indicator forwarding
  */
 
 // Mock Debug BEFORE importing modules
@@ -19,11 +19,12 @@ jest.mock('../../../src/utils/debug.js', () => ({
 }));
 
 import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
+import { StateStore } from '../../../src/core/stateStore.js';
 
 describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
   let display;
   let mockClient;
-  let mockDataManager;
+  let store;
 
   const availableSinks = [
     { name: 'hdmi', label: 'HDMI' },
@@ -33,9 +34,9 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
   ];
 
   const defaultRoutes = {
-    video: { sink: 'combine-bt', fallback: 'hdmi' },
-    spotify: { sink: 'combine-bt', fallback: 'hdmi' },
-    sound: { sink: 'combine-bt', fallback: 'hdmi' }
+    video: 'combine-bt',
+    spotify: 'combine-bt',
+    sound: 'combine-bt'
   };
 
   beforeEach(() => {
@@ -54,11 +55,11 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       <div id="bt-warning" style="display:none;"></div>
     `;
 
-    // Create real EventTarget for DataManager wiring
-    mockDataManager = new EventTarget();
+    // Real StateStore
+    store = new StateStore();
 
     // Create the MonitoringDisplay instance
-    display = new MonitoringDisplay(mockClient, mockDataManager, null);
+    display = new MonitoringDisplay(mockClient, store, null);
   });
 
   afterEach(() => {
@@ -67,33 +68,14 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
   });
 
   /**
-   * Helper to dispatch a message:received event on the mock client
+   * Helper to update audio state via store
    */
-  function dispatchMessage(type, payload) {
-    mockClient.dispatchEvent(new CustomEvent('message:received', {
-      detail: { type, payload }
-    }));
-  }
-
-  /**
-   * Helper to dispatch audio state via DataManager (new architecture)
-   */
-  function syncWithAudioRouting(routes = defaultRoutes, sinks = availableSinks) {
-    // Flatten routes from { stream: { sink, fallback } } to { stream: sink }
-    const flatRoutes = {};
-    Object.entries(routes).forEach(([stream, config]) => {
-      flatRoutes[stream] = typeof config === 'string' ? config : config.sink;
+  function updateAudioState(routes = defaultRoutes, sinks = availableSinks) {
+    store.update('audio', {
+      routes,
+      availableSinks: sinks,
+      ducking: {}
     });
-
-    mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
-      detail: {
-        audio: {
-          routes: flatRoutes,
-          availableSinks: sinks,
-          ducking: {}
-        }
-      }
-    }));
   }
 
   // ============================================
@@ -101,8 +83,8 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
   // ============================================
 
   describe('per-stream dropdown rendering', () => {
-    it('should render per-stream routing dropdowns from sync:full', () => {
-      syncWithAudioRouting();
+    it('should render per-stream routing dropdowns from store', () => {
+      updateAudioState();
 
       const videoDropdown = document.querySelector('[data-stream="video"]');
       const spotifyDropdown = document.querySelector('[data-stream="spotify"]');
@@ -114,7 +96,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     });
 
     it('should populate dropdowns with available sinks', () => {
-      syncWithAudioRouting();
+      updateAudioState();
 
       const videoDropdown = document.querySelector('[data-stream="video"]');
       expect(videoDropdown).toBeTruthy();
@@ -122,7 +104,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     });
 
     it('should set correct option labels from availableSinks', () => {
-      syncWithAudioRouting();
+      updateAudioState();
 
       const videoDropdown = document.querySelector('[data-stream="video"]');
       const labels = Array.from(videoDropdown.options).map(o => o.textContent);
@@ -134,7 +116,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     });
 
     it('should set correct option values from availableSinks', () => {
-      syncWithAudioRouting();
+      updateAudioState();
 
       const videoDropdown = document.querySelector('[data-stream="video"]');
       const values = Array.from(videoDropdown.options).map(o => o.value);
@@ -146,10 +128,10 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     });
 
     it('should select the current sink for each stream', () => {
-      syncWithAudioRouting({
-        video: { sink: 'hdmi', fallback: 'hdmi' },
-        spotify: { sink: 'bluez_output.AA', fallback: 'hdmi' },
-        sound: { sink: 'combine-bt', fallback: 'hdmi' }
+      updateAudioState({
+        video: 'hdmi',
+        spotify: 'bluez_output.AA',
+        sound: 'combine-bt'
       });
 
       const videoDropdown = document.querySelector('[data-stream="video"]');
@@ -162,7 +144,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     });
 
     it('should use data-action="admin.setAudioRoute" on dropdowns', () => {
-      syncWithAudioRouting();
+      updateAudioState();
 
       const dropdowns = document.querySelectorAll('[data-stream]');
       dropdowns.forEach(dropdown => {
@@ -171,7 +153,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     });
 
     it('should render stream labels for each dropdown', () => {
-      syncWithAudioRouting();
+      updateAudioState();
 
       const container = document.getElementById('audio-routing-dropdowns');
       expect(container.textContent).toContain('Video Audio');
@@ -181,37 +163,31 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
   });
 
   // ============================================
-  // UPDATING DROPDOWNS FROM audio:routing EVENTS
+  // UPDATING DROPDOWNS FROM STORE UPDATES
   // ============================================
 
-  describe('audio:routing event updates dropdown selection', () => {
+  describe('audio store updates change dropdown selection', () => {
     beforeEach(() => {
-      // First render the dropdowns via sync:full
-      syncWithAudioRouting();
+      // First render the dropdowns
+      updateAudioState();
     });
 
-    it('should update video dropdown when audio:routing event received', () => {
-      mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
-        detail: { audio: { routes: { video: 'bluez_output.AA' }, availableSinks, ducking: {} } }
-      }));
+    it('should update video dropdown when audio store updated', () => {
+      store.update('audio', { routes: { video: 'bluez_output.AA' } });
 
       const videoDropdown = document.querySelector('[data-stream="video"]');
       expect(videoDropdown.value).toBe('bluez_output.AA');
     });
 
-    it('should update spotify dropdown when audio:routing event received', () => {
-      mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
-        detail: { audio: { routes: { spotify: 'hdmi' }, availableSinks, ducking: {} } }
-      }));
+    it('should update spotify dropdown when audio store updated', () => {
+      store.update('audio', { routes: { spotify: 'hdmi' } });
 
       const spotifyDropdown = document.querySelector('[data-stream="spotify"]');
       expect(spotifyDropdown.value).toBe('hdmi');
     });
 
-    it('should update sound dropdown when audio:routing event received', () => {
-      mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
-        detail: { audio: { routes: { sound: 'bluez_output.BB' }, availableSinks, ducking: {} } }
-      }));
+    it('should update sound dropdown when audio store updated', () => {
+      store.update('audio', { routes: { sound: 'bluez_output.BB' } });
 
       const soundDropdown = document.querySelector('[data-stream="sound"]');
       expect(soundDropdown.value).toBe('bluez_output.BB');
@@ -219,9 +195,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
 
     it('should not throw when stream dropdown does not exist', () => {
       expect(() => {
-        mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
-          detail: { audio: { routes: { nonexistent: 'hdmi' }, availableSinks, ducking: {} } }
-        }));
+        store.update('audio', { routes: { nonexistent: 'hdmi' } });
       }).not.toThrow();
     });
 
@@ -229,16 +203,11 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       const btWarning = document.getElementById('bt-warning');
       btWarning.style.display = 'block';
 
-      mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
-        detail: { audio: { routes: { video: 'combine-bt' }, availableSinks, ducking: {} } }
-      }));
+      store.update('audio', { routes: { video: 'combine-bt' } });
 
       expect(btWarning.style.display).toBe('none');
     });
   });
-
-  // audio:routing:fallback tests removed — now handled by EnvironmentRenderer via DM pipeline
-  // (see tests/unit/ui/renderers/EnvironmentRenderer.test.js)
 
   // ============================================
   // EDGE CASES
@@ -247,26 +216,15 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
   describe('edge cases', () => {
     it('should handle sync:full without environment field', () => {
       expect(() => {
-        dispatchMessage('sync:full', {
-          session: null
-        });
+        mockClient.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'sync:full', payload: { session: null } }
+        }));
       }).not.toThrow();
     });
 
-    it('should handle sync:full with empty audio data', () => {
+    it('should handle store update with no availableSinks', () => {
       expect(() => {
-        dispatchMessage('sync:full', {
-          session: null,
-          environment: {
-            audio: {}
-          }
-        });
-      }).not.toThrow();
-    });
-
-    it('should handle sync:full with no availableSinks', () => {
-      expect(() => {
-        syncWithAudioRouting(defaultRoutes, []);
+        updateAudioState(defaultRoutes, []);
       }).not.toThrow();
 
       // No dropdowns rendered when no sinks available
@@ -274,32 +232,26 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       expect(videoDropdown).toBeFalsy();
     });
 
-    it('should handle null payload for audio:routing', () => {
-      expect(() => {
-        dispatchMessage('audio:routing', null);
-      }).not.toThrow();
-    });
-
     it('should not throw when audio-routing-dropdowns container missing', () => {
       document.getElementById('audio-routing-dropdowns').remove();
 
       expect(() => {
-        syncWithAudioRouting();
+        updateAudioState();
       }).not.toThrow();
     });
 
-    it('should update dropdowns on subsequent sync:full events', () => {
-      // First sync with combine-bt selected
-      syncWithAudioRouting();
+    it('should update dropdowns on subsequent store updates', () => {
+      // First update with combine-bt selected
+      updateAudioState();
 
       let videoDropdown = document.querySelector('[data-stream="video"]');
       expect(videoDropdown.value).toBe('combine-bt');
 
-      // Second sync with hdmi selected
-      syncWithAudioRouting({
-        video: { sink: 'hdmi', fallback: 'hdmi' },
-        spotify: { sink: 'hdmi', fallback: 'hdmi' },
-        sound: { sink: 'hdmi', fallback: 'hdmi' }
+      // Second update with hdmi selected
+      updateAudioState({
+        video: 'hdmi',
+        spotify: 'hdmi',
+        sound: 'hdmi'
       });
 
       videoDropdown = document.querySelector('[data-stream="video"]');
@@ -307,36 +259,31 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     });
 
     it('should handle sink value not in availableSinks gracefully', () => {
-      // Route points to a sink not in the available list
       expect(() => {
-        syncWithAudioRouting({
-          video: { sink: 'nonexistent_sink', fallback: 'hdmi' },
-          spotify: { sink: 'combine-bt', fallback: 'hdmi' },
-          sound: { sink: 'combine-bt', fallback: 'hdmi' }
+        updateAudioState({
+          video: 'nonexistent_sink',
+          spotify: 'combine-bt',
+          sound: 'combine-bt'
         });
       }).not.toThrow();
     });
   });
 
   // ============================================
-  // BACKWARD COMPATIBILITY
+  // DUCKING FORWARDING
   // ============================================
 
   describe('ducking indicator wiring', () => {
     it('should forward spotify ducking state to SpotifyRenderer.renderDucking', () => {
       const renderDuckingSpy = jest.spyOn(display.spotifyRenderer, 'renderDucking');
 
-      mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
-        detail: {
-          audio: {
-            routes: {},
-            availableSinks: [],
-            ducking: {
-              spotify: { ducked: true, volume: 20 }
-            }
-          }
+      store.update('audio', {
+        routes: {},
+        availableSinks: [],
+        ducking: {
+          spotify: { ducked: true, volume: 20 }
         }
-      }));
+      });
 
       expect(renderDuckingSpy).toHaveBeenCalledWith({ ducked: true, volume: 20 });
     });
@@ -344,34 +291,32 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     it('should not call renderDucking when no spotify ducking data present', () => {
       const renderDuckingSpy = jest.spyOn(display.spotifyRenderer, 'renderDucking');
 
-      mockDataManager.dispatchEvent(new CustomEvent('audio-state:updated', {
-        detail: {
-          audio: {
-            routes: {},
-            availableSinks: [],
-            ducking: {}
-          }
-        }
-      }));
+      store.update('audio', {
+        routes: {},
+        availableSinks: [],
+        ducking: {}
+      });
 
       expect(renderDuckingSpy).not.toHaveBeenCalled();
     });
   });
 
-  describe('backward compatibility with Phase 0 radio buttons', () => {
+  describe('backward compatibility with Phase 0 audio format', () => {
     it('should still handle sync:full with Phase 0 audio format (no availableSinks)', () => {
-      // Phase 0 format: just routes.video.sink without availableSinks
       expect(() => {
-        dispatchMessage('sync:full', {
-          session: null,
-          environment: {
-            audio: {
-              routes: {
-                video: { sink: 'bluetooth' }
+        mockClient.dispatchEvent(new CustomEvent('message:received', {
+          detail: {
+            type: 'sync:full',
+            payload: {
+              session: null,
+              environment: {
+                audio: {
+                  routes: { video: 'bluetooth' }
+                }
               }
             }
           }
-        });
+        }));
       }).not.toThrow();
     });
   });

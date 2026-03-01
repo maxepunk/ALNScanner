@@ -384,7 +384,6 @@ ALNScanner/
 │   ├── ui/                # UI management
 │   │   ├── uiManager.js
 │   │   ├── settings.js
-│   │   ├── ScreenUpdateManager.js  # Phase 3: Centralized event routing
 │   │   ├── renderers/              # Admin panel UI renderers
 │   │   │   ├── CueRenderer.js      # Active cues + Quick Fire grid
 │   │   │   ├── EnvironmentRenderer.js  # BT/Audio/Lighting status
@@ -476,7 +475,6 @@ ALNScanner/
 - [uiManager.js](src/ui/uiManager.js) - Screen navigation, stats rendering, error display
   - `renderScoreboard(container?)` - Parameterized: defaults to `#scoreboardContainer`, accepts any container
 - [settings.js](src/ui/settings.js) - Pure state holder + localStorage persistence (no DOM manipulation)
-- [ScreenUpdateManager.js](src/ui/ScreenUpdateManager.js) - Centralized event-to-screen routing (Phase 3)
 - [connectionWizard.js](src/ui/connectionWizard.js) - Network auth flow UI
 
 **Services Layer ([src/services/](src/services/)):**
@@ -500,89 +498,13 @@ ALNScanner/
 - [config.js](src/utils/config.js) - App constants
 - [domEventBindings.js](src/utils/domEventBindings.js) - Event delegation for data-action buttons
 
-### Event-to-Screen Routing (ScreenUpdateManager)
+### UI Event Wiring (main.js)
 
-**Phase 3 refactor**: Centralized event routing replaces scattered visibility checks.
+DataManager emits events (`transaction:added`, `transaction:deleted`, `team-score:updated`, etc.) via `_wireStrategyEvents()`. These are handled by simple `addEventListener` calls in `main.js` that update badges, stats, scoreboards, game activity, and team details. No screen/container scoping — handlers self-guard with null checks on DOM elements.
 
-**Problem Solved:**
-- Before: Each screen needed manual `if (screen.classList.contains('active'))` checks
-- After: Declarative registration - ScreenUpdateManager handles routing automatically
+**CRITICAL: Storage strategies MUST emit events.** `_wireStrategyEvents()` in UnifiedDataManager forwards events from the active strategy. If a strategy method (e.g., `addTransaction`) doesn't `dispatchEvent(new CustomEvent('transaction:added', ...))`, the UI update handlers (badge, stats) will silently never fire.
 
-**Architecture:**
-```
-DataManager emits 'transaction:added'
-  → ScreenUpdateManager.onDataUpdate()
-    → Run ALL global handlers (badge, stats - regardless of screen)
-    → Check active screen ID
-    → Run screen-specific handler IF registered for this event
-```
-
-**CRITICAL: Storage strategies MUST emit events.** `_wireStrategyEvents()` in UnifiedDataManager
-forwards events from the active strategy. If a strategy method (e.g., `addTransaction`) doesn't
-`dispatchEvent(new CustomEvent('transaction:added', ...))`, the ScreenUpdateManager handlers
-(badge updates, stats) will silently never fire.
-
-**Usage Pattern:**
-```javascript
-// 1. Global handlers: Always run (badge updates, stats, etc.)
-screenUpdateManager.registerGlobalHandler('transaction:added', () => {
-  UIManager.updateHistoryBadge();
-  UIManager.updateSessionStats();
-});
-
-// 2. Screen-specific handlers: Only run when that screen is active
-screenUpdateManager.registerScreen('history', {
-  'transaction:added': () => UIManager.renderGameActivity(container),
-  'transaction:deleted': () => UIManager.renderGameActivity(container)
-});
-
-screenUpdateManager.registerScreen('scoreboard', {
-  'team-score:updated': () => UIManager.renderScoreboard()
-});
-
-// 3. Wire to data sources
-screenUpdateManager.connectToDataSource(DataManager, [
-  'transaction:added', 'transaction:deleted', 'team-score:updated'
-]);
-
-// 4. Set app context for handlers that need it
-screenUpdateManager.setAppContext(app);
-```
-
-**Adding a New Screen:**
-```javascript
-// In main.js, register the new screen's event handlers
-screenUpdateManager.registerScreen('myNewScreen', {
-  'transaction:added': (eventData, app) => {
-    // eventData: payload from the event
-    // app: App instance (for accessing currentTeamId, etc.)
-    UIManager.renderMyNewScreen();
-  }
-});
-```
-
-**Container Handlers (DOM elements that update regardless of screen):**
-```javascript
-// Container handlers run for ANY matching container present in DOM
-// Unlike screen handlers, these don't check for .active class
-screenUpdateManager.registerContainer('admin-score-board', {
-  'team-score:updated': (eventData, container) => {
-    UIManager.renderScoreboard(container);
-  }
-});
-```
-
-**Difference: Screen vs Container Handlers:**
-- `registerScreen()`: Only runs when that screen has `.active` class
-- `registerContainer()`: Runs for any container present in DOM (e.g., both scoreboards)
-
-**Current Containers:**
-- `scoreboardContainer` - Main scoreboard screen (scanner-view)
-- `admin-score-board` - Admin panel inline scoreboard (admin-view)
-
-**Key Files:**
-- `src/ui/ScreenUpdateManager.js` - The manager class
-- `src/main.js` (ScreenUpdateManager section) - Registration and wiring
+**Service domain state** (video, spotify, health, cues, environment, etc.) flows through a separate path: `service:state` WebSocket events → StateStore → MonitoringDisplay store subscriptions → renderers. See the StateStore section above.
 
 ## Transaction Flow
 

@@ -1,15 +1,9 @@
 /**
  * MonitoringDisplay Environment Tests
  *
- * Tests that MonitoringDisplay correctly handles environment state WITHOUT
- * duplicate rendering. Environment rendering is now handled by:
- * NetworkedSession → DataManager.updateXXXState() → event → MonitoringDisplay renderer
- *
- * MonitoringDisplay's updateAllDisplays() should NOT duplicate these renders.
- *
- * NOTE: Individual environment event handler tests (bluetooth:device, lighting:status, etc.)
- * were removed as those handlers no longer exist in MonitoringDisplay. They've been moved
- * to NetworkedSession/DataManager event flow.
+ * Tests that MonitoringDisplay correctly wires store subscriptions to
+ * environment renderers. Environment state flows through:
+ * service:state → StateStore → MonitoringDisplay store subscriptions → Renderers
  */
 
 // Mock Debug BEFORE importing modules
@@ -21,11 +15,12 @@ jest.mock('../../../src/utils/debug.js', () => ({
 }));
 
 import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
+import { StateStore } from '../../../src/core/stateStore.js';
 
 describe('MonitoringDisplay - Environment', () => {
   let display;
   let mockClient;
-  let mockDataManager;
+  let store;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -36,15 +31,11 @@ describe('MonitoringDisplay - Environment', () => {
     mockClient.socket = { connected: true, emit: jest.fn() };
     mockClient.config = { url: 'http://localhost:3000' };
 
-    // Mock DataManager with required EventTarget methods
-    mockDataManager = {
-      addEventListener: jest.fn(),
-      removeEventListener: jest.fn(),
-      updateAudioState: jest.fn()
-    };
+    // Real StateStore
+    store = new StateStore();
 
     // Create the MonitoringDisplay instance
-    display = new MonitoringDisplay(mockClient, mockDataManager, null);
+    display = new MonitoringDisplay(mockClient, store, null);
   });
 
   afterEach(() => {
@@ -54,34 +45,35 @@ describe('MonitoringDisplay - Environment', () => {
     document.body.innerHTML = '';
   });
 
-  // ============================================
-  // updateAllDisplays - no duplicate environment renders (Task 6)
-  // ============================================
+  describe('store subscription wiring', () => {
+    it('should route lighting store updates to envRenderer.renderLighting', () => {
+      const renderSpy = jest.spyOn(display.envRenderer, 'renderLighting');
 
-  describe('updateAllDisplays - no duplicate environment renders', () => {
-    // RATIONALE: NetworkedSession already calls dataManager.updateAudioState,
-    // updateLightingState, updateBluetoothState when handling sync:full.
-    // These methods trigger events that MonitoringDisplay listens to via
-    // _wireDataManagerEvents. updateAllDisplays should NOT duplicate these
-    // calls or directly call renderers — that causes double renders.
+      store.update('lighting', { connected: true, activeScene: null, scenes: [] });
 
-    beforeEach(() => {
-      // Clear mock call history from parent beforeEach
-      jest.clearAllMocks();
+      expect(renderSpy).toHaveBeenCalled();
     });
 
-    it('should NOT call dataManager.updateAudioState from updateAllDisplays', () => {
-      // NetworkedSession already calls this — updateAllDisplays should not duplicate
-      display.updateAllDisplays({
-        session: { id: 's1', status: 'active', name: 'Test' },
-        environment: {
-          audio: { routes: { video: { sink: 'hdmi' } }, availableSinks: [] },
-          lighting: { connected: true, activeScene: null, scenes: [] },
-          bluetooth: { scanning: false, pairedDevices: [] }
-        }
-      });
+    it('should route audio store updates to envRenderer.renderAudio', () => {
+      const renderSpy = jest.spyOn(display.envRenderer, 'renderAudio');
 
-      expect(mockDataManager.updateAudioState).not.toHaveBeenCalled();
+      store.update('audio', { routes: {}, availableSinks: [], ducking: {} });
+
+      expect(renderSpy).toHaveBeenCalled();
+    });
+
+    it('should route bluetooth store updates to envRenderer.renderBluetooth', () => {
+      const renderSpy = jest.spyOn(display.envRenderer, 'renderBluetooth');
+
+      store.update('bluetooth', { scanning: false, pairedDevices: [] });
+
+      expect(renderSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('updateAllDisplays - no duplicate environment renders', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
     });
 
     it('should NOT call envRenderer.renderLighting directly from updateAllDisplays', () => {
@@ -111,8 +103,11 @@ describe('MonitoringDisplay - Environment', () => {
     });
 
     it('should NOT have _updateEnvironmentFromSync method anymore', () => {
-      // Method was deleted as it's no longer needed - NetworkedSession handles this
       expect(display._updateEnvironmentFromSync).toBeUndefined();
+    });
+
+    it('should NOT have _wireDataManagerEvents method anymore', () => {
+      expect(display._wireDataManagerEvents).toBeUndefined();
     });
   });
 });

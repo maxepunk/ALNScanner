@@ -438,11 +438,10 @@ Backend broadcast (transaction:new)
     → MonitoringDisplay._handleMessage()
       → this.dataManager.addTransaction()
         → DataManager emits 'transaction:added' (CustomEvent)
-          → ScreenUpdateManager.onDataUpdate('transaction:added', data)
-            → Global handlers run (badge, stats update)
-            → Screen handler runs IF historyScreen is active
-              → UIManager.renderGameActivity(container)
-                → DOM updates with new transaction
+          → main.js event listeners fire:
+            → Badge + stats update
+            → History screen refresh (if container exists)
+            → Admin game activity refresh (if container exists)
 ```
 
 **Key Implementation Details:**
@@ -458,34 +457,18 @@ DataManager.on('transaction:added', handler);
 DataManager.emit('transaction:added', tx);
 ```
 
-2. **ScreenUpdateManager Pattern**
+2. **DataManager Event Listeners (main.js)**
 ```javascript
-// main.js - Declarative event registration via ScreenUpdateManager
-
-// Global handlers: Run on EVERY event regardless of active screen
-screenUpdateManager.registerGlobalHandler('transaction:added', () => {
+// main.js - Simple event listeners on DataManager
+DataManager.addEventListener('transaction:added', () => {
   UIManager.updateHistoryBadge();
   UIManager.updateSessionStats();
+  refreshHistoryScreen();
+  refreshAdminGameActivity();
 });
-
-// Screen handlers: Run ONLY when that screen is active
-screenUpdateManager.registerScreen('history', {
-  'transaction:added': () => {
-    UIManager.updateHistoryStats();
-    UIManager.renderGameActivity(container);
-  }
-});
-
-// Wire to data source (replaces manual addEventListener calls)
-screenUpdateManager.connectToDataSource(DataManager, [
-  'transaction:added', 'transaction:deleted', 'data:cleared', ...
-]);
 ```
 
-**Benefits:**
-- No scattered visibility checks throughout codebase
-- Adding new screens is trivial: just call `registerScreen()`
-- Global vs screen-specific concerns clearly separated
+Handlers self-guard with null checks on DOM elements (no screen/container scoping needed).
 
 3. **Mode-Aware Data Source Routing**
 ```javascript
@@ -520,9 +503,8 @@ _getDataSource() {
 - **File**: backend/tests/e2e/flows/07d-gm-scanner-admin-panel.test.js:689, 758
 
 ### Admin Panel Key Files
-- `src/ui/ScreenUpdateManager.js` - Centralized event-to-screen routing
-- `src/main.js` - ScreenUpdateManager registration and wiring
-- `src/admin/MonitoringDisplay.js` - Transaction history, receives dataManager via DI
+- `src/main.js` - DataManager event listeners for UI updates
+- `src/admin/MonitoringDisplay.js` - Service state display via StateStore subscriptions
 - `src/app/adminController.js` - AdminController DI (receives and passes dataManager)
 - `src/network/networkedSession.js` - NetworkedSession DI (receives and passes dataManager)
 - `src/app/app.js` - NetworkedSession creation (passes this.dataManager)

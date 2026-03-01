@@ -46,6 +46,18 @@ export class HeldItemsRenderer {
     this._manageDurationTimer();
   }
 
+  /**
+   * Replace internal state from a full snapshot (used by StateStore subscriptions)
+   * @param {Array} items - Full list of currently held items
+   */
+  renderSnapshot(items) {
+    if (!this.container) return;
+    this._items.clear();
+    (items || []).forEach(item => this._items.set(item.id, item));
+    this._renderAll();
+    this._manageDurationTimer();
+  }
+
   _renderAll() {
     if (!this.container) return;
 

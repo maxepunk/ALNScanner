@@ -157,8 +157,8 @@ export class NetworkedSession extends EventTarget {
       debug: console
     });
 
-    // 4. AdminController (depends on client, dataManager, and teamRegistry)
-    this.services.adminController = new AdminController(this.services.client, this.dataManager, this.teamRegistry);
+    // 4. AdminController (depends on client, dataManager, teamRegistry, and store)
+    this.services.adminController = new AdminController(this.services.client, this.dataManager, this.teamRegistry, this._store);
   }
 
   /**
@@ -189,8 +189,8 @@ export class NetworkedSession extends EventTarget {
       this.dispatchEvent(new CustomEvent('auth:required'));
     };
 
-    // Global WebSocket → DataManager event handler
-    // Updates state for ALL WebSocket events, regardless of active screen/view
+    // Global WebSocket → DataManager/StateStore event handler
+    // Routes session/transaction data to DataManager, service state to StateStore
     this._messageHandler = (event) => {
       const { type, payload } = event.detail;
 
@@ -221,7 +221,7 @@ export class NetworkedSession extends EventTarget {
             this.dataManager.setPlayerScansFromServer(payload.playerScans);
           }
 
-          // Update Session State (Phase 3)
+          // Update Session State
           // Only update if session field is explicitly present in payload.
           // A missing session field (e.g. from a partial sync:full after score reset)
           // should NOT null out an active session — that's a different semantic than
@@ -232,36 +232,7 @@ export class NetworkedSession extends EventTarget {
             this.dataManager.updateSessionState(null);
           }
 
-          // Update Environment State (Phase 3)
-          if (payload.environment) {
-            if (payload.environment.audio) this.dataManager.updateAudioState(payload.environment.audio);
-            if (payload.environment.lighting) this.dataManager.updateLightingState(payload.environment.lighting);
-            if (payload.environment.bluetooth) this.dataManager.updateBluetoothState(payload.environment.bluetooth);
-          }
-
-          // Sync Cue Engine State (Phase 1 & 2)
-          if (payload.cueEngine) {
-            this.dataManager.syncCueState(payload.cueEngine);
-          }
-
-          // Sync Spotify State (Phase 2)
-          if (payload.spotify) {
-            this.dataManager.updateSpotifyState(payload.spotify);
-          }
-
-          // Sync Service Health (Phase 4) — bulk sync, single event
-          if (payload.serviceHealth) {
-            this.dataManager.syncServiceHealth(payload.serviceHealth);
-          }
-
-          // Sync Held Items (Phase 4) — restore held items on reconnect
-          if (payload.heldItems && payload.heldItems.length > 0) {
-            for (const item of payload.heldItems) {
-              this.dataManager.updateHeldItems(item, 'held');
-            }
-          }
-
-          // Populate StateStore from sync:full (dual-path alongside UDM events above)
+          // Populate StateStore from sync:full (service domain state)
           if (this._store) {
             if (payload.spotify) this._store.update('spotify', payload.spotify);
             if (payload.serviceHealth) this._store.update('health', payload.serviceHealth);
@@ -270,7 +241,6 @@ export class NetworkedSession extends EventTarget {
             if (payload.environment?.lighting) this._store.update('lighting', payload.environment.lighting);
             if (payload.gameClock) this._store.update('gameclock', payload.gameClock);
             if (payload.cueEngine) this._store.update('cueengine', payload.cueEngine);
-            // Note: unlike UDM path above, empty array IS stored (tells renderer "zero items")
             if (payload.heldItems) this._store.update('held', { items: payload.heldItems });
             if (payload.videoStatus) this._store.update('video', payload.videoStatus);
           }
@@ -289,7 +259,6 @@ export class NetworkedSession extends EventTarget {
 
         case 'transaction:new':
           if (payload.transaction) {
-            // Use addTransactionFromBroadcast to store without re-submitting to backend
             this.dataManager.addTransactionFromBroadcast(payload.transaction);
           }
           break;
@@ -305,7 +274,6 @@ export class NetworkedSession extends EventTarget {
           break;
 
         case 'player:scan':
-          // Player scanner activity - forward to DataManager for Game Activity tracking
           this.dataManager.handlePlayerScan(payload);
           break;
 
@@ -315,93 +283,9 @@ export class NetworkedSession extends EventTarget {
           }));
           break;
 
-        // Phase 1: Video State Routing
-        case 'video:status':
-        case 'video:progress':
-          this.dataManager.updateVideoState(payload);
-          break;
-
-        // Phase 2: Cue State Routing
-        case 'cue:fired':
-          this.dataManager.updateCueStatus({ cueId: payload.cueId, state: 'running' });
-          break;
-        case 'cue:completed':
-          this.dataManager.updateCueStatus({ cueId: payload.cueId, state: 'completed' });
-          break;
-        case 'cue:error':
-          this.dataManager.updateCueStatus({ cueId: payload.cueId, state: 'error' });
-          break;
-        case 'cue:status':
-          // payload includes { cueId, state, progress, duration }
-          this.dataManager.updateCueStatus(payload);
-          break;
-        // Phase 4: Unified held item events
-        case 'held:added':
-          this.dataManager.updateHeldItems(payload, 'held');
-          break;
-        case 'held:released':
-          this.dataManager.updateHeldItems(payload, 'released');
-          break;
-        case 'held:discarded':
-          this.dataManager.updateHeldItems(payload, 'discarded');
-          break;
-        case 'held:recoverable':
-          this.dataManager.updateHeldItems(payload, 'recoverable');
-          break;
-
-        // Phase 4: Service health updates
-        case 'service:health':
-          this.dataManager.updateServiceHealth(payload);
-          break;
-
-        // Phase 2: Spotify State Routing
-        case 'spotify:status':
-          this.dataManager.updateSpotifyState(payload);
-          break;
-
-        // Phase 3: Environment State Routing
-        case 'lighting:scene':
-        case 'lighting:status':
-          this.dataManager.updateLightingState(payload);
-          break;
-
-        case 'audio:routing':
-          // payload includes { stream, sink }
-          this.dataManager.updateAudioState(payload);
-          break;
-        case 'audio:routing:fallback':
-          // BT speaker dropped — audio fell back to HDMI
-          this.dataManager.updateAudioState(payload);
-          break;
-        case 'audio:ducking:status':
-          // payload includes { stream, ducked, volume }
-          this.dataManager.updateAudioDucking(payload);
-          break;
-
-        case 'audio:sinks':
-          // Sink list changed (BT speaker connect/disconnect) — refresh dropdown
-          if (payload.availableSinks) {
-            this.dataManager.updateAudioState({ availableSinks: payload.availableSinks });
-          }
-          break;
-
-        case 'bluetooth:scan':
-          // payload: { scanning: boolean }
-          this.dataManager.updateBluetoothScan(payload);
-          break;
-        case 'bluetooth:device':
-          // payload: { type: 'connected'|'disconnected'|'discovered', device }
-          this.dataManager.updateBluetoothDevice(payload);
-          break;
-
-        case 'sound:status':
-          // Sound effect playback status (started/completed/stopped)
-          this.dispatchEvent(new CustomEvent('sound:status', {
-            detail: payload
-          }));
-          break;
-
-        // Unified service:state → StateStore (dual-path alongside UDM events above)
+        // Unified service:state → StateStore
+        // All service domain state (video, cue, spotify, audio, bluetooth,
+        // lighting, health, held, gameclock) arrives via this single event
         case 'service:state':
           if (this._store && payload.domain && payload.state) {
             this._store.update(payload.domain, payload.state);
