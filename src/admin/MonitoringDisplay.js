@@ -337,5 +337,11 @@ export class MonitoringDisplay {
     if (this.heldItemsRenderer) {
       this.heldItemsRenderer.destroy();
     }
+    if (this.sessionRenderer) {
+      this.sessionRenderer.destroy();
+    }
+    if (this.videoRenderer) {
+      this.videoRenderer.destroy();
+    }
   }
 } // End Class MonitoringDisplay
