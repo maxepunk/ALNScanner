@@ -133,6 +133,28 @@ UnifiedDataManager (Facade)
 - `unifiedDataManager.setStrategy(strategy)` called during initialization
 - Once set, strategy handles all data operations for the session
 
+### StateStore (Service Domain State)
+
+**Purpose:** Domain-keyed state container for service state (spotify, video, health, bluetooth, audio, lighting, gameclock, cueengine, held). Populated in Networked mode only via `service:state` WebSocket events and `sync:full` bulk restore.
+
+**Architectural boundary:** StateStore handles service domains with snapshot/shallow-merge semantics. Session/transaction data stays in UnifiedDataManager + storage strategies (list/accumulator semantics — different data pattern).
+
+**Dual-path period:** During transition, both StateStore and existing UDM event handlers receive the same data. `networkedSession.js` routes `sync:full` and individual events to both paths. Renderers will migrate from UDM events to store subscriptions one at a time.
+
+**Key files:**
+- `src/core/stateStore.js` — StateStore class (update, get, getAll, on, off)
+- `src/network/networkedSession.js` — Routes `service:state` and `sync:full` to store
+- `src/main.js` — Creates StateStore instance, passes to App
+
+**API:**
+```javascript
+store.update('spotify', { connected: true, state: 'Playing' }); // shallow merge
+store.get('spotify');        // returns defensive copy or null
+store.getAll();              // returns snapshot of all domains
+store.on('spotify', (state, prev) => { ... });  // domain-filtered subscription
+store.off('spotify', callback);
+```
+
 ## Testing Architecture
 
 ### Test Taxonomy
@@ -346,6 +368,7 @@ ALNScanner/
 │   │   ├── gameActivityBuilder.js  # Shared game activity builder (DRY)
 │   │   ├── tokenManager.js
 │   │   ├── scoring.js              # Scoring config and utilities
+│   │   ├── stateStore.js            # Service domain state (Networked mode)
 │   │   ├── teamRegistry.js         # Team state management
 │   │   └── storage/                # Storage strategy implementations
 │   │       ├── IStorageStrategy.js
@@ -435,6 +458,7 @@ ALNScanner/
 - [unifiedDataManager.js](src/core/unifiedDataManager.js) - Facade pattern delegating to storage strategies
 - [gameActivityBuilder.js](src/core/gameActivityBuilder.js) - Shared game activity builder (used by LocalStorage + NetworkedStorage)
 - [tokenManager.js](src/core/tokenManager.js) - Token database loading, fuzzy matching, group inventory
+- [stateStore.js](src/core/stateStore.js) - Service domain state container (Networked mode, populated via service:state)
 - [teamRegistry.js](src/core/teamRegistry.js) - Team state management for standalone mode
 - [sessionReportGenerator.js](src/core/sessionReportGenerator.js) - Markdown session report generator (networked mode, download on session end)
 - [storage/IStorageStrategy.js](src/core/storage/IStorageStrategy.js) - Interface for storage implementations
@@ -443,7 +467,7 @@ ALNScanner/
 
 **Network Layer ([src/network/](src/network/)):**
 - [orchestratorClient.js](src/network/orchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
-- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list includes environment control events (`bluetooth:device`, `bluetooth:scan`, `audio:routing`, `audio:routing:fallback`, `lighting:scene`, `lighting:status`), Phase 1 events (`gameclock:status`, `cue:fired`, `cue:completed`, `cue:error`, `sound:status`, `cue:status`), Phase 2 events (`spotify:status`), and Phase 4 events (`held:added`, `held:released`, `held:discarded`, `held:recoverable`, `service:health`)
+- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list includes environment control events (`bluetooth:device`, `bluetooth:scan`, `audio:routing`, `audio:routing:fallback`, `lighting:scene`, `lighting:status`), Phase 1 events (`gameclock:status`, `cue:fired`, `cue:completed`, `cue:error`, `sound:status`, `cue:status`), Phase 2 events (`spotify:status`), Phase 4 events (`held:added`, `held:released`, `held:discarded`, `held:recoverable`, `service:health`), and unified state (`service:state`)
 - [connectionManager.js](src/network/connectionManager.js) - Auth, connection state, retry logic
 - [networkedSession.js](src/network/networkedSession.js) - Service factory and lifecycle orchestrator
 - [networkedQueueManager.js](src/network/networkedQueueManager.js) - Offline transaction queue
@@ -644,6 +668,7 @@ screenUpdateManager.registerContainer('admin-score-board', {
 - `cue:status` - Compound cue lifecycle (running/paused/stopped with progress)
 - `held:added` / `held:released` / `held:discarded` / `held:recoverable` - Unified held item lifecycle (Phase 4)
 - `service:health` - Individual service health updates (Phase 4)
+- `service:state` - Unified state push (populates StateStore with `{domain, state}` envelope)
 - `spotify:status` - Spotify playback state (connected, state, volume, pausedByGameClock)
 
 **Event Envelope Pattern (AsyncAPI Decision #2):**

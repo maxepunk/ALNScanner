@@ -26,6 +26,7 @@ import Settings from './ui/settings.js';
 import TokenManager from './core/tokenManager.js';
 import { UnifiedDataManager as UnifiedDataManagerClass } from './core/unifiedDataManager.js';
 import { TeamRegistry as TeamRegistryClass } from './core/teamRegistry.js';
+import { StateStore } from './core/stateStore.js';
 import NFCHandler from './utils/nfcHandler.js';
 import CONFIG from './utils/config.js';
 import InitializationSteps from './app/initializationSteps.js';
@@ -63,6 +64,9 @@ const DataManager = new UnifiedDataManagerClass({
 
 // Create TeamRegistry for unified team management (networked + standalone)
 const TeamRegistry = new TeamRegistryClass();
+
+// Create StateStore for service domain state (Networked mode only, populated via service:state)
+const stateStore = new StateStore();
 
 // Create UIManager with unified DataManager
 const UIManager = new UIManagerClass({
@@ -241,6 +245,7 @@ const app = new App({
   tokenManager: TokenManager,
   dataManager: DataManager,
   teamRegistry: TeamRegistry,
+  stateStore: stateStore,
   nfcHandler: NFCHandler,
   config: CONFIG,
   initializationSteps: InitializationSteps

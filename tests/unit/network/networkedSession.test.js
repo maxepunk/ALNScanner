@@ -770,5 +770,218 @@ describe('NetworkedSession', () => {
         expect(handler.mock.calls[0][0].detail).toEqual(payload);
       });
     });
+
+    describe('service:state → StateStore', () => {
+      let mockStore;
+      let storeMessageHandler;
+
+      beforeEach(async () => {
+        mockStore = {
+          update: jest.fn(),
+          get: jest.fn(),
+          getAll: jest.fn(() => ({})),
+        };
+
+        // Clear prior addEventListener calls so we capture only this session's handler
+        mockClient.addEventListener.mockClear();
+
+        // Create a new session WITH store
+        const sessionWithStore = new NetworkedSession({
+          url: 'https://test.example.com:3000',
+          deviceId: 'GM_TEST',
+          stationName: 'Test Station',
+          token: 'test-token',
+        }, mockDataManager, null, mockStore);
+
+        await sessionWithStore.initialize();
+
+        // Get the message:received handler from THIS session (with store)
+        const messageCall = mockClient.addEventListener.mock.calls.find(
+          (call) => call[0] === 'message:received'
+        );
+        storeMessageHandler = messageCall[1];
+      });
+
+      it('should populate store on service:state event', () => {
+        const payload = { domain: 'spotify', state: { connected: true, state: 'Playing' } };
+        storeMessageHandler({ detail: { type: 'service:state', payload } });
+
+        expect(mockStore.update).toHaveBeenCalledWith('spotify', { connected: true, state: 'Playing' });
+      });
+
+      it('should ignore service:state without domain', () => {
+        const payload = { state: { connected: true } };
+        storeMessageHandler({ detail: { type: 'service:state', payload } });
+
+        expect(mockStore.update).not.toHaveBeenCalled();
+      });
+
+      it('should ignore service:state without state', () => {
+        const payload = { domain: 'spotify' };
+        storeMessageHandler({ detail: { type: 'service:state', payload } });
+
+        expect(mockStore.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('sync:full → StateStore', () => {
+      let mockStore;
+      let storeMessageHandler;
+
+      beforeEach(async () => {
+        mockStore = {
+          update: jest.fn(),
+          get: jest.fn(),
+          getAll: jest.fn(() => ({})),
+        };
+
+        // Add UDM methods required by sync:full handler
+        mockDataManager.currentSessionId = null;
+        mockDataManager.resetForNewSession = jest.fn();
+        mockDataManager.setScannedTokensFromServer = jest.fn();
+        mockDataManager.syncCueState = jest.fn();
+        mockDataManager.updateSpotifyState = jest.fn();
+        mockDataManager.syncServiceHealth = jest.fn();
+        mockDataManager.updateBluetoothState = jest.fn();
+
+        // Clear prior addEventListener calls so we capture only this session's handler
+        mockClient.addEventListener.mockClear();
+
+        const sessionWithStore = new NetworkedSession({
+          url: 'https://test.example.com:3000',
+          deviceId: 'GM_TEST',
+          stationName: 'Test Station',
+          token: 'test-token',
+        }, mockDataManager, null, mockStore);
+
+        await sessionWithStore.initialize();
+
+        const messageCall = mockClient.addEventListener.mock.calls.find(
+          (call) => call[0] === 'message:received'
+        );
+        storeMessageHandler = messageCall[1];
+      });
+
+      it('should populate store with spotify state from sync:full', () => {
+        const payload = { spotify: { connected: true, state: 'Playing', volume: 65 } };
+        storeMessageHandler({ detail: { type: 'sync:full', payload } });
+
+        expect(mockStore.update).toHaveBeenCalledWith('spotify', { connected: true, state: 'Playing', volume: 65 });
+      });
+
+      it('should populate store with serviceHealth from sync:full', () => {
+        const serviceHealth = { vlc: { status: 'healthy' }, spotify: { status: 'healthy' } };
+        const payload = { serviceHealth };
+        storeMessageHandler({ detail: { type: 'sync:full', payload } });
+
+        expect(mockStore.update).toHaveBeenCalledWith('health', serviceHealth);
+      });
+
+      it('should populate store with environment state from sync:full', () => {
+        const payload = {
+          environment: {
+            bluetooth: { scanning: false, devices: [] },
+            audio: { stream: 'video', sink: 'hdmi-stereo' },
+            lighting: { currentScene: 'Pregame', connected: true },
+          }
+        };
+        storeMessageHandler({ detail: { type: 'sync:full', payload } });
+
+        expect(mockStore.update).toHaveBeenCalledWith('bluetooth', { scanning: false, devices: [] });
+        expect(mockStore.update).toHaveBeenCalledWith('audio', { stream: 'video', sink: 'hdmi-stereo' });
+        expect(mockStore.update).toHaveBeenCalledWith('lighting', { currentScene: 'Pregame', connected: true });
+      });
+
+      it('should populate store with gameClock from sync:full', () => {
+        const payload = { gameClock: { running: true, elapsed: 3600 } };
+        storeMessageHandler({ detail: { type: 'sync:full', payload } });
+
+        expect(mockStore.update).toHaveBeenCalledWith('gameclock', { running: true, elapsed: 3600 });
+      });
+
+      it('should populate store with cueEngine from sync:full', () => {
+        const payload = { cueEngine: { activeCues: [], standingCues: [] } };
+        storeMessageHandler({ detail: { type: 'sync:full', payload } });
+
+        expect(mockStore.update).toHaveBeenCalledWith('cueengine', { activeCues: [], standingCues: [] });
+      });
+
+      it('should populate store with heldItems from sync:full', () => {
+        const heldItems = [{ id: 'h1', type: 'cue' }, { id: 'h2', type: 'video' }];
+        const payload = { heldItems };
+        storeMessageHandler({ detail: { type: 'sync:full', payload } });
+
+        expect(mockStore.update).toHaveBeenCalledWith('held', { items: heldItems });
+      });
+
+      it('should populate store with videoStatus from sync:full', () => {
+        const payload = { videoStatus: { nowPlaying: 'jaw011.mp4', isPlaying: true } };
+        storeMessageHandler({ detail: { type: 'sync:full', payload } });
+
+        expect(mockStore.update).toHaveBeenCalledWith('video', { nowPlaying: 'jaw011.mp4', isPlaying: true });
+      });
+
+      it('should populate all service domains from a complete sync:full', () => {
+        const payload = {
+          spotify: { connected: true },
+          serviceHealth: { vlc: { status: 'healthy' } },
+          environment: {
+            bluetooth: { scanning: false },
+            audio: { sink: 'hdmi' },
+            lighting: { connected: true },
+          },
+          gameClock: { running: false },
+          cueEngine: { activeCues: [] },
+          heldItems: [{ id: 'h1' }],
+          videoStatus: { isPlaying: false },
+        };
+        storeMessageHandler({ detail: { type: 'sync:full', payload } });
+
+        expect(mockStore.update).toHaveBeenCalledTimes(9);
+      });
+
+      it('should not populate store for missing sync:full fields', () => {
+        // sync:full with only scores (no service state)
+        const payload = { scores: [{ teamId: '001', currentScore: 5000 }] };
+        storeMessageHandler({ detail: { type: 'sync:full', payload } });
+
+        expect(mockStore.update).not.toHaveBeenCalled();
+      });
+
+      it('should populate BOTH store and UDM paths from sync:full (dual-path)', () => {
+        const payload = {
+          spotify: { connected: true, state: 'Playing' },
+          serviceHealth: { vlc: { status: 'healthy' } },
+        };
+        storeMessageHandler({ detail: { type: 'sync:full', payload } });
+
+        // Store path
+        expect(mockStore.update).toHaveBeenCalledWith('spotify', { connected: true, state: 'Playing' });
+        expect(mockStore.update).toHaveBeenCalledWith('health', { vlc: { status: 'healthy' } });
+
+        // UDM path (existing event handlers still fire)
+        expect(mockDataManager.updateSpotifyState).toHaveBeenCalledWith({ connected: true, state: 'Playing' });
+        expect(mockDataManager.syncServiceHealth).toHaveBeenCalledWith({ vlc: { status: 'healthy' } });
+      });
+    });
+
+    describe('StateStore null safety', () => {
+      it('should not crash on service:state when store is null', () => {
+        // Default session has no store (null)
+        const payload = { domain: 'spotify', state: { connected: true } };
+        expect(() => {
+          messageHandler({ detail: { type: 'service:state', payload } });
+        }).not.toThrow();
+      });
+
+      it('should not crash on sync:full when store is null', () => {
+        // Use a payload with only fields the outer mock handles (scores)
+        // to verify the store-population block is safely skipped when store is null
+        const payload = { scores: [{ teamId: '001', currentScore: 5000 }] };
+        expect(() => {
+          messageHandler({ detail: { type: 'sync:full', payload } });
+        }).not.toThrow();
+      });
+    });
   });
 });

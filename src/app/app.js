@@ -39,6 +39,7 @@ class App {
     this.tokenManager = dependencies.tokenManager || TokenManager;
     this.dataManager = dependencies.dataManager; // Required: inject via main.js
     this.teamRegistry = dependencies.teamRegistry || null;
+    this.stateStore = dependencies.stateStore || null;
     this.nfcHandler = dependencies.nfcHandler || NFCHandler;
     this.config = dependencies.config || CONFIG;
     this.initializationSteps = dependencies.initializationSteps || InitializationSteps;
@@ -489,7 +490,7 @@ class App {
         deviceId: deviceId,
         stationName: this.settings?.stationName || 'GM Station',
         token: token
-      }, this.dataManager, this.teamRegistry);
+      }, this.dataManager, this.teamRegistry, this.stateStore);
 
       // Attempt connection
       try {

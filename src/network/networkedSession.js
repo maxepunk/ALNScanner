@@ -21,11 +21,12 @@ import NetworkedQueueManager from './networkedQueueManager.js';
 import AdminController from '../app/adminController.js';
 
 export class NetworkedSession extends EventTarget {
-  constructor(config, dataManager, teamRegistry = null) {
+  constructor(config, dataManager, teamRegistry = null, store = null) {
     super();
     this.config = config; // { url, deviceId, stationName, token }
     this.dataManager = dataManager; // DataManager reference for AdminController
     this.teamRegistry = teamRegistry; // TeamRegistry for team dropdown sync
+    this._store = store; // StateStore for service domain state (null in Standalone)
     this.services = null;
     this.state = 'disconnected'; // disconnected, connecting, connected, error
   }
@@ -259,6 +260,20 @@ export class NetworkedSession extends EventTarget {
               this.dataManager.updateHeldItems(item, 'held');
             }
           }
+
+          // Populate StateStore from sync:full (dual-path alongside UDM events above)
+          if (this._store) {
+            if (payload.spotify) this._store.update('spotify', payload.spotify);
+            if (payload.serviceHealth) this._store.update('health', payload.serviceHealth);
+            if (payload.environment?.bluetooth) this._store.update('bluetooth', payload.environment.bluetooth);
+            if (payload.environment?.audio) this._store.update('audio', payload.environment.audio);
+            if (payload.environment?.lighting) this._store.update('lighting', payload.environment.lighting);
+            if (payload.gameClock) this._store.update('gameclock', payload.gameClock);
+            if (payload.cueEngine) this._store.update('cueengine', payload.cueEngine);
+            // Note: unlike UDM path above, empty array IS stored (tells renderer "zero items")
+            if (payload.heldItems) this._store.update('held', { items: payload.heldItems });
+            if (payload.videoStatus) this._store.update('video', payload.videoStatus);
+          }
           break;
 
         case 'session:update':
@@ -384,6 +399,13 @@ export class NetworkedSession extends EventTarget {
           this.dispatchEvent(new CustomEvent('sound:status', {
             detail: payload
           }));
+          break;
+
+        // Unified service:state → StateStore (dual-path alongside UDM events above)
+        case 'service:state':
+          if (this._store && payload.domain && payload.state) {
+            this._store.update(payload.domain, payload.state);
+          }
           break;
       }
     };

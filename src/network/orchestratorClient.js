@@ -277,7 +277,8 @@ export class OrchestratorClient extends EventTarget {
       'sound:status',            // Phase 1: Sound playback status
       'spotify:status',          // Phase 2: Spotify playback status
       'audio:ducking:status',    // Phase 3: Audio ducking state change
-      'audio:sinks'              // Phase 3: PipeWire sink added/removed (refresh dropdown)
+      'audio:sinks',             // Phase 3: PipeWire sink added/removed (refresh dropdown)
+      'service:state'            // Unified state push (populates StateStore)
     ];
 
     messageTypes.forEach(type => {
