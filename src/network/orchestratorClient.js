@@ -244,41 +244,21 @@ export class OrchestratorClient extends EventTarget {
       'transaction:deleted',
       'score:updated',
       'scores:reset',
-      'video:status',
       'session:update',
       'session:overtime',
       'device:connected',
       'device:disconnected',
       'group:completed',
-      'display:mode',  // Display control events (HDMI idle loop vs scoreboard)
-      'video:progress',      // Video playback progress (1s interval)
-      'video:queue:update',  // Video queue changes
+      'display:mode',
       'gm:command:ack',
       'offline:queue:processed',
       'batch:ack',
       'error',
-      'player:scan',  // Phase 3: Unified Game Activity - player scan broadcasts
-      'bluetooth:device',        // Phase 0: Environment Control - BT device state changes
-      'bluetooth:scan',          // Phase 0: Environment Control - BT scan start/stop
-      'audio:routing',           // Phase 0: Environment Control - audio route changes
-      'audio:routing:fallback',  // Phase 0: Environment Control - audio HDMI fallback
-      'lighting:scene',          // Phase 0: Environment Control - scene activated
-      'lighting:status',         // Phase 0: Environment Control - HA connection/scene refresh
-      'gameclock:status',        // Phase 1: Game clock state (running/paused/stopped)
-      'cue:fired',               // Phase 1: Cue triggered
-      'cue:status',              // Phase 2: Compound cue progress
-      'cue:completed',           // Phase 1: Cue action sequence completed
-      'cue:error',               // Phase 1: Cue action failed
-      'held:added',              // Phase 4: Held item added (cue or video)
-      'held:released',           // Phase 4: Held item released
-      'held:discarded',          // Phase 4: Held item discarded
-      'held:recoverable',        // Phase 4: Held items recoverable (service came back)
-      'service:health',          // Phase 4: Service health updates
-      'sound:status',            // Phase 1: Sound playback status
-      'spotify:status',          // Phase 2: Spotify playback status
-      'audio:ducking:status',    // Phase 3: Audio ducking state change
-      'audio:sinks',             // Phase 3: PipeWire sink added/removed (refresh dropdown)
-      'service:state'            // Unified state push (populates StateStore)
+      'player:scan',
+      'cue:fired',
+      'cue:completed',
+      'cue:error',
+      'service:state',  // Sole push mechanism for service domain state
     ];
 
     messageTypes.forEach(type => {

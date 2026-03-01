@@ -574,7 +574,7 @@ describe('NetworkedSession', () => {
     });
 
     it('should not call dataManager methods for unhandled event types', () => {
-      messageHandler({ detail: { type: 'video:status', payload: { status: 'playing' } } });
+      messageHandler({ detail: { type: 'display:mode', payload: { mode: 'VIDEO' } } });
 
       expect(mockDataManager.updateTeamScoreFromBackend).not.toHaveBeenCalled();
       expect(mockDataManager.addTransaction).not.toHaveBeenCalled();

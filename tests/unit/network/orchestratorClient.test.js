@@ -226,7 +226,6 @@ describe('OrchestratorClient - Dumb Pipe', () => {
         'transaction:result',
         'transaction:new',
         'score:updated',
-        'video:status',
         'session:update',
         'device:connected',
         'device:disconnected',
@@ -235,18 +234,10 @@ describe('OrchestratorClient - Dumb Pipe', () => {
         'offline:queue:processed',
         'batch:ack',
         'error',
-        'bluetooth:device',
-        'bluetooth:scan',
-        'audio:routing',
-        'audio:routing:fallback',
-        'lighting:scene',
-        'lighting:status',
-        'audio:ducking:status',  // Phase 3: Audio ducking state change
-        'held:added',            // Phase 4: Held item added (cue or video)
-        'held:released',         // Phase 4: Held item released
-        'held:discarded',        // Phase 4: Held item discarded
-        'held:recoverable',      // Phase 4: Held items recoverable
-        'service:health'         // Phase 4: Service health updates
+        'cue:fired',
+        'cue:completed',
+        'cue:error',
+        'service:state',
       ];
 
       messageTypes.forEach(type => {

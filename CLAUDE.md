@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-02-27
+Last verified: 2026-03-01
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -45,7 +45,7 @@ npm run build         # Output to dist/
 npm run preview       # Test production build locally
 
 # Run tests
-npm test              # Jest unit tests (L1: 926 tests, ~15-30s)
+npm test              # Jest unit tests (L1: 1116 tests, ~15-30s)
 npm run test:e2e      # Playwright E2E tests (L2: scanner only, ~2-3 min)
 npm run test:all      # All tests (L1 + L2)
 
@@ -139,8 +139,6 @@ UnifiedDataManager (Facade)
 
 **Architectural boundary:** StateStore handles service domains with snapshot/shallow-merge semantics. Session/transaction data stays in UnifiedDataManager + storage strategies (list/accumulator semantics — different data pattern).
 
-**Dual-path period:** During transition, both StateStore and existing UDM event handlers receive the same data. `networkedSession.js` routes `sync:full` and individual events to both paths. Renderers will migrate from UDM events to store subscriptions one at a time.
-
 **Key files:**
 - `src/core/stateStore.js` — StateStore class (update, get, getAll, on, off)
 - `src/network/networkedSession.js` — Routes `service:state` and `sync:full` to store
@@ -167,7 +165,7 @@ The scanner uses a 3-tier testing strategy:
 - **Purpose**: Verify individual components work correctly in isolation
 - **Run**: `npm test`
 - **Duration**: ~15-30s
-- **Coverage**: 926 tests across all modules (app, core, network, ui, utils)
+- **Coverage**: 1116 tests across 54 suites (app, core, network, ui, utils)
 
 **L2: Scanner E2E Tests (No Orchestrator)**
 - **Location**: `tests/e2e/specs/`
@@ -466,7 +464,7 @@ ALNScanner/
 
 **Network Layer ([src/network/](src/network/)):**
 - [orchestratorClient.js](src/network/orchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
-- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list includes environment control events (`bluetooth:device`, `bluetooth:scan`, `audio:routing`, `audio:routing:fallback`, `lighting:scene`, `lighting:status`), Phase 1 events (`gameclock:status`, `cue:fired`, `cue:completed`, `cue:error`, `sound:status`, `cue:status`), Phase 2 events (`spotify:status`), Phase 4 events (`held:added`, `held:released`, `held:discarded`, `held:recoverable`, `service:health`), and unified state (`service:state`)
+- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list: `sync:full`, `transaction:*`, `score:updated`, `scores:reset`, `session:update`, `session:overtime`, `device:connected/disconnected`, `group:completed`, `display:mode`, `gm:command:ack`, `offline:queue:processed`, `batch:ack`, `error`, `player:scan`, `cue:fired`, `cue:completed`, `cue:error`, `service:state` (sole push mechanism for all service domain state)
 - [connectionManager.js](src/network/connectionManager.js) - Auth, connection state, retry logic
 - [networkedSession.js](src/network/networkedSession.js) - Service factory and lifecycle orchestrator
 - [networkedQueueManager.js](src/network/networkedQueueManager.js) - Offline transaction queue
@@ -580,18 +578,12 @@ DataManager emits events (`transaction:added`, `transaction:deleted`, `team-scor
 - `transaction:new` - New GM transaction processed
 - `player:scan` - Player scanner activity (persisted to session.playerScans)
 - `session:update` - Session lifecycle changes
-- `video:status` - Video playback state
 - `score:updated` - Team score changed (mapped to internal `team-score:updated` event)
-- `gm:command:ack` - Command response (success/failure)
+- `gm:command:ack` - Command response `{action, success, message}` (no result.data)
 - `device:connected` / `device:disconnected` - Device tracking
-- `bluetooth:device` / `bluetooth:scan` - BT device state and scan status
-- `audio:routing` / `audio:routing:fallback` - Audio route changes and HDMI fallback
-- `lighting:scene` / `lighting:status` - Scene activation and HA connection status
-- `cue:status` - Compound cue lifecycle (running/paused/stopped with progress)
-- `held:added` / `held:released` / `held:discarded` / `held:recoverable` - Unified held item lifecycle (Phase 4)
-- `service:health` - Individual service health updates (Phase 4)
-- `service:state` - Unified state push (populates StateStore with `{domain, state}` envelope)
-- `spotify:status` - Spotify playback state (connected, state, volume, pausedByGameClock)
+- `display:mode` - HDMI display mode changes
+- `cue:fired` / `cue:completed` / `cue:error` - Discrete cue game events
+- `service:state` - **Sole push mechanism** for all service domain state (populates StateStore with `{domain, state}` envelope). 10 domains: `spotify`, `video`, `health`, `bluetooth`, `audio`, `lighting`, `sound`, `gameclock`, `cueengine`, `held`
 
 **Event Envelope Pattern (AsyncAPI Decision #2):**
 ```javascript
@@ -696,7 +688,7 @@ socket.emit('gm:command', {
 - Play/pause/stop/skip controls
 - Manual video addition to queue
 - Queue management (reorder, clear)
-- Progress tracking via `video:progress` events
+- Progress tracking via `service:state` domain `video`
 
 **Video List:**
 - Populated from `GET /api/videos` (backend's video directory)
@@ -707,9 +699,9 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 **BluetoothController:** Scan for speakers, pair/unpair, connect/disconnect. Events: `bluetooth:device`, `bluetooth:scan`.
 
-**AudioController:** Route audio streams between HDMI, Bluetooth, and combine-bt sinks. Phase 3: per-stream routing dropdowns (video/spotify/sound independently routable). Events: `audio:routing`, `audio:routing:fallback`.
+**AudioController:** Route audio streams between HDMI, Bluetooth, and combine-bt sinks. Per-stream routing dropdowns (video/spotify/sound independently routable). State delivered via `service:state` domain `audio`.
 
-**LightingController:** Activate Home Assistant scenes, refresh scene list. Events: `lighting:scene`, `lighting:status`.
+**LightingController:** Activate Home Assistant scenes, refresh scene list. State delivered via `service:state` domain `lighting`.
 
 ### Show Control (Phase 1)
 
@@ -721,17 +713,17 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 **MonitoringDisplay updates:** Game clock display (elapsed time), cue/sound event toast notifications, Quick Fire cue grid, Standing Cues list with enable/disable toggles.
 
-**MonitoringDisplay** handles all environment and show control status display updates (BT device list, audio routing indicator, lighting scene list, game clock, cues, sounds). Uses `data-action` attributes wired in `domEventBindings.js`. Delegates to specialized renderers: `HealthRenderer` (service health dashboard), `HeldItemsRenderer` (blocked cues/videos queue), `SpotifyRenderer` (playback + ducking), `CueRenderer` (active cues + quick fire), `VideoRenderer` (queue + now playing), `EnvironmentRenderer` (BT/audio/lighting). Phase 2 additions: `_handleCueStatus()` renders active cues with progress bars and pause/resume/stop buttons (`#active-cues-list` container, `.active-cue-item[data-cue-id]` elements), `_handleSpotifyStatus()` + `_renderNowPlaying()` show Spotify state in `#now-playing-section`. Phase 3 additions: `_renderAudioRoutingDropdowns(audioData)` renders per-stream routing dropdowns (video/spotify/sound) replacing the single radio-button toggle. Dropdown container: `#audio-routing-dropdowns`. Each dropdown sends `audio:route:set` with `{stream, sink}`.
+**MonitoringDisplay** handles all environment and show control status display updates. Uses `data-action` attributes wired in `domEventBindings.js`. Subscribes to StateStore domains via `_wireStoreSubscriptions()` and delegates to specialized differential renderers: `HealthRenderer` (service health), `HeldItemsRenderer` (blocked cues/videos), `SpotifyRenderer` (playback + ducking), `CueRenderer` (active cues + quick fire), `VideoRenderer` (queue + now playing), `EnvironmentRenderer` (BT/audio/lighting). Also handles discrete game events (`cue:fired`, `cue:completed`, `display:mode`) via `_handleMessage()`.
 
 **GOTCHA**: `MonitoringDisplay.refreshAllDisplays()` re-renders the template, destroying dynamic DOM state (active cue elements, now-playing). It calls `_requestInitialState()` afterward to restore state from the backend.
 
 ### HealthRenderer (Phase 4)
 
-Renders service health dashboard in admin panel System Status section. Receives `service-health:updated` events via MonitoringDisplay. Shows per-service status (green/red), message, last checked time, and "Check Now" buttons. Collapsed when all healthy, expanded when any service is down. Uses idempotent full-state rendering pattern.
+Renders service health dashboard in admin panel System Status section. Receives state via StateStore `health` domain subscription in MonitoringDisplay. Shows per-service status (green/red), message, last checked time, and "Check Now" buttons. Collapsed when all healthy, expanded when any service is down. Uses idempotent full-state differential rendering pattern.
 
 ### HeldItemsRenderer (Phase 4)
 
-Renders held items queue (cues/videos blocked by service outage or video conflict). Receives incremental events: `held:added`, `held:released`, `held:discarded`, `held:recoverable`. Maintains internal `_items` Map — stateful incremental pattern (not idempotent). Shows item type, blocked-by services, held duration (live counter), source, and Release/Discard buttons. Bulk "Release All" / "Discard All" at section top.
+Renders held items queue (cues/videos blocked by service outage or video conflict). Receives full snapshot via StateStore `held` domain subscription in MonitoringDisplay (`renderSnapshot(items)`). Shows item type, blocked-by services, held duration (live counter), source, and Release/Discard buttons. Bulk "Release All" / "Discard All" at section top.
 
 ### Session Report (SessionReportGenerator)
 
