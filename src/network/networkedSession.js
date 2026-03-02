@@ -248,9 +248,9 @@ export class NetworkedSession extends EventTarget {
 
         case 'session:update':
           // Session lifecycle: detect boundary changes
-          if (payload.status === 'ended') {
-            this.dataManager.resetForNewSession(null);
-          } else {
+          // NOTE: Do NOT reset on session end — data must survive for report download.
+          // Reset only happens when a NEW session ID arrives (handled by _handleSessionBoundary).
+          if (payload.status !== 'ended') {
             this._handleSessionBoundary(payload.id);
           }
           // Update session state for UI (SessionRenderer)

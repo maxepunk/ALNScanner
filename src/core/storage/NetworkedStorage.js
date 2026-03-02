@@ -145,6 +145,7 @@ export class NetworkedStorage extends IStorageStrategy {
         bonusScore: score.bonusPoints,
         tokenCount: score.tokensScanned,
         completedGroups: score.completedGroups?.length || 0,
+        adminAdjustments: score.adminAdjustments || [],
         isFromBackend: true
       }))
       .sort((a, b) => b.score - a.score);

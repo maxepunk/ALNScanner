@@ -44,6 +44,7 @@ export class SessionReportGenerator {
       this._buildSessionSummary(session, scores, transactions, playerScans),
       this._buildDetectiveSection(transactions),
       this._buildBlackMarketSection(transactions),
+      this._buildAdminAdjustmentsSection(scores),
       this._buildPlayerActivitySection(playerScans, transactions),
     ];
 
@@ -61,8 +62,18 @@ export class SessionReportGenerator {
 
     // Sort scores descending
     const sortedScores = [...scores].sort((a, b) => b.score - a.score);
+    const hasAnyAdjustments = sortedScores.some(s => s.adminAdjustments?.length > 0);
     const leaderboard = sortedScores
-      .map((s, i) => `${i + 1}. **${s.teamId}** — ${this._formatCurrency(s.score)}`)
+      .map((s, i) => {
+        let line = `${i + 1}. **${s.teamId}** — ${this._formatCurrency(s.score)}`;
+        if (hasAnyAdjustments && s.adminAdjustments?.length > 0) {
+          const adjTotal = s.adminAdjustments.reduce((sum, adj) => sum + adj.delta, 0);
+          const txScore = s.score - adjTotal;
+          const sign = adjTotal >= 0 ? '+' : '';
+          line += ` (${this._formatCurrency(txScore)} transactions ${sign}${this._formatCurrency(adjTotal)} adjustments)`;
+        }
+        return line;
+      })
       .join('\n');
 
     const lines = [
@@ -257,6 +268,58 @@ export class SessionReportGenerator {
       }
     }
 
+    lines.push('');
+    return lines.join('\n');
+  }
+
+  /**
+   * Build the admin adjustments section.
+   */
+  _buildAdminAdjustmentsSection(scores) {
+    const allAdjustments = scores
+      .filter(s => s.adminAdjustments?.length > 0)
+      .flatMap(s => s.adminAdjustments.map(adj => ({ ...adj, teamId: s.teamId })))
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    const lines = [
+      '## Admin Adjustments',
+      '',
+    ];
+
+    if (allAdjustments.length === 0) {
+      lines.push('*No admin adjustments this session.*');
+      lines.push('');
+      lines.push('---');
+      lines.push('');
+      return lines.join('\n');
+    }
+
+    lines.push('| Team | Amount | Reason | GM Station | Time |');
+    lines.push('|------|--------|--------|------------|------|');
+
+    for (const adj of allAdjustments) {
+      const sign = adj.delta >= 0 ? '+' : '';
+      const reason = (adj.reason || '—').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+      const time = this._formatTimestamp(adj.timestamp);
+      lines.push(`| ${adj.teamId} | ${sign}${this._formatCurrency(adj.delta)} | ${reason} | ${adj.gmStation || '—'} | ${time} |`);
+    }
+
+    // Per-team adjustment totals
+    const teamTotals = {};
+    for (const adj of allAdjustments) {
+      teamTotals[adj.teamId] = (teamTotals[adj.teamId] || 0) + adj.delta;
+    }
+
+    lines.push('');
+    lines.push('### Adjustment Totals');
+    lines.push('');
+    for (const [teamId, total] of Object.entries(teamTotals).sort((a, b) => b[1] - a[1])) {
+      const sign = total >= 0 ? '+' : '';
+      lines.push(`- **${teamId}:** ${sign}${this._formatCurrency(total)}`);
+    }
+
+    lines.push('');
+    lines.push('---');
     lines.push('');
     return lines.join('\n');
   }

@@ -597,12 +597,20 @@ describe('NetworkedSession', () => {
         mockDataManager.resetForNewSession = jest.fn();
       });
 
-      it('should call resetForNewSession(null) when session ends', () => {
+      it('should NOT call resetForNewSession when session ends (data preserved for report)', () => {
         const payload = { id: 'old-session-123', status: 'ended' };
 
         messageHandler({ detail: { type: 'session:update', payload } });
 
-        expect(mockDataManager.resetForNewSession).toHaveBeenCalledWith(null);
+        expect(mockDataManager.resetForNewSession).not.toHaveBeenCalled();
+      });
+
+      it('should still update session state when session ends', () => {
+        const payload = { id: 'old-session-123', status: 'ended' };
+
+        messageHandler({ detail: { type: 'session:update', payload } });
+
+        expect(mockDataManager.updateSessionState).toHaveBeenCalledWith(payload);
       });
 
       it('should call resetForNewSession with new ID when session changes', () => {
