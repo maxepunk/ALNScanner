@@ -278,8 +278,8 @@ describe('CueRenderer', () => {
 
       const item = items[0];
       expect(item.dataset.cueId).toBe('tension-hit');
-      expect(item.querySelector('.progress-bar__text').textContent).toBe('50%');
-      expect(item.querySelector('.progress-bar__fill').style.width).toBe('50%');
+      expect(item.querySelector('.progress-text').textContent).toBe('50%');
+      expect(item.querySelector('.progress-fill').style.width).toBe('50%');
     });
 
     it('should show Pause button for running cues', () => {
@@ -358,7 +358,7 @@ describe('CueRenderer', () => {
 
       const item = activeListEl.querySelector('.active-cue-item');
       expect(item).toBeTruthy();
-      expect(item.querySelector('.progress-bar__text').textContent).toBe('0%');
+      expect(item.querySelector('.progress-text').textContent).toBe('0%');
     });
   });
 
@@ -371,7 +371,7 @@ describe('CueRenderer', () => {
       renderer.render(state1);
 
       const itemBefore = activeListEl.querySelector('[data-cue-id="tension-hit"]');
-      expect(itemBefore.querySelector('.progress-bar__text').textContent).toBe('30%');
+      expect(itemBefore.querySelector('.progress-text').textContent).toBe('30%');
 
       // Update progress only
       const activeCues2 = new Map([
@@ -383,8 +383,8 @@ describe('CueRenderer', () => {
       // Same DOM element preserved
       const itemAfter = activeListEl.querySelector('[data-cue-id="tension-hit"]');
       expect(itemAfter).toBe(itemBefore);
-      expect(itemAfter.querySelector('.progress-bar__text').textContent).toBe('70%');
-      expect(itemAfter.querySelector('.progress-bar__fill').style.width).toBe('70%');
+      expect(itemAfter.querySelector('.progress-text').textContent).toBe('70%');
+      expect(itemAfter.querySelector('.progress-fill').style.width).toBe('70%');
     });
 
     it('should update state from running to paused in-place', () => {

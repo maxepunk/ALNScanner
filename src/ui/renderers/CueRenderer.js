@@ -194,9 +194,9 @@ export class CueRenderer {
           </div>
           <div class="active-cue-item__progress">
             <div class="progress-bar">
-              <div class="progress-bar__fill" style="width: ${progressPercent}%"></div>
+              <div class="progress-fill" style="width: ${progressPercent}%"></div>
             </div>
-            <span class="progress-bar__text">${progressPercent}%</span>
+            <span class="progress-text">${progressPercent}%</span>
           </div>
           <div class="active-cue-item__actions">
             ${isPaused ?
@@ -217,8 +217,8 @@ export class CueRenderer {
         this._activeEls[cueId] = {
           item,
           stateEl: item.querySelector('.active-cue-item__state'),
-          progressFill: item.querySelector('.progress-bar__fill'),
-          progressText: item.querySelector('.progress-bar__text'),
+          progressFill: item.querySelector('.progress-fill'),
+          progressText: item.querySelector('.progress-text'),
           actionSlot: item.querySelector('.active-cue-item__actions')
         };
       }

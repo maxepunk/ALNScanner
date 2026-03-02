@@ -17,6 +17,7 @@ export class VideoRenderer {
     this._statusBadge = elements.statusBadge || document.getElementById('video-status-badge');
     this._progressContainer = elements.progressContainer || document.getElementById('video-progress-container');
     this._progressBar = elements.progressBar || document.getElementById('video-progress-fill');
+    this._progressTime = elements.progressTime || document.getElementById('video-progress-time');
     this._queueContainer = elements.queueContainer || document.getElementById('video-queue-list');
 
     // Interpolation state
@@ -75,6 +76,9 @@ export class VideoRenderer {
         this._stopInterpolation();
         this._progressContainer.style.display = 'none';
         this._progressBar.style.width = '0%';
+        if (this._progressTime) {
+          this._progressTime.textContent = '';
+        }
       }
     }
 
@@ -120,6 +124,9 @@ export class VideoRenderer {
     // Set initial position synchronously (works in test environments without rAF)
     const progress = duration > 0 ? Math.min(1, positionSeconds / duration) : 0;
     this._progressBar.style.width = `${progress * 100}%`;
+    if (this._progressTime) {
+      this._progressTime.textContent = `${this._formatTime(positionSeconds)} / ${this._formatTime(duration)}`;
+    }
 
     // Start rAF loop for smooth updates (browser only)
     if (duration > 0 && progress < 1 && typeof requestAnimationFrame !== 'undefined') {
@@ -132,9 +139,19 @@ export class VideoRenderer {
     const current = this._positionBase + elapsed;
     const progress = this._duration > 0 ? Math.min(1, current / this._duration) : 0;
     this._progressBar.style.width = `${progress * 100}%`;
+    if (this._progressTime) {
+      this._progressTime.textContent = `${this._formatTime(current)} / ${this._formatTime(this._duration)}`;
+    }
     if (progress < 1 && typeof requestAnimationFrame !== 'undefined') {
       this._animFrame = requestAnimationFrame(() => this._tick());
     }
+  }
+
+  _formatTime(seconds) {
+    const s = Math.max(0, Math.round(seconds));
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
   }
 
   _stopInterpolation() {
