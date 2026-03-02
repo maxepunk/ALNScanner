@@ -93,9 +93,16 @@ export class MonitoringDisplay {
       this.envRenderer.renderBluetooth(state, prev);
     });
 
-    // Video
+    // Video — transform backend state shape to renderer API
+    const mapVideoState = (s) => s ? {
+      nowPlaying: s.currentVideo?.filename || null,
+      isPlaying: s.status === 'playing',
+      progress: s.currentVideo?.position || 0,
+      duration: s.currentVideo?.duration || 0,
+      queue: s.queue,
+    } : null;
     on('video', (state, prev) => {
-      this.videoRenderer.render(state, prev);
+      this.videoRenderer.render(mapVideoState(state), mapVideoState(prev));
     });
 
     // Spotify
@@ -208,10 +215,11 @@ export class MonitoringDisplay {
     if (payload.mode === 'SCOREBOARD') {
       if (nowShowingVal) nowShowingVal.textContent = 'Scoreboard';
       if (nowShowingIcon) nowShowingIcon.textContent = '\uD83C\uDFC6';
-    } else {
+    } else if (payload.mode === 'IDLE_LOOP') {
       if (nowShowingVal) nowShowingVal.textContent = 'Idle Loop';
       if (nowShowingIcon) nowShowingIcon.textContent = '\uD83D\uDD04';
     }
+    // VIDEO mode: nowPlaying text handled by VideoRenderer via service:state
 
     if (btnIdle) btnIdle.classList.toggle('active', payload.mode === 'IDLE_LOOP');
     if (btnScore) btnScore.classList.toggle('active', payload.mode === 'SCOREBOARD');
@@ -245,11 +253,10 @@ export class MonitoringDisplay {
     Debug.log('[MonitoringDisplay] updateAllDisplays (Sync Full)', syncData);
 
     // Session rendering (not a store domain)
-    if (syncData.session) {
-      this.sessionRenderer.render(syncData.session);
-      if (this.teamRegistry) {
-        this.teamRegistry.populateFromSession(syncData.session);
-      }
+    // Always render — SessionRenderer handles null (shows "No Active Session")
+    this.sessionRenderer.render(syncData.session);
+    if (syncData.session && this.teamRegistry) {
+      this.teamRegistry.populateFromSession(syncData.session);
     }
 
     // Orchestrator connection dot

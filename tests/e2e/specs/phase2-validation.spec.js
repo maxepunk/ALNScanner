@@ -165,16 +165,13 @@ test.describe('Phase 2: Admin Module Validation', () => {
       await expect(sessionStatusContainer).toBeAttached();
     });
 
-    test('should have orchestrator and VLC status indicators', async ({ page }) => {
+    test('should have service health dashboard', async ({ page }) => {
       await page.goto('/');
       await page.waitForLoadState('networkidle');
 
-      // Status indicators exist
-      const orchestratorStatus = page.locator('#orchestrator-status');
-      const vlcStatus = page.locator('#vlc-status');
-
-      await expect(orchestratorStatus).toBeAttached();
-      await expect(vlcStatus).toBeAttached();
+      // Health dashboard exists in DOM (replaces old per-service status dots)
+      const healthDashboard = page.locator('#health-dashboard');
+      await expect(healthDashboard).toBeAttached();
     });
   });
 
