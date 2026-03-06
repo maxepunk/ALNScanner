@@ -30,6 +30,11 @@ describe('Shared Scoring Config (Frontend)', () => {
     expect(scoringConfig.typeMultipliers['UNKNOWN']).toBe(0);
   });
 
+  it('should have Mention and Party type multipliers', () => {
+    expect(scoringConfig.typeMultipliers['Mention']).toBe(3);
+    expect(scoringConfig.typeMultipliers['Party']).toBe(5);
+  });
+
   it('should return 0 for unknown memory types in calculateTokenValue', async () => {
     const { calculateTokenValue } = await import('../../../src/core/scoring.js');
 

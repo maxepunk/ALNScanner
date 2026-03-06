@@ -106,7 +106,7 @@ npm run build
 
 **2. Black Market Mode** (`mode: 'blackmarket'`)
 - Currency-based scoring ($10,000 - $750,000)
-- Type multipliers (Personal 1x, Business 3x, Technical 5x)
+- Type multipliers (Personal 1x, Mention 3x, Business 3x, Party 5x, Technical 5x)
 - Group completion bonuses (2x - 20x)
 - Exclusive scoreboard feature
 
@@ -609,7 +609,7 @@ DataManager emits events (`transaction:added`, `transaction:deleted`, `team-scor
   "token_id": {
     "SF_RFID": "token_id",           // Required: Unique identifier
     "SF_ValueRating": 1-5,            // Required: Star rating (1-5)
-    "SF_MemoryType": "Technical",     // Required: Personal|Business|Technical
+    "SF_MemoryType": "Technical",     // Required: Personal|Business|Technical|Mention|Party
     "SF_Group": "Group Name (xN)",    // Optional: Group with multiplier
     "image": "assets/images/...",     // Player scanner only
     "audio": null,                    // Player scanner only
@@ -620,7 +620,9 @@ DataManager emits events (`transaction:added`, `transaction:deleted`, `team-scor
 
 **Valid Memory Types:**
 - `Personal` - 1x multiplier
+- `Mention` - 3x multiplier
 - `Business` - 3x multiplier
+- `Party` - 5x multiplier
 - `Technical` - 5x multiplier
 - Any other value → treated as `UNKNOWN` (0x multiplier)
 
@@ -986,7 +988,7 @@ JSON.parse(localStorage.getItem('transactions'))[0]
 - **Fix**: Fuzzy matching handles colons/case, but check database keys
 
 ### Scoring Issues
-- **Cause**: Invalid memory type (not Personal/Business/Technical)
+- **Cause**: Invalid memory type (not Personal/Mention/Business/Party/Technical)
 - **Result**: Treated as UNKNOWN (0x multiplier)
 - **Debug**: Check `token?.SF_MemoryType` value
 

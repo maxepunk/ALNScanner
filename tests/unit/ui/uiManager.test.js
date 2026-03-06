@@ -31,7 +31,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       backendScores: new Map(),
       SCORING_CONFIG: {
         BASE_VALUES: { 1: 10000, 2: 25000, 3: 50000, 4: 75000, 5: 150000 },
-        TYPE_MULTIPLIERS: { 'Personal': 1, 'Business': 3, 'Technical': 5, 'UNKNOWN': 0 }
+        TYPE_MULTIPLIERS: { 'Personal': 1, 'Mention': 3, 'Business': 3, 'Party': 5, 'Technical': 5, 'UNKNOWN': 0 }
       },
       getTransactions: jest.fn(function() { return this.transactions; }),
       getSessionStats: jest.fn(() => ({ count: 1, totalScore: 5000, totalValue: '⭐⭐⭐' })),

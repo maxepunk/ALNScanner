@@ -660,7 +660,7 @@ class UIManager {
     let calculationText = '';
     if (!isUnknown && !token.isUnknown) {
       const baseValue = dataSource.SCORING_CONFIG.BASE_VALUES[token.valueRating] || 0;
-      const multiplier = dataSource.SCORING_CONFIG.TYPE_MULTIPLIERS[token.memoryType] || 1;
+      const multiplier = dataSource.SCORING_CONFIG.TYPE_MULTIPLIERS[token.memoryType] ?? 0;
 
       if (hasBonus) {
         const groupInfo = dataSource.parseGroupInfo(token.group);

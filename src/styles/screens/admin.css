@@ -835,6 +835,8 @@ body.standalone-mode [data-requires="networked"] {
 .token-card .token-type.type-business { background: #dcfce7; color: #166534; }
 .token-card .token-type.type-technical { background: #fef3c7; color: #92400e; }
 .token-card .token-type.type-unknown { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+.token-card .token-type.type-mention { background: #d9f99d; color: #365314; }
+.token-card .token-type.type-party { background: #f3e8ff; color: #6b21a8; }
 
 .token-card__rating {
   color: #f59e0b;
