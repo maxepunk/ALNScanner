@@ -35,7 +35,7 @@ ALN-TokenData/
     "processingImage": "assets/images/{tokenId}.bmp" | null,
     "SF_RFID": "tokenId",
     "SF_ValueRating": 1-5,
-    "SF_MemoryType": "Personal" | "Business" | "Technical",
+    "SF_MemoryType": "Personal" | "Business" | "Technical" | "Mention" | "Party",
     "SF_Group": "Group Name (xN)" | "",
     "summary": "Optional description text",
     "owner": "Character Name" | null

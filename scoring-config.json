@@ -9,7 +9,9 @@
   },
   "typeMultipliers": {
     "Personal": 1,
+    "Mention": 3,
     "Business": 3,
+    "Party": 5,
     "Technical": 5,
     "UNKNOWN": 0
   }
