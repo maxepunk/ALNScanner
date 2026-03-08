@@ -513,16 +513,22 @@ describe('NetworkedSession', () => {
       expect(messageHandler).toBeDefined();
     });
 
-    it('should update DataManager on score:updated event', () => {
-      const scorePayload = {
+    it('should update DataManager on score:adjusted event', () => {
+      const teamScore = {
         teamId: '001',
         currentScore: 5000,
         tokensScanned: 3
       };
 
-      messageHandler({ detail: { type: 'score:updated', payload: scorePayload } });
+      messageHandler({ detail: { type: 'score:adjusted', payload: { teamScore } } });
 
-      expect(mockDataManager.updateTeamScoreFromBackend).toHaveBeenCalledWith(scorePayload);
+      expect(mockDataManager.updateTeamScoreFromBackend).toHaveBeenCalledWith(teamScore);
+    });
+
+    it('should ignore score:adjusted event without teamScore', () => {
+      messageHandler({ detail: { type: 'score:adjusted', payload: {} } });
+
+      expect(mockDataManager.updateTeamScoreFromBackend).not.toHaveBeenCalled();
     });
 
     it('should update DataManager on sync:full event with scores', () => {
@@ -557,6 +563,16 @@ describe('NetworkedSession', () => {
       messageHandler({ detail: { type: 'transaction:new', payload: { transaction } } });
 
       expect(mockDataManager.addTransactionFromBroadcast).toHaveBeenCalledWith(transaction);
+    });
+
+    it('should extract teamScore from transaction:new event', () => {
+      const transaction = { id: 'tx1', tokenId: 'token1', teamId: '001' };
+      const teamScore = { teamId: '001', currentScore: 5000, tokensScanned: 1 };
+
+      messageHandler({ detail: { type: 'transaction:new', payload: { transaction, teamScore } } });
+
+      expect(mockDataManager.addTransactionFromBroadcast).toHaveBeenCalledWith(transaction);
+      expect(mockDataManager.updateTeamScoreFromBackend).toHaveBeenCalledWith(teamScore);
     });
 
     it('should remove transaction on transaction:deleted event', () => {

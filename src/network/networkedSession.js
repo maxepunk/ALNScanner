@@ -195,8 +195,11 @@ export class NetworkedSession extends EventTarget {
       const { type, payload } = event.detail;
 
       switch (type) {
-        case 'score:updated':
-          this.dataManager.updateTeamScoreFromBackend(payload);
+        case 'score:adjusted':
+          // Admin score adjustments — payload wraps score in .teamScore
+          if (payload.teamScore) {
+            this.dataManager.updateTeamScoreFromBackend(payload.teamScore);
+          }
           break;
 
         case 'sync:full':
@@ -260,6 +263,10 @@ export class NetworkedSession extends EventTarget {
         case 'transaction:new':
           if (payload.transaction) {
             this.dataManager.addTransactionFromBroadcast(payload.transaction);
+          }
+          // Live score update from transaction
+          if (payload.teamScore) {
+            this.dataManager.updateTeamScoreFromBackend(payload.teamScore);
           }
           break;
 

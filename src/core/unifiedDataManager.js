@@ -715,7 +715,7 @@ export class UnifiedDataManager extends EventTarget {
 
   /**
    * Update team score from backend WebSocket event
-   * Called by NetworkedSession on 'score:updated' and 'sync:full'
+   * Called by NetworkedSession on 'transaction:new', 'score:adjusted', and 'sync:full'
    * @param {Object} scoreData - Score data from backend
    */
   updateTeamScoreFromBackend(scoreData) {

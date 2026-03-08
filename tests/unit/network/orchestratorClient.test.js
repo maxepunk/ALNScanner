@@ -225,7 +225,7 @@ describe('OrchestratorClient - Dumb Pipe', () => {
         'sync:full',
         'transaction:result',
         'transaction:new',
-        'score:updated',
+        'score:adjusted',
         'session:update',
         'device:connected',
         'device:disconnected',

@@ -242,7 +242,7 @@ export class OrchestratorClient extends EventTarget {
       'transaction:result',
       'transaction:new',
       'transaction:deleted',
-      'score:updated',
+      'score:adjusted',
       'scores:reset',
       'session:update',
       'session:overtime',

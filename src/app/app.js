@@ -1456,7 +1456,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
       if (reasonInput) reasonInput.value = '';
 
       // Team details screen will auto-refresh via updateTeamScoreFromBackend()
-      // when score:updated event is received (centralized in dataManager.js)
+      // when score:adjusted event is received (centralized in dataManager.js)
 
       this.uiManager.showToast(`Score adjusted: ${delta > 0 ? '+' : ''}${delta} points`, 'success');
     } catch (error) {
