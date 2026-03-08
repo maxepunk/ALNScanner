@@ -464,7 +464,7 @@ ALNScanner/
 
 **Network Layer ([src/network/](src/network/)):**
 - [orchestratorClient.js](src/network/orchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
-- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list: `sync:full`, `transaction:*`, `score:updated`, `scores:reset`, `session:update`, `session:overtime`, `device:connected/disconnected`, `group:completed`, `display:mode`, `gm:command:ack`, `offline:queue:processed`, `batch:ack`, `error`, `player:scan`, `cue:fired`, `cue:completed`, `cue:error`, `service:state` (sole push mechanism for all service domain state)
+- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list: `sync:full`, `transaction:*`, `score:adjusted`, `scores:reset`, `session:update`, `session:overtime`, `device:connected/disconnected`, `group:completed`, `display:mode`, `gm:command:ack`, `offline:queue:processed`, `batch:ack`, `error`, `player:scan`, `cue:fired`, `cue:completed`, `cue:error`, `service:state` (sole push mechanism for all service domain state)
 - [connectionManager.js](src/network/connectionManager.js) - Auth, connection state, retry logic
 - [networkedSession.js](src/network/networkedSession.js) - Service factory and lifecycle orchestrator
 - [networkedQueueManager.js](src/network/networkedQueueManager.js) - Offline transaction queue
@@ -578,7 +578,8 @@ DataManager emits events (`transaction:added`, `transaction:deleted`, `team-scor
 - `transaction:new` - New GM transaction processed
 - `player:scan` - Player scanner activity (persisted to session.playerScans)
 - `session:update` - Session lifecycle changes
-- `score:updated` - Team score changed (mapped to internal `team-score:updated` event)
+- `score:adjusted` - Admin score adjustment (mapped to internal `team-score:updated` event)
+- `transaction:new` - Carries `teamScore` for live score delivery (mapped to internal `team-score:updated` event)
 - `gm:command:ack` - Command response `{action, success, message}` (no result.data)
 - `device:connected` / `device:disconnected` - Device tracking
 - `display:mode` - HDMI display mode changes
