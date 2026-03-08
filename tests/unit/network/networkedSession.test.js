@@ -57,6 +57,7 @@ describe('NetworkedSession', () => {
       scannedTokens: new Set(),
       addTransaction: jest.fn(),
       addTransactionFromBroadcast: jest.fn(),
+      setTransactions: jest.fn(),
       removeTransaction: jest.fn(),
       clearBackendScores: jest.fn(),
       updateTeamScoreFromBackend: jest.fn(),
@@ -493,6 +494,7 @@ describe('NetworkedSession', () => {
       // Add required dataManager methods for WebSocket event handling
       mockDataManager.updateTeamScoreFromBackend = jest.fn();
       mockDataManager.addTransaction = jest.fn();
+      mockDataManager.setTransactions = jest.fn();
       mockDataManager.removeTransaction = jest.fn();
       mockDataManager.clearBackendScores = jest.fn();
 
@@ -544,7 +546,7 @@ describe('NetworkedSession', () => {
       expect(mockDataManager.updateTeamScoreFromBackend).toHaveBeenCalledWith(scores[1]);
     });
 
-    it('should update DataManager on sync:full event with transactions', () => {
+    it('should bulk-restore transactions via setTransactions on sync:full (no re-submission)', () => {
       const recentTransactions = [
         { id: 'tx1', tokenId: 'token1' },
         { id: 'tx2', tokenId: 'token2' }
@@ -552,9 +554,27 @@ describe('NetworkedSession', () => {
 
       messageHandler({ detail: { type: 'sync:full', payload: { recentTransactions } } });
 
-      expect(mockDataManager.addTransaction).toHaveBeenCalledTimes(2);
-      expect(mockDataManager.addTransaction).toHaveBeenCalledWith(recentTransactions[0]);
-      expect(mockDataManager.addTransaction).toHaveBeenCalledWith(recentTransactions[1]);
+      // Must use setTransactions (bulk restore) instead of addTransaction (which re-submits)
+      expect(mockDataManager.setTransactions).toHaveBeenCalledTimes(1);
+      expect(mockDataManager.setTransactions).toHaveBeenCalledWith(recentTransactions);
+      expect(mockDataManager.addTransaction).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to addTransactionFromBroadcast if setTransactions is unavailable', () => {
+      // Remove setTransactions to test fallback
+      delete mockDataManager.setTransactions;
+
+      const recentTransactions = [
+        { id: 'tx1', tokenId: 'token1' },
+        { id: 'tx2', tokenId: 'token2' }
+      ];
+
+      messageHandler({ detail: { type: 'sync:full', payload: { recentTransactions } } });
+
+      expect(mockDataManager.addTransactionFromBroadcast).toHaveBeenCalledTimes(2);
+      expect(mockDataManager.addTransactionFromBroadcast).toHaveBeenCalledWith(recentTransactions[0]);
+      expect(mockDataManager.addTransactionFromBroadcast).toHaveBeenCalledWith(recentTransactions[1]);
+      expect(mockDataManager.addTransaction).not.toHaveBeenCalled();
     });
 
     it('should add transaction on transaction:new event', () => {

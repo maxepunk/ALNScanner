@@ -224,6 +224,19 @@ export class UnifiedDataManager extends EventTarget {
   }
 
   /**
+   * Bulk-set transactions from sync:full (networked mode only)
+   * Replaces local cache WITHOUT re-submitting to backend
+   * Used for state restoration on reconnect
+   * @param {Array} transactions - Transaction array from server
+   */
+  setTransactions(transactions) {
+    // Only NetworkedStorage has this method
+    if (typeof this._activeStrategy?.setTransactions === 'function') {
+      this._activeStrategy.setTransactions(transactions);
+    }
+  }
+
+  /**
    * Add transaction from broadcast (networked mode only)
    * Used when receiving transaction:new events from backend
    * @param {Object} tx - Transaction from broadcast

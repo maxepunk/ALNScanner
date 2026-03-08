@@ -216,7 +216,15 @@ export class NetworkedSession extends EventTarget {
             payload.scores.forEach(s => this.dataManager.updateTeamScoreFromBackend(s));
           }
           if (payload.recentTransactions) {
-            payload.recentTransactions.forEach(tx => this.dataManager.addTransaction(tx));
+            // Bulk restore — does NOT re-submit to backend (addTransaction would re-submit)
+            if (typeof this.dataManager.setTransactions === 'function') {
+              this.dataManager.setTransactions(payload.recentTransactions);
+            } else {
+              // Fallback: add individually without re-submission
+              payload.recentTransactions.forEach(tx => {
+                this.dataManager.addTransactionFromBroadcast(tx);
+              });
+            }
           }
 
           // Sync player scans from server (Game Activity feature)
