@@ -282,6 +282,10 @@ export class NetworkedSession extends EventTarget {
           if (payload.transactionId) {
             this.dataManager.removeTransaction(payload.transactionId);
           }
+          // Update score after deletion (score changed by removing transaction)
+          if (payload.updatedTeamScore) {
+            this.dataManager.updateTeamScoreFromBackend(payload.updatedTeamScore);
+          }
           break;
 
         case 'scores:reset':
