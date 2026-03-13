@@ -40,6 +40,9 @@ export function sendCommand(connection, action, payload, timeout = 5000) {
       // Only process gm:command:ack events
       if (type !== 'gm:command:ack') return;
 
+      // Only consume acks for OUR action (prevent cross-command mismatch)
+      if (response.action !== action) return;
+
       // Cleanup
       clearTimeout(timeoutId);
       connection.removeEventListener('message:received', ackHandler);
