@@ -150,6 +150,16 @@ export class EnvironmentRenderer {
       if (sinkKey !== this._lastSinkKey) {
         this._renderAudioDropdowns(availableSinks);
         this._lastSinkKey = sinkKey;
+        // Re-apply routes after rebuilding dropdowns (they were wiped by rebuild)
+        if (routes) {
+          Object.entries(routes).forEach(([stream, sink]) => {
+            const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${stream}"]`);
+            if (dropdown) dropdown.value = sink;
+          });
+        }
+        // Hide fallback warning
+        if (this.btWarning) this.btWarning.style.display = 'none';
+        return; // Routes already applied above — skip duplicate application below
       }
     }
 
