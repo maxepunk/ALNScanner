@@ -188,9 +188,6 @@ export class MonitoringDisplay {
         this._handleDisplayMode(payload);
         break;
 
-      case 'video:queue:update':
-        this.updateQueueDisplay(payload);
-        break;
     }
   }
 
