@@ -154,7 +154,13 @@ export class EnvironmentRenderer {
         if (routes) {
           Object.entries(routes).forEach(([stream, sink]) => {
             const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${stream}"]`);
-            if (dropdown) dropdown.value = sink;
+            if (dropdown) {
+              dropdown.value = sink;
+              // Fallback if sink doesn't match any option (consistent with differential path)
+              if (!dropdown.value && dropdown.options.length > 0) {
+                dropdown.value = dropdown.options[0].value;
+              }
+            }
           });
         }
         // Hide fallback warning

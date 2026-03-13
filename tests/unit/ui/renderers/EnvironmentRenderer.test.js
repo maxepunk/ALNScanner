@@ -272,6 +272,18 @@ describe('EnvironmentRenderer', () => {
       expect(dropdownAfter.options).toHaveLength(3);
     });
 
+    it('should re-apply routes after dropdown rebuild', () => {
+      renderer.renderAudio({ availableSinks: sinks, routes: { video: 'bluetooth' } });
+
+      // Add new sink — triggers dropdown rebuild
+      const newSinks = [...sinks, { name: 'combine-bt', label: 'Dual BT' }];
+      renderer.renderAudio({ availableSinks: newSinks, routes: { video: 'bluetooth' } });
+
+      // Route value should be re-applied to the rebuilt dropdown
+      const dropdown = document.querySelector('select[data-stream="video"]');
+      expect(dropdown.value).toBe('bluetooth');
+    });
+
     it('should not update dropdown value if already correct', () => {
       renderer.renderAudio({ availableSinks: sinks, routes: { video: 'hdmi' } });
 

@@ -225,12 +225,6 @@ export class MonitoringDisplay {
     if (btnScore) btnScore.classList.toggle('active', payload.mode === 'SCOREBOARD');
   }
 
-  updateQueueDisplay(payload) {
-    if (this.videoRenderer) {
-      this.videoRenderer.renderQueue(payload.items || []);
-    }
-  }
-
   // ============================================
   // AGGREGATE UPDATE METHODS
   // ============================================
