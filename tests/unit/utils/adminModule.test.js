@@ -84,14 +84,14 @@ describe('AdminModule - ES6 Exports', () => {
           mockConnection.dispatchEvent(new CustomEvent('message:received', {
             detail: {
               type: 'gm:command:ack',
-              payload: { success: true, session: expectedSession }
+              payload: { action: 'session:create', success: true, session: expectedSession }
             }
           }));
         }, 10);
 
         // Test REAL behavior: promise resolves with full response object
         const result = await manager.createSession('New Session', ['001']);
-        expect(result).toEqual({ success: true, session: expectedSession });
+        expect(result).toEqual({ action: 'session:create', success: true, session: expectedSession });
       });
 
       it('should reject when acknowledgment indicates failure', async () => {
@@ -102,7 +102,7 @@ describe('AdminModule - ES6 Exports', () => {
           mockConnection.dispatchEvent(new CustomEvent('message:received', {
             detail: {
               type: 'gm:command:ack',
-              payload: { success: false, message: 'Session already exists' }
+              payload: { action: 'session:create', success: false, message: 'Session already exists' }
             }
           }));
         }, 10);
@@ -144,14 +144,14 @@ describe('AdminModule - ES6 Exports', () => {
             new CustomEvent('message:received', {
               detail: {
                 type: 'gm:command:ack',
-                payload: { success: true, session: { status: 'paused' } }
+                payload: { action: 'session:pause', success: true, session: { status: 'paused' } }
               }
             })
           );
         }, 10);
 
         const result = await manager.pauseSession();
-        expect(result).toEqual({ success: true, session: { status: 'paused' } });
+        expect(result).toEqual({ action: 'session:pause', success: true, session: { status: 'paused' } });
       });
     });
   });
@@ -172,13 +172,13 @@ describe('AdminModule - ES6 Exports', () => {
             new CustomEvent('message:received', {
               detail: {
                 type: 'gm:command:ack',
-                payload: { success: true }
+                payload: { action: 'video:play', success: true }
               }
             })
           );
         }, 10);
 
-        await expect(controller.playVideo()).resolves.toEqual({ success: true });
+        await expect(controller.playVideo()).resolves.toEqual({ action: 'video:play', success: true });
       });
 
       it('should reject when command fails', async () => {
@@ -189,7 +189,7 @@ describe('AdminModule - ES6 Exports', () => {
             new CustomEvent('message:received', {
               detail: {
                 type: 'gm:command:ack',
-                payload: { success: false, message: 'VLC not connected' }
+                payload: { action: 'video:play', success: false, message: 'VLC not connected' }
               }
             })
           );
@@ -208,7 +208,7 @@ describe('AdminModule - ES6 Exports', () => {
             new CustomEvent('message:received', {
               detail: {
                 type: 'gm:command:ack',
-                payload: { success: true, queueLength: 1 }
+                payload: { action: 'video:queue:add', success: true, queueLength: 1 }
               }
             })
           );
@@ -228,13 +228,13 @@ describe('AdminModule - ES6 Exports', () => {
             new CustomEvent('message:received', {
               detail: {
                 type: 'gm:command:ack',
-                payload: { success: true }
+                payload: { action: 'video:queue:reorder', success: true }
               }
             })
           );
         }, 10);
 
-        await expect(controller.reorderQueue(0, 2)).resolves.toEqual({ success: true });
+        await expect(controller.reorderQueue(0, 2)).resolves.toEqual({ action: 'video:queue:reorder', success: true });
       });
     });
 
@@ -246,7 +246,7 @@ describe('AdminModule - ES6 Exports', () => {
 
       setTimeout(() => {
         mockConnection.dispatchEvent(new CustomEvent('message:received', {
-          detail: { type: 'gm:command:ack', payload: { success: true, mode: 'IDLE_LOOP' } }
+          detail: { type: 'gm:command:ack', payload: { action: 'display:idle-loop', success: true, mode: 'IDLE_LOOP' } }
         }));
       }, 10);
 
@@ -260,7 +260,7 @@ describe('AdminModule - ES6 Exports', () => {
 
       setTimeout(() => {
         mockConnection.dispatchEvent(new CustomEvent('message:received', {
-          detail: { type: 'gm:command:ack', payload: { success: true, mode: 'SCOREBOARD' } }
+          detail: { type: 'gm:command:ack', payload: { action: 'display:scoreboard', success: true, mode: 'SCOREBOARD' } }
         }));
       }, 10);
 
@@ -274,7 +274,7 @@ describe('AdminModule - ES6 Exports', () => {
 
       setTimeout(() => {
         mockConnection.dispatchEvent(new CustomEvent('message:received', {
-          detail: { type: 'gm:command:ack', payload: { success: true, mode: 'SCOREBOARD' } }
+          detail: { type: 'gm:command:ack', payload: { action: 'display:toggle', success: true, mode: 'SCOREBOARD' } }
         }));
       }, 10);
 
@@ -285,6 +285,7 @@ describe('AdminModule - ES6 Exports', () => {
     it('should send display:status command and return status', async () => {
       const controller = new DisplayController(mockConnection);
       const statusPayload = {
+        action: 'display:status',
         success: true,
         currentMode: 'IDLE_LOOP',
         previousMode: 'IDLE_LOOP',
@@ -320,13 +321,13 @@ describe('AdminModule - ES6 Exports', () => {
           new CustomEvent('message:received', {
             detail: {
               type: 'gm:command:ack',
-              payload: { success: true }
+              payload: { action: 'system:restart', success: true }
             }
           })
         );
       }, 10);
 
-      await expect(ops.restartSystem()).resolves.toEqual({ success: true });
+      await expect(ops.restartSystem()).resolves.toEqual({ action: 'system:restart', success: true });
     });
 
     it('should send clear data command', async () => {
@@ -337,13 +338,13 @@ describe('AdminModule - ES6 Exports', () => {
           new CustomEvent('message:received', {
             detail: {
               type: 'gm:command:ack',
-              payload: { success: true }
+              payload: { action: 'system:clear', success: true }
             }
           })
         );
       }, 10);
 
-      await expect(ops.clearData()).resolves.toEqual({ success: true });
+      await expect(ops.clearData()).resolves.toEqual({ action: 'system:clear', success: true });
     });
 
     describe('Score Management', () => {
@@ -355,13 +356,13 @@ describe('AdminModule - ES6 Exports', () => {
             new CustomEvent('message:received', {
               detail: {
                 type: 'gm:command:ack',
-                payload: { success: true }
+                payload: { action: 'score:reset', success: true }
               }
             })
           );
         }, 10);
 
-        await expect(ops.resetScores()).resolves.toEqual({ success: true });
+        await expect(ops.resetScores()).resolves.toEqual({ action: 'score:reset', success: true });
 
         // Verify gm:command was sent with correct action
         expect(mockConnection.send).toHaveBeenCalledWith('gm:command', {
@@ -378,14 +379,14 @@ describe('AdminModule - ES6 Exports', () => {
             new CustomEvent('message:received', {
               detail: {
                 type: 'gm:command:ack',
-                payload: { success: true }
+                payload: { action: 'score:adjust', success: true }
               }
             })
           );
         }, 10);
 
         await expect(ops.adjustScore('001', 500, 'Manual adjustment')).resolves.toEqual({
-          success: true
+          action: 'score:adjust', success: true
         });
 
         // Verify gm:command was sent with correct payload
@@ -403,13 +404,13 @@ describe('AdminModule - ES6 Exports', () => {
             new CustomEvent('message:received', {
               detail: {
                 type: 'gm:command:ack',
-                payload: { success: true }
+                payload: { action: 'transaction:delete', success: true }
               }
             })
           );
         }, 10);
 
-        await expect(ops.deleteTransaction('tx-12345')).resolves.toEqual({ success: true });
+        await expect(ops.deleteTransaction('tx-12345')).resolves.toEqual({ action: 'transaction:delete', success: true });
 
         // Verify gm:command was sent with correct payload
         expect(mockConnection.send).toHaveBeenCalledWith('gm:command', {
@@ -437,7 +438,7 @@ describe('AdminModule - ES6 Exports', () => {
             new CustomEvent('message:received', {
               detail: {
                 type: 'gm:command:ack',
-                payload: { success: false, message: 'No active session' }
+                payload: { action: 'score:adjust', success: false, message: 'No active session' }
               }
             })
           );
