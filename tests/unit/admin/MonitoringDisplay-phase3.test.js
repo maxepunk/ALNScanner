@@ -274,21 +274,21 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
   // ============================================
 
   describe('ducking indicator wiring', () => {
-    it('should forward spotify ducking state to SpotifyRenderer.renderDucking', () => {
+    it('should transform backend ducking array to renderer shape', () => {
       const renderDuckingSpy = jest.spyOn(display.spotifyRenderer, 'renderDucking');
 
       store.update('audio', {
         routes: {},
         availableSinks: [],
         ducking: {
-          spotify: { ducked: true, volume: 20 }
+          spotify: ['video', 'sound']
         }
       });
 
-      expect(renderDuckingSpy).toHaveBeenCalledWith({ ducked: true, volume: 20 });
+      expect(renderDuckingSpy).toHaveBeenCalledWith({ ducked: true, activeSources: ['video', 'sound'] });
     });
 
-    it('should not call renderDucking when no spotify ducking data present', () => {
+    it('should call renderDucking with ducked:false when no spotify ducking sources', () => {
       const renderDuckingSpy = jest.spyOn(display.spotifyRenderer, 'renderDucking');
 
       store.update('audio', {
@@ -297,7 +297,19 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
         ducking: {}
       });
 
-      expect(renderDuckingSpy).not.toHaveBeenCalled();
+      expect(renderDuckingSpy).toHaveBeenCalledWith({ ducked: false, activeSources: [] });
+    });
+
+    it('should call renderDucking with ducked:false when spotify ducking is empty array', () => {
+      const renderDuckingSpy = jest.spyOn(display.spotifyRenderer, 'renderDucking');
+
+      store.update('audio', {
+        routes: {},
+        availableSinks: [],
+        ducking: { spotify: [] }
+      });
+
+      expect(renderDuckingSpy).toHaveBeenCalledWith({ ducked: false, activeSources: [] });
     });
   });
 

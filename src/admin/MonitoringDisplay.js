@@ -82,10 +82,13 @@ export class MonitoringDisplay {
     // Environment: Audio + ducking forwarding
     on('audio', (state, prev) => {
       this.envRenderer.renderAudio(state, prev);
-      const spotifyDucking = state?.ducking?.spotify;
-      if (spotifyDucking) {
-        this.spotifyRenderer.renderDucking(spotifyDucking);
-      }
+      // Transform backend shape { spotify: ['video'] } → renderer shape { ducked, activeSources }
+      const duckingSources = state?.ducking?.spotify;
+      this.spotifyRenderer.renderDucking(
+        duckingSources && duckingSources.length > 0
+          ? { ducked: true, activeSources: duckingSources }
+          : { ducked: false, activeSources: [] }
+      );
     });
 
     // Environment: Bluetooth
