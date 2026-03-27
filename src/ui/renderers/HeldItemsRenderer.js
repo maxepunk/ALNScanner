@@ -2,48 +2,16 @@ import { escapeHtml } from '../../utils/escapeHtml.js';
 
 /**
  * HeldItemsRenderer - Unified Held Items Queue
- * Phase 4: Replaces CueRenderer.renderHeldItem() with unified cue+video queue
- *
  * Shows all held items (cues blocked by service outage, videos blocked by VLC)
  * with release/discard buttons and live duration counter.
  *
- * NOTE: Unlike other renderers (CueRenderer, HealthRenderer) which receive full state
- * and render idempotently, this renderer receives incremental events (held/released/discarded)
- * and maintains internal state via `_items` Map. Wire via `e.detail` directly, not a state snapshot.
+ * Receives full state snapshots via StateStore subscription (renderSnapshot).
  */
 export class HeldItemsRenderer {
   constructor(elements = {}) {
     this.container = elements.container || document.getElementById('held-items-container');
     this._items = new Map(); // id → held item data
     this._durationTimer = null;
-  }
-
-  /**
-   * Handle held item event
-   * @param {Object} data - { action, id, type, reason, cueId?, videoFile?, heldAt?, ... }
-   */
-  render(data) {
-    if (!this.container) return;
-
-    const { action } = data;
-
-    switch (action) {
-      case 'held':
-        this._items.set(data.id, data);
-        break;
-      case 'released':
-      case 'discarded': {
-        const id = data.id || data.heldId;
-        this._items.delete(id);
-        break;
-      }
-      case 'recoverable':
-        // Mark recoverable items — could add visual indicator
-        break;
-    }
-
-    this._renderAll();
-    this._manageDurationTimer();
   }
 
   /**
