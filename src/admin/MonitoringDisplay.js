@@ -120,6 +120,21 @@ export class MonitoringDisplay {
         prev ? { state: prev.status || prev.state, elapsed: prev.elapsed } : null
       );
     });
+
+    // Sound playback status
+    on('sound', (state) => {
+      const container = document.getElementById('sound-status');
+      if (!container) return;
+      const playing = state?.playing || [];
+      if (playing.length === 0) {
+        container.innerHTML = '';
+        container.style.display = 'none';
+        return;
+      }
+      container.style.display = '';
+      const files = playing.map(p => `<span class="sound-playing__file">${escapeHtml(p.file)}</span>`).join(', ');
+      container.innerHTML = `<div class="sound-playing">Playing: ${files}</div>`;
+    });
   }
 
   /**

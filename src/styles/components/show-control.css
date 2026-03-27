@@ -153,3 +153,16 @@
   font-size: var(--text-sm);
   font-style: italic;
 }
+
+/* ============================================
+   SOUND PLAYBACK STATUS
+   ============================================ */
+.sound-playing {
+  padding: 4px 8px;
+  font-size: 0.85em;
+  color: var(--color-text-secondary);
+}
+.sound-playing__file {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
