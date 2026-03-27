@@ -213,3 +213,23 @@
   display: none;
 }
 
+/* ============================================
+   VOLUME CONTROLS - Per-stream PipeWire volume
+   ============================================ */
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.volume-slider {
+  flex: 1;
+  height: 4px;
+}
+.volume-label {
+  font-size: 0.8em;
+  min-width: 35px;
+  text-align: right;
+  color: var(--color-text-secondary);
+}
+

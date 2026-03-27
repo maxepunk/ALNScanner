@@ -33,6 +33,16 @@ export class AudioController {
   }
 
   /**
+   * Set volume for a specific audio stream
+   * @param {string} stream - Stream identifier ('video', 'spotify', 'sound')
+   * @param {number} volume - Volume level (0-100)
+   * @returns {Promise<Object>} Volume set response
+   */
+  async setVolume(stream, volume) {
+    return sendCommand(this.connection, 'audio:volume:set', { stream, volume });
+  }
+
+  /**
    * Cleanup (no persistent listeners)
    */
   destroy() {

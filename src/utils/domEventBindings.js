@@ -36,6 +36,14 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
     }
   }, 150);
 
+  // Debounced stream volume setter (video, spotify, sound via PipeWire)
+  const debouncedStreamVolume = debounce((stream, volume) => {
+    const adminController = app.networkedSession?.getService('adminController');
+    if (adminController?.initialized) {
+      safeAdminAction(adminController.getModule('audioController').setVolume(stream, volume), 'setStreamVolume');
+    }
+  }, 150);
+
   /**
    * Handle admin.* actions — routes to AdminController modules
    * AdminController is accessed lazily via networkedSession (created after connection)
@@ -173,6 +181,17 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
         const sceneId = actionElement.dataset.sceneId;
         if (sceneId) {
           safeAdminAction(adminController.getModule('lightingController').activateScene(sceneId), 'activateScene');
+        }
+        break;
+      }
+      case 'setStreamVolume': {
+        const stream = actionElement.dataset.stream;
+        const volume = parseInt(actionElement.value, 10);
+        if (stream && !isNaN(volume)) {
+          // Update label immediately for responsive UI
+          const label = actionElement.parentElement?.querySelector('.volume-label');
+          if (label) label.textContent = `${volume}%`;
+          debouncedStreamVolume(stream, volume);
         }
         break;
       }

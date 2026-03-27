@@ -43,6 +43,7 @@ export class EnvironmentRenderer {
     this._lastSinkKey = null;     // serialized sink names for change detection
     this._lastDeviceKey = null;   // serialized device addresses for change detection
     this._deviceEls = null;       // { address: { item, statusEl, actionsEl } }
+    this._volumeValues = { video: 100, spotify: 100, sound: 100 }; // Track last-known slider values
   }
 
   /**
@@ -190,6 +191,12 @@ export class EnvironmentRenderer {
   _renderAudioDropdowns(sinks) {
     if (!this.audioRoutingContainer) return;
 
+    // Preserve current volume slider values before rebuild
+    this.audioRoutingContainer.querySelectorAll('.volume-slider').forEach(slider => {
+      const stream = slider.dataset.stream;
+      if (stream) this._volumeValues[stream] = parseInt(slider.value, 10) || 100;
+    });
+
     const streams = [
       { id: 'video', label: this.STREAM_LABELS.video },
       { id: 'spotify', label: this.STREAM_LABELS.spotify },
@@ -204,6 +211,13 @@ export class EnvironmentRenderer {
             <option value="${escapeHtml(sink.name)}">${escapeHtml(sink.label || sink.description || sink.name)}</option>
           `).join('')}
         </select>
+        <div class="volume-control">
+          <input type="range" min="0" max="100" value="${this._volumeValues[stream.id]}"
+                 data-stream="${stream.id}"
+                 data-action="admin.setStreamVolume"
+                 class="volume-slider" />
+          <span class="volume-label">${this._volumeValues[stream.id]}%</span>
+        </div>
       </div>
     `).join('');
   }

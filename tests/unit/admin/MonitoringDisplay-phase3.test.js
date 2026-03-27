@@ -146,7 +146,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     it('should use data-action="admin.setAudioRoute" on dropdowns', () => {
       updateAudioState();
 
-      const dropdowns = document.querySelectorAll('[data-stream]');
+      const dropdowns = document.querySelectorAll('select[data-stream]');
       dropdowns.forEach(dropdown => {
         expect(dropdown.dataset.action).toBe('admin.setAudioRoute');
       });
