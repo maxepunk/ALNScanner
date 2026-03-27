@@ -254,6 +254,7 @@ export class NetworkedSession extends EventTarget {
             if (payload.cueEngine) this._store.update('cueengine', payload.cueEngine);
             if (payload.heldItems) this._store.update('held', { items: payload.heldItems });
             if (payload.videoStatus) this._store.update('video', payload.videoStatus);
+            if (payload.sound) this._store.update('sound', payload.sound);
           }
           break;
 
