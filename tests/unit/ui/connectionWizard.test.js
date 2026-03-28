@@ -106,8 +106,8 @@ describe('ConnectionWizard', () => {
     test('should query /api/state and assign next available ID', async () => {
       const mockState = {
         devices: [
-          { deviceId: 'GM_Station_1', type: 'gm' },
-          { deviceId: 'GM_Station_2', type: 'gm' }
+          { deviceId: 'GM_Station_1', type: 'gm', connectionStatus: 'connected' },
+          { deviceId: 'GM_Station_2', type: 'gm', connectionStatus: 'connected' }
         ]
       };
 
@@ -134,12 +134,13 @@ describe('ConnectionWizard', () => {
       expect(display.dataset.deviceId).toBe('GM_Station_5');
     });
 
-    test('should filter out non-GM devices', async () => {
+    test('should filter out non-GM devices and disconnected GMs', async () => {
       const mockState = {
         devices: [
-          { deviceId: 'GM_Station_1', type: 'gm' },
-          { deviceId: 'player_1', type: 'player' },
-          { deviceId: 'esp32_001', type: 'esp32' }
+          { deviceId: 'GM_Station_1', type: 'gm', connectionStatus: 'connected' },
+          { deviceId: 'GM_Station_5', type: 'gm', connectionStatus: 'disconnected' },
+          { deviceId: 'player_1', type: 'player', connectionStatus: 'connected' },
+          { deviceId: 'esp32_001', type: 'esp32', connectionStatus: 'connected' }
         ]
       };
 

@@ -182,8 +182,17 @@ export class ConnectionWizard {
     const stationNameDisplay = document.getElementById('stationNameDisplay');
     if (!stationNameDisplay) return; // Graceful fallback if HTML not updated yet
 
+    // Reuse previously assigned station name on reconnection
+    const savedStationName = localStorage.getItem('aln_station_name');
+    if (savedStationName && savedStationName.startsWith('GM_Station_')) {
+      stationNameDisplay.textContent = savedStationName;
+      stationNameDisplay.dataset.deviceId = savedStationName;
+      console.log(`[ConnectionWizard] Reusing saved station name: ${savedStationName}`);
+      return;
+    }
+
     try {
-      // Query /api/state (no auth required)
+      // Query /api/state (no auth required) — only for FIRST-TIME assignment
       const response = await fetch(`${serverUrl}/api/state`, {
         method: 'GET',
         mode: 'cors',
@@ -197,9 +206,9 @@ export class ConnectionWizard {
       const state = await response.json();
       const devices = state.devices || [];
 
-      // Extract existing GM device IDs
+      // Only count CONNECTED GM devices (disconnected entries are stale)
       const existingIds = devices
-        .filter(d => d.type === 'gm')
+        .filter(d => d.type === 'gm' && d.connectionStatus === 'connected')
         .map(d => d.deviceId);
 
       // Find next available station ID
