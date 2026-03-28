@@ -24,7 +24,7 @@ export class AudioController {
 
   /**
    * Set audio output for a stream
-   * @param {string} sink - PipeWire sink name (e.g., 'bluez_output.AA_BB_CC_DD_EE_FF.1', 'hdmi', 'combine-bt')
+   * @param {string} sink - PipeWire sink name (e.g., 'bluez_output.AA_BB_CC_DD_EE_FF.1', 'hdmi')
    * @param {string} [stream='video'] - Stream identifier ('video', 'spotify', 'sound')
    * @returns {Promise<Object>} Route set response
    */

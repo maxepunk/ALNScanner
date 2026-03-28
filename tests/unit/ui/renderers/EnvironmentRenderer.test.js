@@ -263,7 +263,7 @@ describe('EnvironmentRenderer', () => {
       const dropdownBefore = document.querySelector('select[data-stream="video"]');
 
       // New sink added
-      const newSinks = [...sinks, { name: 'combine-bt', label: 'Dual BT' }];
+      const newSinks = [...sinks, { name: 'bluez_output.CC_DD_EE_FF_00_11.1', label: 'BT Speaker (00:11)' }];
       renderer.renderAudio({ availableSinks: newSinks, routes: {} });
 
       // Dropdown rebuilt (different element)
@@ -276,7 +276,7 @@ describe('EnvironmentRenderer', () => {
       renderer.renderAudio({ availableSinks: sinks, routes: { video: 'bluetooth' } });
 
       // Add new sink — triggers dropdown rebuild
-      const newSinks = [...sinks, { name: 'combine-bt', label: 'Dual BT' }];
+      const newSinks = [...sinks, { name: 'bluez_output.CC_DD_EE_FF_00_11.1', label: 'BT Speaker (00:11)' }];
       renderer.renderAudio({ availableSinks: newSinks, routes: { video: 'bluetooth' } });
 
       // Route value should be re-applied to the rebuilt dropdown

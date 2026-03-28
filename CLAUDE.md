@@ -702,7 +702,7 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 **BluetoothController:** Scan for speakers, pair/unpair, connect/disconnect. Events: `bluetooth:device`, `bluetooth:scan`.
 
-**AudioController:** Route audio streams between HDMI, Bluetooth, and combine-bt sinks. Per-stream routing dropdowns (video/spotify/sound independently routable). State delivered via `service:state` domain `audio`.
+**AudioController:** Route audio streams and set per-stream volume (HDMI and Bluetooth sinks). Routing dropdowns + volume sliders (video/spotify/sound independently controllable). Volume sliders use `_volumeValues` cache in EnvironmentRenderer to survive dropdown rebuilds (BT speaker reconnect). State delivered via `service:state` domain `audio`.
 
 **LightingController:** Activate Home Assistant scenes, refresh scene list. State delivered via `service:state` domain `lighting`.
 
@@ -719,6 +719,8 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 **MonitoringDisplay** handles all environment and show control status display updates. Uses `data-action` attributes wired in `domEventBindings.js`. Subscribes to StateStore domains via `_wireStoreSubscriptions()` and delegates to specialized differential renderers: `HealthRenderer` (service health), `HeldItemsRenderer` (blocked cues/videos), `SpotifyRenderer` (playback + ducking), `CueRenderer` (active cues + quick fire), `VideoRenderer` (queue + now playing), `EnvironmentRenderer` (BT/audio/lighting). Also handles discrete game events (`cue:fired`, `cue:completed`, `display:mode`) via `_handleMessage()`.
 
 **GOTCHA**: `MonitoringDisplay.refreshAllDisplays()` re-renders the template, destroying dynamic DOM state (active cue elements, now-playing). It calls `_requestInitialState()` afterward to restore state from the backend.
+
+**GOTCHA**: CSS variables use `--color-text-primary`, `--color-text-secondary` (NOT `--text-primary`/`--text-secondary`). All design tokens in `src/styles/variables.css` use the `--color-` prefix.
 
 ### HealthRenderer (Phase 4)
 

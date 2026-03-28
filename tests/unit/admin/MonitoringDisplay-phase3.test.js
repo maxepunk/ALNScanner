@@ -30,13 +30,13 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     { name: 'hdmi', label: 'HDMI' },
     { name: 'bluez_output.AA', label: 'BT Speaker 1' },
     { name: 'bluez_output.BB', label: 'BT Speaker 2' },
-    { name: 'combine-bt', label: 'Both BT Speakers' }
+    { name: 'bluez_output.CC_DD_EE_FF_00_11.1', label: 'BT Speaker (00:11)' }
   ];
 
   const defaultRoutes = {
-    video: 'combine-bt',
-    spotify: 'combine-bt',
-    sound: 'combine-bt'
+    video: 'bluez_output.CC_DD_EE_FF_00_11.1',
+    spotify: 'bluez_output.CC_DD_EE_FF_00_11.1',
+    sound: 'bluez_output.CC_DD_EE_FF_00_11.1'
   };
 
   beforeEach(() => {
@@ -112,7 +112,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       expect(labels).toContain('HDMI');
       expect(labels).toContain('BT Speaker 1');
       expect(labels).toContain('BT Speaker 2');
-      expect(labels).toContain('Both BT Speakers');
+      expect(labels).toContain('BT Speaker (00:11)');
     });
 
     it('should set correct option values from availableSinks', () => {
@@ -124,14 +124,14 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       expect(values).toContain('hdmi');
       expect(values).toContain('bluez_output.AA');
       expect(values).toContain('bluez_output.BB');
-      expect(values).toContain('combine-bt');
+      expect(values).toContain('bluez_output.CC_DD_EE_FF_00_11.1');
     });
 
     it('should select the current sink for each stream', () => {
       updateAudioState({
         video: 'hdmi',
         spotify: 'bluez_output.AA',
-        sound: 'combine-bt'
+        sound: 'bluez_output.CC_DD_EE_FF_00_11.1'
       });
 
       const videoDropdown = document.querySelector('[data-stream="video"]');
@@ -140,7 +140,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
 
       expect(videoDropdown.value).toBe('hdmi');
       expect(spotifyDropdown.value).toBe('bluez_output.AA');
-      expect(soundDropdown.value).toBe('combine-bt');
+      expect(soundDropdown.value).toBe('bluez_output.CC_DD_EE_FF_00_11.1');
     });
 
     it('should use data-action="admin.setAudioRoute" on dropdowns', () => {
@@ -203,7 +203,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       const btWarning = document.getElementById('bt-warning');
       btWarning.style.display = 'block';
 
-      store.update('audio', { routes: { video: 'combine-bt' } });
+      store.update('audio', { routes: { video: 'bluez_output.CC_DD_EE_FF_00_11.1' } });
 
       expect(btWarning.style.display).toBe('none');
     });
@@ -241,11 +241,11 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     });
 
     it('should update dropdowns on subsequent store updates', () => {
-      // First update with combine-bt selected
+      // First update with BT sink selected
       updateAudioState();
 
       let videoDropdown = document.querySelector('[data-stream="video"]');
-      expect(videoDropdown.value).toBe('combine-bt');
+      expect(videoDropdown.value).toBe('bluez_output.CC_DD_EE_FF_00_11.1');
 
       // Second update with hdmi selected
       updateAudioState({
@@ -262,8 +262,8 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       expect(() => {
         updateAudioState({
           video: 'nonexistent_sink',
-          spotify: 'combine-bt',
-          sound: 'combine-bt'
+          spotify: 'bluez_output.CC_DD_EE_FF_00_11.1',
+          sound: 'bluez_output.CC_DD_EE_FF_00_11.1'
         });
       }).not.toThrow();
     });
