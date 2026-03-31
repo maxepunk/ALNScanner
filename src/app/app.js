@@ -1538,6 +1538,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
   async adminSetIdleLoop() { return this._adminDisplayAction('setIdleLoop', 'Idle Loop'); }
   async adminSetScoreboard() { return this._adminDisplayAction('setScoreboard', 'Scoreboard'); }
+  async adminReturnToVideo() { return this._adminDisplayAction('returnToVideo', 'Return to Video'); }
 }
 
 // Create singleton instance

@@ -256,6 +256,13 @@ export class NetworkedSession extends EventTarget {
             if (payload.videoStatus) this._store.update('video', payload.videoStatus);
             if (payload.sound) this._store.update('sound', payload.sound);
           }
+
+          // Restore display mode on reconnect (not a StateStore domain — routes to MonitoringDisplay)
+          if (payload.displayStatus && this.services?.client) {
+            this.services.client.dispatchEvent(new CustomEvent('message:received', {
+              detail: { type: 'display:mode', payload: { mode: payload.displayStatus.currentMode } }
+            }));
+          }
           break;
 
         case 'session:update':

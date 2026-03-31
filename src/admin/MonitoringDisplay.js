@@ -33,6 +33,9 @@ export class MonitoringDisplay {
     this._messageHandler = this._handleMessage.bind(this);
     this.client.addEventListener('message:received', this._messageHandler);
 
+    // Track current display mode for Return to Video visibility logic
+    this._currentDisplayMode = 'IDLE_LOOP';
+
     // Wire store subscriptions (replaces DataManager event subscriptions)
     this._wireStoreSubscriptions();
 
@@ -106,6 +109,7 @@ export class MonitoringDisplay {
     } : null;
     on('video', (state, prev) => {
       this.videoRenderer.render(mapVideoState(state), mapVideoState(prev));
+      this._updateReturnToVideoVisibility(state);
     });
 
     // Spotify
@@ -238,6 +242,27 @@ export class MonitoringDisplay {
 
     if (btnIdle) btnIdle.classList.toggle('active', payload.mode === 'IDLE_LOOP');
     if (btnScore) btnScore.classList.toggle('active', payload.mode === 'SCOREBOARD');
+
+    this._currentDisplayMode = payload.mode;
+    this._updateReturnToVideoVisibility();
+  }
+
+  /**
+   * Show/hide "Return to Video" button based on compound condition:
+   * display mode is SCOREBOARD AND video is playing behind it.
+   * Called from both _handleDisplayMode() and video store subscription.
+   * @param {Object} [videoState] - Optional video state, reads from store if omitted
+   * @private
+   */
+  _updateReturnToVideoVisibility(videoState) {
+    const btn = document.getElementById('btn-return-to-video');
+    if (!btn) return;
+
+    const state = videoState || this.store?.get('video');
+    const videoPlaying = state?.status === 'playing';
+    const inScoreboard = this._currentDisplayMode === 'SCOREBOARD';
+
+    btn.style.display = (inScoreboard && videoPlaying) ? '' : 'none';
   }
 
   // ============================================

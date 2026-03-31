@@ -36,6 +36,15 @@ export class DisplayController {
     }
 
     /**
+     * Return to video from scoreboard overlay.
+     * Only valid when scoreboard is showing over a playing video.
+     * @returns {Promise<Object>} Response with { success, mode: 'VIDEO' }
+     */
+    async returnToVideo() {
+        return sendCommand(this.connection, 'display:return-to-video', {});
+    }
+
+    /**
      * Get current display status
      * @returns {Promise<Object>} Response with { currentMode, previousMode, pendingVideo, timestamp }
      */
