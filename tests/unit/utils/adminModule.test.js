@@ -269,19 +269,6 @@ describe('AdminModule - ES6 Exports', () => {
       expect(result.mode).toBe('SCOREBOARD');
     });
 
-    it('should send display:toggle command via sendCommand', async () => {
-      const controller = new DisplayController(mockConnection);
-
-      setTimeout(() => {
-        mockConnection.dispatchEvent(new CustomEvent('message:received', {
-          detail: { type: 'gm:command:ack', payload: { action: 'display:toggle', success: true, mode: 'SCOREBOARD' } }
-        }));
-      }, 10);
-
-      const result = await controller.toggleDisplayMode();
-      expect(result.success).toBe(true);
-    });
-
     it('should send display:status command and return status', async () => {
       const controller = new DisplayController(mockConnection);
       const statusPayload = {

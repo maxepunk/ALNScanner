@@ -36,14 +36,6 @@ export class DisplayController {
     }
 
     /**
-     * Toggle between Idle Loop and Scoreboard modes
-     * @returns {Promise<Object>} Response with { success, mode: 'IDLE_LOOP'|'SCOREBOARD' }
-     */
-    async toggleDisplayMode() {
-        return sendCommand(this.connection, 'display:toggle', {});
-    }
-
-    /**
      * Get current display status
      * @returns {Promise<Object>} Response with { currentMode, previousMode, pendingVideo, timestamp }
      */
