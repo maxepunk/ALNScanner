@@ -70,11 +70,12 @@ jobs:
             echo "❌ dist/index.html not found"
             exit 1
           fi
-          if [ ! -f "dist/assets/index.js" ] && [ ! -f "dist/assets/index-*.js" ]; then
+          JS_COUNT=$(find dist/assets -name '*.js' ! -name '*.map' | wc -l)
+          if [ "$JS_COUNT" -eq 0 ]; then
             echo "❌ No JavaScript bundle found in dist/assets/"
             exit 1
           fi
-          echo "✓ Build artifacts verified"
+          echo "✓ Build artifacts verified ($JS_COUNT JS bundles)"
 
       - name: Check bundle size
         run: |
