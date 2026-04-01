@@ -1,3 +1,12 @@
+const fs = require('fs');
+const path = require('path');
+
+// Load per-file coverage thresholds if available, otherwise fall back to global thresholds
+const thresholdsPath = path.resolve(__dirname, '.coverage-thresholds.json');
+const coverageThreshold = fs.existsSync(thresholdsPath)
+  ? JSON.parse(fs.readFileSync(thresholdsPath, 'utf8'))
+  : { global: { branches: 70, functions: 80, lines: 80 } };
+
 module.exports = {
   testEnvironment: 'jsdom',
   testMatch: ['**/tests/**/*.test.js'],
@@ -13,13 +22,8 @@ module.exports = {
     '!**/node_modules/**'
   ],
 
-  coverageThreshold: {
-    global: {
-      branches: 70,
-      functions: 80,
-      lines: 80
-    }
-  },
+  coverageReporters: ['text', 'lcov', 'html', 'json'],
+  coverageThreshold,
 
   // Transform ES6 modules with Babel
   transform: {

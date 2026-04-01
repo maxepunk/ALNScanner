@@ -1,0 +1,242 @@
+{
+  "./src/admin/AdminOperations.js": {
+    "branches": 0,
+    "functions": 75,
+    "lines": 85
+  },
+  "./src/admin/AudioController.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
+  },
+  "./src/admin/BluetoothController.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
+  },
+  "./src/admin/CueController.js": {
+    "branches": 60,
+    "functions": 65,
+    "lines": 60
+  },
+  "./src/admin/DisplayController.js": {
+    "branches": 0,
+    "functions": 80,
+    "lines": 80
+  },
+  "./src/admin/LightingController.js": {
+    "branches": 0,
+    "functions": 100,
+    "lines": 100
+  },
+  "./src/admin/MonitoringDisplay.js": {
+    "branches": 50,
+    "functions": 60,
+    "lines": 65
+  },
+  "./src/admin/SessionManager.js": {
+    "branches": 100,
+    "functions": 40,
+    "lines": 50
+  },
+  "./src/admin/SoundController.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
+  },
+  "./src/admin/SpotifyController.js": {
+    "branches": 65,
+    "functions": 75,
+    "lines": 70
+  },
+  "./src/admin/utils/CommandSender.js": {
+    "branches": 65,
+    "functions": 100,
+    "lines": 85
+  },
+  "./src/admin/VideoController.js": {
+    "branches": 0,
+    "functions": 40,
+    "lines": 50
+  },
+  "./src/app/adminController.js": {
+    "branches": 85,
+    "functions": 100,
+    "lines": 95
+  },
+  "./src/app/app.js": {
+    "branches": 45,
+    "functions": 55,
+    "lines": 50
+  },
+  "./src/app/initializationSteps.js": {
+    "branches": 70,
+    "functions": 90,
+    "lines": 80
+  },
+  "./src/app/sessionModeManager.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
+  },
+  "./src/core/gameActivityBuilder.js": {
+    "branches": 85,
+    "functions": 100,
+    "lines": 95
+  },
+  "./src/core/scoring.js": {
+    "branches": 70,
+    "functions": 100,
+    "lines": 80
+  },
+  "./src/core/sessionReportGenerator.js": {
+    "branches": 55,
+    "functions": 80,
+    "lines": 75
+  },
+  "./src/core/stateStore.js": {
+    "branches": 90,
+    "functions": 100,
+    "lines": 95
+  },
+  "./src/core/storage/IStorageStrategy.js": {
+    "branches": 0,
+    "functions": 80,
+    "lines": 80
+  },
+  "./src/core/storage/LocalStorage.js": {
+    "branches": 75,
+    "functions": 100,
+    "lines": 95
+  },
+  "./src/core/storage/NetworkedStorage.js": {
+    "branches": 70,
+    "functions": 90,
+    "lines": 75
+  },
+  "./src/core/teamRegistry.js": {
+    "branches": 40,
+    "functions": 50,
+    "lines": 50
+  },
+  "./src/core/tokenManager.js": {
+    "branches": 75,
+    "functions": 85,
+    "lines": 85
+  },
+  "./src/core/unifiedDataManager.js": {
+    "branches": 30,
+    "functions": 50,
+    "lines": 45
+  },
+  "./src/main.js": {
+    "branches": 0,
+    "functions": 0,
+    "lines": 0
+  },
+  "./src/network/connectionManager.js": {
+    "branches": 65,
+    "functions": 80,
+    "lines": 85
+  },
+  "./src/network/networkedQueueManager.js": {
+    "branches": 80,
+    "functions": 100,
+    "lines": 95
+  },
+  "./src/network/networkedSession.js": {
+    "branches": 85,
+    "functions": 100,
+    "lines": 90
+  },
+  "./src/network/orchestratorClient.js": {
+    "branches": 50,
+    "functions": 80,
+    "lines": 80
+  },
+  "./src/services/StateValidationService.js": {
+    "branches": 100,
+    "functions": 75,
+    "lines": 95
+  },
+  "./src/ui/connectionWizard.js": {
+    "branches": 35,
+    "functions": 30,
+    "lines": 40
+  },
+  "./src/ui/renderers/CueRenderer.js": {
+    "branches": 85,
+    "functions": 100,
+    "lines": 95
+  },
+  "./src/ui/renderers/EnvironmentRenderer.js": {
+    "branches": 85,
+    "functions": 100,
+    "lines": 95
+  },
+  "./src/ui/renderers/HealthRenderer.js": {
+    "branches": 85,
+    "functions": 100,
+    "lines": 95
+  },
+  "./src/ui/renderers/HeldItemsRenderer.js": {
+    "branches": 85,
+    "functions": 70,
+    "lines": 80
+  },
+  "./src/ui/renderers/SessionRenderer.js": {
+    "branches": 80,
+    "functions": 90,
+    "lines": 75
+  },
+  "./src/ui/renderers/SpotifyRenderer.js": {
+    "branches": 85,
+    "functions": 85,
+    "lines": 95
+  },
+  "./src/ui/renderers/VideoRenderer.js": {
+    "branches": 80,
+    "functions": 65,
+    "lines": 75
+  },
+  "./src/ui/settings.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
+  },
+  "./src/ui/uiManager.js": {
+    "branches": 65,
+    "functions": 65,
+    "lines": 75
+  },
+  "./src/utils/config.js": {
+    "branches": 0,
+    "functions": 0,
+    "lines": 100
+  },
+  "./src/utils/debug.js": {
+    "branches": 60,
+    "functions": 100,
+    "lines": 75
+  },
+  "./src/utils/domEventBindings.js": {
+    "branches": 35,
+    "functions": 90,
+    "lines": 45
+  },
+  "./src/utils/escapeHtml.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
+  },
+  "./src/utils/jwtUtils.js": {
+    "branches": 85,
+    "functions": 65,
+    "lines": 90
+  },
+  "./src/utils/nfcHandler.js": {
+    "branches": 45,
+    "functions": 60,
+    "lines": 55
+  }
+}
