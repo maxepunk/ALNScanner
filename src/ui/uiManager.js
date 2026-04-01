@@ -11,6 +11,8 @@
  * - Scoreboard and team details rendering
  */
 
+import { escapeHtml } from '../utils/escapeHtml.js';
+
 class UIManager {
   /**
    * Create UIManager instance
@@ -380,7 +382,7 @@ class UIManager {
         <div class="session-status session-status--paused">
           <h4 class="session-status__header">
             <span class="session-status__icon">⏸️</span>
-            <span>${this.escapeHtml(session.name || 'Session')}</span>
+            <span>${escapeHtml(session.name || 'Session')}</span>
             <span class="session-status__badge session-status__badge--paused">Paused</span>
           </h4>
           <div class="session-status__details">
@@ -405,7 +407,7 @@ class UIManager {
       <div class="session-status session-status--active">
         <h4 class="session-status__header">
           <span class="session-status__icon">🎮</span>
-          <span>${this.escapeHtml(session.name || 'Session')}</span>
+          <span>${escapeHtml(session.name || 'Session')}</span>
           <span class="session-status__badge session-status__badge--active">Active</span>
         </h4>
         <div class="session-status__details">
@@ -844,18 +846,6 @@ class UIManager {
   }
 
   /**
-   * Escape HTML to prevent XSS
-   * @param {string} text - Text to escape
-   * @returns {string} Escaped text
-   */
-  escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  /**
    * Format timestamp to time string (HH:MM)
    * @param {string} timestamp - ISO timestamp
    * @returns {string} Formatted time
@@ -972,11 +962,11 @@ class UIManager {
     let statusContent;
     if (status === 'claimed' && claimEvent?.mode === 'blackmarket') {
       // Black Market: Show earned value
-      statusContent = `<span class="status-icon">💰</span> SOLD to ${this.escapeHtml(claimEvent?.teamId || 'Unknown')}
+      statusContent = `<span class="status-icon">💰</span> SOLD to ${escapeHtml(claimEvent?.teamId || 'Unknown')}
         <span class="points">$${(claimEvent?.points || 0).toLocaleString()}</span>`;
     } else if (status === 'claimed' && claimEvent?.mode === 'detective') {
       // Detective: Show what they gave up
-      statusContent = `<span class="status-icon">🔍</span> EXPOSED by ${this.escapeHtml(claimEvent?.teamId || 'Unknown')}
+      statusContent = `<span class="status-icon">🔍</span> EXPOSED by ${escapeHtml(claimEvent?.teamId || 'Unknown')}
         <span class="points potential">Worth: $${(potentialValue || 0).toLocaleString()}</span>`;
     } else {
       // Available: Show potential value
@@ -988,7 +978,7 @@ class UIManager {
       <div class="token-card ${status}" data-token-id="${tokenId}">
         <!-- Header: Token ID + Type + Rating -->
         <div class="token-card__header">
-          <span class="token-id">${this.escapeHtml(tokenId)}</span>
+          <span class="token-id">${escapeHtml(tokenId)}</span>
           <span class="token-type type-${memoryType.toLowerCase()}">${memoryType}</span>
         </div>
         <div class="token-card__rating">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</div>
@@ -1001,7 +991,7 @@ class UIManager {
         ${tokenData?.summary ? `
           <div class="token-card__summary">
             <button class="summary-toggle" onclick="this.parentElement.classList.toggle('expanded')">Intel</button>
-            <div class="summary-content">${this.escapeHtml(tokenData.summary)}</div>
+            <div class="summary-content">${escapeHtml(tokenData.summary)}</div>
           </div>
         ` : ''}
 
@@ -1052,7 +1042,7 @@ class UIManager {
           <div class="event discovery">
             <span class="icon">👁</span>
             <span class="label">Discovered</span>
-            <span class="device">${this.escapeHtml(event.deviceId)}</span>
+            <span class="device">${escapeHtml(event.deviceId)}</span>
             <span class="time">${time}</span>
           </div>
         `;
@@ -1063,7 +1053,7 @@ class UIManager {
           <div class="event scan collapsible">
             <span class="icon">👁</span>
             <span class="label">Scanned</span>
-            <span class="device">${this.escapeHtml(event.deviceId)}</span>
+            <span class="device">${escapeHtml(event.deviceId)}</span>
             <span class="time">${time}</span>
           </div>
         `;
@@ -1073,18 +1063,18 @@ class UIManager {
           <div class="event claim ${event.mode}">
             <span class="icon">${event.mode === 'blackmarket' ? '💰' : '🔍'}</span>
             <span class="label">${event.mode === 'blackmarket' ? 'Black Market' : 'Detective'}</span>
-            <span class="team">${this.escapeHtml(event.teamId)}</span>
+            <span class="team">${escapeHtml(event.teamId)}</span>
             <span class="time">${time}</span>
             <span class="points">$${(event.points || 0).toLocaleString()}</span>
             ${event.groupProgress ? `
               <div class="group-progress">
-                ${this.escapeHtml(event.groupProgress.name)} (${event.groupProgress.found}/${event.groupProgress.total})
+                ${escapeHtml(event.groupProgress.name)} (${event.groupProgress.found}/${event.groupProgress.total})
               </div>
             ` : ''}
             ${event.summary ? `
               <div class="exposed-summary">
                 <span class="summary-label">Intel:</span>
-                <span class="summary-text">${this.escapeHtml(event.summary)}</span>
+                <span class="summary-text">${escapeHtml(event.summary)}</span>
               </div>
             ` : ''}
           </div>

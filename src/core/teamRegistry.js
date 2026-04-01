@@ -193,31 +193,6 @@ class TeamRegistry extends EventTarget {
     }
 
     /**
-     * Populate from standalone session data
-     * Called when StandaloneDataManager loads session
-     * @param {Object} standaloneSessionData - Session object from localStorage
-     */
-    populateFromStandaloneSession(standaloneSessionData) {
-        if (!standaloneSessionData?.teams) return;
-
-        this.teams.clear();
-
-        Object.entries(standaloneSessionData.teams).forEach(([teamId, teamData]) => {
-            this.teams.set(teamId, {
-                teamId,
-                score: teamData.score || 0,
-                tokensScanned: teamData.tokensScanned || 0,
-                baseScore: teamData.baseScore || 0,
-                bonusPoints: teamData.bonusPoints || 0
-            });
-        });
-
-        this.dispatchEvent(new CustomEvent('teams:updated', {
-            detail: { teams: this.getTeams() }
-        }));
-    }
-
-    /**
      * Populate a select element with team options
      * Used for dropdown UI
      * @param {HTMLSelectElement} selectElement - Select element to populate

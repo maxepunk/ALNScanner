@@ -12,7 +12,6 @@
  */
 
 import { sendCommand } from './utils/CommandSender.js';
-import Debug from '../utils/debug.js';
 
 export class AdminOperations {
   /**
@@ -20,27 +19,6 @@ export class AdminOperations {
    */
   constructor(connection) {
     this.connection = connection;
-
-    // Bind handler for cleanup
-    this._messageHandler = this._handleMessage.bind(this);
-
-    // Listen for command acknowledgments and broadcasts
-    this.connection.addEventListener('message:received', this._messageHandler);
-  }
-
-  /**
-   * Handle incoming messages (informational logging)
-   * @private
-   */
-  _handleMessage(event) {
-    const { type } = event.detail;
-
-    // Handle scores:reset broadcast (informational)
-    if (type === 'scores:reset') {
-      Debug.log('[AdminOperations] Scores reset broadcast received');
-      // sync:full will follow automatically
-      // MonitoringDisplay handles the actual UI update
-    }
   }
 
   /**
@@ -89,13 +67,19 @@ export class AdminOperations {
   }
 
   /**
-   * Cleanup event listeners
+   * Trigger on-demand health check for a service
+   * @param {string} serviceId - Service to check (e.g., 'vlc', 'spotify', 'audio')
+   * @param {number} [timeout=5000]
+   * @returns {Promise<Object>}
    */
-  destroy() {
-    if (this.connection && this._messageHandler) {
-      this.connection.removeEventListener('message:received', this._messageHandler);
-    }
+  async checkService(serviceId, timeout = 5000) {
+    return sendCommand(this.connection, 'service:check', { serviceId }, timeout);
   }
+
+  /**
+   * Cleanup (no-op, no listeners to remove)
+   */
+  destroy() {}
 }
 
 export default AdminOperations;

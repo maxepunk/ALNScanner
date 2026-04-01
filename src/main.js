@@ -42,7 +42,7 @@ import { bindDOMEvents } from './utils/domEventBindings.js';
  * - DataManager event listeners update UI (badges, screens, scoreboards)
  * - Event wiring happens in main.js (centralized)
  *
- * Phase 2: UnifiedDataManager replaces both DataManager and StandaloneDataManager
+ * UnifiedDataManager replaces both DataManager and StandaloneDataManager
  * - Single manager with strategy pattern (LocalStorage/NetworkedStorage)
  * - Mode-specific initialization done by App during selectGameMode()
  */

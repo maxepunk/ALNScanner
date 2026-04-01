@@ -19,8 +19,6 @@ export class VideoController {
    */
   constructor(connection) {
     this.connection = connection;
-    this.currentVideo = null;
-    this.queueLength = 0;
   }
 
   /**

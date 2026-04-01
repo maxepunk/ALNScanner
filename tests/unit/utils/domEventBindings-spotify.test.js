@@ -17,8 +17,11 @@ describe('domEventBindings - spotify actions', () => {
     stop: jest.fn(),
     next: jest.fn(),
     previous: jest.fn(),
-    checkService: jest.fn(),
     setVolume: jest.fn()
+  };
+
+  const mockAdminOperations = {
+    checkService: jest.fn()
   };
 
   const mockSessionManager = {
@@ -30,6 +33,7 @@ describe('domEventBindings - spotify actions', () => {
     getModule: jest.fn((name) => {
       switch (name) {
         case 'spotifyController': return mockSpotifyController;
+        case 'adminOperations': return mockAdminOperations;
         case 'sessionManager': return mockSessionManager;
         default: return {};
       }
@@ -89,7 +93,7 @@ describe('domEventBindings - spotify actions', () => {
   });
 
   describe('admin.serviceCheck', () => {
-    it('should call spotifyController.checkService with service id from data attribute', () => {
+    it('should call adminOperations.checkService with service id from data attribute', () => {
       const btn = document.createElement('button');
       btn.dataset.action = 'admin.serviceCheck';
       btn.setAttribute('data-service-id', 'spotify');
@@ -97,8 +101,8 @@ describe('domEventBindings - spotify actions', () => {
 
       clickAction(btn);
 
-      expect(mockAdminController.getModule).toHaveBeenCalledWith('spotifyController');
-      expect(mockSpotifyController.checkService).toHaveBeenCalledWith('spotify');
+      expect(mockAdminController.getModule).toHaveBeenCalledWith('adminOperations');
+      expect(mockAdminOperations.checkService).toHaveBeenCalledWith('spotify');
     });
   });
 

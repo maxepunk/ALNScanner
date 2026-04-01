@@ -4,7 +4,7 @@
  */
 
 /* ============================================
-   PHASE 3: MODE-BASED FEATURE VISIBILITY
+   MODE-BASED FEATURE VISIBILITY
    Hide networked-only sections in standalone mode
    ============================================ */
 body.standalone-mode [data-requires="networked"] {
@@ -640,7 +640,7 @@ body.standalone-mode [data-requires="networked"] {
 }
 
 /* ============================================
-   DISPLAY STATUS (Phase 4.2 - Now Showing + Queue)
+   DISPLAY STATUS (Now Showing + Queue)
    ============================================ */
 .display-status {
   display: flex;
@@ -687,7 +687,7 @@ body.standalone-mode [data-requires="networked"] {
 }
 
 /* ============================================
-   IDLE MODE TOGGLE (Phase 4.2)
+   IDLE MODE TOGGLE
    ============================================ */
 .idle-mode-toggle {
   display: flex;

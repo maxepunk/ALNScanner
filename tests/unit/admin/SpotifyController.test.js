@@ -31,13 +31,6 @@ describe('SpotifyController', () => {
     expect(sendCommand).toHaveBeenCalledWith(mockClient, 'spotify:next', {}, 5000);
   });
 
-  it('should send spotify:playlist with URI', async () => {
-    await controller.setPlaylist('spotify:playlist:act2');
-    expect(sendCommand).toHaveBeenCalledWith(
-      mockClient, 'spotify:playlist', { uri: 'spotify:playlist:act2' }, 5000
-    );
-  });
-
   it('should send spotify:volume', async () => {
     await controller.setVolume(75);
     expect(sendCommand).toHaveBeenCalledWith(
@@ -45,17 +38,4 @@ describe('SpotifyController', () => {
     );
   });
 
-  it('should send spotify:cache:verify', async () => {
-    await controller.verifyCacheStatus();
-    expect(sendCommand).toHaveBeenCalledWith(
-      mockClient, 'spotify:cache:verify', {}, 10000
-    );
-  });
-
-  it('should send service:check with serviceId', async () => {
-    await controller.checkService('spotify');
-    expect(sendCommand).toHaveBeenCalledWith(
-      mockClient, 'service:check', { serviceId: 'spotify' }, 5000
-    );
-  });
 });

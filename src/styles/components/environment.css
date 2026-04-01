@@ -1,12 +1,11 @@
 /**
  * ALN GM Scanner - Environment Control Styles
  * Audio routing, Bluetooth speakers, and lighting scenes
- * Phase 0 Environment Control (Networked mode only)
+ * Environment Control (Networked mode only)
  */
 
 /* ============================================
    AUDIO ROUTING DROPDOWNS - Per-stream routing
-   Phase 3: Replaces Phase 0 pill-style radio group
    ============================================ */
 #audio-routing-dropdowns {
   display: flex;

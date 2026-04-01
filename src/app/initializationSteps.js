@@ -215,7 +215,7 @@ export function determineInitialScreen(sessionModeManager) {
  * Validate system state and determine initial screen for networked mode
  * Async version that performs full validation before deciding action.
  *
- * Phase 4.1 enhancement: Validates orchestrator + session in addition to token.
+ * Validates orchestrator + session in addition to token.
  * If any validation fails, clears stale state and shows mode selection screen.
  *
  * @param {Object} sessionModeManager - SessionModeManager instance

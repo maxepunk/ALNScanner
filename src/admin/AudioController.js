@@ -7,7 +7,7 @@
  * - GM routes Spotify music to a specific PipeWire sink
  * - GM routes sound effects to a specific PipeWire sink
  *
- * Phase 3: Per-stream routing (video, spotify, sound)
+ * Per-stream routing (video, spotify, sound)
  *
  * @module admin/AudioController
  */

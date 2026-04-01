@@ -67,16 +67,6 @@ export class SpotifyController {
   }
 
   /**
-   * Set active playlist
-   * @param {string} uri - Spotify playlist URI (e.g., 'spotify:playlist:act2')
-   * @param {number} [timeout=5000] - Command timeout in milliseconds
-   * @returns {Promise<Object>} Command acknowledgment
-   */
-  async setPlaylist(uri, timeout = 5000) {
-    return sendCommand(this.connection, 'spotify:playlist', { uri }, timeout);
-  }
-
-  /**
    * Set Spotify volume
    * @param {number} volume - Volume level (0-100)
    * @param {number} [timeout=5000] - Command timeout in milliseconds
@@ -84,25 +74,6 @@ export class SpotifyController {
    */
   async setVolume(volume, timeout = 5000) {
     return sendCommand(this.connection, 'spotify:volume', { volume }, timeout);
-  }
-
-  /**
-   * Trigger on-demand health check for a service
-   * @param {string} serviceId - Service to check (e.g., 'spotify')
-   * @param {number} [timeout=5000]
-   * @returns {Promise<Object>}
-   */
-  async checkService(serviceId, timeout = 5000) {
-    return sendCommand(this.connection, 'service:check', { serviceId }, timeout);
-  }
-
-  /**
-   * Verify cache status of offline playlists
-   * @param {number} [timeout=10000] - Command timeout in milliseconds (longer for cache checks)
-   * @returns {Promise<Object>} Command acknowledgment with cache status
-   */
-  async verifyCacheStatus(timeout = 10000) {
-    return sendCommand(this.connection, 'spotify:cache:verify', {}, timeout);
   }
 
   /**

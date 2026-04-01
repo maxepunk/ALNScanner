@@ -19,31 +19,6 @@ export class SessionManager {
    */
   constructor(connection) {
     this.connection = connection;
-    this.currentSession = null;
-
-    // Bind handler for cleanup
-    this._messageHandler = this._handleMessage.bind(this);
-
-    // Listen to session-related broadcasts
-    this.connection.addEventListener('message:received', this._messageHandler);
-  }
-
-  /**
-   * Handle incoming session-related messages
-   * @private
-   */
-  _handleMessage(event) {
-    const { type, payload } = event.detail;
-
-    // Update local session state from broadcasts
-    if (type === 'session:update') {
-      this.currentSession = payload;
-    }
-
-    // Update from sync:full for initial state on connection
-    if (type === 'sync:full' && payload.session) {
-      this.currentSession = payload.session;
-    }
   }
 
   /**
@@ -58,11 +33,9 @@ export class SessionManager {
 
   /**
    * Start the game (transition from setup to active)
-   * Phase 1: Cue Engine integration
    * @returns {Promise<Object>} Start response
    */
   async startGame() {
-    if (!this.currentSession) return;
     return sendCommand(this.connection, 'session:start', {});
   }
 
@@ -71,7 +44,6 @@ export class SessionManager {
    * @returns {Promise<Object>} Pause response
    */
   async pauseSession() {
-    if (!this.currentSession) return;
     return sendCommand(this.connection, 'session:pause', {});
   }
 
@@ -80,7 +52,6 @@ export class SessionManager {
    * @returns {Promise<Object>} Resume response
    */
   async resumeSession() {
-    if (!this.currentSession) return;
     return sendCommand(this.connection, 'session:resume', {});
   }
 
@@ -89,42 +60,13 @@ export class SessionManager {
    * @returns {Promise<Object>} End response
    */
   async endSession() {
-    if (!this.currentSession) return;
     return sendCommand(this.connection, 'session:end', {});
   }
 
   /**
-   * Get current session state
-   * @returns {Object|null} Current session or null
+   * Cleanup (no-op, no listeners to remove)
    */
-  getSession() {
-    return this.currentSession;
-  }
-
-  /**
-   * Check if a session is active
-   * @returns {boolean}
-   */
-  isActive() {
-    return this.currentSession?.status === 'active';
-  }
-
-  /**
-   * Check if session is paused
-   * @returns {boolean}
-   */
-  isPaused() {
-    return this.currentSession?.status === 'paused';
-  }
-
-  /**
-   * Cleanup event listeners
-   */
-  destroy() {
-    if (this.connection && this._messageHandler) {
-      this.connection.removeEventListener('message:received', this._messageHandler);
-    }
-  }
+  destroy() {}
 }
 
 export default SessionManager;

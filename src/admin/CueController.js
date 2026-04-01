@@ -50,7 +50,7 @@ export class CueController {
   }
 
   /**
-   * Pause a running compound cue (Phase 2)
+   * Pause a running compound cue
    * @param {string} cueId - Cue identifier
    * @param {number} [timeout=5000] - Command timeout in milliseconds
    * @returns {Promise<Object>} Command acknowledgment
@@ -60,7 +60,7 @@ export class CueController {
   }
 
   /**
-   * Stop a running compound cue (Phase 2)
+   * Stop a running compound cue
    * @param {string} cueId - Cue identifier
    * @param {number} [timeout=5000] - Command timeout in milliseconds
    * @returns {Promise<Object>} Command acknowledgment
@@ -70,7 +70,7 @@ export class CueController {
   }
 
   /**
-   * Resume a paused compound cue (Phase 2)
+   * Resume a paused compound cue
    * @param {string} cueId - Cue identifier
    * @param {number} [timeout=5000] - Command timeout in milliseconds
    * @returns {Promise<Object>} Command acknowledgment

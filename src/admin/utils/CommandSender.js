@@ -66,19 +66,4 @@ export function sendCommand(connection, action, payload, timeout = 5000) {
   });
 }
 
-/**
- * Create a bound command sender for a specific connection
- * Useful for modules that send many commands
- *
- * @param {Object} connection - OrchestratorClient instance
- * @returns {Function} Bound sendCommand function
- *
- * @example
- * const send = createCommandSender(this.connection);
- * await send('session:pause', {});
- */
-export function createCommandSender(connection) {
-  return (action, payload, timeout) => sendCommand(connection, action, payload, timeout);
-}
-
-export default { sendCommand, createCommandSender };
+export default { sendCommand };

@@ -16,8 +16,20 @@ export class StateStore {
   }
 
   update(domain, state) {
-    this._prev[domain] = this._state[domain] || null;
-    this._state[domain] = { ...this._state[domain], ...state };  // shallow merge
+    const prev = this._state[domain] || null;
+    const merged = { ...prev, ...state };
+
+    // Skip notification if nothing actually changed (shallow equality)
+    if (prev !== null) {
+      const keys = Object.keys(merged);
+      const prevKeys = Object.keys(prev);
+      if (keys.length === prevKeys.length && keys.every(k => merged[k] === prev[k])) {
+        return;
+      }
+    }
+
+    this._prev[domain] = prev;
+    this._state[domain] = merged;
     const listeners = this._listeners[domain];
     if (listeners) {
       for (const cb of listeners) {

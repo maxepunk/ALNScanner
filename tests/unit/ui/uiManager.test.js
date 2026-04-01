@@ -918,39 +918,6 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
     });
   });
 
-  describe('Utility Methods - escapeHtml', () => {
-    beforeEach(() => {
-      uiManager.init();
-    });
-
-    it('should escape HTML special characters', () => {
-      const result = uiManager.escapeHtml('<script>alert("xss")</script>');
-      // DOM-based escaping
-      expect(result).toContain('&lt;');
-      expect(result).toContain('&gt;');
-      expect(result).not.toContain('<script');
-    });
-
-    it('should escape ampersands', () => {
-      const result = uiManager.escapeHtml('foo & bar');
-      expect(result).toBe('foo &amp; bar');
-    });
-
-    it('should handle null/undefined', () => {
-      expect(uiManager.escapeHtml(null)).toBe('');
-      expect(uiManager.escapeHtml(undefined)).toBe('');
-    });
-
-    it('should handle empty string', () => {
-      expect(uiManager.escapeHtml('')).toBe('');
-    });
-
-    it('should handle plain text without escaping', () => {
-      const result = uiManager.escapeHtml('Hello World');
-      expect(result).toBe('Hello World');
-    });
-  });
-
   describe('Utility Methods - _formatTime', () => {
     beforeEach(() => {
       uiManager.init();

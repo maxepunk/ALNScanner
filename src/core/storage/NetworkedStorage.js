@@ -41,6 +41,20 @@ export class NetworkedStorage extends IStorageStrategy {
   }
 
   /**
+   * Send a gm:command via WebSocket with AsyncAPI envelope
+   * @param {string} action - Command action (e.g., 'session:create')
+   * @param {Object} payload - Command payload data
+   * @private
+   */
+  _emitCommand(action, payload) {
+    this.socket.emit('gm:command', {
+      event: 'gm:command',
+      data: { action, payload },
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
    * Initialize storage
    * Event listeners are handled by NetworkedSession which owns the socket.
    * @returns {Promise<void>}
@@ -108,14 +122,7 @@ export class NetworkedStorage extends IStorageStrategy {
 
     this.debug?.log(`[NetworkedStorage] Removing transaction: ${transactionId}`);
 
-    this.socket.emit('gm:command', {
-      event: 'gm:command',
-      data: {
-        action: 'transaction:delete',
-        payload: { transactionId }
-      },
-      timestamp: new Date().toISOString()
-    });
+    this._emitCommand('transaction:delete', { transactionId });
 
     return { success: true, pending: true };
   }
@@ -166,14 +173,7 @@ export class NetworkedStorage extends IStorageStrategy {
 
     this.debug?.log(`[NetworkedStorage] Adjusting score for team ${teamId}: ${delta > 0 ? '+' : ''}${delta} (${reason})`);
 
-    this.socket.emit('gm:command', {
-      event: 'gm:command',
-      data: {
-        action: 'score:adjust',
-        payload: { teamId, delta, reason }
-      },
-      timestamp: new Date().toISOString()
-    });
+    this._emitCommand('score:adjust', { teamId, delta, reason });
 
     return { success: true, pending: true };
   }
@@ -212,14 +212,7 @@ export class NetworkedStorage extends IStorageStrategy {
 
     this.debug?.log(`[NetworkedStorage] Creating session: ${name}`);
 
-    this.socket.emit('gm:command', {
-      event: 'gm:command',
-      data: {
-        action: 'session:create',
-        payload: { name, teams }
-      },
-      timestamp: new Date().toISOString()
-    });
+    this._emitCommand('session:create', { name, teams });
 
     return { pending: true };
   }
@@ -236,11 +229,7 @@ export class NetworkedStorage extends IStorageStrategy {
 
     this.debug?.log('[NetworkedStorage] Ending session');
 
-    this.socket.emit('gm:command', {
-      event: 'gm:command',
-      data: { action: 'session:end', payload: {} },
-      timestamp: new Date().toISOString()
-    });
+    this._emitCommand('session:end', {});
   }
 
   /**
@@ -266,11 +255,7 @@ export class NetworkedStorage extends IStorageStrategy {
 
     this.debug?.log('[NetworkedStorage] Pausing session');
 
-    this.socket.emit('gm:command', {
-      event: 'gm:command',
-      data: { action: 'session:pause', payload: {} },
-      timestamp: new Date().toISOString()
-    });
+    this._emitCommand('session:pause', {});
 
     return { success: true, pending: true };
   }
@@ -287,11 +272,7 @@ export class NetworkedStorage extends IStorageStrategy {
 
     this.debug?.log('[NetworkedStorage] Resuming session');
 
-    this.socket.emit('gm:command', {
-      event: 'gm:command',
-      data: { action: 'session:resume', payload: {} },
-      timestamp: new Date().toISOString()
-    });
+    this._emitCommand('session:resume', {});
 
     return { success: true, pending: true };
   }
@@ -308,11 +289,7 @@ export class NetworkedStorage extends IStorageStrategy {
 
     this.debug?.log('[NetworkedStorage] Resetting all scores');
 
-    this.socket.emit('gm:command', {
-      event: 'gm:command',
-      data: { action: 'scores:reset', payload: {} },
-      timestamp: new Date().toISOString()
-    });
+    this._emitCommand('scores:reset', {});
 
     return { success: true, pending: true };
   }

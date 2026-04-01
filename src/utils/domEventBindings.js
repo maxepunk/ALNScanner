@@ -137,10 +137,8 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
         safeAdminAction(adminController.getModule('spotifyController').stop(), 'spotifyStop');
         break;
       case 'serviceCheck': {
-        // Routes through spotifyController.checkService() which sends generic 'service:check' command.
-        // Works for all services (vlc, lighting, etc.) — spotifyController is just the host module.
         const serviceId = actionElement.getAttribute('data-service-id');
-        safeAdminAction(adminController.getModule('spotifyController').checkService(serviceId), 'serviceCheck');
+        safeAdminAction(adminController.getModule('adminOperations').checkService(serviceId), 'serviceCheck');
         break;
       }
       case 'spotifySetVolume': {

@@ -48,7 +48,7 @@ class App {
     this.sessionModeManager = dependencies.sessionModeManager || null;
     this.networkedSession = dependencies.networkedSession || null;
 
-    // Global reference for HTML onclick handlers (temporary until Phase 6)
+    // Global reference for HTML onclick handlers (temporary until domEventBindings migration)
     this.showConnectionWizard = dependencies.showConnectionWizard || (typeof window !== 'undefined' ? window.showConnectionWizard : null);
 
     // Instance state
@@ -101,7 +101,7 @@ class App {
     // Register service worker for PWA functionality (Phase 1J)
     await this.initializationSteps.registerServiceWorker(navigator, this.uiManager);
 
-    // Connection restoration logic with full state validation (Phase 1C + Phase 4.1)
+    // Connection restoration logic with full state validation (Phase 1C)
     // Use validateAndDetermineInitialScreen for networked mode validation:
     // - Validates JWT token expiration
     // - Validates orchestrator reachability
@@ -175,7 +175,7 @@ class App {
 
       init() {
         // Show view selector tabs in BOTH networked and standalone modes
-        // Phase 3: Admin panel is now available in standalone mode
+        // Admin panel is now available in standalone mode
         const viewSelector = document.getElementById('viewSelector');
         if (viewSelector) {
           viewSelector.style.display = 'flex';
@@ -421,7 +421,7 @@ class App {
         this.sessionModeManager.setMode(mode);
         this.debug.log(`Game mode locked: ${mode}`);
 
-        // Phase 3: Add body class for CSS-based feature hiding
+        // Add body class for CSS-based feature hiding
         document.body.classList.add('standalone-mode');
         document.body.classList.remove('networked-mode');
 
@@ -435,10 +435,10 @@ class App {
 
         this.debug.log('UnifiedDataManager initialized for standalone mode');
 
-        // Phase 3: Initialize view controller (shows admin tabs in standalone mode too)
+        // Initialize view controller (shows admin tabs in standalone mode too)
         this.viewController.init();
 
-        // Phase 3: Initialize admin session display in standalone mode
+        // Initialize admin session display in standalone mode
         const sessionContainer = document.getElementById('session-status-container');
         if (sessionContainer) {
           this.uiManager.renderSessionStatus(sessionContainer);
@@ -468,7 +468,7 @@ class App {
    * @private
    */
   async _initializeNetworkedMode() {
-    // Phase 3: Add body class for CSS-based feature display
+    // Add body class for CSS-based feature display
     document.body.classList.add('networked-mode');
     document.body.classList.remove('standalone-mode');
 
@@ -1155,7 +1155,7 @@ class App {
   }
 
   async adminViewSessionDetails() {
-    const session = this.viewController.adminInstances?.sessionManager?.currentSession;
+    const session = this.dataManager.getSessionData();
 
     if (!session) {
       alert('No session data available');
@@ -1512,7 +1512,7 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
     }
   }
 
-  // ========== Admin Display Control (Phase 4.2) ==========
+  // ========== Admin Display Control ==========
 
   async _adminDisplayAction(action, label) {
     if (!this.sessionModeManager?.isNetworked()) {

@@ -43,7 +43,6 @@ class DebugLogger {
     if (content) {
       content.textContent = this.messages.join('\n');
       // Auto-scroll to bottom if debug view is active
-      // TODO: Remove app parameter once App is converted to ES6
       if (app?.viewController?.currentView === 'debug') {
         content.scrollTop = content.scrollHeight;
       }
@@ -55,7 +54,6 @@ class DebugLogger {
    * @param {Object} app - App instance (for viewController access)
    */
   toggle(app = null) {
-    // TODO: Remove app parameter once App is converted to ES6
     if (app?.viewController) {
       if (app.viewController.currentView === 'debug') {
         app.viewController.switchView('scanner');

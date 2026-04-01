@@ -46,8 +46,8 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     const currentTeam = await scanner.getCurrentTeam();
     expect(currentTeam).toBe('123');
 
-    // Perform manual scan (using real token 'rat002')
-    await scanner.manualScan('rat002');
+    // Perform manual scan (using real token from data/tokens.json)
+    await scanner.manualScan('ale001');
 
     // Verify result screen appears
     await expect(scanner.resultScreen).toBeVisible();
@@ -65,8 +65,8 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     await scanner.enterTeam('456');
     await scanner.confirmTeam();
 
-    // First scan should succeed (using real token 'alr001')
-    await scanner.manualScan('alr001');
+    // First scan should succeed
+    await scanner.manualScan('ale002');
     await expect(scanner.resultScreen).toBeVisible();
     const firstResult = await scanner.getResultStatus();
     expect(firstResult.toLowerCase()).toMatch(/complete|success/);
@@ -74,7 +74,7 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     await scanner.continueScan();
 
     // Second scan of SAME token should show duplicate error
-    await scanner.manualScan('alr001');
+    await scanner.manualScan('ale002');
     await expect(scanner.resultScreen).toBeVisible();
     const duplicateResult = await scanner.getResultStatus();
     expect(duplicateResult.toLowerCase()).toContain('already');  // "Token Already Scanned"
@@ -90,7 +90,7 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     expect(currentTeam).toBe('789');
 
     // Scan first token
-    await scanner.manualScan('alr002');
+    await scanner.manualScan('ale003');
     await scanner.continueScan();
 
     // Team should still be 789
@@ -98,7 +98,7 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     expect(currentTeam).toBe('789');
 
     // Scan second token
-    await scanner.manualScan('asm031');
+    await scanner.manualScan('ale004');
     await scanner.continueScan();
 
     // Team should STILL be 789
@@ -116,14 +116,14 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     expect(badgeCount === null || badgeCount === 0).toBe(true);
 
     // Scan first token
-    await scanner.manualScan('asm042');
+    await scanner.manualScan('ash001');
     await scanner.continueScan();
 
     // Badge should now show 1 (use Playwright auto-retry for async badge update)
     await expect(scanner.historyBadge).toHaveText('1', { timeout: 5000 });
 
     // Scan second token
-    await scanner.manualScan('det001');
+    await scanner.manualScan('ash002');
     await scanner.continueScan();
 
     // Badge should now show 2
@@ -136,13 +136,13 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     await scanner.confirmTeam();
 
     // Scan 3 tokens
-    await scanner.manualScan('det002');
+    await scanner.manualScan('ash003');
     await scanner.continueScan();
 
-    await scanner.manualScan('din002');
+    await scanner.manualScan('ash004');
     await scanner.continueScan();
 
-    await scanner.manualScan('din021');
+    await scanner.manualScan('cas001');
     await scanner.continueScan();
 
     // Open history
@@ -208,7 +208,7 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     await scanner.confirmTeam();
 
     // Scan a token
-    await scanner.manualScan('fli002');
+    await scanner.manualScan('cas002');
     await expect(scanner.resultScreen).toBeVisible();
 
     // Finish team
@@ -249,7 +249,7 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     expect(tokenCount).toBe(0);
 
     // Scan first token
-    await scanner.manualScan('fli031');
+    await scanner.manualScan('cas003');
     await scanner.continueScan();
 
     // Count should be 1
@@ -257,7 +257,7 @@ test.describe('L2: Standalone Mode - Complete User Journeys', () => {
     expect(tokenCount).toBe(1);
 
     // Scan second token
-    await scanner.manualScan('hos002');
+    await scanner.manualScan('cas004');
     await scanner.continueScan();
 
     // Count should be 2

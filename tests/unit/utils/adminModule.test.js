@@ -37,43 +37,6 @@ describe('AdminModule - ES6 Exports', () => {
   });
 
   describe('SessionManager', () => {
-    it('should initialize with null session', () => {
-      const manager = new SessionManager(mockConnection);
-      expect(manager.currentSession).toBeNull();
-    });
-
-    it('should update currentSession from session:update events', () => {
-      const manager = new SessionManager(mockConnection);
-      const sessionData = { name: 'Test Session', status: 'active' };
-
-      // Simulate broadcast event using EventTarget API
-      mockConnection.dispatchEvent(new CustomEvent('message:received', {
-        detail: {
-          type: 'session:update',
-          payload: sessionData
-        }
-      }));
-
-      // Verify REAL behavior: state updated
-      expect(manager.currentSession).toEqual(sessionData);
-    });
-
-    it('should update currentSession from sync:full events', () => {
-      const manager = new SessionManager(mockConnection);
-      const syncData = { session: { name: 'Synced Session' } };
-
-      // Simulate sync:full event using EventTarget API
-      mockConnection.dispatchEvent(new CustomEvent('message:received', {
-        detail: {
-          type: 'sync:full',
-          payload: syncData
-        }
-      }));
-
-      // Verify REAL behavior: state updated
-      expect(manager.currentSession).toEqual(syncData.session);
-    });
-
     describe('createSession', () => {
       it('should resolve when acknowledgment indicates success', async () => {
         const manager = new SessionManager(mockConnection);
@@ -126,18 +89,8 @@ describe('AdminModule - ES6 Exports', () => {
     });
 
     describe('pauseSession', () => {
-      it('should return early if no current session', async () => {
-        const manager = new SessionManager(mockConnection);
-        manager.currentSession = null;
-
-        const result = await manager.pauseSession();
-        expect(result).toBeUndefined();
-        expect(mockConnection.send).not.toHaveBeenCalled();
-      });
-
       it('should resolve when pause succeeds', async () => {
         const manager = new SessionManager(mockConnection);
-        manager.currentSession = { name: 'Active' };
 
         setTimeout(() => {
           mockConnection.dispatchEvent(
@@ -157,12 +110,6 @@ describe('AdminModule - ES6 Exports', () => {
   });
 
   describe('VideoController', () => {
-    it('should initialize with null video and zero queue', () => {
-      const controller = new VideoController(mockConnection);
-      expect(controller.currentVideo).toBeNull();
-      expect(controller.queueLength).toBe(0);
-    });
-
     describe('playVideo', () => {
       it('should resolve when command succeeds', async () => {
         const controller = new VideoController(mockConnection);
