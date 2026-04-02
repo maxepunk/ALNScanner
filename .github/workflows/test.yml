@@ -30,6 +30,9 @@ jobs:
       - name: Run unit tests with coverage
         run: npm test -- --coverage --maxWorkers=2
 
+      - name: Check coverage ratchet
+        run: npm run coverage:check
+
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
         if: always()
