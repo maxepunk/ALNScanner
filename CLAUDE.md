@@ -165,7 +165,7 @@ The scanner uses a 3-tier testing strategy:
 - **Purpose**: Verify individual components work correctly in isolation
 - **Run**: `npm test`
 - **Duration**: ~15-30s
-- **Coverage**: 1116 tests across 54 suites (app, core, network, ui, utils)
+- **Coverage**: 1116 tests across 57 suites (admin, app, core, network, ui, utils)
 
 **L2: Scanner E2E Tests (No Orchestrator)**
 - **Location**: `tests/e2e/specs/`
@@ -191,6 +191,7 @@ The scanner uses a 3-tier testing strategy:
 ALNScanner/
 ├── tests/
 │   ├── unit/                       # L1: Jest unit tests
+│   │   ├── admin/                  # Admin panel (SessionManager, controllers, MonitoringDisplay)
 │   │   ├── app/                    # App layer (app.js, SessionModeManager, etc.)
 │   │   ├── core/                   # Business logic (UnifiedDataManager, TokenManager, Storage)
 │   │   ├── network/                # WebSocket layer (OrchestratorClient, etc.)
