@@ -2,7 +2,7 @@ name: Test & Build
 
 on:
   push:
-    branches: [main, pr-4-review, pr-5-review]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
