@@ -43,8 +43,7 @@ export class SessionReportGenerator {
       '',
       this._buildSessionSummary(session, scores, transactions, playerScans),
       this._buildDetectiveSection(transactions),
-      this._buildBlackMarketSection(transactions),
-      this._buildAdminAdjustmentsSection(scores),
+      this._buildScoringTimeline(transactions, scores),
       this._buildPlayerActivitySection(playerScans, transactions),
     ];
 
@@ -133,60 +132,113 @@ export class SessionReportGenerator {
   }
 
   /**
-   * Build the black market transactions section.
+   * Build a unified scoring timeline merging black market sales and admin adjustments.
    */
-  _buildBlackMarketSection(transactions) {
-    const blackmarket = transactions
+  _buildScoringTimeline(transactions, scores) {
+    const sales = transactions
       .filter(tx => tx.status === 'accepted' && tx.mode === 'blackmarket')
+      .map(tx => ({
+        timestamp: tx.timestamp,
+        type: 'Sale',
+        detail: this._formatSaleDetail(tx),
+        team: tx.teamId,
+        amount: tx.points,
+        isSale: true
+      }));
+
+    const adjustments = (scores || [])
+      .filter(s => s.adminAdjustments?.length > 0)
+      .flatMap(s => s.adminAdjustments.map(adj => ({
+        timestamp: adj.timestamp,
+        type: 'Adjustment',
+        detail: this._formatAdjustmentDetail(adj),
+        team: s.teamId,
+        amount: adj.delta,
+        isSale: false
+      })));
+
+    const timeline = [...sales, ...adjustments]
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
     const lines = [
-      '## Black Market Transactions',
+      '## Scoring Timeline',
       '',
     ];
 
-    if (blackmarket.length === 0) {
-      lines.push('*No black market transactions this session.*');
+    if (timeline.length === 0) {
+      lines.push('*No scoring events this session.*');
       lines.push('');
       lines.push('---');
       lines.push('');
       return lines.join('\n');
     }
 
-    lines.push('| Token | Owner | Buried By | Points | Rating | Type | Breakdown |');
-    lines.push('|-------|-------|-----------|--------|--------|------|-----------|');
+    lines.push('| Time | Type | Detail | Team | Amount |');
+    lines.push('|------|------|--------|------|--------|');
 
-    for (const tx of blackmarket) {
-      const owner = this._getTokenOwner(tx.tokenId);
-      const rating = tx.valueRating || 0;
-      const type = tx.memoryType || 'UNKNOWN';
-      const baseValue = SCORING_CONFIG.BASE_VALUES[rating] || 0;
-      const multiplier = SCORING_CONFIG.TYPE_MULTIPLIERS[type]
-        ?? SCORING_CONFIG.TYPE_MULTIPLIERS.UNKNOWN ?? 0;
-      const breakdown = `${this._formatCurrency(baseValue)} × ${multiplier}x`;
-      lines.push(
-        `| ${tx.tokenId} | ${owner} | ${tx.teamId} | ${this._formatCurrency(tx.points)} | ${rating}★ | ${type} | ${breakdown} |`
-      );
+    for (const event of timeline) {
+      const time = this._formatTimestamp(event.timestamp);
+      const amount = this._formatSignedCurrency(event.amount);
+      lines.push(`| ${time} | ${event.type} | ${event.detail} | ${event.team} | ${amount} |`);
     }
 
-    // Per-team subtotals
-    const teamTotals = {};
-    for (const tx of blackmarket) {
-      teamTotals[tx.teamId] = (teamTotals[tx.teamId] || 0) + tx.points;
+    // Final Totals with breakdown
+    const salesTotals = {};
+    const adjustmentTotals = {};
+    for (const event of timeline) {
+      if (event.isSale) {
+        salesTotals[event.team] = (salesTotals[event.team] || 0) + event.amount;
+      } else {
+        adjustmentTotals[event.team] = (adjustmentTotals[event.team] || 0) + event.amount;
+      }
     }
 
+    const allTeams = new Set([...Object.keys(salesTotals), ...Object.keys(adjustmentTotals)]);
+    const teamFinals = [...allTeams].map(team => {
+      const salesTotal = salesTotals[team] || 0;
+      const adjTotal = adjustmentTotals[team] || 0;
+      return { team, salesTotal, adjTotal, final: salesTotal + adjTotal };
+    }).sort((a, b) => b.final - a.final);
+
     lines.push('');
-    lines.push('### Team Subtotals');
+    lines.push('### Final Totals');
     lines.push('');
-    const sortedTeams = Object.entries(teamTotals).sort((a, b) => b[1] - a[1]);
-    for (const [teamId, total] of sortedTeams) {
-      lines.push(`- **${teamId}:** ${this._formatCurrency(total)}`);
+    for (const t of teamFinals) {
+      const adjSign = t.adjTotal >= 0 ? '+' : '-';
+      const adjAbs = Math.abs(t.adjTotal);
+      const finalDisplay = t.final >= 0
+        ? this._formatCurrency(t.final)
+        : `-${this._formatCurrency(Math.abs(t.final))}`;
+      lines.push(`- **${t.team}:** ${finalDisplay} (${this._formatCurrency(t.salesTotal)} sales ${adjSign} ${this._formatCurrency(adjAbs)} adjustments)`);
     }
 
     lines.push('');
     lines.push('---');
     lines.push('');
     return lines.join('\n');
+  }
+
+  /**
+   * Format sale detail with parenthetical scoring breakdown.
+   */
+  _formatSaleDetail(tx) {
+    const owner = this._getTokenOwner(tx.tokenId);
+    const rating = tx.valueRating || 0;
+    const type = tx.memoryType || 'UNKNOWN';
+    const baseValue = SCORING_CONFIG.BASE_VALUES[rating] || 0;
+    const multiplier = SCORING_CONFIG.TYPE_MULTIPLIERS[type]
+      ?? SCORING_CONFIG.TYPE_MULTIPLIERS.UNKNOWN ?? 0;
+    return `${tx.tokenId}/${owner} (${rating}★ ${type}, ${this._formatCurrency(baseValue)} × ${multiplier}x)`
+      .replace(/\|/g, '\\|');
+  }
+
+  /**
+   * Format adjustment detail with reason and GM station.
+   */
+  _formatAdjustmentDetail(adj) {
+    const reason = (adj.reason || '—').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+    const station = adj.gmStation;
+    return station ? `${reason} (${station})` : reason;
   }
 
   /**
@@ -272,58 +324,6 @@ export class SessionReportGenerator {
     return lines.join('\n');
   }
 
-  /**
-   * Build the admin adjustments section.
-   */
-  _buildAdminAdjustmentsSection(scores) {
-    const allAdjustments = scores
-      .filter(s => s.adminAdjustments?.length > 0)
-      .flatMap(s => s.adminAdjustments.map(adj => ({ ...adj, teamId: s.teamId })))
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-    const lines = [
-      '## Admin Adjustments',
-      '',
-    ];
-
-    if (allAdjustments.length === 0) {
-      lines.push('*No admin adjustments this session.*');
-      lines.push('');
-      lines.push('---');
-      lines.push('');
-      return lines.join('\n');
-    }
-
-    lines.push('| Team | Amount | Reason | GM Station | Time |');
-    lines.push('|------|--------|--------|------------|------|');
-
-    for (const adj of allAdjustments) {
-      const sign = adj.delta >= 0 ? '+' : '';
-      const reason = (adj.reason || '—').replace(/\|/g, '\\|').replace(/\n/g, ' ');
-      const time = this._formatTimestamp(adj.timestamp);
-      lines.push(`| ${adj.teamId} | ${sign}${this._formatCurrency(adj.delta)} | ${reason} | ${adj.gmStation || '—'} | ${time} |`);
-    }
-
-    // Per-team adjustment totals
-    const teamTotals = {};
-    for (const adj of allAdjustments) {
-      teamTotals[adj.teamId] = (teamTotals[adj.teamId] || 0) + adj.delta;
-    }
-
-    lines.push('');
-    lines.push('### Adjustment Totals');
-    lines.push('');
-    for (const [teamId, total] of Object.entries(teamTotals).sort((a, b) => b[1] - a[1])) {
-      const sign = total >= 0 ? '+' : '';
-      lines.push(`- **${teamId}:** ${sign}${this._formatCurrency(total)}`);
-    }
-
-    lines.push('');
-    lines.push('---');
-    lines.push('');
-    return lines.join('\n');
-  }
-
   // --- Utility methods ---
 
   /**
@@ -343,6 +343,17 @@ export class SessionReportGenerator {
    */
   _formatCurrency(amount) {
     return '$' + (amount ?? 0).toLocaleString('en-US');
+  }
+
+  /**
+   * Format a number as signed currency (+$50,000 or -$25,000).
+   * @param {number} amount
+   * @returns {string}
+   */
+  _formatSignedCurrency(amount) {
+    const val = amount ?? 0;
+    if (val >= 0) return `+${this._formatCurrency(val)}`;
+    return `-${this._formatCurrency(Math.abs(val))}`;
   }
 
   /**

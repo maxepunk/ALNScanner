@@ -51,6 +51,21 @@ const mockScores = [
   { teamId: 'Shadow Corp', score: 150000 }
 ];
 
+const mockScoresWithAdjustments = [
+  {
+    teamId: 'Whitemetal Inc.', score: 125000,
+    adminAdjustments: [
+      { delta: 50000, reason: 'Puzzle bonus', timestamp: '2026-02-16T20:15:00.000Z', gmStation: 'GM_STATION_1' }
+    ]
+  },
+  {
+    teamId: 'Shadow Corp', score: 725000,
+    adminAdjustments: [
+      { delta: -25000, reason: 'Penalty for rule violation', timestamp: '2026-02-16T20:30:00.000Z', gmStation: 'GM_STATION_2' }
+    ]
+  }
+];
+
 const mockTransactions = [
   {
     id: 'tx-1',
@@ -231,43 +246,104 @@ describe('SessionReportGenerator', () => {
     });
   });
 
-  describe('_buildBlackMarketSection()', () => {
-    it('should only include blackmarket mode transactions', () => {
-      const section = generator._buildBlackMarketSection(mockTransactions);
+  describe('_buildScoringTimeline()', () => {
+    it('should include both sale and adjustment rows', () => {
+      const section = generator._buildScoringTimeline(mockTransactions, mockScoresWithAdjustments);
+      expect(section).toContain('Sale');
+      expect(section).toContain('Adjustment');
+    });
+
+    it('should only include blackmarket transactions as sales', () => {
+      const section = generator._buildScoringTimeline(mockTransactions, mockScores);
       expect(section).toContain('mab001');
       expect(section).toContain('alr001');
       expect(section).not.toContain('sof001');
     });
 
-    it('should use Buried By as the team column header', () => {
-      const section = generator._buildBlackMarketSection(mockTransactions);
-      expect(section).toContain('Buried By');
+    it('should show sales with owner and parenthetical breakdown', () => {
+      const section = generator._buildScoringTimeline(mockTransactions, mockScores);
+      // mab001 owned by MARCUS: 5★ Technical, $150,000 × 5x
+      expect(section).toContain('mab001/MARCUS');
+      expect(section).toContain('5★ Technical');
+      expect(section).toContain('$150,000 × 5x');
+      // alr001 owned by ALEX
+      expect(section).toContain('alr001/ALEX');
     });
 
-    it('should include scoring breakdown', () => {
-      const section = generator._buildBlackMarketSection(mockTransactions);
-      // mab001: rating 5 Technical = $150,000 × 5x = $750,000
-      expect(section).toContain('$750,000');
-      expect(section).toContain('Technical');
+    it('should show adjustment reason with GM station', () => {
+      const section = generator._buildScoringTimeline(mockTransactions, mockScoresWithAdjustments);
+      expect(section).toContain('Puzzle bonus (GM_STATION_1)');
+      expect(section).toContain('Penalty for rule violation (GM_STATION_2)');
     });
 
-    it('should include Owner column from token database', () => {
-      const section = generator._buildBlackMarketSection(mockTransactions);
-      expect(section).toContain('MARCUS');
-      expect(section).toContain('ALEX');
+    it('should display timestamps for all events', () => {
+      const section = generator._buildScoringTimeline(mockTransactions, mockScoresWithAdjustments);
+      // Should not have empty time cells (—) since all events have timestamps
+      const rows = section.split('\n').filter(l => l.startsWith('|') && !l.startsWith('|---'));
+      const dataRows = rows.slice(1); // skip header
+      for (const row of dataRows) {
+        const timeCell = row.split('|')[1].trim();
+        expect(timeCell).not.toBe('—');
+      }
     });
 
-    it('should include per-team subtotals', () => {
-      const section = generator._buildBlackMarketSection(mockTransactions);
-      expect(section).toContain('Shadow Corp');
-      expect(section).toContain('Whitemetal Inc.');
+    it('should sort events chronologically', () => {
+      const section = generator._buildScoringTimeline(mockTransactions, mockScoresWithAdjustments);
+      // mab001 (19:45) < alr001 (20:00) < Puzzle bonus (20:15) < Penalty (20:30)
+      const mabIdx = section.indexOf('mab001');
+      const alrIdx = section.indexOf('alr001');
+      const puzzleIdx = section.indexOf('Puzzle bonus');
+      const penaltyIdx = section.indexOf('Penalty');
+      expect(mabIdx).toBeLessThan(alrIdx);
+      expect(alrIdx).toBeLessThan(puzzleIdx);
+      expect(puzzleIdx).toBeLessThan(penaltyIdx);
     });
 
-    it('should return a note when no blackmarket transactions exist', () => {
-      const section = generator._buildBlackMarketSection([
-        { ...mockTransactions[0] } // detective only
-      ]);
-      expect(section).toContain('No black market transactions');
+    it('should format sale amounts with positive sign', () => {
+      const section = generator._buildScoringTimeline(mockTransactions, mockScores);
+      expect(section).toContain('+$750,000');
+      expect(section).toContain('+$75,000');
+    });
+
+    it('should format adjustment amounts with correct sign', () => {
+      const section = generator._buildScoringTimeline([], mockScoresWithAdjustments);
+      expect(section).toContain('+$50,000');
+      expect(section).toContain('-$25,000');
+      // Final Totals should show $0 sales for adjustments-only teams
+      expect(section).toContain('$0 sales');
+    });
+
+    it('should include Final Totals with breakdown', () => {
+      const section = generator._buildScoringTimeline(mockTransactions, mockScoresWithAdjustments);
+      expect(section).toContain('### Final Totals');
+      expect(section).toContain('sales');
+      expect(section).toContain('adjustments');
+    });
+
+    it('should return empty message when no scoring events exist', () => {
+      const detectiveOnly = [{ ...mockTransactions[0] }]; // detective mode
+      const section = generator._buildScoringTimeline(detectiveOnly, mockScores);
+      expect(section).toContain('No scoring events');
+    });
+
+    it('should handle sales only with no adjustments', () => {
+      const section = generator._buildScoringTimeline(mockTransactions, mockScores);
+      expect(section).toContain('Sale');
+      expect(section).not.toContain('Adjustment');
+      expect(section).toContain('### Final Totals');
+      // Should show $0 adjustments
+      expect(section).toContain('$0 adjustments');
+    });
+
+    it('should escape pipe characters in adjustment reason', () => {
+      const scoresWithPipe = [{
+        teamId: 'Team A', score: 100,
+        adminAdjustments: [
+          { delta: 100, reason: 'Reason | with pipe', timestamp: '2026-02-16T20:00:00.000Z', gmStation: 'GM1' }
+        ]
+      }];
+      const section = generator._buildScoringTimeline([], scoresWithPipe);
+      expect(section).toContain('Reason \\| with pipe');
     });
   });
 
@@ -317,6 +393,25 @@ describe('SessionReportGenerator', () => {
       expect(generator._formatCurrency(750000)).toBe('$750,000');
       expect(generator._formatCurrency(10000)).toBe('$10,000');
       expect(generator._formatCurrency(0)).toBe('$0');
+    });
+  });
+
+  describe('_formatSignedCurrency()', () => {
+    it('should format positive amounts with + sign', () => {
+      expect(generator._formatSignedCurrency(50000)).toBe('+$50,000');
+    });
+
+    it('should format negative amounts with - sign before $', () => {
+      expect(generator._formatSignedCurrency(-25000)).toBe('-$25,000');
+    });
+
+    it('should format zero as +$0', () => {
+      expect(generator._formatSignedCurrency(0)).toBe('+$0');
+    });
+
+    it('should handle null/undefined as +$0', () => {
+      expect(generator._formatSignedCurrency(null)).toBe('+$0');
+      expect(generator._formatSignedCurrency(undefined)).toBe('+$0');
     });
   });
 
