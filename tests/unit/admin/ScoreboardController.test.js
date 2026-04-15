@@ -51,29 +51,16 @@ describe('ScoreboardController', () => {
   });
 
   describe('jumpToOwner', () => {
-    it('sends scoreboard:page:owner with trimmed owner', async () => {
-      await controller.jumpToOwner('  Alex Reeves  ');
+    // Input validation lives on the backend (commandExecutor trims and
+    // rejects empty owner via gm:command:ack). Client-side we match the
+    // sibling-controller convention and just send the command.
+    it('sends scoreboard:page:owner with the owner payload', async () => {
+      await controller.jumpToOwner('Alex Reeves');
       expect(sendCommand).toHaveBeenCalledWith(
         mockConnection,
         'scoreboard:page:owner',
         { owner: 'Alex Reeves' }
       );
-    });
-
-    it('rejects when owner is empty', async () => {
-      await expect(controller.jumpToOwner('')).rejects.toThrow(/owner is required/);
-      expect(sendCommand).not.toHaveBeenCalled();
-    });
-
-    it('rejects when owner is whitespace-only', async () => {
-      await expect(controller.jumpToOwner('   ')).rejects.toThrow(/owner is required/);
-      expect(sendCommand).not.toHaveBeenCalled();
-    });
-
-    it('rejects when owner is not a string', async () => {
-      await expect(controller.jumpToOwner(null)).rejects.toThrow(/owner is required/);
-      await expect(controller.jumpToOwner(undefined)).rejects.toThrow(/owner is required/);
-      expect(sendCommand).not.toHaveBeenCalled();
     });
   });
 

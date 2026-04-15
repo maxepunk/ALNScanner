@@ -20,9 +20,6 @@ export class EvidencePickerRenderer {
     this.nextBtn = elements.nextBtn || document.getElementById('scoreboard-next-btn');
     this.jumpBtn = elements.jumpBtn || document.getElementById('scoreboard-jump-btn');
     this.dropdown = elements.dropdown || document.getElementById('scoreboard-owner-dropdown');
-
-    // Track last-rendered owner list to avoid destroying a user's in-progress
-    // dropdown selection on unrelated updates.
     this._lastOwners = null;
   }
 
@@ -45,12 +42,13 @@ export class EvidencePickerRenderer {
     if (this.jumpBtn) this.jumpBtn.disabled = !hasEvidence;
     if (this.dropdown) this.dropdown.disabled = !hasEvidence;
 
-    // Skip dropdown DOM rebuild if the owner list is unchanged.
-    if (this._ownersEqual(this._lastOwners, list)) return;
+    // Skip dropdown DOM rebuild if the owner list is unchanged
+    // (preserves an in-progress user selection on unrelated updates).
+    const prev = this._lastOwners;
+    if (prev && prev.length === list.length && prev.every((v, i) => v === list[i])) return;
     this._lastOwners = list.slice();
 
     if (this.dropdown) {
-      // Preserve current selection if the owner is still present.
       const prevValue = this.dropdown.value;
       const options = ['<option value="">Jump to character…</option>']
         .concat(list.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`));
@@ -59,15 +57,6 @@ export class EvidencePickerRenderer {
         this.dropdown.value = prevValue;
       }
     }
-  }
-
-  _ownersEqual(a, b) {
-    if (!a || !b) return false;
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (a[i] !== b[i]) return false;
-    }
-    return true;
   }
 }
 

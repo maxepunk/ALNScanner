@@ -419,9 +419,12 @@ describe('UnifiedDataManager', () => {
     });
 
     it('returns alphabetical unique owners from detective transactions', async () => {
+      // tokenManager.findToken returns { token, matchedId } — mirror that shape
       mockTokenManager.findToken = jest.fn(tokenId => {
         const owners = { t1: 'Alex Reeves', t2: 'Ashley White', t3: 'Alex Reeves', t4: 'Marcus Black' };
-        return owners[tokenId] ? { owner: owners[tokenId], SF_RFID: tokenId, SF_ValueRating: 3, SF_MemoryType: 'Personal' } : null;
+        return owners[tokenId]
+          ? { token: { owner: owners[tokenId], SF_RFID: tokenId, SF_ValueRating: 3, SF_MemoryType: 'Personal' }, matchedId: tokenId }
+          : null;
       });
       await manager.addTransaction({ tokenId: 't1', teamId: 'A', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
       await manager.addTransaction({ tokenId: 't2', teamId: 'B', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
@@ -433,8 +436,11 @@ describe('UnifiedDataManager', () => {
 
     it('excludes black-market (non-detective) transactions', async () => {
       mockTokenManager.findToken = jest.fn(tokenId => ({
-        owner: tokenId === 'bm1' ? 'BM Owner' : 'Detective Owner',
-        SF_RFID: tokenId, SF_ValueRating: 3, SF_MemoryType: 'Personal'
+        token: {
+          owner: tokenId === 'bm1' ? 'BM Owner' : 'Detective Owner',
+          SF_RFID: tokenId, SF_ValueRating: 3, SF_MemoryType: 'Personal'
+        },
+        matchedId: tokenId
       }));
       await manager.addTransaction({ tokenId: 'bm1', teamId: 'A', mode: 'blackmarket', valueRating: 3, memoryType: 'Personal', points: 10000, timestamp: new Date().toISOString() });
       await manager.addTransaction({ tokenId: 'det1', teamId: 'B', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
@@ -450,7 +456,7 @@ describe('UnifiedDataManager', () => {
           { tokenId: 'x', mode: 'detective', status: 'accepted', owner: 'From Backend' }
         ])
       };
-      mockTokenManager.findToken = jest.fn(() => ({ owner: 'From Token DB' }));
+      mockTokenManager.findToken = jest.fn(() => ({ token: { owner: 'From Token DB' }, matchedId: 'x' }));
       expect(manager.getExposedOwners()).toEqual(['From Backend']);
     });
 
@@ -458,7 +464,7 @@ describe('UnifiedDataManager', () => {
       manager._activeStrategy = {
         getTransactions: () => ([{ tokenId: 'x', mode: 'detective', status: 'accepted' }])
       };
-      mockTokenManager.findToken = jest.fn(() => ({ owner: 'Resolved From DB' }));
+      mockTokenManager.findToken = jest.fn(() => ({ token: { owner: 'Resolved From DB' }, matchedId: 'x' }));
       expect(manager.getExposedOwners()).toEqual(['Resolved From DB']);
     });
 

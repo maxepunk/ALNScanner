@@ -1042,3 +1042,34 @@ body.standalone-mode [data-requires="networked"] {
 /* Toggle text visibility based on expand state */
 .token-card__timeline[data-expanded="false"] ~ .timeline-toggle .collapse-text { display: none; }
 .token-card__timeline[data-expanded="true"] ~ .timeline-toggle .expand-text { display: none; }
+
+/* ============================================================================
+ * Scoreboard Evidence Navigation (admin panel, networked mode only)
+ * Prev / Next page scroll + alphabetical character jump dropdown.
+ * ============================================================================ */
+.scoreboard-evidence-hint {
+  margin: 0 0 var(--space-3) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.scoreboard-evidence-nav,
+.scoreboard-evidence-jump {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.scoreboard-evidence-jump {
+  margin-bottom: 0;
+}
+
+.scoreboard-evidence-jump select {
+  flex: 1;
+  padding: var(--space-2);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}

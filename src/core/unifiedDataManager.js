@@ -287,15 +287,14 @@ export class UnifiedDataManager extends EventTarget {
     const owners = new Set();
     for (const tx of transactions) {
       if (!tx || tx.mode !== 'detective') continue;
-      // `status` is populated for accepted transactions; older/in-flight
-      // records may lack it — fall back to including the transaction.
       if (tx.status && tx.status !== 'accepted') continue;
       // Prefer backend-resolved owner on the transaction; fall back to
-      // token lookup for locally-recorded transactions that don't carry it.
+      // the token database for locally-recorded transactions.
+      // NOTE: findToken() returns { token, matchedId }, not the token itself.
       let owner = typeof tx.owner === 'string' ? tx.owner : null;
       if (!owner && this.tokenManager?.findToken && tx.tokenId) {
-        const token = this.tokenManager.findToken(tx.tokenId);
-        owner = token?.owner || null;
+        const match = this.tokenManager.findToken(tx.tokenId);
+        owner = match?.token?.owner || null;
       }
       if (owner) owners.add(owner);
     }

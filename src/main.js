@@ -114,27 +114,18 @@ const refreshAdminGameActivity = () => {
   if (container) UIManager.renderGameActivity(container, { showSummary: true, showFilters: true });
 };
 
-// Lazily-constructed renderer for the Scoreboard Evidence admin panel picker.
-// Built on first render attempt (DOM may not be present until admin view loads).
+// Scoreboard Evidence picker (networked mode only — admin section is hidden
+// in standalone via `data-requires="networked"`). Constructed lazily on first
+// refresh; in standalone mode the short-circuit skips both construction and
+// the per-transaction getExposedOwners() pass.
 let _evidencePickerRenderer = null;
-const getEvidencePickerRenderer = () => {
+const refreshEvidencePicker = () => {
+  if (document.body.classList.contains('standalone-mode')) return;
   if (!_evidencePickerRenderer) {
-    if (!document.getElementById('scoreboard-evidence-section')) return null;
+    if (!document.getElementById('scoreboard-evidence-section')) return;
     _evidencePickerRenderer = new EvidencePickerRenderer();
   }
-  return _evidencePickerRenderer;
-};
-const refreshEvidencePicker = () => {
-  const renderer = getEvidencePickerRenderer();
-  if (!renderer) return;
-  // getExposedOwners() throws before a strategy is active; guard with try/catch.
-  let owners = [];
-  try {
-    owners = DataManager.getExposedOwners?.() || [];
-  } catch (_err) {
-    owners = [];
-  }
-  renderer.render(owners);
+  _evidencePickerRenderer.render(DataManager.getExposedOwners());
 };
 
 DataManager.addEventListener('transaction:added', () => {
