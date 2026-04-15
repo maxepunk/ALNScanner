@@ -25,6 +25,7 @@ import { LightingController } from '../admin/LightingController.js';
 import { CueController } from '../admin/CueController.js';
 import { SoundController } from '../admin/SoundController.js';
 import { SpotifyController } from '../admin/SpotifyController.js';
+import { ScoreboardController } from '../admin/ScoreboardController.js';
 
 export class AdminController extends EventTarget {
   constructor(client, dataManager, teamRegistry = null, store = null) {
@@ -61,7 +62,8 @@ export class AdminController extends EventTarget {
       lightingController: new LightingController(this.client),
       cueController: new CueController(this.client),
       soundController: new SoundController(this.client),
-      spotifyController: new SpotifyController(this.client)
+      spotifyController: new SpotifyController(this.client),
+      scoreboardController: new ScoreboardController(this.client)
     };
 
     this.initialized = true;

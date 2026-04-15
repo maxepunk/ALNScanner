@@ -396,4 +396,106 @@ describe('UnifiedDataManager', () => {
       expect(stats).toEqual({ count: 0, totalValue: 0, totalScore: 0 });
     });
   });
+
+  describe('getExposedOwners', () => {
+    beforeEach(async () => {
+      manager = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+      await manager.initializeStandaloneMode();
+    });
+
+    it('returns an empty array before a strategy is active', () => {
+      const fresh = new UnifiedDataManager({
+        tokenManager: mockTokenManager,
+        sessionModeManager: mockSessionModeManager
+      });
+      expect(fresh.getExposedOwners()).toEqual([]);
+    });
+
+    it('returns an empty array when no transactions exist', () => {
+      expect(manager.getExposedOwners()).toEqual([]);
+    });
+
+    it('returns alphabetical unique owners from detective transactions', async () => {
+      mockTokenManager.findToken = jest.fn(tokenId => {
+        const owners = { t1: 'Alex Reeves', t2: 'Ashley White', t3: 'Alex Reeves', t4: 'Marcus Black' };
+        return owners[tokenId] ? { owner: owners[tokenId], SF_RFID: tokenId, SF_ValueRating: 3, SF_MemoryType: 'Personal' } : null;
+      });
+      await manager.addTransaction({ tokenId: 't1', teamId: 'A', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
+      await manager.addTransaction({ tokenId: 't2', teamId: 'B', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
+      await manager.addTransaction({ tokenId: 't3', teamId: 'C', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
+      await manager.addTransaction({ tokenId: 't4', teamId: 'D', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
+
+      expect(manager.getExposedOwners()).toEqual(['Alex Reeves', 'Ashley White', 'Marcus Black']);
+    });
+
+    it('excludes black-market (non-detective) transactions', async () => {
+      mockTokenManager.findToken = jest.fn(tokenId => ({
+        owner: tokenId === 'bm1' ? 'BM Owner' : 'Detective Owner',
+        SF_RFID: tokenId, SF_ValueRating: 3, SF_MemoryType: 'Personal'
+      }));
+      await manager.addTransaction({ tokenId: 'bm1', teamId: 'A', mode: 'blackmarket', valueRating: 3, memoryType: 'Personal', points: 10000, timestamp: new Date().toISOString() });
+      await manager.addTransaction({ tokenId: 'det1', teamId: 'B', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
+
+      const owners = manager.getExposedOwners();
+      expect(owners).toEqual(['Detective Owner']);
+      expect(owners).not.toContain('BM Owner');
+    });
+
+    it('prefers transaction.owner over token lookup when present', () => {
+      manager._activeStrategy = {
+        getTransactions: () => ([
+          { tokenId: 'x', mode: 'detective', status: 'accepted', owner: 'From Backend' }
+        ])
+      };
+      mockTokenManager.findToken = jest.fn(() => ({ owner: 'From Token DB' }));
+      expect(manager.getExposedOwners()).toEqual(['From Backend']);
+    });
+
+    it('falls back to token.owner when transaction has no owner field', () => {
+      manager._activeStrategy = {
+        getTransactions: () => ([{ tokenId: 'x', mode: 'detective', status: 'accepted' }])
+      };
+      mockTokenManager.findToken = jest.fn(() => ({ owner: 'Resolved From DB' }));
+      expect(manager.getExposedOwners()).toEqual(['Resolved From DB']);
+    });
+
+    it('excludes transactions whose token has no owner', () => {
+      manager._activeStrategy = {
+        getTransactions: () => ([
+          { tokenId: 'x', mode: 'detective', status: 'accepted' },
+          { tokenId: 'y', mode: 'detective', status: 'accepted', owner: 'Known' }
+        ])
+      };
+      mockTokenManager.findToken = jest.fn(() => null);
+      expect(manager.getExposedOwners()).toEqual(['Known']);
+    });
+
+    it('excludes rejected transactions when status is present', () => {
+      manager._activeStrategy = {
+        getTransactions: () => ([
+          { tokenId: 'x', mode: 'detective', status: 'rejected', owner: 'Rejected Owner' },
+          { tokenId: 'y', mode: 'detective', status: 'accepted', owner: 'Accepted Owner' }
+        ])
+      };
+      expect(manager.getExposedOwners()).toEqual(['Accepted Owner']);
+    });
+
+    it('sorts owners with locale comparison', () => {
+      manager._activeStrategy = {
+        getTransactions: () => ([
+          { tokenId: 'a', mode: 'detective', status: 'accepted', owner: 'Ørjan' },
+          { tokenId: 'b', mode: 'detective', status: 'accepted', owner: 'Alice' },
+          { tokenId: 'c', mode: 'detective', status: 'accepted', owner: 'Bob' }
+        ])
+      };
+      const owners = manager.getExposedOwners();
+      // Alice first alphabetically regardless of implementation of localeCompare
+      expect(owners[0]).toBe('Alice');
+      expect(owners).toContain('Bob');
+      expect(owners).toContain('Ørjan');
+    });
+  });
 });

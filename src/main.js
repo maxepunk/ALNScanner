@@ -32,6 +32,7 @@ import { App } from './app/app.js';
 // Import connection wizard and DOM event bindings
 import { ConnectionWizard, QueueStatusManager, setupCleanupHandlers } from './ui/connectionWizard.js';
 import { bindDOMEvents } from './utils/domEventBindings.js';
+import { EvidencePickerRenderer } from './ui/renderers/EvidencePickerRenderer.js';
 
 
 /**
@@ -113,12 +114,36 @@ const refreshAdminGameActivity = () => {
   if (container) UIManager.renderGameActivity(container, { showSummary: true, showFilters: true });
 };
 
+// Lazily-constructed renderer for the Scoreboard Evidence admin panel picker.
+// Built on first render attempt (DOM may not be present until admin view loads).
+let _evidencePickerRenderer = null;
+const getEvidencePickerRenderer = () => {
+  if (!_evidencePickerRenderer) {
+    if (!document.getElementById('scoreboard-evidence-section')) return null;
+    _evidencePickerRenderer = new EvidencePickerRenderer();
+  }
+  return _evidencePickerRenderer;
+};
+const refreshEvidencePicker = () => {
+  const renderer = getEvidencePickerRenderer();
+  if (!renderer) return;
+  // getExposedOwners() throws before a strategy is active; guard with try/catch.
+  let owners = [];
+  try {
+    owners = DataManager.getExposedOwners?.() || [];
+  } catch (_err) {
+    owners = [];
+  }
+  renderer.render(owners);
+};
+
 DataManager.addEventListener('transaction:added', () => {
   UIManager.updateHistoryBadge();
   UIManager.updateSessionStats();
   refreshHistoryScreen();
   refreshTeamDetails();
   refreshAdminGameActivity();
+  refreshEvidencePicker();
 });
 
 DataManager.addEventListener('transaction:deleted', () => {
@@ -127,6 +152,7 @@ DataManager.addEventListener('transaction:deleted', () => {
   refreshHistoryScreen();
   refreshTeamDetails();
   refreshAdminGameActivity();
+  refreshEvidencePicker();
 });
 
 DataManager.addEventListener('data:cleared', () => {
@@ -134,11 +160,13 @@ DataManager.addEventListener('data:cleared', () => {
   clearScoreboards();
   const adminActivity = document.getElementById('admin-game-activity');
   if (adminActivity) adminActivity.innerHTML = '';
+  refreshEvidencePicker();
 });
 
 DataManager.addEventListener('game-state:updated', () => {
   UIManager.updateHistoryBadge();
   UIManager.updateSessionStats();
+  refreshEvidencePicker();
 });
 
 DataManager.addEventListener('team-score:updated', (e) => {
@@ -150,7 +178,10 @@ DataManager.addEventListener('team-score:updated', (e) => {
   }
 });
 
-DataManager.addEventListener('scores:cleared', clearScoreboards);
+DataManager.addEventListener('scores:cleared', () => {
+  clearScoreboards();
+  refreshEvidencePicker();
+});
 
 DataManager.addEventListener('player-scan:added', () => {
   refreshHistoryScreen(false); // no stats — player scans don't affect scoring

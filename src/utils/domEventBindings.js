@@ -193,6 +193,20 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
         }
         break;
       }
+      case 'scoreboardNext':
+        safeAdminAction(adminController.getModule('scoreboardController').scrollNext(), 'scoreboardNext');
+        break;
+      case 'scoreboardPrev':
+        safeAdminAction(adminController.getModule('scoreboardController').scrollPrev(), 'scoreboardPrev');
+        break;
+      case 'scoreboardJumpToOwner': {
+        const dropdown = document.getElementById('scoreboard-owner-dropdown');
+        const owner = dropdown?.value;
+        if (owner) {
+          safeAdminAction(adminController.getModule('scoreboardController').jumpToOwner(owner), 'scoreboardJumpToOwner');
+        }
+        break;
+      }
       default:
         debug.log(`Unknown admin action: ${method}`, true);
     }

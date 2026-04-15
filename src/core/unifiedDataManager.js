@@ -271,6 +271,38 @@ export class UnifiedDataManager extends EventTarget {
   }
 
   /**
+   * Get the alphabetical list of character owners whose tokens have been
+   * exposed on the scoreboard in the current session (detective-mode
+   * transactions in `accepted` status).
+   *
+   * Mirrors the filter used by `backend/public/scoreboard.html#addEvidence`
+   * (`transaction.mode !== 'detective'` → rejected). Used by the GM scanner
+   * admin panel to populate the "Jump to Character" dropdown.
+   *
+   * @returns {string[]} Unique owner names sorted with locale comparison.
+   */
+  getExposedOwners() {
+    if (!this._activeStrategy) return [];
+    const transactions = this._activeStrategy.getTransactions() || [];
+    const owners = new Set();
+    for (const tx of transactions) {
+      if (!tx || tx.mode !== 'detective') continue;
+      // `status` is populated for accepted transactions; older/in-flight
+      // records may lack it — fall back to including the transaction.
+      if (tx.status && tx.status !== 'accepted') continue;
+      // Prefer backend-resolved owner on the transaction; fall back to
+      // token lookup for locally-recorded transactions that don't carry it.
+      let owner = typeof tx.owner === 'string' ? tx.owner : null;
+      if (!owner && this.tokenManager?.findToken && tx.tokenId) {
+        const token = this.tokenManager.findToken(tx.tokenId);
+        owner = token?.owner || null;
+      }
+      if (owner) owners.add(owner);
+    }
+    return [...owners].sort((a, b) => a.localeCompare(b));
+  }
+
+  /**
    * Get session data for report generation
    * @returns {Object|null} Session state object
    */

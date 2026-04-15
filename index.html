@@ -485,6 +485,24 @@
                 <div id="device-list" class="device-list"></div>
             </section>
 
+            <!-- Scoreboard Evidence Navigation (Networked mode only) -->
+            <section class="admin-section" data-requires="networked" id="scoreboard-evidence-section">
+                <h3>Scoreboard Evidence</h3>
+                <p class="scoreboard-evidence-hint" id="scoreboard-evidence-hint" style="margin: 0 0 0.75rem 0; color: var(--color-text-secondary); font-size: 0.9rem;">
+                    Awaiting evidence...
+                </p>
+                <div class="scoreboard-evidence-nav" style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+                    <button class="btn" id="scoreboard-prev-btn" data-action="admin.scoreboardPrev" disabled>← Prev</button>
+                    <button class="btn" id="scoreboard-next-btn" data-action="admin.scoreboardNext" disabled>Next →</button>
+                </div>
+                <div class="scoreboard-evidence-jump" style="display: flex; gap: 0.5rem; align-items: center;">
+                    <select id="scoreboard-owner-dropdown" style="flex: 1; padding: 0.5rem; background: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border); border-radius: var(--radius-sm);" disabled>
+                        <option value="">Jump to character…</option>
+                    </select>
+                    <button class="btn" id="scoreboard-jump-btn" data-action="admin.scoreboardJumpToOwner" disabled>Jump</button>
+                </div>
+            </section>
+
             <!-- Score Board Section -->
             <section class="admin-section">
                 <h3>Team Scores</h3>
