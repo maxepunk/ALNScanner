@@ -36,6 +36,14 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
     }
   }, 150);
 
+  // Same debounce pattern for the music (MPD) volume slider.
+  const debouncedMusicVolume = debounce((volume) => {
+    const adminController = app.networkedSession?.getService('adminController');
+    if (adminController?.initialized) {
+      safeAdminAction(adminController.getModule('musicController').setVolume(volume), 'musicSetVolume');
+    }
+  }, 150);
+
   // Debounced stream volume setter (video, spotify, sound via PipeWire)
   const debouncedStreamVolume = debounce((stream, volume) => {
     const adminController = app.networkedSession?.getService('adminController');
@@ -148,6 +156,45 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
         }
         break;
       }
+      case 'musicPlay':
+        safeAdminAction(adminController.getModule('musicController').play(), 'musicPlay');
+        break;
+      case 'musicPause':
+        safeAdminAction(adminController.getModule('musicController').pause(), 'musicPause');
+        break;
+      case 'musicStop':
+        safeAdminAction(adminController.getModule('musicController').stop(), 'musicStop');
+        break;
+      case 'musicNext':
+        safeAdminAction(adminController.getModule('musicController').next(), 'musicNext');
+        break;
+      case 'musicPrevious':
+        safeAdminAction(adminController.getModule('musicController').previous(), 'musicPrevious');
+        break;
+      case 'musicSetVolume': {
+        const volume = parseInt(actionElement.value, 10);
+        if (!isNaN(volume)) {
+          debouncedMusicVolume(volume);
+        }
+        break;
+      }
+      case 'musicSetShuffle': {
+        const enabled = !!actionElement.checked;
+        safeAdminAction(adminController.getModule('musicController').setShuffle(enabled), 'musicSetShuffle');
+        break;
+      }
+      case 'musicSetLoop': {
+        const enabled = !!actionElement.checked;
+        safeAdminAction(adminController.getModule('musicController').setLoop(enabled), 'musicSetLoop');
+        break;
+      }
+      case 'musicLoadPlaylist': {
+        const playlistId = actionElement.value;
+        if (playlistId) {
+          safeAdminAction(adminController.getModule('musicController').loadPlaylist(playlistId), 'musicLoadPlaylist');
+        }
+        break;
+      }
       case 'startBtScan':
         safeAdminAction(adminController.getModule('bluetoothController').startScan(), 'startBtScan');
         break;
@@ -219,6 +266,9 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
 
     // Skip range inputs — handled by 'input' event listener
     if (actionElement.type === 'range') return;
+    // Skip checkboxes and radios — handled by 'change' listener (avoids
+    // double-firing because click on these toggles state then fires change).
+    if (actionElement.type === 'checkbox' || actionElement.type === 'radio') return;
 
     // Prevent default action for links (e.g., <a href="#" data-action="...">)
     if (actionElement.tagName === 'A') {
