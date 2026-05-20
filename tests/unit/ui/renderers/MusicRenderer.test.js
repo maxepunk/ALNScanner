@@ -85,6 +85,34 @@ describe('MusicRenderer', () => {
     expect(container.querySelector('.music__volume-value').textContent).toBe('42%');
   });
 
+  test('preserves picker selection when playlist list changes but selected id remains valid', () => {
+    // Regression guard: when innerHTML is wiped to rebuild <option>s,
+    // <select>.value resets to the first option. Without re-asserting
+    // picker.value, the visible selection jumps away from the currently
+    // playing playlist even though its id is still in the new option set.
+    renderer.render({
+      connected: true, state: 'playing', volume: 70,
+      playlist: { id: 'b', name: 'B' },
+      playlists: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
+    });
+    const picker = container.querySelector('.music__playlist-picker');
+    expect(picker.value).toBe('b');
+
+    // Second render — list signature changes ('a' removed, 'c' added) but
+    // playlist.id stays 'b' (still in the new option set).
+    renderer.render(
+      { connected: true, state: 'playing', volume: 70,
+        playlist: { id: 'b', name: 'B' },
+        playlists: [{ id: 'b', name: 'B' }, { id: 'c', name: 'C' }] },
+      { connected: true, state: 'playing', volume: 70,
+        playlist: { id: 'b', name: 'B' },
+        playlists: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] }
+    );
+    // Picker MUST still show 'b' selected (the playing playlist) even
+    // though innerHTML was rebuilt and the id didn't change.
+    expect(picker.value).toBe('b');
+  });
+
   test('rebuilds picker options only when playlists list signature changes', () => {
     renderer.render({ connected: true, state: 'stopped', volume: 70,
       playlists: [{ id: 'a', name: 'A' }] });

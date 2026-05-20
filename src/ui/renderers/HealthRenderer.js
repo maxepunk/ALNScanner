@@ -58,7 +58,7 @@ export class HealthRenderer {
     if (mode === 'expanded') {
       this._updateDOM(statuses, healthyCount, totalCount);
     }
-    // collapsed + same mode = no update needed (always 8/8)
+    // collapsed + same mode = no update needed (all services healthy)
   }
 
   _buildDOM(statuses, healthyCount, totalCount, mode) {

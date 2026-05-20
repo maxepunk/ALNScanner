@@ -190,7 +190,8 @@ export class MusicRenderer {
 
     // Playlist list — only rebuild <option>s if signature changed
     const sig = this._signaturePlaylists(playlists);
-    if (sig !== this._playlistsSig) {
+    const rebuilt = sig !== this._playlistsSig;
+    if (rebuilt) {
       this._els.picker.innerHTML = playlists.length === 0
         ? '<option value="">(no playlists)</option>'
         : playlists.map(p =>
@@ -199,8 +200,12 @@ export class MusicRenderer {
       this._playlistsSig = sig;
     }
 
-    // Selected playlist changed (does NOT require rebuilding options)
-    if (playlist.id !== prevPlaylist.id) {
+    // Restore selection. We must do this in BOTH cases:
+    //   - Selected playlist changed (obvious)
+    //   - List signature changed but playlist.id didn't (innerHTML wipe
+    //     resets <select>.value to the first option; without re-asserting,
+    //     the picker visually jumps off the currently-playing playlist)
+    if (rebuilt || playlist.id !== prevPlaylist.id) {
       this._els.picker.value = playlist.id || '';
     }
   }
@@ -230,7 +235,10 @@ export class MusicRenderer {
   }
 
   _signaturePlaylists(playlists) {
-    return playlists.map(p => `${p.id}|${p.name || ''}`).join(',');
+    // JSON.stringify avoids separator-collision: a playlist name containing
+    // '|' or ',' would otherwise produce ambiguous signatures and skip
+    // legitimate rebuilds.
+    return JSON.stringify(playlists.map(p => [p.id, p.name || '']));
   }
 }
 
