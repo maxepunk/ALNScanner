@@ -6,7 +6,7 @@ describe('HealthRenderer', () => {
 
   const allHealthy = () => {
     const health = {};
-    ['vlc', 'spotify', 'lighting', 'bluetooth', 'audio', 'sound', 'gameclock', 'cueengine'].forEach(s => {
+    ['vlc', 'spotify', 'music', 'lighting', 'bluetooth', 'audio', 'sound', 'gameclock', 'cueengine'].forEach(s => {
       health[s] = { status: 'healthy', message: 'OK' };
     });
     return health;
@@ -28,7 +28,21 @@ describe('HealthRenderer', () => {
       renderer.render({ serviceHealth: allHealthy() });
 
       expect(container.querySelector('.health-dashboard--ok')).toBeTruthy();
-      expect(container.textContent).toContain('8/8');
+      expect(container.textContent).toContain('9/9');
+    });
+
+    it('should render music service entry alongside spotify', () => {
+      const health = {
+        vlc: { status: 'healthy', message: 'OK' },
+        music: { status: 'down', message: 'MPD socket missing' },
+      };
+      renderer.render({ serviceHealth: health });
+
+      const musicCard = container.querySelector('[data-service="music"]');
+      expect(musicCard).not.toBeNull();
+      expect(musicCard.textContent).toContain('Music (MPD)');
+      expect(musicCard.textContent).toContain('MPD socket missing');
+      expect(musicCard.classList.contains('health-service--down')).toBe(true);
     });
 
     it('should show expanded grid when any service is down', () => {
@@ -65,16 +79,17 @@ describe('HealthRenderer', () => {
       expect(btns).toHaveLength(0);
     });
 
-    it('should render all 8 service names in expanded mode', () => {
+    it('should render all 9 service names in expanded mode', () => {
       // All unknown (no health data) → all degraded → expanded
       renderer.render({ serviceHealth: {} });
 
       const serviceNames = container.querySelectorAll('.health-service__name');
-      expect(serviceNames).toHaveLength(8);
+      expect(serviceNames).toHaveLength(9);
 
       const names = Array.from(serviceNames).map(el => el.textContent);
       expect(names).toContain('VLC Player');
       expect(names).toContain('Spotify');
+      expect(names).toContain('Music (MPD)');
       expect(names).toContain('Lighting (HA)');
       expect(names).toContain('Bluetooth');
       expect(names).toContain('Audio Routing');
@@ -159,12 +174,12 @@ describe('HealthRenderer', () => {
       // Start with 2 services down, rest healthy
       const health1 = { ...allHealthy(), vlc: { status: 'down', message: 'Failed' }, spotify: { status: 'down', message: 'Failed' } };
       renderer.render({ serviceHealth: health1 });
-      expect(container.textContent).toContain('6/8');
+      expect(container.textContent).toContain('7/9');
 
       // One recovers, still expanded (1 down)
       const health2 = { ...allHealthy(), spotify: { status: 'down', message: 'Failed' } };
       renderer.render({ serviceHealth: health2 }, { serviceHealth: health1 });
-      expect(container.textContent).toContain('7/8');
+      expect(container.textContent).toContain('8/9');
     });
 
     it('should add Check Now button when service goes down', () => {

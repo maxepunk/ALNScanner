@@ -14,6 +14,7 @@ export class HealthRenderer {
     this.SERVICE_NAMES = {
       vlc: 'VLC Player',
       spotify: 'Spotify',
+      music: 'Music (MPD)',
       lighting: 'Lighting (HA)',
       bluetooth: 'Bluetooth',
       audio: 'Audio Routing',
