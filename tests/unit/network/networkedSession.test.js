@@ -832,6 +832,24 @@ describe('NetworkedSession', () => {
         expect(mockStore.update).toHaveBeenCalledWith('spotify', { connected: true, state: 'Playing', volume: 65 });
       });
 
+      it('should populate store with music state from sync:full', () => {
+        const music = {
+          connected: true, state: 'playing', volume: 70,
+          track: { title: 'A', artist: 'B' },
+          playlist: { id: 'all-tracks', name: 'All Tracks', position: 0, total: 66 },
+          playlists: [{ id: 'all-tracks', name: 'All Tracks' }],
+          pausedByGameClock: false,
+        };
+        storeMessageHandler({ detail: { type: 'sync:full', payload: { music } } });
+
+        expect(mockStore.update).toHaveBeenCalledWith('music', music);
+      });
+
+      it('should not call store.update for music when payload.music is absent', () => {
+        storeMessageHandler({ detail: { type: 'sync:full', payload: { spotify: {} } } });
+        expect(mockStore.update).not.toHaveBeenCalledWith('music', expect.anything());
+      });
+
       it('should populate store with serviceHealth from sync:full', () => {
         const serviceHealth = { vlc: { status: 'healthy' }, spotify: { status: 'healthy' } };
         const payload = { serviceHealth };

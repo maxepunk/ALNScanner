@@ -246,6 +246,7 @@ export class NetworkedSession extends EventTarget {
           // Populate StateStore from sync:full (service domain state)
           if (this._store) {
             if (payload.spotify) this._store.update('spotify', payload.spotify);
+            if (payload.music) this._store.update('music', payload.music);
             if (payload.serviceHealth) this._store.update('health', payload.serviceHealth);
             if (payload.environment?.bluetooth) this._store.update('bluetooth', payload.environment.bluetooth);
             if (payload.environment?.audio) this._store.update('audio', payload.environment.audio);
