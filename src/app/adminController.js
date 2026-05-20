@@ -25,6 +25,7 @@ import { LightingController } from '../admin/LightingController.js';
 import { CueController } from '../admin/CueController.js';
 import { SoundController } from '../admin/SoundController.js';
 import { SpotifyController } from '../admin/SpotifyController.js';
+import { MusicController } from '../admin/MusicController.js';
 import { ScoreboardController } from '../admin/ScoreboardController.js';
 
 export class AdminController extends EventTarget {
@@ -63,6 +64,7 @@ export class AdminController extends EventTarget {
       cueController: new CueController(this.client),
       soundController: new SoundController(this.client),
       spotifyController: new SpotifyController(this.client),
+      musicController: new MusicController(this.client),
       scoreboardController: new ScoreboardController(this.client)
     };
 

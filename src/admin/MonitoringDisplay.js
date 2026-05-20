@@ -5,6 +5,7 @@ import { EnvironmentRenderer } from '../ui/renderers/EnvironmentRenderer.js';
 import { SessionRenderer } from '../ui/renderers/SessionRenderer.js';
 import { VideoRenderer } from '../ui/renderers/VideoRenderer.js';
 import { SpotifyRenderer } from '../ui/renderers/SpotifyRenderer.js';
+import { MusicRenderer } from '../ui/renderers/MusicRenderer.js';
 import { HealthRenderer } from '../ui/renderers/HealthRenderer.js';
 import { HeldItemsRenderer } from '../ui/renderers/HeldItemsRenderer.js';
 
@@ -26,6 +27,7 @@ export class MonitoringDisplay {
     this.sessionRenderer = new SessionRenderer();
     this.videoRenderer = new VideoRenderer();
     this.spotifyRenderer = new SpotifyRenderer();
+    this.musicRenderer = new MusicRenderer();
     this.healthRenderer = new HealthRenderer();
     this.heldItemsRenderer = new HeldItemsRenderer();
 
@@ -82,14 +84,21 @@ export class MonitoringDisplay {
       this.envRenderer.renderLighting(state, prev);
     });
 
-    // Environment: Audio + ducking forwarding
+    // Environment: Audio + ducking forwarding (both spotify and music)
     on('audio', (state, prev) => {
       this.envRenderer.renderAudio(state, prev);
-      // Transform backend shape { spotify: ['video'] } → renderer shape { ducked, activeSources }
-      const duckingSources = state?.ducking?.spotify;
+      // Backend shape is { spotify: [...], music: [...] } where each value is
+      // the list of active source streams (video/sound) ducking that target.
+      const spotifySources = state?.ducking?.spotify;
       this.spotifyRenderer.renderDucking(
-        duckingSources && duckingSources.length > 0
-          ? { ducked: true, activeSources: duckingSources }
+        spotifySources && spotifySources.length > 0
+          ? { ducked: true, activeSources: spotifySources }
+          : { ducked: false, activeSources: [] }
+      );
+      const musicSources = state?.ducking?.music;
+      this.musicRenderer.renderDucking(
+        musicSources && musicSources.length > 0
+          ? { ducked: true, activeSources: musicSources }
           : { ducked: false, activeSources: [] }
       );
     });
@@ -115,6 +124,11 @@ export class MonitoringDisplay {
     // Spotify
     on('spotify', (state, prev) => {
       this.spotifyRenderer.render(state, prev);
+    });
+
+    // Music (MPD)
+    on('music', (state, prev) => {
+      this.musicRenderer.render(state, prev);
     });
 
     // Game Clock — map 'status' field to 'state' for SessionRenderer
