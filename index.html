@@ -425,10 +425,10 @@
                     </div>
                 </div>
 
-                <!-- Now Playing / Spotify Status (Phase 2 - populated by MonitoringDisplay) -->
+                <!-- Music (MPD) — populated by MusicRenderer subscribed to StateStore 'music' domain -->
                 <div class="subsection">
-                    <div id="now-playing-section">
-                        <!-- Populated dynamically by SpotifyRenderer via DM spotify-state:updated event -->
+                    <div id="music-section">
+                        <!-- Populated dynamically by MusicRenderer -->
                     </div>
                 </div>
                 <div id="sound-status"></div>

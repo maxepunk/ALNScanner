@@ -770,10 +770,10 @@ describe('NetworkedSession', () => {
       });
 
       it('should populate store on service:state event', () => {
-        const payload = { domain: 'spotify', state: { connected: true, state: 'Playing' } };
+        const payload = { domain: 'gameclock', state: { connected: true, state: 'Playing' } };
         storeMessageHandler({ detail: { type: 'service:state', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('spotify', { connected: true, state: 'Playing' });
+        expect(mockStore.update).toHaveBeenCalledWith('gameclock', { connected: true, state: 'Playing' });
       });
 
       it('should ignore service:state without domain', () => {
@@ -784,7 +784,7 @@ describe('NetworkedSession', () => {
       });
 
       it('should ignore service:state without state', () => {
-        const payload = { domain: 'spotify' };
+        const payload = { domain: 'gameclock' };
         storeMessageHandler({ detail: { type: 'service:state', payload } });
 
         expect(mockStore.update).not.toHaveBeenCalled();
@@ -825,15 +825,26 @@ describe('NetworkedSession', () => {
         storeMessageHandler = messageCall[1];
       });
 
-      it('should populate store with spotify state from sync:full', () => {
-        const payload = { spotify: { connected: true, state: 'Playing', volume: 65 } };
-        storeMessageHandler({ detail: { type: 'sync:full', payload } });
+      it('should populate store with music state from sync:full', () => {
+        const music = {
+          connected: true, state: 'playing', volume: 70,
+          track: { title: 'A', artist: 'B' },
+          playlist: { id: 'all-tracks', name: 'All Tracks', position: 0, total: 66 },
+          playlists: [{ id: 'all-tracks', name: 'All Tracks' }],
+          pausedByGameClock: false,
+        };
+        storeMessageHandler({ detail: { type: 'sync:full', payload: { music } } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('spotify', { connected: true, state: 'Playing', volume: 65 });
+        expect(mockStore.update).toHaveBeenCalledWith('music', music);
+      });
+
+      it('should not call store.update for music when payload.music is absent', () => {
+        storeMessageHandler({ detail: { type: 'sync:full', payload: { heldItems: [] } } });
+        expect(mockStore.update).not.toHaveBeenCalledWith('music', expect.anything());
       });
 
       it('should populate store with serviceHealth from sync:full', () => {
-        const serviceHealth = { vlc: { status: 'healthy' }, spotify: { status: 'healthy' } };
+        const serviceHealth = { vlc: { status: 'healthy' }, music: { status: 'healthy' } };
         const payload = { serviceHealth };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
@@ -886,7 +897,7 @@ describe('NetworkedSession', () => {
 
       it('should populate all service domains from a complete sync:full', () => {
         const payload = {
-          spotify: { connected: true },
+          music: { connected: true },
           serviceHealth: { vlc: { status: 'healthy' } },
           environment: {
             bluetooth: { scanning: false },
@@ -913,13 +924,13 @@ describe('NetworkedSession', () => {
 
       it('should populate store (not UDM) for service state from sync:full', () => {
         const payload = {
-          spotify: { connected: true, state: 'Playing' },
+          music: { connected: true, state: 'playing' },
           serviceHealth: { vlc: { status: 'healthy' } },
         };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
         // Store is sole path for service state
-        expect(mockStore.update).toHaveBeenCalledWith('spotify', { connected: true, state: 'Playing' });
+        expect(mockStore.update).toHaveBeenCalledWith('music', { connected: true, state: 'playing' });
         expect(mockStore.update).toHaveBeenCalledWith('health', { vlc: { status: 'healthy' } });
       });
     });
@@ -927,7 +938,7 @@ describe('NetworkedSession', () => {
     describe('StateStore null safety', () => {
       it('should not crash on service:state when store is null', () => {
         // Default session has no store (null)
-        const payload = { domain: 'spotify', state: { connected: true } };
+        const payload = { domain: 'gameclock', state: { connected: true } };
         expect(() => {
           messageHandler({ detail: { type: 'service:state', payload } });
         }).not.toThrow();

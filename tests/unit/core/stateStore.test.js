@@ -14,30 +14,30 @@ describe('StateStore', () => {
     });
 
     it('should return null for unknown domains', () => {
-      expect(store.get('spotify')).toBeNull();
+      expect(store.get('music')).toBeNull();
     });
   });
 
   describe('update()', () => {
     it('should store state for a domain', () => {
-      store.update('spotify', { connected: true, state: 'Playing' });
-      expect(store.get('spotify')).toEqual({ connected: true, state: 'Playing' });
+      store.update('music', { connected: true, state: 'Playing' });
+      expect(store.get('music')).toEqual({ connected: true, state: 'Playing' });
     });
 
     it('should shallow-merge new state into existing domain state', () => {
-      store.update('spotify', { connected: true, state: 'Playing' });
-      store.update('spotify', { volume: 65 });
-      expect(store.get('spotify')).toEqual({ connected: true, state: 'Playing', volume: 65 });
+      store.update('music', { connected: true, state: 'Playing' });
+      store.update('music', { volume: 65 });
+      expect(store.get('music')).toEqual({ connected: true, state: 'Playing', volume: 65 });
     });
 
     it('should store previous state', () => {
-      store.update('spotify', { state: 'Playing' });
-      store.update('spotify', { state: 'Paused' });
+      store.update('music', { state: 'Playing' });
+      store.update('music', { state: 'Paused' });
 
       // Verify via listener that prev was the old state
       const cb = jest.fn();
-      store.on('spotify', cb);
-      store.update('spotify', { state: 'Stopped' });
+      store.on('music', cb);
+      store.update('music', { state: 'Stopped' });
       expect(cb).toHaveBeenCalledWith(
         { state: 'Stopped' },
         { state: 'Paused' }
@@ -46,8 +46,8 @@ describe('StateStore', () => {
 
     it('should set prev to null on first update', () => {
       const cb = jest.fn();
-      store.on('spotify', cb);
-      store.update('spotify', { connected: true });
+      store.on('music', cb);
+      store.update('music', { connected: true });
       expect(cb).toHaveBeenCalledWith({ connected: true }, null);
     });
   });
@@ -55,15 +55,15 @@ describe('StateStore', () => {
   describe('on() / off()', () => {
     it('should call subscriber when domain updates', () => {
       const cb = jest.fn();
-      store.on('spotify', cb);
-      store.update('spotify', { state: 'Playing' });
+      store.on('music', cb);
+      store.update('music', { state: 'Playing' });
       expect(cb).toHaveBeenCalledTimes(1);
       expect(cb).toHaveBeenCalledWith({ state: 'Playing' }, null);
     });
 
     it('should not call subscriber for other domains', () => {
       const cb = jest.fn();
-      store.on('spotify', cb);
+      store.on('music', cb);
       store.update('video', { status: 'idle' });
       expect(cb).not.toHaveBeenCalled();
     });
@@ -80,9 +80,9 @@ describe('StateStore', () => {
 
     it('should unsubscribe with off()', () => {
       const cb = jest.fn();
-      store.on('spotify', cb);
-      store.off('spotify', cb);
-      store.update('spotify', { state: 'Playing' });
+      store.on('music', cb);
+      store.off('music', cb);
+      store.update('music', { state: 'Playing' });
       expect(cb).not.toHaveBeenCalled();
     });
 
@@ -99,38 +99,38 @@ describe('StateStore', () => {
     });
 
     it('should return snapshot of all domains', () => {
-      store.update('spotify', { state: 'Playing' });
+      store.update('music', { state: 'Playing' });
       store.update('health', { vlc: 'healthy' });
       const all = store.getAll();
       expect(all).toEqual({
-        spotify: { state: 'Playing' },
+        music: { state: 'Playing' },
         health: { vlc: 'healthy' },
       });
     });
 
     it('should return a copy from getAll() (not internal reference)', () => {
-      store.update('spotify', { state: 'Playing' });
+      store.update('music', { state: 'Playing' });
       const all = store.getAll();
-      all.spotify = 'tampered';
-      expect(store.get('spotify')).toEqual({ state: 'Playing' });
+      all.music = 'tampered';
+      expect(store.get('music')).toEqual({ state: 'Playing' });
     });
 
     it('should return a copy from get() (not internal reference)', () => {
-      store.update('spotify', { state: 'Playing', volume: 65 });
-      const state = store.get('spotify');
+      store.update('music', { state: 'Playing', volume: 65 });
+      const state = store.get('music');
       state.volume = 0;  // Mutate the returned copy
-      expect(store.get('spotify').volume).toBe(65);  // Internal state unchanged
+      expect(store.get('music').volume).toBe(65);  // Internal state unchanged
     });
   });
 
   describe('rapid updates', () => {
     it('should emit for each update with correct prev', () => {
       const calls = [];
-      store.on('spotify', (state, prev) => calls.push({ state: { ...state }, prev }));
+      store.on('music', (state, prev) => calls.push({ state: { ...state }, prev }));
 
-      store.update('spotify', { state: 'Playing' });
-      store.update('spotify', { state: 'Paused' });
-      store.update('spotify', { state: 'Stopped' });
+      store.update('music', { state: 'Playing' });
+      store.update('music', { state: 'Paused' });
+      store.update('music', { state: 'Stopped' });
 
       expect(calls).toHaveLength(3);
       expect(calls[0]).toEqual({ state: { state: 'Playing' }, prev: null });
@@ -145,15 +145,15 @@ describe('StateStore', () => {
       const badCb = jest.fn(() => { throw new Error('listener broke'); });
       const goodCb = jest.fn();
 
-      store.on('spotify', badCb);
-      store.on('spotify', goodCb);
+      store.on('music', badCb);
+      store.on('music', goodCb);
 
-      store.update('spotify', { state: 'Playing' });
+      store.update('music', { state: 'Playing' });
 
       expect(badCb).toHaveBeenCalledTimes(1);
       expect(goodCb).toHaveBeenCalledTimes(1);
       expect(errSpy).toHaveBeenCalledWith(
-        'StateStore listener error [spotify]:',
+        'StateStore listener error [music]:',
         expect.any(Error)
       );
 
@@ -162,23 +162,23 @@ describe('StateStore', () => {
   });
 
   describe('cross-domain isolation', () => {
-    it('should not trigger spotify listener on video update', () => {
-      const spotifyCb = jest.fn();
+    it('should not trigger music listener on video update', () => {
+      const musicCb = jest.fn();
       const videoCb = jest.fn();
-      store.on('spotify', spotifyCb);
+      store.on('music', musicCb);
       store.on('video', videoCb);
 
       store.update('video', { status: 'playing' });
 
-      expect(spotifyCb).not.toHaveBeenCalled();
+      expect(musicCb).not.toHaveBeenCalled();
       expect(videoCb).toHaveBeenCalledTimes(1);
     });
 
     it('should maintain independent state per domain', () => {
-      store.update('spotify', { state: 'Playing' });
+      store.update('music', { state: 'Playing' });
       store.update('video', { status: 'idle' });
 
-      expect(store.get('spotify')).toEqual({ state: 'Playing' });
+      expect(store.get('music')).toEqual({ state: 'Playing' });
       expect(store.get('video')).toEqual({ status: 'idle' });
     });
   });

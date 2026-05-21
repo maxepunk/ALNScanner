@@ -1,6 +1,6 @@
 /**
  * MonitoringDisplay - Phase 3 Audio Routing Tests
- * Per-stream routing dropdowns (Video Audio, Spotify Music, Sound Effects)
+ * Per-stream routing dropdowns (Video Audio, Music, Sound Effects)
  *
  * Tests:
  * - Rendering per-stream dropdowns from store audio state
@@ -35,7 +35,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
 
   const defaultRoutes = {
     video: 'bluez_output.CC_DD_EE_FF_00_11.1',
-    spotify: 'bluez_output.CC_DD_EE_FF_00_11.1',
+    music: 'bluez_output.CC_DD_EE_FF_00_11.1',
     sound: 'bluez_output.CC_DD_EE_FF_00_11.1'
   };
 
@@ -87,11 +87,11 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       updateAudioState();
 
       const videoDropdown = document.querySelector('[data-stream="video"]');
-      const spotifyDropdown = document.querySelector('[data-stream="spotify"]');
+      const musicDropdown = document.querySelector('[data-stream="music"]');
       const soundDropdown = document.querySelector('[data-stream="sound"]');
 
       expect(videoDropdown).toBeTruthy();
-      expect(spotifyDropdown).toBeTruthy();
+      expect(musicDropdown).toBeTruthy();
       expect(soundDropdown).toBeTruthy();
     });
 
@@ -130,16 +130,16 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
     it('should select the current sink for each stream', () => {
       updateAudioState({
         video: 'hdmi',
-        spotify: 'bluez_output.AA',
+        music: 'bluez_output.AA',
         sound: 'bluez_output.CC_DD_EE_FF_00_11.1'
       });
 
       const videoDropdown = document.querySelector('[data-stream="video"]');
-      const spotifyDropdown = document.querySelector('[data-stream="spotify"]');
+      const musicDropdown = document.querySelector('[data-stream="music"]');
       const soundDropdown = document.querySelector('[data-stream="sound"]');
 
       expect(videoDropdown.value).toBe('hdmi');
-      expect(spotifyDropdown.value).toBe('bluez_output.AA');
+      expect(musicDropdown.value).toBe('bluez_output.AA');
       expect(soundDropdown.value).toBe('bluez_output.CC_DD_EE_FF_00_11.1');
     });
 
@@ -157,7 +157,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
 
       const container = document.getElementById('audio-routing-dropdowns');
       expect(container.textContent).toContain('Video Audio');
-      expect(container.textContent).toContain('Spotify Music');
+      expect(container.textContent).toContain('Music');
       expect(container.textContent).toContain('Sound Effects');
     });
   });
@@ -179,11 +179,11 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       expect(videoDropdown.value).toBe('bluez_output.AA');
     });
 
-    it('should update spotify dropdown when audio store updated', () => {
-      store.update('audio', { routes: { spotify: 'hdmi' } });
+    it('should update music dropdown when audio store updated', () => {
+      store.update('audio', { routes: { music: 'hdmi' } });
 
-      const spotifyDropdown = document.querySelector('[data-stream="spotify"]');
-      expect(spotifyDropdown.value).toBe('hdmi');
+      const musicDropdown = document.querySelector('[data-stream="music"]');
+      expect(musicDropdown.value).toBe('hdmi');
     });
 
     it('should update sound dropdown when audio store updated', () => {
@@ -250,7 +250,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       // Second update with hdmi selected
       updateAudioState({
         video: 'hdmi',
-        spotify: 'hdmi',
+        music: 'hdmi',
         sound: 'hdmi'
       });
 
@@ -262,7 +262,7 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       expect(() => {
         updateAudioState({
           video: 'nonexistent_sink',
-          spotify: 'bluez_output.CC_DD_EE_FF_00_11.1',
+          music: 'bluez_output.CC_DD_EE_FF_00_11.1',
           sound: 'bluez_output.CC_DD_EE_FF_00_11.1'
         });
       }).not.toThrow();
@@ -275,21 +275,21 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
 
   describe('ducking indicator wiring', () => {
     it('should transform backend ducking array to renderer shape', () => {
-      const renderDuckingSpy = jest.spyOn(display.spotifyRenderer, 'renderDucking');
+      const renderDuckingSpy = jest.spyOn(display.musicRenderer, 'renderDucking');
 
       store.update('audio', {
         routes: {},
         availableSinks: [],
         ducking: {
-          spotify: ['video', 'sound']
+          music: ['video', 'sound']
         }
       });
 
       expect(renderDuckingSpy).toHaveBeenCalledWith({ ducked: true, activeSources: ['video', 'sound'] });
     });
 
-    it('should call renderDucking with ducked:false when no spotify ducking sources', () => {
-      const renderDuckingSpy = jest.spyOn(display.spotifyRenderer, 'renderDucking');
+    it('should call renderDucking with ducked:false when no music ducking sources', () => {
+      const renderDuckingSpy = jest.spyOn(display.musicRenderer, 'renderDucking');
 
       store.update('audio', {
         routes: {},
@@ -300,13 +300,13 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
       expect(renderDuckingSpy).toHaveBeenCalledWith({ ducked: false, activeSources: [] });
     });
 
-    it('should call renderDucking with ducked:false when spotify ducking is empty array', () => {
-      const renderDuckingSpy = jest.spyOn(display.spotifyRenderer, 'renderDucking');
+    it('should call renderDucking with ducked:false when music ducking is empty array', () => {
+      const renderDuckingSpy = jest.spyOn(display.musicRenderer, 'renderDucking');
 
       store.update('audio', {
         routes: {},
         availableSinks: [],
-        ducking: { spotify: [] }
+        ducking: { music: [] }
       });
 
       expect(renderDuckingSpy).toHaveBeenCalledWith({ ducked: false, activeSources: [] });

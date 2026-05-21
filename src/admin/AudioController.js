@@ -4,10 +4,10 @@
  *
  * User Stories:
  * - GM routes video audio output to a specific PipeWire sink
- * - GM routes Spotify music to a specific PipeWire sink
+ * - GM routes music to a specific PipeWire sink
  * - GM routes sound effects to a specific PipeWire sink
  *
- * Per-stream routing (video, spotify, sound)
+ * Per-stream routing (video, music, sound)
  *
  * @module admin/AudioController
  */
@@ -25,7 +25,7 @@ export class AudioController {
   /**
    * Set audio output for a stream
    * @param {string} sink - PipeWire sink name (e.g., 'bluez_output.AA_BB_CC_DD_EE_FF.1', 'hdmi')
-   * @param {string} [stream='video'] - Stream identifier ('video', 'spotify', 'sound')
+   * @param {string} [stream='video'] - Stream identifier ('video', 'music', 'sound')
    * @returns {Promise<Object>} Route set response
    */
   async setVideoOutput(sink, stream = 'video') {
@@ -34,7 +34,7 @@ export class AudioController {
 
   /**
    * Set volume for a specific audio stream
-   * @param {string} stream - Stream identifier ('video', 'spotify', 'sound')
+   * @param {string} stream - Stream identifier ('video', 'music', 'sound')
    * @param {number} volume - Volume level (0-100)
    * @returns {Promise<Object>} Volume set response
    */

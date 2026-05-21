@@ -47,13 +47,13 @@ describe('AudioController - Volume Control', () => {
       );
     });
 
-    it('should accept spotify stream', async () => {
-      await controller.setVolume('spotify', 50);
+    it('should accept music stream', async () => {
+      await controller.setVolume('music', 50);
 
       expect(sendCommand).toHaveBeenCalledWith(
         mockConnection,
         'audio:volume:set',
-        { stream: 'spotify', volume: 50 }
+        { stream: 'music', volume: 50 }
       );
     });
 

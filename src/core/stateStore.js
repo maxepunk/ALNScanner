@@ -1,7 +1,7 @@
 /**
  * StateStore — domain-keyed state container for service state.
  *
- * Handles service domains only (spotify, video, health, etc.) with
+ * Handles service domains only (music, video, health, etc.) with
  * snapshot/shallow-merge semantics. Session/transaction data stays
  * in UDM + storage strategies (different data pattern).
  *

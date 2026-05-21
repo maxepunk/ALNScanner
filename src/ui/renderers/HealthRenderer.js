@@ -13,7 +13,7 @@ export class HealthRenderer {
     this.container = elements.container || document.getElementById('health-dashboard');
     this.SERVICE_NAMES = {
       vlc: 'VLC Player',
-      spotify: 'Spotify',
+      music: 'Music (MPD)',
       lighting: 'Lighting (HA)',
       bluetooth: 'Bluetooth',
       audio: 'Audio Routing',
@@ -57,7 +57,7 @@ export class HealthRenderer {
     if (mode === 'expanded') {
       this._updateDOM(statuses, healthyCount, totalCount);
     }
-    // collapsed + same mode = no update needed (always 8/8)
+    // collapsed + same mode = no update needed (all services healthy)
   }
 
   _buildDOM(statuses, healthyCount, totalCount, mode) {

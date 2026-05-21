@@ -197,7 +197,7 @@ describe('EnvironmentRenderer', () => {
 
       const streams = Array.from(dropdowns).map(d => d.dataset.stream);
       expect(streams).toContain('video');
-      expect(streams).toContain('spotify');
+      expect(streams).toContain('music');
       expect(streams).toContain('sound');
     });
 
@@ -220,11 +220,11 @@ describe('EnvironmentRenderer', () => {
     it('should update route selection values', () => {
       renderer.renderAudio({
         availableSinks: sinks,
-        routes: { video: 'bluetooth', spotify: 'hdmi', sound: 'hdmi' },
+        routes: { video: 'bluetooth', music: 'hdmi', sound: 'hdmi' },
       });
 
       expect(document.querySelector('select[data-stream="video"]').value).toBe('bluetooth');
-      expect(document.querySelector('select[data-stream="spotify"]').value).toBe('hdmi');
+      expect(document.querySelector('select[data-stream="music"]').value).toBe('hdmi');
     });
 
     it('should hide bt-warning when rendering audio', () => {

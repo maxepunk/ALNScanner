@@ -26,17 +26,17 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
     }
   }
 
-  // Debounced volume setter — prevents dbus-send subprocess pile-up and
-  // slider DOM destruction during drag (SpotifyRenderer.render replaces innerHTML).
-  // 150ms trailing debounce: fires when user pauses or releases slider.
-  const debouncedSpotifyVolume = debounce((volume) => {
+  // Debounced volume setter for the music (MPD) slider.
+  // Prevents pile-up of D-Bus calls and slider DOM destruction during drag
+  // (renderer replaces innerHTML on state push). 150ms trailing debounce.
+  const debouncedMusicVolume = debounce((volume) => {
     const adminController = app.networkedSession?.getService('adminController');
     if (adminController?.initialized) {
-      safeAdminAction(adminController.getModule('spotifyController').setVolume(volume), 'spotifySetVolume');
+      safeAdminAction(adminController.getModule('musicController').setVolume(volume), 'musicSetVolume');
     }
   }, 150);
 
-  // Debounced stream volume setter (video, spotify, sound via PipeWire)
+  // Debounced stream volume setter (video, music, sound via PipeWire)
   const debouncedStreamVolume = debounce((stream, volume) => {
     const adminController = app.networkedSession?.getService('adminController');
     if (adminController?.initialized) {
@@ -121,30 +121,47 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
       case 'discardAllHeld':
         safeAdminAction(adminController.getModule('cueController').discardAllHeld(), 'discardAllHeld');
         break;
-      case 'spotifyPlay':
-        safeAdminAction(adminController.getModule('spotifyController').play(), 'spotifyPlay');
-        break;
-      case 'spotifyPause':
-        safeAdminAction(adminController.getModule('spotifyController').pause(), 'spotifyPause');
-        break;
-      case 'spotifyNext':
-        safeAdminAction(adminController.getModule('spotifyController').next(), 'spotifyNext');
-        break;
-      case 'spotifyPrevious':
-        safeAdminAction(adminController.getModule('spotifyController').previous(), 'spotifyPrevious');
-        break;
-      case 'spotifyStop':
-        safeAdminAction(adminController.getModule('spotifyController').stop(), 'spotifyStop');
-        break;
       case 'serviceCheck': {
         const serviceId = actionElement.getAttribute('data-service-id');
         safeAdminAction(adminController.getModule('adminOperations').checkService(serviceId), 'serviceCheck');
         break;
       }
-      case 'spotifySetVolume': {
+      case 'musicPlay':
+        safeAdminAction(adminController.getModule('musicController').play(), 'musicPlay');
+        break;
+      case 'musicPause':
+        safeAdminAction(adminController.getModule('musicController').pause(), 'musicPause');
+        break;
+      case 'musicStop':
+        safeAdminAction(adminController.getModule('musicController').stop(), 'musicStop');
+        break;
+      case 'musicNext':
+        safeAdminAction(adminController.getModule('musicController').next(), 'musicNext');
+        break;
+      case 'musicPrevious':
+        safeAdminAction(adminController.getModule('musicController').previous(), 'musicPrevious');
+        break;
+      case 'musicSetVolume': {
         const volume = parseInt(actionElement.value, 10);
         if (!isNaN(volume)) {
-          debouncedSpotifyVolume(volume);
+          debouncedMusicVolume(volume);
+        }
+        break;
+      }
+      case 'musicSetShuffle': {
+        const enabled = !!actionElement.checked;
+        safeAdminAction(adminController.getModule('musicController').setShuffle(enabled), 'musicSetShuffle');
+        break;
+      }
+      case 'musicSetLoop': {
+        const enabled = !!actionElement.checked;
+        safeAdminAction(adminController.getModule('musicController').setLoop(enabled), 'musicSetLoop');
+        break;
+      }
+      case 'musicLoadPlaylist': {
+        const playlistId = actionElement.value;
+        if (playlistId) {
+          safeAdminAction(adminController.getModule('musicController').loadPlaylist(playlistId), 'musicLoadPlaylist');
         }
         break;
       }
@@ -219,6 +236,9 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
 
     // Skip range inputs — handled by 'input' event listener
     if (actionElement.type === 'range') return;
+    // Skip checkboxes and radios — handled by 'change' listener (avoids
+    // double-firing because click on these toggles state then fires change).
+    if (actionElement.type === 'checkbox' || actionElement.type === 'radio') return;
 
     // Prevent default action for links (e.g., <a href="#" data-action="...">)
     if (actionElement.tagName === 'A') {
