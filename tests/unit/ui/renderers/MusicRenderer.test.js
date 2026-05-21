@@ -157,4 +157,147 @@ describe('MusicRenderer', () => {
     expect(container.querySelector('.music__playlist-picker').innerHTML)
       .toContain('&lt;img');
   });
+
+  // ── Queue counter ──────────────────────────────────────────────────────
+  describe('queue counter', () => {
+    afterEach(() => {
+      // Ensure progress timer doesn't leak between tests
+      if (renderer._progressTimer) clearInterval(renderer._progressTimer);
+    });
+
+    test('shows "Track X of Y" when playlist has tracks', () => {
+      renderer.render({
+        connected: true, state: 'playing', volume: 70, playlists: [],
+        playlist: { id: 'p1', name: 'P1', position: 2, total: 10 },
+      });
+      const counter = container.querySelector('.music__queue-counter');
+      expect(counter).not.toBeNull();
+      expect(counter.textContent).toBe('Track 3 of 10');
+      expect(counter.style.display).not.toBe('none');
+    });
+
+    test('is hidden when no playlist active', () => {
+      renderer.render({ connected: true, state: 'stopped', volume: 70, playlists: [] });
+      const counter = container.querySelector('.music__queue-counter');
+      expect(counter.style.display).toBe('none');
+    });
+
+    test('updates differentially when position advances', () => {
+      renderer.render({
+        connected: true, state: 'playing', volume: 70, playlists: [],
+        playlist: { id: 'p1', name: 'P1', position: 0, total: 5 },
+      });
+      renderer.render({
+        connected: true, state: 'playing', volume: 70, playlists: [],
+        playlist: { id: 'p1', name: 'P1', position: 2, total: 5 },
+      }, {
+        connected: true, state: 'playing', volume: 70, playlists: [],
+        playlist: { id: 'p1', name: 'P1', position: 0, total: 5 },
+      });
+      expect(container.querySelector('.music__queue-counter').textContent).toBe('Track 3 of 5');
+    });
+  });
+
+  // ── Progress bar (client-side extrapolation) ─────────────────────────
+  describe('progress bar', () => {
+    afterEach(() => {
+      if (renderer._progressTimer) clearInterval(renderer._progressTimer);
+      jest.useRealTimers();
+    });
+
+    test('renders initial position and duration', () => {
+      renderer.render({
+        connected: true, state: 'paused', volume: 70, playlists: [],
+        track: { title: 'A', artist: '', position: 30, duration: 180 },
+      });
+      expect(container.querySelector('.music__time-current').textContent).toBe('0:30');
+      expect(container.querySelector('.music__time-duration').textContent).toBe('3:00');
+      const fill = container.querySelector('.music__progress-fill');
+      // 30/180 = ~16.67%
+      expect(parseFloat(fill.style.width)).toBeCloseTo(16.67, 1);
+    });
+
+    test('extrapolates position via 250ms timer while playing', () => {
+      jest.useFakeTimers();
+      const startTime = Date.now();
+      jest.setSystemTime(startTime);
+      renderer.render({
+        connected: true, state: 'playing', volume: 70, playlists: [],
+        track: { title: 'A', artist: '', position: 10, duration: 100 },
+      });
+      // Advance 2 seconds — display should now read ~0:12 (10 + 2)
+      jest.setSystemTime(startTime + 2000);
+      jest.advanceTimersByTime(250);
+      expect(container.querySelector('.music__time-current').textContent).toBe('0:12');
+    });
+
+    test('freezes position when paused', () => {
+      jest.useFakeTimers();
+      const startTime = Date.now();
+      jest.setSystemTime(startTime);
+      renderer.render({
+        connected: true, state: 'playing', volume: 70, playlists: [],
+        track: { title: 'A', artist: '', position: 5, duration: 60 },
+      });
+      jest.setSystemTime(startTime + 3000);
+      jest.advanceTimersByTime(250);
+      // Switch to paused
+      renderer.render(
+        { connected: true, state: 'paused', volume: 70, playlists: [],
+          track: { title: 'A', artist: '', position: 5, duration: 60 } },
+        { connected: true, state: 'playing', volume: 70, playlists: [],
+          track: { title: 'A', artist: '', position: 5, duration: 60 } }
+      );
+      const frozen = container.querySelector('.music__time-current').textContent;
+      // Now wait 5 more seconds — display should NOT advance
+      jest.setSystemTime(startTime + 8000);
+      jest.advanceTimersByTime(1000);
+      expect(container.querySelector('.music__time-current').textContent).toBe(frozen);
+    });
+
+    test('resets extrapolation when track changes', () => {
+      jest.useFakeTimers();
+      const startTime = Date.now();
+      jest.setSystemTime(startTime);
+      renderer.render({
+        connected: true, state: 'playing', volume: 70, playlists: [],
+        track: { title: 'A', artist: '', file: 'a.mp3', position: 50, duration: 60 },
+      });
+      jest.setSystemTime(startTime + 5000);
+      jest.advanceTimersByTime(250);
+      // New track starts
+      renderer.render(
+        { connected: true, state: 'playing', volume: 70, playlists: [],
+          track: { title: 'B', artist: '', file: 'b.mp3', position: 0, duration: 90 } },
+        { connected: true, state: 'playing', volume: 70, playlists: [],
+          track: { title: 'A', artist: '', file: 'a.mp3', position: 50, duration: 60 } }
+      );
+      expect(container.querySelector('.music__time-current').textContent).toBe('0:00');
+      expect(container.querySelector('.music__time-duration').textContent).toBe('1:30');
+    });
+
+    test('caps position at duration', () => {
+      jest.useFakeTimers();
+      const startTime = Date.now();
+      jest.setSystemTime(startTime);
+      renderer.render({
+        connected: true, state: 'playing', volume: 70, playlists: [],
+        track: { title: 'A', artist: '', position: 50, duration: 60 },
+      });
+      // Advance way past duration
+      jest.setSystemTime(startTime + 30000);
+      jest.advanceTimersByTime(250);
+      expect(container.querySelector('.music__time-current').textContent).toBe('1:00');
+      const fill = container.querySelector('.music__progress-fill');
+      expect(parseFloat(fill.style.width)).toBe(100);
+    });
+
+    test('formatTime handles invalid input', () => {
+      expect(renderer._formatTime(NaN)).toBe('0:00');
+      expect(renderer._formatTime(-1)).toBe('0:00');
+      expect(renderer._formatTime(undefined)).toBe('0:00');
+      expect(renderer._formatTime(65)).toBe('1:05');
+      expect(renderer._formatTime(125)).toBe('2:05');
+    });
+  });
 });
