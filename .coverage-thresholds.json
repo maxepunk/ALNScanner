@@ -1,8 +1,8 @@
 {
   "./src/admin/AdminOperations.js": {
-    "branches": 0,
-    "functions": 75,
-    "lines": 85
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
   },
   "./src/admin/AudioController.js": {
     "branches": 100,
@@ -21,8 +21,8 @@
   },
   "./src/admin/DisplayController.js": {
     "branches": 0,
-    "functions": 80,
-    "lines": 80
+    "functions": 100,
+    "lines": 100
   },
   "./src/admin/LightingController.js": {
     "branches": 0,
@@ -34,6 +34,16 @@
     "functions": 60,
     "lines": 65
   },
+  "./src/admin/MusicController.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
+  },
+  "./src/admin/ScoreboardController.js": {
+    "branches": 0,
+    "functions": 100,
+    "lines": 100
+  },
   "./src/admin/SessionManager.js": {
     "branches": 100,
     "functions": 40,
@@ -43,11 +53,6 @@
     "branches": 100,
     "functions": 100,
     "lines": 100
-  },
-  "./src/admin/SpotifyController.js": {
-    "branches": 65,
-    "functions": 75,
-    "lines": 70
   },
   "./src/admin/utils/CommandSender.js": {
     "branches": 65,
@@ -90,9 +95,9 @@
     "lines": 80
   },
   "./src/core/sessionReportGenerator.js": {
-    "branches": 55,
-    "functions": 80,
-    "lines": 75
+    "branches": 70,
+    "functions": 95,
+    "lines": 90
   },
   "./src/core/stateStore.js": {
     "branches": 90,
@@ -125,8 +130,8 @@
     "lines": 85
   },
   "./src/core/unifiedDataManager.js": {
-    "branches": 30,
-    "functions": 50,
+    "branches": 40,
+    "functions": 55,
     "lines": 45
   },
   "./src/main.js": {
@@ -174,6 +179,11 @@
     "functions": 100,
     "lines": 95
   },
+  "./src/ui/renderers/EvidencePickerRenderer.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
+  },
   "./src/ui/renderers/HealthRenderer.js": {
     "branches": 85,
     "functions": 100,
@@ -184,15 +194,15 @@
     "functions": 70,
     "lines": 80
   },
+  "./src/ui/renderers/MusicRenderer.js": {
+    "branches": 70,
+    "functions": 65,
+    "lines": 80
+  },
   "./src/ui/renderers/SessionRenderer.js": {
     "branches": 80,
     "functions": 90,
     "lines": 75
-  },
-  "./src/ui/renderers/SpotifyRenderer.js": {
-    "branches": 85,
-    "functions": 85,
-    "lines": 95
   },
   "./src/ui/renderers/VideoRenderer.js": {
     "branches": 80,
