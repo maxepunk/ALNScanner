@@ -33,7 +33,7 @@ export class EnvironmentRenderer {
     // Constants
     this.STREAM_LABELS = {
       video: 'Video Audio',
-      spotify: 'Spotify Music',
+      music: 'Music',
       sound: 'Sound Effects'
     };
 
@@ -43,7 +43,7 @@ export class EnvironmentRenderer {
     this._lastSinkKey = null;     // serialized sink names for change detection
     this._lastDeviceKey = null;   // serialized device addresses for change detection
     this._deviceEls = null;       // { address: { item, statusEl, actionsEl } }
-    this._volumeValues = { video: 100, spotify: 100, sound: 100 }; // Track last-known slider values
+    this._volumeValues = { video: 100, music: 100, sound: 100 }; // Track last-known slider values
   }
 
   /**
@@ -199,7 +199,7 @@ export class EnvironmentRenderer {
 
     const streams = [
       { id: 'video', label: this.STREAM_LABELS.video },
-      { id: 'spotify', label: this.STREAM_LABELS.spotify },
+      { id: 'music', label: this.STREAM_LABELS.music },
       { id: 'sound', label: this.STREAM_LABELS.sound }
     ];
 

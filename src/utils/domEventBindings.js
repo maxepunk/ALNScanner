@@ -26,17 +26,9 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
     }
   }
 
-  // Debounced volume setter — prevents dbus-send subprocess pile-up and
-  // slider DOM destruction during drag (SpotifyRenderer.render replaces innerHTML).
-  // 150ms trailing debounce: fires when user pauses or releases slider.
-  const debouncedSpotifyVolume = debounce((volume) => {
-    const adminController = app.networkedSession?.getService('adminController');
-    if (adminController?.initialized) {
-      safeAdminAction(adminController.getModule('spotifyController').setVolume(volume), 'spotifySetVolume');
-    }
-  }, 150);
-
-  // Same debounce pattern for the music (MPD) volume slider.
+  // Debounced volume setter for the music (MPD) slider.
+  // Prevents pile-up of D-Bus calls and slider DOM destruction during drag
+  // (renderer replaces innerHTML on state push). 150ms trailing debounce.
   const debouncedMusicVolume = debounce((volume) => {
     const adminController = app.networkedSession?.getService('adminController');
     if (adminController?.initialized) {
@@ -44,7 +36,7 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
     }
   }, 150);
 
-  // Debounced stream volume setter (video, spotify, sound via PipeWire)
+  // Debounced stream volume setter (video, music, sound via PipeWire)
   const debouncedStreamVolume = debounce((stream, volume) => {
     const adminController = app.networkedSession?.getService('adminController');
     if (adminController?.initialized) {
@@ -129,31 +121,9 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
       case 'discardAllHeld':
         safeAdminAction(adminController.getModule('cueController').discardAllHeld(), 'discardAllHeld');
         break;
-      case 'spotifyPlay':
-        safeAdminAction(adminController.getModule('spotifyController').play(), 'spotifyPlay');
-        break;
-      case 'spotifyPause':
-        safeAdminAction(adminController.getModule('spotifyController').pause(), 'spotifyPause');
-        break;
-      case 'spotifyNext':
-        safeAdminAction(adminController.getModule('spotifyController').next(), 'spotifyNext');
-        break;
-      case 'spotifyPrevious':
-        safeAdminAction(adminController.getModule('spotifyController').previous(), 'spotifyPrevious');
-        break;
-      case 'spotifyStop':
-        safeAdminAction(adminController.getModule('spotifyController').stop(), 'spotifyStop');
-        break;
       case 'serviceCheck': {
         const serviceId = actionElement.getAttribute('data-service-id');
         safeAdminAction(adminController.getModule('adminOperations').checkService(serviceId), 'serviceCheck');
-        break;
-      }
-      case 'spotifySetVolume': {
-        const volume = parseInt(actionElement.value, 10);
-        if (!isNaN(volume)) {
-          debouncedSpotifyVolume(volume);
-        }
         break;
       }
       case 'musicPlay':

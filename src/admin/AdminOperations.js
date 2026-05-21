@@ -68,7 +68,7 @@ export class AdminOperations {
 
   /**
    * Trigger on-demand health check for a service
-   * @param {string} serviceId - Service to check (e.g., 'vlc', 'spotify', 'audio')
+   * @param {string} serviceId - Service to check (e.g., 'vlc', 'music', 'audio')
    * @param {number} [timeout=5000]
    * @returns {Promise<Object>}
    */

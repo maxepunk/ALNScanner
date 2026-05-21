@@ -2,8 +2,7 @@
  * MusicController - Local Music Playback Control (MPD)
  * Manages music:* commands via WebSocket.
  *
- * Mirrors SpotifyController shape so it slots into adminController identically.
- * Adds playlist + shuffle/loop semantics that Spotify doesn't have.
+ * Provides transports plus playlist + shuffle/loop semantics.
  *
  * @module admin/MusicController
  */
@@ -78,7 +77,7 @@ export class MusicController {
    * Cleanup (no persistent listeners — CommandSender uses one-time listeners).
    */
   destroy() {
-    // Intentionally empty — parallel with SpotifyController.
+    // Intentionally empty — CommandSender uses one-time listeners.
   }
 }
 

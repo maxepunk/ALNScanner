@@ -16,7 +16,7 @@ process.on('unhandledRejection', (reason) => { unhandledRejections.push(reason);
 import { bindDOMEvents } from '../../../src/utils/domEventBindings.js';
 
 describe('domEventBindings - safeAdminAction', () => {
-  const mockSpotifyController = {
+  const mockMusicController = {
     play: jest.fn(),
     pause: jest.fn(),
     stop: jest.fn(),
@@ -62,7 +62,7 @@ describe('domEventBindings - safeAdminAction', () => {
     initialized: true,
     getModule: jest.fn((name) => {
       switch (name) {
-        case 'spotifyController': return mockSpotifyController;
+        case 'musicController': return mockMusicController;
         case 'cueController': return mockCueController;
         case 'bluetoothController': return mockBluetoothController;
         case 'audioController': return mockAudioController;
@@ -119,11 +119,11 @@ describe('domEventBindings - safeAdminAction', () => {
     await Promise.resolve();
   }
 
-  it('should log to debug when a spotify action rejects', async () => {
-    mockSpotifyController.play.mockRejectedValueOnce(new Error('Connection lost'));
+  it('should log to debug when a music action rejects', async () => {
+    mockMusicController.play.mockRejectedValueOnce(new Error('Connection lost'));
 
     const btn = document.createElement('button');
-    btn.dataset.action = 'admin.spotifyPlay';
+    btn.dataset.action = 'admin.musicPlay';
     document.body.appendChild(btn);
 
     clickAction(btn);
@@ -196,11 +196,11 @@ describe('domEventBindings - safeAdminAction', () => {
   });
 
   it('should catch rejected promise inside debounced volume callback', async () => {
-    mockSpotifyController.setVolume.mockRejectedValueOnce(new Error('Volume failed'));
+    mockMusicController.setVolume.mockRejectedValueOnce(new Error('Volume failed'));
 
     const slider = document.createElement('input');
     slider.type = 'range';
-    slider.dataset.action = 'admin.spotifySetVolume';
+    slider.dataset.action = 'admin.musicSetVolume';
     slider.value = '50';
     document.body.appendChild(slider);
 
@@ -208,7 +208,7 @@ describe('domEventBindings - safeAdminAction', () => {
     jest.advanceTimersByTime(150);
     await flushMicrotasks();
 
-    expect(mockSpotifyController.setVolume).toHaveBeenCalledWith(50);
+    expect(mockMusicController.setVolume).toHaveBeenCalledWith(50);
     expect(mockDebug.log).toHaveBeenCalledWith(
       expect.stringContaining('Volume failed'),
       true
@@ -216,10 +216,10 @@ describe('domEventBindings - safeAdminAction', () => {
   });
 
   it('should include action name in the error log message', async () => {
-    mockSpotifyController.pause.mockRejectedValueOnce(new Error('timeout'));
+    mockMusicController.pause.mockRejectedValueOnce(new Error('timeout'));
 
     const btn = document.createElement('button');
-    btn.dataset.action = 'admin.spotifyPause';
+    btn.dataset.action = 'admin.musicPause';
     document.body.appendChild(btn);
 
     clickAction(btn);
@@ -230,14 +230,14 @@ describe('domEventBindings - safeAdminAction', () => {
       call => typeof call[0] === 'string' && call[0].includes('timeout')
     );
     expect(logCall).toBeDefined();
-    expect(logCall[0]).toMatch(/spotify/i);
+    expect(logCall[0]).toMatch(/music/i);
   });
 
   it('should not produce unhandled rejections when wrapper is in place', async () => {
-    mockSpotifyController.next.mockRejectedValueOnce(new Error('network error'));
+    mockMusicController.next.mockRejectedValueOnce(new Error('network error'));
 
     const btn = document.createElement('button');
-    btn.dataset.action = 'admin.spotifyNext';
+    btn.dataset.action = 'admin.musicNext';
     document.body.appendChild(btn);
 
     clickAction(btn);

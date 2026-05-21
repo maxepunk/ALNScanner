@@ -518,7 +518,7 @@ export class UnifiedDataManager extends EventTarget {
       this._networkedStrategy.setSessionId?.(sessionId);
     }
 
-    // Service state (video, cue, spotify, audio, bluetooth, lighting, health, held)
+    // Service state (video, cue, music, audio, bluetooth, lighting, health, held)
     // is now managed by StateStore — no ephemeral state to clear here.
 
     this._log(`Reset for new session: ${sessionId || 'none'}`);

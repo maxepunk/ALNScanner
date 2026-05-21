@@ -3,14 +3,16 @@ import { escapeHtml } from '../../utils/escapeHtml.js';
 /**
  * MusicRenderer - Differential DOM Rendering for Music (MPD) Status & Controls
  *
- * Mirrors SpotifyRenderer pattern: first render builds full DOM and caches
- * element references; subsequent renders diff state vs prev and only update
- * changed elements. Volume slider is protected during user drag.
+ * First render builds full DOM and caches element references; subsequent
+ * renders diff state vs prev and only update changed elements. Volume
+ * slider is protected during user drag.
  *
- * Extends Spotify shape with:
+ * Features:
  *   - Playlist picker (<select>) populated from state.playlists
+ *   - Transport controls (play/pause/stop/next/previous)
  *   - Shuffle + Loop toggles
- *   - Ducking indicator (same pattern as SpotifyRenderer.renderDucking)
+ *   - Volume slider with drag protection
+ *   - Ducking indicator
  */
 export class MusicRenderer {
   constructor(elements = {}) {
@@ -211,7 +213,7 @@ export class MusicRenderer {
   }
 
   /**
-   * Render ducking status indicator (mirrors SpotifyRenderer.renderDucking).
+   * Render ducking status indicator.
    * @param {Object} duckingState - { ducked, volume, activeSources }
    */
   renderDucking(duckingState) {

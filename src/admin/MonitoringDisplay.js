@@ -4,7 +4,6 @@ import { CueRenderer } from '../ui/renderers/CueRenderer.js';
 import { EnvironmentRenderer } from '../ui/renderers/EnvironmentRenderer.js';
 import { SessionRenderer } from '../ui/renderers/SessionRenderer.js';
 import { VideoRenderer } from '../ui/renderers/VideoRenderer.js';
-import { SpotifyRenderer } from '../ui/renderers/SpotifyRenderer.js';
 import { MusicRenderer } from '../ui/renderers/MusicRenderer.js';
 import { HealthRenderer } from '../ui/renderers/HealthRenderer.js';
 import { HeldItemsRenderer } from '../ui/renderers/HeldItemsRenderer.js';
@@ -26,7 +25,6 @@ export class MonitoringDisplay {
     this.envRenderer = new EnvironmentRenderer();
     this.sessionRenderer = new SessionRenderer();
     this.videoRenderer = new VideoRenderer();
-    this.spotifyRenderer = new SpotifyRenderer();
     this.musicRenderer = new MusicRenderer();
     this.healthRenderer = new HealthRenderer();
     this.heldItemsRenderer = new HeldItemsRenderer();
@@ -84,17 +82,11 @@ export class MonitoringDisplay {
       this.envRenderer.renderLighting(state, prev);
     });
 
-    // Environment: Audio + ducking forwarding (both spotify and music)
+    // Environment: Audio + ducking forwarding to MusicRenderer
     on('audio', (state, prev) => {
       this.envRenderer.renderAudio(state, prev);
-      // Backend shape is { spotify: [...], music: [...] } where each value is
-      // the list of active source streams (video/sound) ducking that target.
-      const spotifySources = state?.ducking?.spotify;
-      this.spotifyRenderer.renderDucking(
-        spotifySources && spotifySources.length > 0
-          ? { ducked: true, activeSources: spotifySources }
-          : { ducked: false, activeSources: [] }
-      );
+      // Backend shape is { music: [...] } where the value is the list of
+      // active source streams (video/sound) ducking the music target.
       const musicSources = state?.ducking?.music;
       this.musicRenderer.renderDucking(
         musicSources && musicSources.length > 0
@@ -119,11 +111,6 @@ export class MonitoringDisplay {
     on('video', (state, prev) => {
       this.videoRenderer.render(mapVideoState(state), mapVideoState(prev));
       this._updateReturnToVideoVisibility(state);
-    });
-
-    // Spotify
-    on('spotify', (state, prev) => {
-      this.spotifyRenderer.render(state, prev);
     });
 
     // Music (MPD)
@@ -169,7 +156,7 @@ export class MonitoringDisplay {
   /**
    * Handle incoming WebSocket messages
    *
-   * Service state (cue, spotify, environment, video, health, gameclock, held)
+   * Service state (cue, music, environment, video, health, gameclock, held)
    * is handled by service:state → StateStore → store subscriptions → Renderers.
    *
    * This handler processes:
@@ -285,7 +272,7 @@ export class MonitoringDisplay {
 
   /**
    * Initialize displays from sync:full event.
-   * Service state (gameclock, cue, spotify, environment, video, health, held)
+   * Service state (gameclock, cue, music, environment, video, health, held)
    * is handled by StateStore subscriptions — sync:full populates the store
    * in networkedSession, which triggers subscriptions automatically.
    *

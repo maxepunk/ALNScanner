@@ -13,7 +13,6 @@ export class HealthRenderer {
     this.container = elements.container || document.getElementById('health-dashboard');
     this.SERVICE_NAMES = {
       vlc: 'VLC Player',
-      spotify: 'Spotify',
       music: 'Music (MPD)',
       lighting: 'Lighting (HA)',
       bluetooth: 'Bluetooth',

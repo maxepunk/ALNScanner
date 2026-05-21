@@ -135,7 +135,7 @@ UnifiedDataManager (Facade)
 
 ### StateStore (Service Domain State)
 
-**Purpose:** Domain-keyed state container for service state (spotify, music, video, health, bluetooth, audio, lighting, sound, gameclock, cueengine, held). Populated in Networked mode only via `service:state` WebSocket events and `sync:full` bulk restore.
+**Purpose:** Domain-keyed state container for service state (music, video, health, bluetooth, audio, lighting, sound, gameclock, cueengine, held). Populated in Networked mode only via `service:state` WebSocket events and `sync:full` bulk restore.
 
 **Architectural boundary:** StateStore handles service domains with snapshot/shallow-merge semantics. Session/transaction data stays in UnifiedDataManager + storage strategies (list/accumulator semantics — different data pattern).
 
@@ -146,11 +146,11 @@ UnifiedDataManager (Facade)
 
 **API:**
 ```javascript
-store.update('spotify', { connected: true, state: 'Playing' }); // shallow merge
-store.get('spotify');        // returns defensive copy or null
+store.update('music', { connected: true, state: 'playing' }); // shallow merge
+store.get('music');        // returns defensive copy or null
 store.getAll();              // returns snapshot of all domains
-store.on('spotify', (state, prev) => { ... });  // domain-filtered subscription
-store.off('spotify', callback);
+store.on('music', (state, prev) => { ... });  // domain-filtered subscription
+store.off('music', callback);
 ```
 
 ## Testing Architecture
@@ -359,7 +359,6 @@ ALNScanner/
 │   │   ├── MonitoringDisplay.js    # Game Activity + environment + show control status
 │   │   ├── SessionManager.js
 │   │   ├── SoundController.js      # Phase 1: Sound playback control
-│   │   ├── SpotifyController.js   # Phase 2: Spotify status display
 │   │   ├── VideoController.js
 │   │   └── utils/
 │   ├── core/              # Core business logic
@@ -488,7 +487,6 @@ ALNScanner/
 - [AudioController.js](src/admin/AudioController.js) - Audio routing control (HDMI/Bluetooth via PipeWire)
 - [BluetoothController.js](src/admin/BluetoothController.js) - BT speaker scan/pair/connect/disconnect
 - [LightingController.js](src/admin/LightingController.js) - Home Assistant scene activation/refresh
-- [SpotifyController.js](src/admin/SpotifyController.js) - Spotify status display in admin panel (Phase 2)
 - [MusicController.js](src/admin/MusicController.js) - Local music (MPD) playback control: transports, volume, shuffle/loop, playlist load
 
 **Utils Layer ([src/utils/](src/utils/)):**
@@ -504,7 +502,7 @@ DataManager emits events (`transaction:added`, `transaction:deleted`, `team-scor
 
 **CRITICAL: Storage strategies MUST emit events.** `_wireStrategyEvents()` in UnifiedDataManager forwards events from the active strategy. If a strategy method (e.g., `addTransaction`) doesn't `dispatchEvent(new CustomEvent('transaction:added', ...))`, the UI update handlers (badge, stats) will silently never fire.
 
-**Service domain state** (video, spotify, health, cues, environment, etc.) flows through a separate path: `service:state` WebSocket events → StateStore → MonitoringDisplay store subscriptions → renderers. See the StateStore section above.
+**Service domain state** (video, music, health, cues, environment, etc.) flows through a separate path: `service:state` WebSocket events → StateStore → MonitoringDisplay store subscriptions → renderers. See the StateStore section above.
 
 ## Transaction Flow
 
@@ -586,7 +584,7 @@ DataManager emits events (`transaction:added`, `transaction:deleted`, `team-scor
 - `device:connected` / `device:disconnected` - Device tracking
 - `display:mode` - HDMI display mode changes
 - `cue:fired` / `cue:completed` / `cue:error` - Discrete cue game events
-- `service:state` - **Sole push mechanism** for all service domain state (populates StateStore with `{domain, state}` envelope). 11 domains: `spotify`, `music`, `video`, `health`, `bluetooth`, `audio`, `lighting`, `sound`, `gameclock`, `cueengine`, `held`
+- `service:state` - **Sole push mechanism** for all service domain state (populates StateStore with `{domain, state}` envelope). 10 domains: `music`, `video`, `health`, `bluetooth`, `audio`, `lighting`, `sound`, `gameclock`, `cueengine`, `held`
 
 **Event Envelope Pattern (AsyncAPI Decision #2):**
 ```javascript
@@ -704,7 +702,7 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 **BluetoothController:** Scan for speakers, pair/unpair, connect/disconnect. Events: `bluetooth:device`, `bluetooth:scan`.
 
-**AudioController:** Route audio streams and set per-stream volume (HDMI and Bluetooth sinks). Routing dropdowns + volume sliders (video/spotify/sound independently controllable). Volume sliders use `_volumeValues` cache in EnvironmentRenderer to survive dropdown rebuilds (BT speaker reconnect). State delivered via `service:state` domain `audio`.
+**AudioController:** Route audio streams and set per-stream volume (HDMI and Bluetooth sinks). Routing dropdowns + volume sliders (video/music/sound independently controllable). Volume sliders use `_volumeValues` cache in EnvironmentRenderer to survive dropdown rebuilds (BT speaker reconnect). State delivered via `service:state` domain `audio`.
 
 **LightingController:** Activate Home Assistant scenes, refresh scene list. State delivered via `service:state` domain `lighting`.
 
@@ -718,7 +716,7 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 **MonitoringDisplay updates:** Game clock display (elapsed time), cue/sound event toast notifications, Quick Fire cue grid, Standing Cues list with enable/disable toggles.
 
-**MonitoringDisplay** handles all environment and show control status display updates. Uses `data-action` attributes wired in `domEventBindings.js`. Subscribes to StateStore domains via `_wireStoreSubscriptions()` and delegates to specialized differential renderers: `HealthRenderer` (service health), `HeldItemsRenderer` (blocked cues/videos), `SpotifyRenderer` (playback + ducking), `MusicRenderer` (MPD playback + playlist picker + ducking), `CueRenderer` (active cues + quick fire), `VideoRenderer` (queue + now playing), `EnvironmentRenderer` (BT/audio/lighting). Also handles discrete game events (`cue:fired`, `cue:completed`, `display:mode`) via `_handleMessage()`. The audio-domain subscription forwards ducking sources for BOTH `ducking.spotify` and `ducking.music` from `audioRoutingService.getState()`.
+**MonitoringDisplay** handles all environment and show control status display updates. Uses `data-action` attributes wired in `domEventBindings.js`. Subscribes to StateStore domains via `_wireStoreSubscriptions()` and delegates to specialized differential renderers: `HealthRenderer` (service health), `HeldItemsRenderer` (blocked cues/videos), `MusicRenderer` (MPD playback + playlist picker + ducking), `CueRenderer` (active cues + quick fire), `VideoRenderer` (queue + now playing), `EnvironmentRenderer` (BT/audio/lighting). Also handles discrete game events (`cue:fired`, `cue:completed`, `display:mode`) via `_handleMessage()`. The audio-domain subscription forwards `ducking.music` sources from `audioRoutingService.getState()` to `MusicRenderer.renderDucking()`.
 
 **GOTCHA**: `MonitoringDisplay.refreshAllDisplays()` re-renders the template, destroying dynamic DOM state (active cue elements, now-playing). It calls `_requestInitialState()` afterward to restore state from the backend.
 

@@ -1,7 +1,7 @@
 /**
  * domEventBindings - Music Action Tests
  *
- * Mirrors the spotify-actions test suite for the music (MPD) controls:
+ * Music event binding tests for the music (MPD) controls:
  * - Transport clicks (play/pause/stop/next/previous)
  * - Volume slider with debounce
  * - Checkbox toggles for shuffle/loop (boolean payload)
