@@ -143,7 +143,12 @@ export class EnvironmentRenderer {
    * @param {Object|null} prev - Previous audio state
    */
   renderAudio(audioState, prev = null) {
-    const { routes, availableSinks } = audioState;
+    const { routes, availableSinks, volumes } = audioState;
+
+    // Seed slider cache + live DOM from persisted volumes (orchestrator owns
+    // per-stream volume state — see audioRoutingService.getState()). Done
+    // before the sink-change rebuild so new dropdowns pick up fresh values.
+    this._applyVolumes(volumes);
 
     // Build dropdowns if sinks available and changed
     if (availableSinks && availableSinks.length > 0 && this.audioRoutingContainer) {
@@ -220,6 +225,30 @@ export class EnvironmentRenderer {
         </div>
       </div>
     `).join('');
+  }
+
+  /**
+   * Merge incoming persisted volumes into the cache and update live sliders
+   * in place. Safe to call when no slider DOM exists (cache update only).
+   * @param {Object<string, number>} volumes
+   * @private
+   */
+  _applyVolumes(volumes) {
+    if (!volumes || typeof volumes !== 'object') return;
+
+    for (const [stream, value] of Object.entries(volumes)) {
+      if (typeof value !== 'number') continue;
+      this._volumeValues[stream] = value;
+
+      if (!this.audioRoutingContainer) continue;
+      const slider = this.audioRoutingContainer.querySelector(`input[data-stream="${stream}"]`);
+      if (slider && String(slider.value) !== String(value)) {
+        slider.value = String(value);
+        const item = slider.closest('.audio-control-item');
+        const label = item && item.querySelector('.volume-label');
+        if (label) label.textContent = `${value}%`;
+      }
+    }
   }
 
   // ─── Bluetooth ────────────────────────────────────────────────

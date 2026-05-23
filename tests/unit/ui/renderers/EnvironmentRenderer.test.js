@@ -296,6 +296,68 @@ describe('EnvironmentRenderer', () => {
     });
   });
 
+  describe('volume slider state from audioState.volumes', () => {
+    let renderer;
+    let container;
+
+    beforeEach(() => {
+      document.body.innerHTML = '<div id="audio-routing-dropdowns"></div>';
+      container = document.getElementById('audio-routing-dropdowns');
+      renderer = new EnvironmentRenderer({ audioRoutingContainer: container });
+    });
+
+    test('seeds slider DOM from audioState.volumes on initial render', () => {
+      const sinks = [{ name: 'hdmi-stereo', label: 'HDMI', type: 'hdmi' }];
+
+      renderer.renderAudio({
+        availableSinks: sinks,
+        routes: { video: 'hdmi-stereo', music: 'hdmi-stereo', sound: 'hdmi-stereo' },
+        volumes: { video: 75, music: 40, sound: 90 },
+      });
+
+      expect(container.querySelector('input[data-stream="video"]').value).toBe('75');
+      expect(container.querySelector('input[data-stream="music"]').value).toBe('40');
+      expect(container.querySelector('input[data-stream="sound"]').value).toBe('90');
+    });
+
+    test('updates existing slider DOM when volumes change without sink set changing', () => {
+      const sinks = [{ name: 'hdmi-stereo', label: 'HDMI', type: 'hdmi' }];
+
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: {} });
+      expect(container.querySelector('input[data-stream="video"]').value).toBe('100');
+
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: { video: 25 } });
+
+      expect(container.querySelector('input[data-stream="video"]').value).toBe('25');
+      expect(container.querySelector('input[data-stream="music"]').value).toBe('100');
+    });
+
+    test('updates the volume label text when slider changes', () => {
+      const sinks = [{ name: 'hdmi-stereo', label: 'HDMI', type: 'hdmi' }];
+
+      renderer.renderAudio({
+        availableSinks: sinks,
+        routes: {},
+        volumes: { video: 60 },
+      });
+
+      const item = container.querySelector('input[data-stream="video"]').closest('.audio-control-item');
+      expect(item.querySelector('.volume-label').textContent).toBe('60%');
+    });
+
+    test('omitted volumes payload does not overwrite the cache', () => {
+      const sinks = [{ name: 'hdmi-stereo', label: 'HDMI', type: 'hdmi' }];
+
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: { video: 75 } });
+      expect(renderer._volumeValues.video).toBe(75);
+
+      renderer.renderAudio({ availableSinks: sinks, routes: {} });
+
+      expect(renderer._volumeValues.video).toBe(75);
+      expect(container.querySelector('input[data-stream="video"]').value).toBe('75');
+    });
+  });
+
   describe('Bluetooth', () => {
     it('should render disconnect button for connected devices', () => {
       renderer.renderBluetooth({
