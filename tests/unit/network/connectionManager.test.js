@@ -333,24 +333,25 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       jest.useRealTimers();
     });
 
-    it('should use exponential backoff delays (1s, 2s, 4s, 8s, 16s, 30s max)', async () => {
-      const delays = [];
+    it('should use jittered exponential backoff with 1s base for the first retry', () => {
+      // retryCount is the post-increment value: 1 = first retry.
+      // base * 2^(retryCount-1), capped at 30s, +/- 20% jitter.
+      const cases = [
+        { retryCount: 1, center: 1000 },
+        { retryCount: 2, center: 2000 },
+        { retryCount: 3, center: 4000 },
+        { retryCount: 4, center: 8000 },
+        { retryCount: 5, center: 16000 },
+        { retryCount: 6, center: 30000 }, // capped
+        { retryCount: 7, center: 30000 }, // capped
+      ];
 
-      for (let i = 0; i < 7; i++) {
-        connectionManager.retryCount = i;
+      for (const { retryCount, center } of cases) {
+        connectionManager.retryCount = retryCount;
         const delay = connectionManager._calculateRetryDelay();
-        delays.push(delay);
+        expect(delay).toBeGreaterThanOrEqual(center * 0.8);
+        expect(delay).toBeLessThanOrEqual(center * 1.2);
       }
-
-      expect(delays).toEqual([
-        1000,  // 1s
-        2000,  // 2s
-        4000,  // 4s
-        8000,  // 8s
-        16000, // 16s
-        30000, // 30s (capped)
-        30000  // 30s (capped)
-      ]);
     });
 
     it('should emit auth:required after max retries', (done) => {

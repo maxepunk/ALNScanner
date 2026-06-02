@@ -268,10 +268,15 @@ export class ConnectionManager extends EventTarget {
    * @private
    */
   _calculateRetryDelay() {
-    const baseDelay = 1000; // 1 second
-    const maxDelay = 30000; // 30 seconds
-    const delay = baseDelay * Math.pow(2, this.retryCount);
-    return Math.min(delay, maxDelay);
+    const baseDelay = 1000;  // 1 second
+    const maxDelay = 30000;  // 30 seconds
+    // retryCount is post-increment (1 = first retry), so 2^(retryCount-1)
+    // makes the first retry use the 1s base.
+    const exp = Math.max(0, this.retryCount - 1);
+    const capped = Math.min(baseDelay * Math.pow(2, exp), maxDelay);
+    // +/- 20% jitter to avoid lockstep reconnects across stations.
+    const jitter = capped * 0.2 * (Math.random() * 2 - 1);
+    return Math.round(capped + jitter);
   }
 
   /**
