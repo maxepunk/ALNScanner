@@ -163,6 +163,41 @@ describe('NetworkedQueueManager', () => {
       expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(false); // absent after result
     });
 
+    it('removes the entry and surfaces transaction:failed on a definitive rejected result (connected)', async () => {
+      mockClient.isConnected = true;
+      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'rejected', message: 'No active session' });
+
+      const failedSpy = jest.fn();
+      queueManager.addEventListener('transaction:failed', failedSpy);
+
+      const id = queueManager.queueTransaction({ tokenId: 'tR', teamId: '001' });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(false);  // permanent: removed
+      expect(failedSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the entry persisted when the durable submit throws (transient, connected)', async () => {
+      mockClient.isConnected = true;
+      jest.spyOn(queueManager, 'replayTransaction').mockRejectedValue(new Error('connection lost'));
+
+      const id = queueManager.queueTransaction({ tokenId: 'tT', teamId: '001' });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // Transient failure: leave persisted for syncQueue to retry on reconnect
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);
+    });
+
+    it('keeps the entry persisted when the connected result is queued', async () => {
+      mockClient.isConnected = true;
+      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'queued' });
+
+      const id = queueManager.queueTransaction({ tokenId: 'tQ', teamId: '001' });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);
+    });
+
     it('should handle missing client gracefully', () => {
       queueManager.client = null;
 
