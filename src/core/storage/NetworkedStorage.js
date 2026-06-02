@@ -130,13 +130,21 @@ export class NetworkedStorage extends IStorageStrategy {
 
     this.debug?.log(`[NetworkedStorage] Submitting transaction: ${transaction.tokenId} for team ${transaction.teamId}`);
 
+    // Backend STRICTLY requires the AsyncAPI envelope {event, data, timestamp}
+    // (adminEvents.js rejects an unwrapped payload with VALIDATION_ERROR). Mirror
+    // the same envelope _emitCommand uses. CC-5.
     this.socket.emit('transaction:submit', {
-      tokenId: transaction.tokenId,
-      teamId: transaction.teamId,
-      deviceId: transaction.deviceId,
-      deviceType: 'gm',
-      mode: transaction.mode,
-      timestamp: transaction.timestamp || new Date().toISOString()
+      event: 'transaction:submit',
+      data: {
+        tokenId: transaction.tokenId,
+        teamId: transaction.teamId,
+        deviceId: transaction.deviceId,
+        deviceType: 'gm',
+        mode: transaction.mode,
+        summary: transaction.summary ?? null,
+        timestamp: transaction.timestamp || new Date().toISOString()
+      },
+      timestamp: new Date().toISOString()
     });
 
     // Mark locally for duplicate prevention

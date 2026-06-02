@@ -99,7 +99,7 @@ describe('NetworkedStorage Strategy', () => {
   });
 
   describe('addTransaction', () => {
-    it('should emit transaction:submit to socket', async () => {
+    it('should emit transaction:submit wrapped in the AsyncAPI envelope', async () => {
       const tx = {
         tokenId: 'token1',
         teamId: '001',
@@ -108,12 +108,18 @@ describe('NetworkedStorage Strategy', () => {
 
       await storage.addTransaction(tx);
 
+      // Backend strictly rejects an unwrapped payload (adminEvents.js requires
+      // {event, data, timestamp}). CC-5.
       expect(mockSocket.emit).toHaveBeenCalledWith(
         'transaction:submit',
         expect.objectContaining({
-          tokenId: 'token1',
-          teamId: '001',
-          deviceType: 'gm'
+          event: 'transaction:submit',
+          timestamp: expect.any(String),
+          data: expect.objectContaining({
+            tokenId: 'token1',
+            teamId: '001',
+            deviceType: 'gm'
+          })
         })
       );
     });
