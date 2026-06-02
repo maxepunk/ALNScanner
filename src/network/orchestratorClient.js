@@ -109,7 +109,9 @@ export class OrchestratorClient extends EventTarget {
           this.connectionTimeout = null;
         }
         // No need to manually remove 'once' listeners - they auto-remove after firing
-        this.dispatchEvent(new CustomEvent('socket:error', { detail: { error } }));
+        this.dispatchEvent(new CustomEvent('socket:error', {
+          detail: { error, reason: this._parseErrorReason(error) }
+        }));
         reject(error);
       };
 
@@ -252,7 +254,9 @@ export class OrchestratorClient extends EventTarget {
     });
 
     this.socket.on('connect_error', (error) => {
-      this.dispatchEvent(new CustomEvent('socket:error', { detail: { error } }));
+      this.dispatchEvent(new CustomEvent('socket:error', {
+        detail: { error, reason: this._parseErrorReason(error) }
+      }));
     });
 
     // Forward all AsyncAPI message types
@@ -275,6 +279,19 @@ export class OrchestratorClient extends EventTarget {
         }));
       });
     });
+  }
+
+  /**
+   * Extract the backend reject reason prefix from a connect_error.
+   * Backend rejects with messages like "AUTH_INVALID: ...", "DEVICE_ID_COLLISION: ...".
+   * @param {Error} error
+   * @returns {string|null} The CONSTANT_CASE prefix, or null if not present
+   * @private
+   */
+  _parseErrorReason(error) {
+    const msg = error?.message || '';
+    const match = msg.match(/^([A-Z_]+):/);
+    return match ? match[1] : null;
   }
 
   /**

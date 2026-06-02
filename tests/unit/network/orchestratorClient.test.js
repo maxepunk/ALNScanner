@@ -98,7 +98,23 @@ describe('OrchestratorClient - Dumb Pipe', () => {
 
       await expect(connectPromise).rejects.toThrow('Connection failed');
       expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({
-        detail: { error: expect.any(Error) }
+        detail: expect.objectContaining({ error: expect.any(Error) })
+      }));
+    });
+
+    it('should expose backend reject reason on socket:error detail', async () => {
+      const errorHandler = jest.fn();
+      client.addEventListener('socket:error', errorHandler);
+
+      const connectPromise = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateError(new Error('DEVICE_ID_COLLISION: This device ID is already connected from another location'));
+
+      await expect(connectPromise).rejects.toThrow('DEVICE_ID_COLLISION');
+      expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({
+        detail: expect.objectContaining({
+          reason: 'DEVICE_ID_COLLISION',
+          error: expect.any(Error)
+        })
       }));
     });
 
