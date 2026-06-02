@@ -379,7 +379,11 @@ export class ConnectionWizard {
       // (Modal close and UI transition happen in App._initializeNetworkedMode)
 
     } catch (error) {
-      if (error.name === 'AbortError') {
+      // AbortSignal.timeout() rejects with a TimeoutError DOMException in spec
+      // browsers (Chrome/Edge — the production runtime); undici/Node may surface
+      // AbortError. Treat both as a timeout so the operator gets an actionable
+      // message (covers both the health-check and the auth-POST timeouts).
+      if (error.name === 'TimeoutError' || error.name === 'AbortError') {
         statusDiv.textContent = '❌ Server timed out — check the orchestrator and retry.';
       } else {
         statusDiv.textContent = `❌ Connection failed: ${error.message}`;

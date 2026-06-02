@@ -253,30 +253,36 @@ describe('ConnectionWizard', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    test('should show a timeout-specific message when the auth POST aborts', async () => {
-      const display = document.getElementById('stationNameDisplay');
-      display.textContent = 'GM_Station_1';
-      display.dataset.deviceId = 'GM_Station_1';
+    // AbortSignal.timeout() rejects with a TimeoutError DOMException in spec
+    // browsers (Chrome/Edge — the production runtime); undici/Node may surface
+    // AbortError. Both must produce the timeout-specific operator message.
+    test.each([['TimeoutError'], ['AbortError']])(
+      'shows a timeout-specific message when the auth POST aborts with %s',
+      async (errorName) => {
+        const display = document.getElementById('stationNameDisplay');
+        display.textContent = 'GM_Station_1';
+        display.dataset.deviceId = 'GM_Station_1';
 
-      document.getElementById('serverUrl').value = 'http://localhost:3000';
-      document.getElementById('gmPassword').value = 'admin';
+        document.getElementById('serverUrl').value = 'http://localhost:3000';
+        document.getElementById('gmPassword').value = 'admin';
 
-      mockFetch
-        .mockResolvedValueOnce({ ok: true }) // health check passes
-        .mockRejectedValueOnce(
-          Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })
-        ); // auth POST times out
+        mockFetch
+          .mockResolvedValueOnce({ ok: true }) // health check passes
+          .mockRejectedValueOnce(
+            Object.assign(new Error('The operation was aborted due to timeout'), { name: errorName })
+          ); // auth POST times out
 
-      const event = new Event('submit');
-      event.preventDefault = jest.fn();
+        const event = new Event('submit');
+        event.preventDefault = jest.fn();
 
-      await wizard.handleConnectionSubmit(event);
+        await wizard.handleConnectionSubmit(event);
 
-      const statusDiv = document.getElementById('connectionStatusMsg');
-      expect(statusDiv.textContent).toContain('timed out');
-      // must NOT proceed to networked init on a timeout
-      expect(mockApp.selectGameMode).not.toHaveBeenCalled();
-    });
+        const statusDiv = document.getElementById('connectionStatusMsg');
+        expect(statusDiv.textContent).toContain('timed out');
+        // must NOT proceed to networked init on a timeout
+        expect(mockApp.selectGameMode).not.toHaveBeenCalled();
+      }
+    );
 
     test('should pass an AbortSignal to the auth POST', async () => {
       const display = document.getElementById('stationNameDisplay');
