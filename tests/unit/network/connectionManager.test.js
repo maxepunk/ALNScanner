@@ -266,18 +266,46 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       expect(connectSpy).not.toHaveBeenCalled();
     });
 
-    it('should emit disconnected event on disconnect', async () => {
-      const disconnectedHandler = jest.fn();
-      connectionManager.addEventListener('disconnected', disconnectedHandler);
+    it('should auto-reconnect on transport close (Wi-Fi blip)', (done) => {
+      connectionManager.token = createValidToken();
 
-      // Simulate disconnect
+      jest.spyOn(connectionManager, 'connect').mockImplementation(async () => {
+        expect(true).toBe(true); // reconnect was attempted
+        done();
+      });
+
       const disconnectHandler = mockClient.addEventListener.mock.calls
         .find(c => c[0] === 'socket:disconnected')[1];
 
       disconnectHandler({ detail: { reason: 'transport close' } });
+    });
+
+    it('should auto-reconnect on ping timeout', (done) => {
+      connectionManager.token = createValidToken();
+
+      jest.spyOn(connectionManager, 'connect').mockImplementation(async () => {
+        expect(true).toBe(true);
+        done();
+      });
+
+      const disconnectHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'socket:disconnected')[1];
+
+      disconnectHandler({ detail: { reason: 'ping timeout' } });
+    });
+
+    it('should emit disconnected event on disconnect', async () => {
+      const disconnectedHandler = jest.fn();
+      connectionManager.addEventListener('disconnected', disconnectedHandler);
+
+      // Use a client-initiated reason so no reconnect timer is scheduled.
+      const disconnectHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'socket:disconnected')[1];
+
+      disconnectHandler({ detail: { reason: 'io client disconnect' } });
 
       expect(disconnectedHandler).toHaveBeenCalledWith(expect.objectContaining({
-        detail: { reason: 'transport close' }
+        detail: { reason: 'io client disconnect' }
       }));
       expect(connectionManager.state).toBe('disconnected');
     });

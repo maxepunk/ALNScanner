@@ -173,23 +173,26 @@ export class ConnectionManager extends EventTarget {
       this.state = 'disconnected';
       this.dispatchEvent(new CustomEvent('disconnected', { detail: { reason } }));
 
-      // Only auto-reconnect on server-initiated disconnect
-      if (reason === 'io server disconnect') {
-        // Check if token still valid
-        if (!this.isTokenValid()) {
-          this.dispatchEvent(new CustomEvent('auth:required', {
-            detail: { reason: 'token_expired' }
-          }));
-          return;
-        }
-
-        // Schedule reconnection
-        setTimeout(() => {
-          this.connect().catch(() => {
-            // Retry logic handles failures
-          });
-        }, 1000);
+      // Client-initiated disconnects are intentional — never auto-reconnect.
+      const CLIENT_INITIATED = ['io client disconnect', 'client namespace disconnect'];
+      if (CLIENT_INITIATED.includes(reason)) {
+        return;
       }
+
+      // Any other reason (transport close, ping timeout, transport error,
+      // io server disconnect) is an unexpected drop — auto-reconnect, token permitting.
+      if (!this.isTokenValid()) {
+        this.dispatchEvent(new CustomEvent('auth:required', {
+          detail: { reason: 'token_expired' }
+        }));
+        return;
+      }
+
+      setTimeout(() => {
+        this.connect().catch(() => {
+          // Retry logic handles failures
+        });
+      }, this._calculateRetryDelay());
     };
 
     this.client.addEventListener('socket:disconnected', this.disconnectHandler);
