@@ -244,7 +244,10 @@ export class NetworkedQueueManager extends EventTarget {
    */
   replayTransaction(transaction) {
     return new Promise((resolve, reject) => {
-      const handlerKey = `${transaction.tokenId}-${transaction.teamId}`;
+      // Key by clientTxId (unique per submission) so concurrent same-token replays
+      // can't collide in activeHandlers and delete the wrong handler / leak a
+      // listener on timeout. Fall back to tokenId-teamId for any caller without one.
+      const handlerKey = transaction.clientTxId || `${transaction.tokenId}-${transaction.teamId}`;
 
       // Helper to cleanup handler and timeout
       const cleanup = (timeout, handler) => {

@@ -44,6 +44,7 @@ describe('NetworkedSession', () => {
     mockQueueManager = {
       syncQueue: jest.fn(),
       reconcileWithServerState: jest.fn(),
+      clearQueue: jest.fn(),
       destroy: jest.fn(),
     };
 
@@ -742,6 +743,27 @@ describe('NetworkedSession', () => {
         messageHandler({ detail: { type: 'sync:full', payload } });
 
         expect(mockDataManager.resetForNewSession).not.toHaveBeenCalled();
+      });
+
+      it('clears the offline queue on a NEW session boundary (no cross-session replay)', () => {
+        const payload = { session: { id: 'new-session-456' }, scores: [], recentTransactions: [] };
+
+        messageHandler({ detail: { type: 'sync:full', payload } });
+
+        // A genuine new session => old-session offline scans must be discarded,
+        // else syncQueue replays them and the backend scores them into the NEW
+        // session (phantom transactions / score inflation).
+        expect(mockQueueManager.clearQueue).toHaveBeenCalledTimes(1);
+      });
+
+      it('does NOT clear the offline queue when the session id is unchanged (transient restart)', () => {
+        const payload = { session: { id: 'old-session-123' }, scores: [], recentTransactions: [] };
+
+        messageHandler({ detail: { type: 'sync:full', payload } });
+
+        // Same id (e.g. orchestrator restart restoring the persisted session) =>
+        // same-session offline scans must still flush, not be dropped.
+        expect(mockQueueManager.clearQueue).not.toHaveBeenCalled();
       });
 
       it('should call setScannedTokensFromServer when deviceScannedTokens present', () => {

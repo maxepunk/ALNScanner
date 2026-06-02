@@ -139,6 +139,11 @@ describe('NetworkedQueueManager', () => {
         expect.objectContaining({ clientTxId: id })
       );
 
+      // ORDERING: persisted BEFORE emitting. Guards against re-introducing the
+      // fire-and-forget loss window (saveQueue's setItem must precede client.send).
+      expect(localStorageMock.setItem.mock.invocationCallOrder[0])
+        .toBeLessThan(mockClient.send.mock.invocationCallOrder[0]);
+
       // Resolve the in-flight replay so the 30s timer is cleared (no leaked timer)
       const replayHandler = mockClient.addEventListener.mock.calls
         .find(c => c[0] === 'message:received')[1];
@@ -196,6 +201,31 @@ describe('NetworkedQueueManager', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
 
       expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);
+    });
+
+    it('durable connected flow end-to-end: queue -> submit -> REAL result -> removed (no replayTransaction mock)', async () => {
+      // Exercises the full scanner-side durable path through the REAL replayTransaction
+      // matcher against the true backend wire payload (as OrchestratorClient unwraps
+      // it to {type, payload}). Guards the phantom-mock class: a change to the envelope
+      // shape or matcher would break this without a mock hiding it.
+      mockClient.isConnected = true;
+      const handlers = [];
+      mockClient.addEventListener.mockImplementation((type, h) => {
+        if (type === 'message:received') handlers.push(h);
+      });
+
+      const id = queueManager.queueTransaction({ tokenId: 'tE2E', teamId: '001' });
+
+      // Persisted + submitted via the real _submitDurable -> replayTransaction path.
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);
+      expect(mockClient.send).toHaveBeenCalledWith('transaction:submit', expect.objectContaining({ clientTxId: id }));
+
+      // Real backend transaction:result envelope, matched by clientTxId.
+      handlers.forEach(h => h({ detail: { type: 'transaction:result', payload: { clientTxId: id, status: 'accepted', tokenId: 'tE2E', teamId: '001', points: 100 } } }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // Real matcher resolved -> _submitDurable removed it. End to end, no mock.
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(false);
     });
 
     it('should handle missing client gracefully', () => {
@@ -595,6 +625,28 @@ describe('NetworkedQueueManager', () => {
         .rejects
         .toThrow('Failed to process transaction');
     });
+
+    it('tracks concurrent same-token replays under distinct handler keys (clientTxId)', async () => {
+      const handlers = [];
+      mockClient.addEventListener.mockImplementation((type, h) => {
+        if (type === 'message:received') handlers.push(h);
+      });
+
+      const p1 = queueManager.replayTransaction({ tokenId: 'tk', teamId: '1', clientTxId: 'c1' });
+      const p2 = queueManager.replayTransaction({ tokenId: 'tk', teamId: '1', clientTxId: 'c2' });
+
+      // Distinct keys: the old tokenId-teamId key collided two same-token replays
+      // into ONE map entry (size 1), which could delete the wrong handler and leak
+      // a listener on timeout. Keyed by clientTxId they stay distinct.
+      expect(queueManager.activeHandlers.size).toBe(2);
+
+      // Settle both (clears their 30s timers), each matched by its own clientTxId.
+      handlers.forEach(h => h({ detail: { type: 'transaction:result', payload: { clientTxId: 'c1', status: 'accepted' } } }));
+      handlers.forEach(h => h({ detail: { type: 'transaction:result', payload: { clientTxId: 'c2', status: 'accepted' } } }));
+      await Promise.all([p1, p2]);
+
+      expect(queueManager.activeHandlers.size).toBe(0);
+    });
   });
 
   describe('reconcileWithServerState', () => {
@@ -614,6 +666,22 @@ describe('NetworkedQueueManager', () => {
       queueManager.tempQueue = [{ tokenId: 'tNew', teamId: '001', clientTxId: 'b' }];
       queueManager.reconcileWithServerState(undefined);
       expect(queueManager.tempQueue).toHaveLength(1);
+    });
+
+    it('is a no-op for an empty array (fresh-session sync:full delivers [])', () => {
+      queueManager.tempQueue = [{ tokenId: 'tNew', teamId: '001', clientTxId: 'b' }];
+      localStorageMock.setItem.mockClear();
+      queueManager.reconcileWithServerState([]);
+      expect(queueManager.tempQueue).toHaveLength(1);
+      expect(localStorageMock.setItem).not.toHaveBeenCalled();
+    });
+
+    it('does not persist or emit when nothing matches', () => {
+      queueManager.tempQueue = [{ tokenId: 'tNew', teamId: '001', clientTxId: 'b' }];
+      localStorageMock.setItem.mockClear();
+      queueManager.reconcileWithServerState(['tOther']);
+      expect(queueManager.tempQueue).toHaveLength(1);
+      expect(localStorageMock.setItem).not.toHaveBeenCalled();
     });
   });
 

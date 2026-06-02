@@ -361,6 +361,13 @@ export class NetworkedSession extends EventTarget {
     // Only reset when session ID actually changes (new session started)
     if (newSessionId && newSessionId !== currentSessionId) {
       this.dataManager.resetForNewSession(newSessionId);
+      // A genuine NEW session means any offline-queued scans belong to a DEAD
+      // session — discard them so syncQueue doesn't replay them into the new
+      // session (the backend would score them, since the tokens aren't yet
+      // scanned there → phantom transactions / score inflation). A transient
+      // orchestrator restart restores the SAME id (no boundary), so same-session
+      // offline scans are preserved and still flush. Review fix (cross-session).
+      this.services?.queueManager?.clearQueue();
     }
   }
 
