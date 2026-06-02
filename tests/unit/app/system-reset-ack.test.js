@@ -27,6 +27,7 @@ describe('app.adminResetAndCreateNew - ack action filter (AC-3)', () => {
     fakeSocket = {
       _ackHandler: null,
       once: jest.fn((event, cb) => { if (event === 'gm:command:ack') fakeSocket._ackHandler = cb; }),
+      off: jest.fn((event, cb) => { if (event === 'gm:command:ack' && fakeSocket._ackHandler === cb) fakeSocket._ackHandler = null; }),
       emit: jest.fn(),
       _deliverAck(payload) {
         const cb = this._ackHandler;
@@ -68,5 +69,24 @@ describe('app.adminResetAndCreateNew - ack action filter (AC-3)', () => {
     // which only happens if the foreign ack was ignored (not rejected) and the
     // matching system:reset ack was observed.
     expect(sessionManager.createSession).toHaveBeenCalledWith('New Game');
+  });
+
+  it('removes the ack listener on the 5s timeout (no dangling re-arm leak)', async () => {
+    jest.useFakeTimers();
+
+    const resetPromise = app.adminResetAndCreateNew();
+    await Promise.resolve();
+    expect(fakeSocket._ackHandler).not.toBeNull();
+
+    // Fire the 5s timeout (no ack ever arrives).
+    jest.advanceTimersByTime(5000);
+    await resetPromise; // adminResetAndCreateNew swallows the rejection via try/catch
+
+    // The armed one-shot listener must be removed on timeout, else a late ack
+    // would re-invoke ackHandler and re-arm forever.
+    expect(fakeSocket.off).toHaveBeenCalledWith('gm:command:ack', expect.any(Function));
+    expect(fakeSocket._ackHandler).toBeNull();
+
+    jest.useRealTimers();
   });
 });

@@ -1153,6 +1153,10 @@ class App {
 
       await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
+          // Remove the currently-armed one-shot listener on timeout, else a late
+          // ack would re-invoke ackHandler and re-arm forever (leak). socket/
+          // ackHandler are initialized by the time this fires (+5s).
+          socket.off('gm:command:ack', ackHandler);
           reject(new Error('System reset timeout (5s)'));
         }, 5000);
 
