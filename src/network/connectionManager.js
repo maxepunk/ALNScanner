@@ -105,6 +105,12 @@ export class ConnectionManager extends EventTarget {
     this.state = 'connecting';
     this.dispatchEvent(new CustomEvent('connecting'));
 
+    // Register the handshake-error listener BEFORE connecting so an AUTH_*/
+    // collision reject is captured even on the very FIRST connect — socket:error
+    // fires during the handshake, before client.connect() rejects (idempotent:
+    // _setupErrorHandler removes any prior listener first).
+    this._setupErrorHandler();
+
     try {
       // Delegate WebSocket connection to OrchestratorClient
       await this.client.connect(this.token, {
@@ -119,7 +125,6 @@ export class ConnectionManager extends EventTarget {
 
       // Setup reconnection handler
       this._setupReconnectionHandler();
-      this._setupErrorHandler();
 
     } catch (error) {
       this.state = 'disconnected';

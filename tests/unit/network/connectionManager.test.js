@@ -448,6 +448,45 @@ describe('ConnectionManager - Connection Lifecycle', () => {
     });
   });
 
+  describe('first-connect error capture (M1)', () => {
+    beforeEach(() => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true });
+    });
+
+    afterEach(() => {
+      connectionManager._clearRetryTimer();
+    });
+
+    it('captures AUTH_INVALID on the very first connect and re-prompts (no prior successful connect)', async () => {
+      const authHandler = jest.fn();
+      connectionManager.addEventListener('auth:required', authHandler);
+
+      // Simulate a real failing handshake: OrchestratorClient fires socket:error
+      // (carrying the reason) and THEN client.connect() rejects. This exercises the
+      // real capture chain (socket:error -> _lastErrorReason -> catch), unlike the
+      // sibling tests that pre-set _lastErrorReason directly.
+      mockClient.connect.mockImplementation(async () => {
+        const errorHandler = mockClient.addEventListener.mock.calls
+          .find(c => c[0] === 'socket:error')?.[1];
+        if (errorHandler) {
+          errorHandler({ detail: { reason: 'AUTH_INVALID', error: new Error('AUTH_INVALID: bad token') } });
+        }
+        throw new Error('AUTH_INVALID: bad token');
+      });
+      connectionManager.token = createValidToken();
+
+      await expect(connectionManager.connect()).rejects.toThrow('AUTH_INVALID');
+
+      // The error handler must have been registered BEFORE the handshake so the
+      // reason was captured and the catch re-prompted instead of blindly retrying.
+      expect(authHandler).toHaveBeenCalledWith(expect.objectContaining({
+        detail: { reason: 'auth_failed' }
+      }));
+      expect(connectionManager.token).toBeNull();
+      expect(connectionManager.retryTimer).toBeNull();
+    });
+  });
+
   describe('disconnect', () => {
     beforeEach(async () => {
       global.fetch = jest.fn().mockResolvedValue({ ok: true });
