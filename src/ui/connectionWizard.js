@@ -449,14 +449,40 @@ export class QueueStatusManager {
 }
 
 /**
- * Cleanup handler for page unload
- * Ensures graceful disconnect when page is closing
+ * Page-lifecycle controller (RL-2).
+ * On background (visibility→hidden / pagehide / freeze) we proactively close the
+ * socket: this makes the page BFCache-eligible AND frees the deviceId server-side,
+ * preventing the DEVICE_ID_COLLISION churn that full reloads cause. On foreground
+ * (visibility→visible / pageshow / resume) we reconnect via ConnectionManager,
+ * which revalidates token + health and triggers sync:full.
  */
 export function setupCleanupHandlers(app) {
-  window.addEventListener('beforeunload', () => {
-    if (app.networkedSession?.services?.client) {
-      console.log('Page unloading - disconnecting socket');
-      app.networkedSession.services.client.disconnect();
+  const closeSocket = () => {
+    const client = app.networkedSession?.getService?.('client');
+    if (client) {
+      console.log('Page backgrounded - closing socket (BFCache-eligible, frees deviceId)');
+      Promise.resolve(client.disconnect()).catch(() => {});
     }
+  };
+
+  const reopenSocket = () => {
+    const cm = app.networkedSession?.getService?.('connectionManager');
+    if (cm) {
+      console.log('Page foregrounded - reconnecting');
+      Promise.resolve(cm.connect()).catch(() => {}); // connect() revalidates + sync:full
+    }
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') closeSocket();
+    else reopenSocket();
+  });
+
+  // pagehide replaces beforeunload (beforeunload disqualifies BFCache).
+  window.addEventListener('pagehide', closeSocket);
+  window.addEventListener('freeze', closeSocket);
+  window.addEventListener('resume', reopenSocket);
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) reopenSocket(); // restored from BFCache
   });
 }

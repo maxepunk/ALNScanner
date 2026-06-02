@@ -3,7 +3,7 @@
  * Tests auto-assignment of station names with device ID collision prevention
  */
 
-import { ConnectionWizard } from '../../../src/ui/connectionWizard.js';
+import { ConnectionWizard, setupCleanupHandlers } from '../../../src/ui/connectionWizard.js';
 
 describe('ConnectionWizard', () => {
   let wizard;
@@ -210,5 +210,63 @@ describe('ConnectionWizard', () => {
       expect(statusDiv.textContent).toContain('Please fill in all fields');
       expect(mockFetch).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('setupCleanupHandlers() — page lifecycle (RL-2)', () => {
+  let lifecycleApp;
+  let mockClient;
+  let mockConnectionManager;
+
+  const setVisibility = (state) => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => state
+    });
+  };
+
+  beforeEach(() => {
+    // Capture per-test consts in the closure. setupCleanupHandlers adds anonymous
+    // document/window listeners that can't be removed, so they accumulate across
+    // tests in this describe; binding each test's listener to its OWN mocks (not
+    // the shared describe-level lets, which getService would read lazily at fire
+    // time) keeps the per-test call counts correct.
+    const client = { disconnect: jest.fn().mockResolvedValue(undefined) };
+    const cm = { connect: jest.fn().mockResolvedValue(undefined) };
+    mockClient = client;
+    mockConnectionManager = cm;
+    lifecycleApp = {
+      networkedSession: {
+        getService: jest.fn((name) =>
+          name === 'client' ? client
+            : name === 'connectionManager' ? cm
+            : null)
+      }
+    };
+    setupCleanupHandlers(lifecycleApp);
+  });
+
+  it('closes the socket when the page is hidden (BFCache-eligible, frees deviceId)', () => {
+    setVisibility('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(mockClient.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconnects via ConnectionManager when the page becomes visible again', () => {
+    setVisibility('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(mockConnectionManager.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the socket on pagehide (BFCache-friendly replacement for beforeunload)', () => {
+    window.dispatchEvent(new Event('pagehide'));
+    expect(mockClient.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing when there is no active networked session', () => {
+    const standaloneApp = { networkedSession: null };
+    setupCleanupHandlers(standaloneApp);
+    setVisibility('hidden');
+    expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow();
   });
 });
