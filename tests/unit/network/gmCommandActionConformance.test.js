@@ -23,17 +23,28 @@ function loadActionEnum() {
   );
 }
 
+function collectJsFiles(dir) {
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...collectJsFiles(full)); // recurse into subdirs (e.g. utils/)
+    else if (entry.name.endsWith('.js')) out.push(full);
+  }
+  return out;
+}
+
 function collectControllerActions() {
-  const found = new Map(); // action -> [files]
+  const found = new Map(); // action -> [relative file paths]
   const re = /sendCommand\(\s*this\.connection,\s*'([^']+)'/g;
-  for (const file of fs.readdirSync(ADMIN_DIR)) {
-    if (!file.endsWith('.js')) continue;
-    const src = fs.readFileSync(path.join(ADMIN_DIR, file), 'utf8');
+  // Recursive so a future controller in a subdirectory can't emit a non-contract
+  // action that silently slips past the safety net.
+  for (const file of collectJsFiles(ADMIN_DIR)) {
+    const src = fs.readFileSync(file, 'utf8');
     let m;
     while ((m = re.exec(src)) !== null) {
       const action = m[1];
       if (!found.has(action)) found.set(action, []);
-      found.get(action).push(file);
+      found.get(action).push(path.relative(ADMIN_DIR, file));
     }
   }
   return found;
