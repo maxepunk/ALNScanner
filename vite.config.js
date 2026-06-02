@@ -1,6 +1,24 @@
 import { defineConfig } from 'vite';
 import { createHtmlPlugin } from 'vite-plugin-html';
 import basicSsl from '@vitejs/plugin-basic-ssl';
+import { readFileSync } from 'fs';
+
+// Emit the repo-root sw.js verbatim into dist/sw.js. Kept OUT of publicDir
+// because publicDir ('data') is the ALN-TokenData submodule — putting sw.js
+// there would pollute the shared token submodule (SW-1).
+function emitServiceWorker() {
+  return {
+    name: 'aln-emit-service-worker',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'sw.js',
+        source: readFileSync('./sw.js', 'utf8')
+      });
+    }
+  };
+}
 
 export default defineConfig({
   root: './', // Project root is current directory
@@ -47,6 +65,9 @@ export default defineConfig({
   plugins: [
     // HTTPS with self-signed certificate (required for NFC API)
     basicSsl(),
+
+    // Emit the runtime service worker into dist/sw.js (publicDir is the token submodule)
+    emitServiceWorker(),
 
     // HTML processing
     createHtmlPlugin({
