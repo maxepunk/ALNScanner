@@ -138,13 +138,46 @@ describe('OrchestratorClient - Dumb Pipe', () => {
 
       const oldSocket = client.socket;
 
-      // Second connection (should cleanup first)
+      // Second connection now gracefully tears down the live socket first (RL-5):
+      // it awaits the server-confirmed disconnect before opening a new socket.
       const connectPromise2 = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateDisconnect('io client disconnect');
+      await new Promise(resolve => setTimeout(resolve, 0));
       mockSocket._simulateConnect();
       await connectPromise2;
 
       expect(oldSocket.removeAllListeners).toHaveBeenCalled();
       expect(oldSocket.disconnect).toHaveBeenCalled();
+    });
+
+    it('should await prior socket teardown before opening a new socket (RL-5)', async () => {
+      // First connection
+      const p1 = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateConnect();
+      await p1;
+      expect(global.io).toHaveBeenCalledTimes(1);
+
+      // Prior socket is still "connected"
+      mockSocket.connected = true;
+
+      // Second connect should gracefully disconnect the prior socket first
+      const p2 = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+
+      // The graceful disconnect was requested on the OLD socket...
+      expect(mockSocket.disconnect).toHaveBeenCalled();
+      // ...but the NEW io() socket must NOT be created until teardown settles.
+      expect(global.io).toHaveBeenCalledTimes(1);
+
+      // Drive the server-confirmed disconnect of the old socket.
+      mockSocket._simulateDisconnect('io client disconnect');
+      // Let connect() resume past `await this.disconnect()` and open the new
+      // socket (registering its once('connect')) before we simulate connection.
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // Now the new socket is created and we can complete the handshake.
+      mockSocket._simulateConnect();
+      await p2;
+      expect(global.io).toHaveBeenCalledTimes(2);
     });
 
     it('should NOT validate token (that is ConnectionManager responsibility)', async () => {
@@ -361,10 +394,8 @@ describe('OrchestratorClient - Dumb Pipe', () => {
     });
 
     it('should handle disconnect when socket exists but not connected', async () => {
-      const connectPromise = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
-      mockSocket._simulateConnect();
-      await connectPromise;
-
+      // beforeEach already established a connected socket; re-connecting here is
+      // redundant and (post-RL-5) would await a teardown this test never drives.
       // Simulate unexpected disconnection (socket exists but not connected)
       mockSocket.connected = false;
       client.isConnected = false;

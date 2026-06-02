@@ -70,12 +70,16 @@ export class OrchestratorClient extends EventTarget {
    * @emits socket:error - Connection failed
    */
   async connect(token, auth) {
-    // Cleanup old socket first (allows reconnection)
+    // If a live socket exists, gracefully tear it down and WAIT for the server
+    // to confirm the disconnect before re-handshaking with the same deviceId.
+    // Opening a new socket inside the server's stale-socket teardown window
+    // triggers a spurious DEVICE_ID_COLLISION (RL-5).
     if (this.socket?.connected) {
-      console.warn('OrchestratorClient: Already connected, cleaning up old socket');
+      console.warn('OrchestratorClient: live socket present, awaiting teardown before reconnect');
+      await this.disconnect(); // resolves on server 'disconnect' (1s fallback), then _cleanup()
+    } else {
+      this._cleanup();
     }
-
-    this._cleanup();
 
     this.socket = io(this.config.url, {
       transports: this.config.transports,
