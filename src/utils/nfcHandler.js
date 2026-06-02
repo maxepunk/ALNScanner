@@ -9,6 +9,7 @@ import Debug from './debug.js';
 class NFCHandlerClass {
   constructor() {
     this.reader = null;
+    this.abortController = null;
     this.isScanning = false;
     this.lastRead = null;       // { id: string, timestamp: number }
     this.debounceMs = 2000;     // Ignore same tag within 2 seconds
@@ -34,6 +35,7 @@ class NFCHandlerClass {
 
     try {
       this.reader = new NDEFReader();
+      this.abortController = new AbortController();
 
       // CRITICAL: Attach event listeners BEFORE calling scan()
       // Otherwise events may fire before listeners are registered
@@ -68,8 +70,9 @@ class NFCHandlerClass {
         if (onError) onError(event);
       });
 
-      // NOW start scanning - listeners are ready to catch events
-      await this.reader.scan();
+      // NOW start scanning - listeners are ready to catch events.
+      // Pass the abort signal so stopScan() can truly stop the radio.
+      await this.reader.scan({ signal: this.abortController.signal });
       this.isScanning = true;
 
     } catch (error) {
@@ -156,10 +159,15 @@ class NFCHandlerClass {
   }
 
   /**
-   * Stop NFC scanning
-   * Note: Web NFC doesn't have explicit stop - scan continues until page closes
+   * Stop NFC scanning by aborting the active scan.
+   * Web NFC DOES support stopping via AbortController (NDEFReader.scan({signal})).
    */
   stopScan() {
+    if (this.abortController) {
+      this.abortController.abort();
+    }
+    this.abortController = null;
+    this.reader = null;
     this.isScanning = false;
   }
 

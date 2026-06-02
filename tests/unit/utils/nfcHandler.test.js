@@ -141,11 +141,63 @@ describe('NFCHandler - ES6 Module', () => {
     });
   });
 
+  describe('startScan AbortController', () => {
+    let scanSpy;
+
+    beforeEach(() => {
+      scanSpy = jest.fn().mockResolvedValue(undefined);
+      // Minimal NDEFReader mock that records the options passed to scan()
+      global.window.NDEFReader = class {
+        constructor() { this.addEventListener = jest.fn(); }
+        scan(opts) { return scanSpy(opts); }
+      };
+    });
+
+    afterEach(() => {
+      delete global.window.NDEFReader;
+    });
+
+    it('passes an AbortSignal to reader.scan()', async () => {
+      const handler = new NFCHandlerClass();
+      await handler.startScan(() => {}, () => {});
+
+      expect(scanSpy).toHaveBeenCalledTimes(1);
+      const opts = scanSpy.mock.calls[0][0];
+      expect(opts).toBeDefined();
+      expect(opts.signal).toBeInstanceOf(AbortSignal);
+      expect(opts.signal.aborted).toBe(false);
+    });
+  });
+
   describe('stopScan', () => {
+    beforeEach(() => {
+      global.window.NDEFReader = class {
+        constructor() { this.addEventListener = jest.fn(); }
+        scan() { return Promise.resolve(); }
+      };
+    });
+
+    afterEach(() => {
+      delete global.window.NDEFReader;
+    });
+
     it('should set isScanning to false', () => {
       NFCHandler.isScanning = true;
       NFCHandler.stopScan();
       expect(NFCHandler.isScanning).toBe(false);
+    });
+
+    it('aborts the active scan and clears reader/controller', async () => {
+      const handler = new NFCHandlerClass();
+      await handler.startScan(() => {}, () => {});
+      const signal = handler.abortController.signal;
+
+      handler.stopScan();
+
+      expect(signal.aborted).toBe(true);
+      expect(handler.reader).toBe(null);
+      expect(handler.abortController).toBe(null);
+      expect(handler.isScanning).toBe(false);
     });
   });
 
