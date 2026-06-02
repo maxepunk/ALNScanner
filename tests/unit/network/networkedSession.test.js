@@ -533,6 +533,24 @@ describe('NetworkedSession', () => {
       expect(mockDataManager.updateTeamScoreFromBackend).not.toHaveBeenCalled();
     });
 
+    it('dispatches backend:error when a backend error event arrives', () => {
+      const seen = [];
+      session.addEventListener('backend:error', (e) => seen.push(e.detail));
+
+      messageHandler({ detail: { type: 'error', payload: { code: 'QUEUE_FULL', message: 'Offline queue is full' } } });
+
+      expect(seen).toEqual([{ code: 'QUEUE_FULL', message: 'Offline queue is full' }]);
+    });
+
+    it('routes AUTH_REQUIRED error into the auth:required flow', () => {
+      const authSpy = jest.fn();
+      session.addEventListener('auth:required', authSpy);
+
+      messageHandler({ detail: { type: 'error', payload: { code: 'AUTH_REQUIRED', message: 'Not identified' } } });
+
+      expect(authSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('should update DataManager on sync:full event with scores', () => {
       const scores = [
         { teamId: '001', currentScore: 5000 },
