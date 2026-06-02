@@ -107,10 +107,12 @@ describe('NetworkedQueueManager', () => {
 
       queueManager.queueTransaction(transaction);
 
-      expect(queueManager.tempQueue).toContainEqual(transaction);
+      expect(queueManager.tempQueue).toContainEqual(
+        expect.objectContaining({ tokenId: 'token1', teamId: '001' })
+      );
       expect(localStorageMock.setItem).toHaveBeenCalledWith(
         'networkedTempQueue',
-        JSON.stringify([transaction])
+        expect.stringContaining('token1')
       );
       expect(eventSpy).toHaveBeenCalledTimes(1);
       expect(eventSpy.mock.calls[0][0].detail).toEqual({
@@ -130,7 +132,10 @@ describe('NetworkedQueueManager', () => {
 
       queueManager.queueTransaction(transaction);
 
-      expect(mockClient.send).toHaveBeenCalledWith('transaction:submit', transaction);
+      expect(mockClient.send).toHaveBeenCalledWith(
+        'transaction:submit',
+        expect.objectContaining({ tokenId: 'token2', teamId: '002' })
+      );
       expect(queueManager.tempQueue).toHaveLength(0);
     });
 
@@ -140,7 +145,20 @@ describe('NetworkedQueueManager', () => {
       const transaction = { tokenId: 'token3', teamId: '003' };
       queueManager.queueTransaction(transaction);
 
-      expect(queueManager.tempQueue).toContainEqual(transaction);
+      expect(queueManager.tempQueue).toContainEqual(
+        expect.objectContaining({ tokenId: 'token3', teamId: '003' })
+      );
+    });
+
+    it('should generate and return a clientTxId, persisting it', () => {
+      mockClient.isConnected = false;
+      const tx = { tokenId: 'tokenX', teamId: '009', timestamp: new Date().toISOString() };
+
+      const id = queueManager.queueTransaction(tx);
+
+      expect(typeof id).toBe('string');
+      expect(id.length).toBeGreaterThan(0);
+      expect(queueManager.tempQueue[0].clientTxId).toBe(id);
     });
   });
 
@@ -183,7 +201,7 @@ describe('NetworkedQueueManager', () => {
       queueManager.tempQueue = [...transactions];
 
       // Mock successful replay
-      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'success' });
+      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'accepted' });
 
       await queueManager.syncQueue();
 
@@ -194,21 +212,21 @@ describe('NetworkedQueueManager', () => {
       expect(localStorageMock.removeItem).toHaveBeenCalledWith('networkedTempQueue');
     });
 
-    it('should clear queue even if some transactions fail', async () => {
+    it('should keep a transient-failed entry and remove the succeeded one', async () => {
       const transactions = [
         { tokenId: 'token1', teamId: '001' },
         { tokenId: 'token2', teamId: '002' }
       ];
       queueManager.tempQueue = [...transactions];
 
-      // Mock mixed results
+      // First accepted (removed), second throws (transient -> kept for reconnect)
       jest.spyOn(queueManager, 'replayTransaction')
-        .mockResolvedValueOnce({ status: 'success' })
+        .mockResolvedValueOnce({ status: 'accepted' })
         .mockRejectedValueOnce(new Error('Validation error'));
 
       await queueManager.syncQueue();
 
-      expect(queueManager.tempQueue).toHaveLength(0);
+      expect(queueManager.tempQueue).toHaveLength(1);
 
       // Find the call with 'Queue sync complete'
       const syncCompleteCall = mockDebug.log.mock.calls.find(
@@ -219,7 +237,8 @@ describe('NetworkedQueueManager', () => {
       expect(syncCompleteCall[1]).toEqual({
         total: 2,
         success: 1,
-        failed: 1
+        failed: 1,
+        kept: 1
       });
     });
 
@@ -249,7 +268,7 @@ describe('NetworkedQueueManager', () => {
 
     it('should emit queue:changed event after sync', async () => {
       queueManager.tempQueue = [{ tokenId: 'token1', teamId: '001' }];
-      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'success' });
+      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'accepted' });
 
       const eventSpy = jest.fn();
       queueManager.addEventListener('queue:changed', eventSpy);
@@ -263,19 +282,69 @@ describe('NetworkedQueueManager', () => {
       });
     });
 
-    it('should preserve queue on sync failure', async () => {
-      const transactions = [{ tokenId: 'token1', teamId: '001' }];
+    it('should preserve queue when a replay throws (transient/connection error)', async () => {
+      const transactions = [{ tokenId: 'token1', teamId: '001', clientTxId: 'ctx-1' }];
       queueManager.tempQueue = [...transactions];
 
-      // Mock sync failure (throw before any replays)
-      jest.spyOn(queueManager, 'replayTransaction').mockImplementation(() => {
-        throw new Error('Network failure');
-      });
+      jest.spyOn(queueManager, 'replayTransaction').mockRejectedValue(new Error('connection lost'));
 
       await queueManager.syncQueue();
 
-      // Queue should be cleared despite failures (per spec)
+      // Transient failure: keep for next reconnect (was wrongly cleared before)
+      expect(queueManager.tempQueue).toContainEqual(transactions[0]);
+    });
+
+    it('should remove accepted and duplicate entries', async () => {
+      queueManager.tempQueue = [
+        { tokenId: 'tA', teamId: '001', clientTxId: 'a' },
+        { tokenId: 'tB', teamId: '002', clientTxId: 'b' }
+      ];
+      jest.spyOn(queueManager, 'replayTransaction')
+        .mockResolvedValueOnce({ status: 'accepted', clientTxId: 'a' })
+        .mockResolvedValueOnce({ status: 'duplicate', clientTxId: 'b' });
+
+      await queueManager.syncQueue();
+
       expect(queueManager.tempQueue).toHaveLength(0);
+    });
+
+    it('should remove rejected entries (permanent fail) and not retry them', async () => {
+      const tx = { tokenId: 'tC', teamId: '003', clientTxId: 'c' };
+      queueManager.tempQueue = [tx];
+      jest.spyOn(queueManager, 'replayTransaction')
+        .mockResolvedValueOnce({ status: 'rejected', clientTxId: 'c', message: 'No active session' });
+
+      await queueManager.syncQueue();
+
+      expect(queueManager.tempQueue).toHaveLength(0); // permanent: removed, not looped forever
+    });
+
+    it('should keep queued entries for the next reconnect', async () => {
+      const tx = { tokenId: 'tD', teamId: '004', clientTxId: 'd' };
+      queueManager.tempQueue = [tx];
+      jest.spyOn(queueManager, 'replayTransaction')
+        .mockResolvedValueOnce({ status: 'queued', clientTxId: 'd' });
+
+      await queueManager.syncQueue();
+
+      expect(queueManager.tempQueue).toContainEqual(tx);
+    });
+
+    it('should surface a transaction:failed event on permanent rejection', async () => {
+      const tx = { tokenId: 'tE', teamId: '005', clientTxId: 'e' };
+      queueManager.tempQueue = [tx];
+      jest.spyOn(queueManager, 'replayTransaction')
+        .mockResolvedValueOnce({ status: 'rejected', clientTxId: 'e', message: 'No active session' });
+
+      const failedSpy = jest.fn();
+      queueManager.addEventListener('transaction:failed', failedSpy);
+
+      await queueManager.syncQueue();
+
+      expect(failedSpy).toHaveBeenCalledTimes(1);
+      expect(failedSpy.mock.calls[0][0].detail).toEqual(
+        expect.objectContaining({ status: 'rejected', message: 'No active session' })
+      );
     });
   });
 

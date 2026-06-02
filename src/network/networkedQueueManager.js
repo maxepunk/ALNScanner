@@ -36,13 +36,20 @@ export class NetworkedQueueManager extends EventTarget {
    * @emits queue:changed - Queue status updated
    */
   queueTransaction(transaction) {
+    // Stamp a per-submission correlation id so results/replays match unambiguously
+    // (tokenId+teamId aliases across concurrent submissions). TQ-3.
+    const clientTxId = transaction.clientTxId
+      || `${this.deviceId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const tx = { ...transaction, clientTxId };
+
     // Check if we have a connection and it's connected
     if (!this.client || !this.client.isConnected) {
       // Not connected - add to temp queue
-      this.tempQueue.push(transaction);
+      this.tempQueue.push(tx);
       this.saveQueue();
       this.debug.log('Transaction queued for later submission', {
-        tokenId: transaction.tokenId,
+        tokenId: tx.tokenId,
+        clientTxId,
         queueSize: this.tempQueue.length
       });
 
@@ -52,12 +59,14 @@ export class NetworkedQueueManager extends EventTarget {
       }));
     } else {
       // Connected - send immediately via OrchestratorClient
-      this.client.send('transaction:submit', transaction);
+      this.client.send('transaction:submit', tx);
 
       this.debug.log('Transaction sent immediately', {
-        tokenId: transaction.tokenId
+        tokenId: tx.tokenId,
+        clientTxId
       });
     }
+    return clientTxId;
   }
 
   /**
@@ -82,43 +91,68 @@ export class NetworkedQueueManager extends EventTarget {
     const results = [];
 
     try {
-      // Replay each transaction via WebSocket (transaction:submit)
-      // This ensures proper scoring, duplicate detection, and game mechanics
+      // Replay each transaction via WebSocket (transaction:submit). Branch on the
+      // backend's actual result status: accepted/duplicate -> done (remove);
+      // rejected/error -> permanent failure (surface via transaction:failed, then
+      // remove — no infinite retry of an invalid tx); queued/timeout/connection-
+      // error -> keep for the next reconnect (TQ-2). Replaced the old behavior
+      // that cleared the WHOLE queue unconditionally (silently lost failures).
+      const survivors = [];
       for (let i = 0; i < batch.length; i++) {
         const transaction = batch[i];
 
         this.debug.log(`Replaying transaction ${i + 1}/${batch.length}`, {
           tokenId: transaction.tokenId,
-          teamId: transaction.teamId
+          clientTxId: transaction.clientTxId
         });
 
         try {
           // Replay via WebSocket (same path as live scans)
           const result = await this.replayTransaction(transaction);
-          results.push({ success: true, transaction, result });
+          const status = result?.status;
+          if (status === 'accepted' || status === 'duplicate') {
+            results.push({ success: true, transaction, result });
+            // durable result — removed (not pushed to survivors)
+          } else if (status === 'rejected' || status === 'error') {
+            // Permanent failure: do NOT silently drop — surface, then remove.
+            this.debug.error?.('Transaction permanently rejected', {
+              tokenId: transaction.tokenId,
+              clientTxId: transaction.clientTxId,
+              status,
+              message: result?.message
+            });
+            this.dispatchEvent(new CustomEvent('transaction:failed', {
+              detail: { transaction, status, message: result?.message }
+            }));
+            results.push({ success: false, transaction, result });
+          } else {
+            // queued or unknown transient: keep for next reconnect
+            survivors.push(transaction);
+            results.push({ success: false, transaction, result });
+          }
         } catch (error) {
+          // Timeout / connection error: keep for next reconnect (TQ-2)
           this.debug.error?.('Transaction replay failed', {
             tokenId: transaction.tokenId,
             error: error.message
           });
 
+          survivors.push(transaction);
           results.push({ success: false, transaction, error: error.message });
         }
       }
 
       const successCount = results.filter(r => r.success).length;
-      const failCount = results.length - successCount;
 
       this.debug.log('Queue sync complete', {
         total: batch.length,
         success: successCount,
-        failed: failCount
+        failed: results.length - successCount,
+        kept: survivors.length
       });
 
-      // Clear queue after ALL transactions processed (even if some failed)
-      // Failed transactions are lost but logged - operator can manually re-scan
-      // This prevents infinite retry loops for permanently invalid transactions
-      this.tempQueue = [];
+      // Keep only transient/queued survivors for the next reconnect
+      this.tempQueue = survivors;
       this.saveQueue();
 
     } catch (error) {
