@@ -180,6 +180,32 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       expect(global.io).toHaveBeenCalledTimes(2);
     });
 
+    it('does not tear down a freshly reconnected socket after the 1s disconnect fallback (RL-5 regression)', async () => {
+      // First connection
+      const p1 = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateConnect();
+      await p1;
+
+      // Prior socket still connected → reconnect awaits graceful teardown (RL-5).
+      mockSocket.connected = true;
+      const p2 = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      // Server confirms the OLD socket's disconnect quickly (well under 1s).
+      mockSocket._simulateDisconnect('io client disconnect');
+      // Let connect() resume and open the new socket.
+      await new Promise(resolve => setTimeout(resolve, 0));
+      mockSocket._simulateConnect();
+      await p2;
+
+      expect(client.socket).not.toBeNull();
+      expect(client.isConnected).toBe(true);
+
+      // The OLD disconnect()'s 1s fallback timer must NOT fire late and tear down
+      // the freshly-opened socket (it must be cleared when the disconnect event arrived).
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      expect(client.socket).not.toBeNull();
+      expect(client.isConnected).toBe(true);
+    });
+
     it('should NOT validate token (that is ConnectionManager responsibility)', async () => {
       // Should not have any isTokenValid method
       expect(client.isTokenValid).toBeUndefined();

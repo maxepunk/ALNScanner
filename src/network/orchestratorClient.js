@@ -216,7 +216,11 @@ export class OrchestratorClient extends EventTarget {
         return;
       }
 
+      let fallbackTimer;
       this.socket.once('disconnect', (reason) => {
+        // Clear the fallback so it can't fire ~1s later and _cleanup() a socket
+        // opened by a subsequent connect() (the RL-5 await-teardown race).
+        clearTimeout(fallbackTimer);
         this.dispatchEvent(new CustomEvent('socket:disconnected', { detail: { reason } }));
         this._cleanup();
         resolve();
@@ -224,8 +228,8 @@ export class OrchestratorClient extends EventTarget {
 
       this.socket.disconnect();
 
-      // Timeout fallback
-      setTimeout(() => {
+      // Timeout fallback: clean up even if the server never confirms the disconnect.
+      fallbackTimer = setTimeout(() => {
         this._cleanup();
         resolve();
       }, 1000);
