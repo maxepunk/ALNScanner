@@ -42,31 +42,76 @@ export class NetworkedQueueManager extends EventTarget {
       || `${this.deviceId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const tx = { ...transaction, clientTxId };
 
-    // Check if we have a connection and it's connected
-    if (!this.client || !this.client.isConnected) {
-      // Not connected - add to temp queue
-      this.tempQueue.push(tx);
-      this.saveQueue();
-      this.debug.log('Transaction queued for later submission', {
+    // ALWAYS persist first (durability) — even on the connected path. A scan
+    // emitted during the reconnect window (isConnected still true but the socket
+    // dropping) would otherwise be fire-and-forget and permanently lost; now it
+    // survives as a persisted entry and is retried by syncQueue on reconnect. TQ-1.
+    this.tempQueue.push(tx);
+    this.saveQueue();
+    this.dispatchEvent(new CustomEvent('queue:changed', {
+      detail: this.getStatus()
+    }));
+
+    if (this.client && this.client.isConnected) {
+      // Connected: submit now and remove only on a definitive result. A fresh
+      // connected scan is submitted immediately here; offline-enqueued entries are
+      // flushed by syncQueue() on reconnect. No overlap for a given entry —
+      // syncQueue processes only the entries present at its start, and this one is
+      // already in-flight via _submitDurable.
+      this._submitDurable(tx);
+    } else {
+      this.debug.log('Transaction queued (offline)', {
         tokenId: tx.tokenId,
         clientTxId,
         queueSize: this.tempQueue.length
       });
+    }
+    return clientTxId;
+  }
 
-      // Emit event for UI updates (event-driven, no polling needed)
+  /**
+   * Submit a persisted transaction and remove it only on a definitive result
+   * (accepted/duplicate/rejected/error). Transient failures (timeout/connection
+   * error) and 'queued' leave it persisted for the next syncQueue. TQ-1/TQ-2.
+   * @private
+   */
+  _submitDurable(tx) {
+    this.replayTransaction(tx)
+      .then((result) => {
+        const status = result?.status;
+        if (status === 'accepted' || status === 'duplicate' ||
+            status === 'rejected' || status === 'error') {
+          this._removeByClientTxId(tx.clientTxId);
+          if (status === 'rejected' || status === 'error') {
+            this.dispatchEvent(new CustomEvent('transaction:failed', {
+              detail: { transaction: tx, status, message: result?.message }
+            }));
+          }
+        }
+        // queued/unknown: leave persisted for the next reconnect
+      })
+      .catch((err) => {
+        // timeout / connection error: leave persisted; syncQueue retries on reconnect
+        this.debug.error?.('Durable submit failed - keeping for retry', {
+          tokenId: tx.tokenId,
+          error: err.message
+        });
+      });
+  }
+
+  /**
+   * Remove a persisted entry by its correlation id after a definitive result.
+   * @private
+   */
+  _removeByClientTxId(clientTxId) {
+    const before = this.tempQueue.length;
+    this.tempQueue = this.tempQueue.filter(t => t.clientTxId !== clientTxId);
+    if (this.tempQueue.length !== before) {
+      this.saveQueue();
       this.dispatchEvent(new CustomEvent('queue:changed', {
         detail: this.getStatus()
       }));
-    } else {
-      // Connected - send immediately via OrchestratorClient
-      this.client.send('transaction:submit', tx);
-
-      this.debug.log('Transaction sent immediately', {
-        tokenId: tx.tokenId,
-        clientTxId
-      });
     }
-    return clientTxId;
   }
 
   /**

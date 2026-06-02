@@ -121,22 +121,46 @@ describe('NetworkedQueueManager', () => {
       });
     });
 
-    it('should send transaction immediately when connected', () => {
-      const transaction = {
-        tokenId: 'token2',
-        teamId: '002',
-        timestamp: new Date().toISOString()
-      };
-
+    it('should persist before emitting on the connected path', () => {
+      const transaction = { tokenId: 'token2', teamId: '002', timestamp: new Date().toISOString() };
       mockClient.isConnected = true;
 
-      queueManager.queueTransaction(transaction);
+      const id = queueManager.queueTransaction(transaction);
 
+      // Durable (TQ-1): entry is in the queue AND persisted at emit time
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(
+        'networkedTempQueue',
+        expect.stringContaining(id)
+      );
+      // And it was emitted via the durable submit path
       expect(mockClient.send).toHaveBeenCalledWith(
         'transaction:submit',
-        expect.objectContaining({ tokenId: 'token2', teamId: '002' })
+        expect.objectContaining({ clientTxId: id })
       );
-      expect(queueManager.tempQueue).toHaveLength(0);
+
+      // Resolve the in-flight replay so the 30s timer is cleared (no leaked timer)
+      const replayHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'message:received')[1];
+      replayHandler({ detail: { type: 'transaction:result', payload: { clientTxId: id, status: 'accepted' } } });
+    });
+
+    it('should remove the entry after a definitive accepted result', async () => {
+      const transaction = { tokenId: 'token2', teamId: '002', timestamp: new Date().toISOString() };
+      mockClient.isConnected = true;
+      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'accepted' });
+
+      const id = queueManager.queueTransaction(transaction);
+
+      // STRENGTHENED: prove durability THEN removal so the test cannot pass
+      // accidentally pre-fix (where the connected path never queued the entry).
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);  // present after queue
+
+      // _submitDurable is fire-and-forget; setTimeout(0) is a macrotask that runs
+      // AFTER the .then()->_removeByClientTxId microtask chain (deterministic).
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(false); // absent after result
     });
 
     it('should handle missing client gracefully', () => {
