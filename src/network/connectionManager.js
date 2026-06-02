@@ -35,6 +35,8 @@ export class ConnectionManager extends EventTarget {
     this.maxRetries = config.maxRetries || 5;
     this.retryTimer = null;
     this.disconnectHandler = null;
+    this.errorHandler = null;
+    this._lastErrorReason = null;
 
     // Wire global connection status indicator updates
     this.addEventListener('connecting', () => this._updateGlobalConnectionStatus('connecting'));
@@ -117,6 +119,7 @@ export class ConnectionManager extends EventTarget {
 
       // Setup reconnection handler
       this._setupReconnectionHandler();
+      this._setupErrorHandler();
 
     } catch (error) {
       this.state = 'disconnected';
@@ -199,6 +202,20 @@ export class ConnectionManager extends EventTarget {
   }
 
   /**
+   * Listen for handshake errors so we can capture the reject reason.
+   * @private
+   */
+  _setupErrorHandler() {
+    if (this.errorHandler) {
+      this.client.removeEventListener('socket:error', this.errorHandler);
+    }
+    this.errorHandler = (event) => {
+      this._lastErrorReason = event.detail?.reason || null;
+    };
+    this.client.addEventListener('socket:error', this.errorHandler);
+  }
+
+  /**
    * Remove reconnection handler
    * @private
    */
@@ -206,6 +223,10 @@ export class ConnectionManager extends EventTarget {
     if (this.disconnectHandler) {
       this.client.removeEventListener('socket:disconnected', this.disconnectHandler);
       this.disconnectHandler = null;
+    }
+    if (this.errorHandler) {
+      this.client.removeEventListener('socket:error', this.errorHandler);
+      this.errorHandler = null;
     }
   }
 

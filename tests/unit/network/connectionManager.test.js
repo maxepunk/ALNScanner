@@ -388,6 +388,29 @@ describe('ConnectionManager - Connection Lifecycle', () => {
     });
   });
 
+  describe('connect_error handling', () => {
+    beforeEach(async () => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true });
+      await connectionManager.connect();
+    });
+
+    it('should register a socket:error listener on the client', () => {
+      expect(mockClient.addEventListener).toHaveBeenCalledWith(
+        'socket:error',
+        expect.any(Function)
+      );
+    });
+
+    it('should capture the reject reason from socket:error', () => {
+      const errorHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'socket:error')[1];
+
+      errorHandler({ detail: { reason: 'DEVICE_ID_COLLISION', error: new Error('x') } });
+
+      expect(connectionManager._lastErrorReason).toBe('DEVICE_ID_COLLISION');
+    });
+  });
+
   describe('disconnect', () => {
     beforeEach(async () => {
       global.fetch = jest.fn().mockResolvedValue({ ok: true });
