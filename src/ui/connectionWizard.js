@@ -162,11 +162,7 @@ export class ConnectionWizard {
       debounceTimer = setTimeout(() => {
         const url = serverUrlInput.value.trim();
         if (url) {
-          // Normalize URL (add protocol if missing)
-          let normalizedUrl = url;
-          if (!normalizedUrl.match(/^https?:\/\//i)) {
-            normalizedUrl = `http://${normalizedUrl}`;
-          }
+          const normalizedUrl = this._normalizeUrl(url);
           this.assignStationName(normalizedUrl);
         }
       }, DEBOUNCE_MS);
@@ -264,6 +260,20 @@ export class ConnectionWizard {
   }
 
   /**
+   * Normalize a typed server URL — prepend the PAGE protocol (not hardcoded
+   * http://) so a bare host:port isn't mixed-content-blocked on an HTTPS scanner.
+   * @param {string} url
+   * @returns {string}
+   * @private
+   */
+  _normalizeUrl(url) {
+    const trimmed = url.trim();
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    return `${protocol}//${trimmed}`;
+  }
+
+  /**
    * Select discovered server and pre-fill connection form
    */
   selectServer(url) {
@@ -299,10 +309,9 @@ export class ConnectionWizard {
     statusDiv.style.color = '#2196F3';
 
     try {
-      // Normalize URL - add http:// if no protocol specified
-      let normalizedUrl = serverUrl.trim();
-      if (!normalizedUrl.match(/^https?:\/\//i)) {
-        normalizedUrl = `http://${normalizedUrl}`;
+      // Normalize URL - prepend the page protocol if none specified
+      let normalizedUrl = this._normalizeUrl(serverUrl);
+      if (normalizedUrl !== serverUrl.trim()) {
         statusDiv.textContent = `🔧 Using ${normalizedUrl}`;
       }
 

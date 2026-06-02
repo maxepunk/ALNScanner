@@ -1,6 +1,11 @@
 /**
  * Unit tests for ConnectionWizard
  * Tests auto-assignment of station names with device ID collision prevention
+ *
+ * Served over https to match the real GM scanner (NFC requires HTTPS), so
+ * window.location.protocol === 'https:' — needed to exercise _normalizeUrl's
+ * page-protocol branch (jsdom's location is otherwise non-configurable).
+ * @jest-environment-options {"url": "https://localhost:3000/"}
  */
 
 import { ConnectionWizard, setupCleanupHandlers } from '../../../src/ui/connectionWizard.js';
@@ -99,6 +104,20 @@ describe('ConnectionWizard', () => {
         'GM_Station_1'
       ]);
       expect(result).toBe('GM_Station_3');
+    });
+  });
+
+  describe('_normalizeUrl()', () => {
+    test('leaves a fully-qualified URL untouched', () => {
+      expect(wizard._normalizeUrl('https://10.0.0.5:3000')).toBe('https://10.0.0.5:3000');
+      expect(wizard._normalizeUrl('http://10.0.0.5:3000')).toBe('http://10.0.0.5:3000');
+    });
+
+    test('prepends the page protocol for a bare host:port (HTTPS page)', () => {
+      // This file's jsdom env is served over https (see @jest-environment-options),
+      // so a bare host:port must become https:// — not the old hardcoded http://.
+      expect(window.location.protocol).toBe('https:'); // sanity: env is https
+      expect(wizard._normalizeUrl('10.0.0.5:3000')).toBe('https://10.0.0.5:3000');
     });
   });
 
