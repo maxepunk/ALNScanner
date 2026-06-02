@@ -40,4 +40,13 @@ describe('service worker build artifact (SW-1/SW-2)', () => {
     expect(sw).toContain("startsWith('/api/')");
     expect(sw).toContain("startsWith('/socket.io/')");
   });
+
+  it('is network-first (no cache-first early return) so updated assets/token data are never served stale', () => {
+    // R7 made the cache live; tokenManager fetches a same-origin, non-hashed
+    // tokens.json the SW would otherwise cache-first + never invalidate (static
+    // cache name) -> stale token data across deploys. Network-first keeps the app
+    // fresh online and uses the cache only as an offline fallback.
+    const sw = fs.readFileSync(DIST_SW, 'utf8');
+    expect(sw).not.toContain('if (cached) return cached');
+  });
 });

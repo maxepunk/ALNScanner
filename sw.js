@@ -37,31 +37,23 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (isBypass(url)) return; // let network handle it
 
-  // Navigations: network-first, fall back to cached shell when offline.
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((resp) => {
-          const copy = resp.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(request, copy));
-          return resp;
-        })
-        .catch(() => caches.match(request).then((c) => c || caches.match('./')))
-    );
-    return;
-  }
-
-  // Static assets: cache-first, populate on miss.
+  // Network-first for everything (navigations + assets): always serve fresh when
+  // online so an updated build / token data after a redeploy is never masked by a
+  // stale cache (the cache name is static and tokens.json is a non-hashed,
+  // same-origin fetch). Fall back to the cache ONLY when the network is
+  // unavailable (Wi-Fi blip / offline reload). The cache is a resilience net,
+  // not the source of truth.
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((resp) => {
+    fetch(request)
+      .then((resp) => {
         if (resp && resp.status === 200 && resp.type === 'basic') {
           const copy = resp.clone();
           caches.open(CACHE_NAME).then((c) => c.put(request, copy));
         }
         return resp;
-      });
-    })
+      })
+      .catch(() => caches.match(request).then(
+        (cached) => cached || (request.mode === 'navigate' ? caches.match('./') : undefined)
+      ))
   );
 });
