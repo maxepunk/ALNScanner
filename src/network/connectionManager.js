@@ -214,7 +214,11 @@ export class ConnectionManager extends EventTarget {
         return;
       }
 
-      setTimeout(() => {
+      // Schedule the reconnect on the cancellable retryTimer (cleared first), so
+      // rapid repeated drops don't stack competing reconnects and an explicit
+      // disconnect() can cancel a pending reconnect.
+      this._clearRetryTimer();
+      this.retryTimer = setTimeout(() => {
         this.connect().catch(() => {
           // Retry logic handles failures
         });

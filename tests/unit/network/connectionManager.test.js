@@ -309,6 +309,43 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       }));
       expect(connectionManager.state).toBe('disconnected');
     });
+
+    it('does not stack multiple reconnects on rapid repeated disconnects (M2)', () => {
+      jest.useFakeTimers();
+      try {
+        connectionManager.token = createValidToken();
+        const connectSpy = jest.spyOn(connectionManager, 'connect').mockResolvedValue();
+
+        const disconnectHandler = mockClient.addEventListener.mock.calls
+          .find(c => c[0] === 'socket:disconnected')[1];
+
+        // Two rapid transport drops must not schedule two competing reconnects.
+        disconnectHandler({ detail: { reason: 'transport close' } });
+        disconnectHandler({ detail: { reason: 'transport close' } });
+
+        jest.advanceTimersByTime(60000); // cover any jittered backoff + 30s cap
+
+        expect(connectSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('disconnect() cancels a pending auto-reconnect (M2)', async () => {
+      connectionManager.token = createValidToken();
+      jest.spyOn(connectionManager, 'connect').mockResolvedValue();
+
+      const disconnectHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'socket:disconnected')[1];
+
+      // A transport drop schedules a cancellable reconnect...
+      disconnectHandler({ detail: { reason: 'transport close' } });
+      expect(connectionManager.retryTimer).not.toBeNull();
+
+      // ...which an explicit disconnect() must cancel.
+      await connectionManager.disconnect();
+      expect(connectionManager.retryTimer).toBeNull();
+    });
   });
 
   describe('retry logic', () => {
