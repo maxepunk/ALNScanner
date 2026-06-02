@@ -524,6 +524,35 @@ describe('ConnectionManager - Connection Lifecycle', () => {
     });
   });
 
+  describe('concurrent connect (single-flight)', () => {
+    beforeEach(() => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true });
+    });
+
+    it('dedups concurrent connect() calls so only one socket is opened', async () => {
+      connectionManager.token = createValidToken();
+
+      // Two callers race (e.g. a reconnect/retry timer firing while a manual or
+      // page-foreground connect is already in flight).
+      const p1 = connectionManager.connect();
+      const p2 = connectionManager.connect();
+      await Promise.all([p1, p2]);
+
+      // Single-flight: the underlying client.connect runs exactly once.
+      expect(mockClient.connect).toHaveBeenCalledTimes(1);
+    });
+
+    it('allows a fresh connect after the in-flight one settles', async () => {
+      connectionManager.token = createValidToken();
+
+      await connectionManager.connect();
+      await connectionManager.connect();
+
+      // Sequential (non-overlapping) connects are NOT deduped.
+      expect(mockClient.connect).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('disconnect', () => {
     beforeEach(async () => {
       global.fetch = jest.fn().mockResolvedValue({ ok: true });

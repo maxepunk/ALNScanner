@@ -37,6 +37,7 @@ export class ConnectionManager extends EventTarget {
     this.disconnectHandler = null;
     this.errorHandler = null;
     this._lastErrorReason = null;
+    this._connectInFlight = null;
 
     // Wire global connection status indicator updates
     this.addEventListener('connecting', () => this._updateGlobalConnectionStatus('connecting'));
@@ -76,7 +77,12 @@ export class ConnectionManager extends EventTarget {
   }
 
   /**
-   * Connect to orchestrator
+   * Connect to orchestrator.
+   *
+   * Single-flight: if a connect attempt is already in progress, concurrent
+   * callers (e.g. a reconnect/retry timer firing while a manual or page-
+   * foreground connect is in flight) receive the SAME in-flight promise instead
+   * of opening a competing socket and corrupting the shared _lastErrorReason.
    * @returns {Promise<void>}
    * @emits connecting - Connection attempt started
    * @emits connected - Connection established
@@ -84,6 +90,25 @@ export class ConnectionManager extends EventTarget {
    * @throws {Error} If validation or connection fails
    */
   async connect() {
+    if (this._connectInFlight) {
+      return this._connectInFlight;
+    }
+    this._connectInFlight = this._doConnect();
+    try {
+      return await this._connectInFlight;
+    } finally {
+      this._connectInFlight = null;
+    }
+  }
+
+  /**
+   * Perform a single connection attempt (token + health validation, handshake,
+   * reconnect/error-handler setup, retry-on-failure). Wrapped by connect() for
+   * single-flight dedup — do not call directly.
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _doConnect() {
     // Validate token
     if (!this.isTokenValid()) {
       this.dispatchEvent(new CustomEvent('auth:required', {
