@@ -232,7 +232,7 @@ describe('setupCleanupHandlers() — page lifecycle (RL-2)', () => {
     // the shared describe-level lets, which getService would read lazily at fire
     // time) keeps the per-test call counts correct.
     const client = { disconnect: jest.fn().mockResolvedValue(undefined) };
-    const cm = { connect: jest.fn().mockResolvedValue(undefined) };
+    const cm = { connect: jest.fn().mockResolvedValue(undefined), disconnect: jest.fn().mockResolvedValue(undefined) };
     mockClient = client;
     mockConnectionManager = cm;
     lifecycleApp = {
@@ -246,10 +246,12 @@ describe('setupCleanupHandlers() — page lifecycle (RL-2)', () => {
     setupCleanupHandlers(lifecycleApp);
   });
 
-  it('closes the socket when the page is hidden (BFCache-eligible, frees deviceId)', () => {
+  it('closes the socket via ConnectionManager.disconnect when hidden (clears reconnect timer + frees deviceId)', () => {
     setVisibility('hidden');
     document.dispatchEvent(new Event('visibilitychange'));
-    expect(mockClient.disconnect).toHaveBeenCalledTimes(1);
+    // cm.disconnect() (not client.disconnect()) so a pending reconnect timer is
+    // cancelled — else it would fire while backgrounded and defeat BFCache (RL-2).
+    expect(mockConnectionManager.disconnect).toHaveBeenCalledTimes(1);
   });
 
   it('reconnects via ConnectionManager when the page becomes visible again', () => {
@@ -260,7 +262,7 @@ describe('setupCleanupHandlers() — page lifecycle (RL-2)', () => {
 
   it('closes the socket on pagehide (BFCache-friendly replacement for beforeunload)', () => {
     window.dispatchEvent(new Event('pagehide'));
-    expect(mockClient.disconnect).toHaveBeenCalledTimes(1);
+    expect(mockConnectionManager.disconnect).toHaveBeenCalledTimes(1);
   });
 
   it('does nothing when there is no active networked session', () => {
@@ -268,5 +270,20 @@ describe('setupCleanupHandlers() — page lifecycle (RL-2)', () => {
     setupCleanupHandlers(standaloneApp);
     setVisibility('hidden');
     expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow();
+  });
+
+  it('pauses NFC on background via the app hook (NFC-3 wiring, end-to-end)', () => {
+    // Guards the closeSocket -> app.pauseNFCForBackground() wiring, which the
+    // other tests' NFC-less mocks would let pass even if the hook were deleted.
+    const pauseNFC = jest.fn();
+    const nfcApp = {
+      pauseNFCForBackground: pauseNFC,
+      resumeNFCForForeground: jest.fn(),
+      networkedSession: null
+    };
+    setupCleanupHandlers(nfcApp);
+    setVisibility('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(pauseNFC).toHaveBeenCalledTimes(1);
   });
 });

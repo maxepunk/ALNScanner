@@ -459,10 +459,13 @@ export class QueueStatusManager {
 export function setupCleanupHandlers(app) {
   const closeSocket = () => {
     app.pauseNFCForBackground?.(); // free the NFC radio on background (NFC-3, both modes)
-    const client = app.networkedSession?.getService?.('client');
-    if (client) {
+    // Use ConnectionManager.disconnect() (not client.disconnect()): it cancels any
+    // pending reconnect timer + removes the reconnect handler before closing the
+    // socket, so a queued reconnect can't fire while backgrounded and defeat BFCache.
+    const cm = app.networkedSession?.getService?.('connectionManager');
+    if (cm) {
       console.log('Page backgrounded - closing socket (BFCache-eligible, frees deviceId)');
-      Promise.resolve(client.disconnect()).catch(() => {});
+      Promise.resolve(cm.disconnect()).catch(() => {});
     }
   };
 
