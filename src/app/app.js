@@ -1128,7 +1128,18 @@ class App {
 
         const socket = this.viewController.adminInstances.sessionManager.connection.socket;
 
-        socket.once('gm:command:ack', (response) => {
+        // AC-3: filter the ack by action. socket.once self-removes after each
+        // fire, so a racing ack for a DIFFERENT command would consume the one-shot
+        // and let the genuine system:reset ack be dropped (false "reset timeout").
+        // Re-arm until response.data.action === 'system:reset' (CommandSender
+        // pattern). Arrow + self-referencing const preserves lexical `this` and
+        // the resolve/reject/timeout closures across re-arms.
+        const ackHandler = (response) => {
+          if (response.data?.action !== 'system:reset') {
+            socket.once('gm:command:ack', ackHandler);
+            return;
+          }
+
           clearTimeout(timeout);
 
           if (response.data && response.data.success) {
@@ -1138,7 +1149,9 @@ class App {
             const errorMsg = response.data?.message || 'Reset failed';
             reject(new Error(errorMsg));
           }
-        });
+        };
+
+        socket.once('gm:command:ack', ackHandler);
 
         socket.emit('gm:command', {
           event: 'gm:command',
