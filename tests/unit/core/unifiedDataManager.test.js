@@ -30,6 +30,55 @@ describe('UnifiedDataManager', () => {
     });
   });
 
+  describe('scannedTokens reload durability (TQ-7)', () => {
+    const mockSocket = { on: jest.fn(), off: jest.fn(), emit: jest.fn(), connected: true };
+
+    beforeEach(() => {
+      // jsdom localStorage persists per-file; isolate each test to prevent bleed.
+      localStorage.clear();
+      mockSessionModeManager.isNetworked.mockReturnValue(true);
+      mockSessionModeManager.isStandalone.mockReturnValue(false);
+    });
+
+    it('rehydrates the duplicate guard from persisted state BEFORE sync:full', async () => {
+      // A prior session persisted a scan, then the page reloaded.
+      localStorage.setItem('networkedSessionId', 'sess-1');
+      localStorage.setItem('networkedScannedTokens:sess-1', JSON.stringify(['tok-9']));
+
+      manager = new UnifiedDataManager({ tokenManager: mockTokenManager, sessionModeManager: mockSessionModeManager });
+      await manager.initializeNetworkedMode(mockSocket); // NO sync:full yet
+
+      // Assert via the FACADE (the guard app.js actually uses), not the strategy Set.
+      expect(manager.isTokenScanned('tok-9')).toBe(true);
+    });
+
+    it('keeps a gap-scanned token after the server overwrite (union, not replace)', async () => {
+      localStorage.setItem('networkedSessionId', 'sess-1');
+      manager = new UnifiedDataManager({ tokenManager: mockTokenManager, sessionModeManager: mockSessionModeManager });
+      await manager.initializeNetworkedMode(mockSocket);
+
+      manager.markTokenAsScanned('tok-gap');              // scanned during the reconnect gap (still queued)
+      manager.setScannedTokensFromServer(['tok-server']); // sync:full that does not yet know about tok-gap
+
+      expect(manager.isTokenScanned('tok-gap')).toBe(true);    // survived the overwrite
+      expect(manager.isTokenScanned('tok-server')).toBe(true); // server mark added
+    });
+
+    it('persists marks and unmarks so a reload reflects the latest guard state', async () => {
+      localStorage.setItem('networkedSessionId', 'sess-1');
+      manager = new UnifiedDataManager({ tokenManager: mockTokenManager, sessionModeManager: mockSessionModeManager });
+      await manager.initializeNetworkedMode(mockSocket);
+
+      manager.markTokenAsScanned('tok-x');
+      expect(JSON.parse(localStorage.getItem('networkedScannedTokens:sess-1') || '[]')).toContain('tok-x');
+
+      // Admin deleted the transaction -> re-scan allowed; the removal must persist
+      // too, else rehydrate after a reload would re-block the token.
+      manager.unmarkTokenAsScanned('tok-x');
+      expect(JSON.parse(localStorage.getItem('networkedScannedTokens:sess-1') || '[]')).not.toContain('tok-x');
+    });
+  });
+
   describe('strategy initialization', () => {
     it('should initialize standalone mode with LocalStorage', async () => {
       mockSessionModeManager.isStandalone.mockReturnValue(true);

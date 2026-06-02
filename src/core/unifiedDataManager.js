@@ -447,6 +447,9 @@ export class UnifiedDataManager extends EventTarget {
    */
   markTokenAsScanned(tokenId) {
     this.scannedTokens.add(tokenId);
+    // Persist so the dedup guard survives a reload in networked mode (TQ-7).
+    // Optional chain is the mode guard (_networkedStrategy is null in standalone).
+    this._networkedStrategy?.persistScannedTokens?.();
   }
 
   /**
@@ -455,6 +458,9 @@ export class UnifiedDataManager extends EventTarget {
    */
   unmarkTokenAsScanned(tokenId) {
     this.scannedTokens.delete(tokenId);
+    // Persist the removal too — else an admin transaction-delete that re-enables a
+    // re-scan would be undone by rehydrate after a reload (TQ-7 follow-through).
+    this._networkedStrategy?.persistScannedTokens?.();
   }
 
   /**
