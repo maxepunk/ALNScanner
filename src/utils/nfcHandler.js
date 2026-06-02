@@ -34,6 +34,13 @@ class NFCHandlerClass {
     }
 
     try {
+      // Idempotent re-arm: tear down any prior scan before starting a new one
+      // (called on every team confirmation + lifecycle resume — prevents leaked
+      //  readers/listeners and a single tap processed by more than one listener).
+      if (this.abortController) {
+        this.stopScan();
+      }
+
       this.reader = new NDEFReader();
       this.abortController = new AbortController();
 

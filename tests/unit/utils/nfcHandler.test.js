@@ -167,6 +167,23 @@ describe('NFCHandler - ES6 Module', () => {
       expect(opts.signal).toBeInstanceOf(AbortSignal);
       expect(opts.signal.aborted).toBe(false);
     });
+
+    it('aborts a prior scan before re-arming (idempotent re-entry)', async () => {
+      const handler = new NFCHandlerClass();
+
+      await handler.startScan(() => {}, () => {});
+      const firstSignal = handler.abortController.signal;
+      expect(firstSignal.aborted).toBe(false);
+
+      // Re-enter (simulates a second team confirmation / lifecycle re-arm) WITHOUT stopScan
+      await handler.startScan(() => {}, () => {});
+
+      // The first scan's signal must have been aborted by the re-arm
+      expect(firstSignal.aborted).toBe(true);
+      // A fresh controller is now in place and not aborted
+      expect(handler.abortController.signal).not.toBe(firstSignal);
+      expect(handler.abortController.signal.aborted).toBe(false);
+    });
   });
 
   describe('stopScan', () => {
