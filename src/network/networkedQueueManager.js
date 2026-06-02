@@ -292,12 +292,13 @@ export class NetworkedQueueManager extends EventTarget {
 
         if (matches) {
           cleanup(timeout, handler);
-
-          if (payload.status === 'error') {
-            reject(new Error(payload.message || 'Transaction failed'));
-          } else {
-            resolve(payload);
-          }
+          // Resolve with the payload for EVERY transaction:result status. The caller
+          // (_submitDurable/syncQueue) branches on status: accepted/duplicate ->
+          // remove; rejected/error -> remove + transaction:failed (definitive; 'error'
+          // = paused/not-active in-flight, surfaced + unmarked so the GM re-scans on
+          // resume); queued -> keep. Only the 30s timeout and type==='error' EVENTS
+          // (QUEUE_FULL/AUTH) reject (transient -> keep).
+          resolve(payload);
         }
         // If doesn't match, keep listening (might be from another concurrent scan)
       };

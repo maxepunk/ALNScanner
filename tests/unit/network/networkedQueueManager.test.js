@@ -182,6 +182,29 @@ describe('NetworkedQueueManager', () => {
       expect(failedSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('in-flight paused: connected scan + REAL error result → removed + transaction:failed (no mock)', async () => {
+      // Edge case: a scan submitted while active, but the session paused before the
+      // backend processed it → transaction:result status 'error'. Now DEFINITIVE
+      // (remove + unmark + toast via transaction:failed), NOT kept-and-stuck. GM
+      // re-scans after resume (the gate blocks scanning while paused).
+      mockClient.isConnected = true;
+      const handlers = [];
+      mockClient.addEventListener.mockImplementation((type, h) => {
+        if (type === 'message:received') handlers.push(h);
+      });
+      const failedSpy = jest.fn();
+      queueManager.addEventListener('transaction:failed', failedSpy);
+
+      const id = queueManager.queueTransaction({ tokenId: 'tPause', teamId: '001' });
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);  // queued at emit time
+
+      handlers.forEach(h => h({ detail: { type: 'transaction:result', payload: { clientTxId: id, status: 'error', tokenId: 'tPause', teamId: '001', message: 'Session is paused' } } }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(false);  // removed (definitive)
+      expect(failedSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('keeps the entry persisted when the durable submit throws (transient, connected)', async () => {
       mockClient.isConnected = true;
       jest.spyOn(queueManager, 'replayTransaction').mockRejectedValue(new Error('connection lost'));
@@ -499,7 +522,7 @@ describe('NetworkedQueueManager', () => {
       });
     });
 
-    it('should reject on error status', async () => {
+    it('should resolve with the payload on a definitive error status (caller treats as failure)', async () => {
       const transaction = { tokenId: 'token3', teamId: '003' };
 
       mockClient.addEventListener.mockImplementation((eventType, handler) => {
@@ -511,16 +534,20 @@ describe('NetworkedQueueManager', () => {
                 tokenId: 'token3',
                 teamId: '003',
                 status: 'error',
-                message: 'Invalid token'
+                message: 'Session is paused'
               }
             }
           });
         }, 10);
       });
 
+      // status 'error' (paused/not-active, in-flight) RESOLVES now — the caller
+      // (_submitDurable/syncQueue) treats it as a DEFINITIVE failure (remove +
+      // transaction:failed), like 'rejected'. Only the 30s timeout and type==='error'
+      // EVENTS reject (transient → keep).
       await expect(queueManager.replayTransaction(transaction))
-        .rejects
-        .toThrow('Invalid token');
+        .resolves
+        .toMatchObject({ status: 'error', message: 'Session is paused' });
     });
 
     it('should timeout after 30s', async () => {
