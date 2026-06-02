@@ -124,7 +124,25 @@ export class ConnectionManager extends EventTarget {
     } catch (error) {
       this.state = 'disconnected';
 
-      // Schedule retry
+      const reason = this._lastErrorReason;
+      this._lastErrorReason = null; // consume
+
+      // Auth failures are NOT transient — retrying a known-bad credential
+      // just hammers the server. Clear the stale token and re-prompt.
+      if (reason === 'AUTH_INVALID' || reason === 'AUTH_REQUIRED') {
+        this.token = null;
+        try {
+          localStorage.removeItem('aln_auth_token');
+        } catch { /* localStorage may be unavailable */ }
+        this.dispatchEvent(new CustomEvent('auth:required', {
+          detail: { reason: 'auth_failed' }
+        }));
+        throw error;
+      }
+
+      // DEVICE_ID_COLLISION and transient transport errors: retry with
+      // jittered backoff (which spaces retries past the server's stale-socket
+      // teardown window — see RL-5/RL-6).
       this.retryCount++;
       if (this.retryCount < this.maxRetries) {
         this._scheduleRetry();

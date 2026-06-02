@@ -394,6 +394,13 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       await connectionManager.connect();
     });
 
+    // Defensive: P1a.4's DEVICE_ID_COLLISION test schedules a real retry timer.
+    // Clear it after each test so it can't fire during a later test (pollution)
+    // or keep the Jest worker alive (open handle).
+    afterEach(() => {
+      connectionManager._clearRetryTimer();
+    });
+
     it('should register a socket:error listener on the client', () => {
       expect(mockClient.addEventListener).toHaveBeenCalledWith(
         'socket:error',
@@ -408,6 +415,35 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       errorHandler({ detail: { reason: 'DEVICE_ID_COLLISION', error: new Error('x') } });
 
       expect(connectionManager._lastErrorReason).toBe('DEVICE_ID_COLLISION');
+    });
+
+    it('should skip retries and dispatch auth:required on AUTH_INVALID', async () => {
+      const authHandler = jest.fn();
+      connectionManager.addEventListener('auth:required', authHandler);
+
+      // Simulate handshake rejected for bad token
+      mockClient.connect.mockRejectedValueOnce(new Error('AUTH_INVALID: Invalid or expired token'));
+      connectionManager._lastErrorReason = 'AUTH_INVALID';
+      connectionManager.token = createValidToken(); // token passes local expiry check; server rejected it
+
+      await expect(connectionManager.connect()).rejects.toThrow('AUTH_INVALID');
+
+      expect(authHandler).toHaveBeenCalledWith(expect.objectContaining({
+        detail: { reason: 'auth_failed' }
+      }));
+      expect(connectionManager.retryTimer).toBeNull(); // no retry scheduled
+      expect(connectionManager.token).toBeNull();       // stale token cleared
+    });
+
+    it('should still schedule a retry on DEVICE_ID_COLLISION', async () => {
+      mockClient.connect.mockRejectedValueOnce(new Error('DEVICE_ID_COLLISION: in use'));
+      connectionManager._lastErrorReason = 'DEVICE_ID_COLLISION';
+      connectionManager.token = createValidToken();
+
+      await expect(connectionManager.connect()).rejects.toThrow('DEVICE_ID_COLLISION');
+
+      expect(connectionManager.retryTimer).not.toBeNull();
+      expect(connectionManager.retryCount).toBe(1);
     });
   });
 
