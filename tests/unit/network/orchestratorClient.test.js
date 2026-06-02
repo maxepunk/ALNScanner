@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import OrchestratorClient from '../../../src/network/orchestratorClient.js';
+import OrchestratorClient, { MESSAGE_TYPES } from '../../../src/network/orchestratorClient.js';
 
 describe('OrchestratorClient - Dumb Pipe', () => {
   let client;
@@ -249,6 +249,23 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       });
 
       expect(messageHandler).toHaveBeenCalledTimes(messageTypes.length);
+    });
+
+    it('forwards every event in the exported production MESSAGE_TYPES array', () => {
+      const messageHandler = jest.fn();
+      client.addEventListener('message:received', messageHandler);
+
+      MESSAGE_TYPES.forEach(type => {
+        mockSocket._simulateMessage(type, {
+          event: type,
+          data: { test: 'data' },
+          timestamp: new Date().toISOString()
+        });
+      });
+
+      expect(messageHandler).toHaveBeenCalledTimes(MESSAGE_TYPES.length);
+      // Confirm the production array is non-trivial (guards against an empty export)
+      expect(MESSAGE_TYPES.length).toBeGreaterThanOrEqual(20);
     });
 
     it('should NOT process messages (just forward them)', () => {

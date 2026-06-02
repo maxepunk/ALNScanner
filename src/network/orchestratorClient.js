@@ -17,6 +17,34 @@
  * - Admin module initialization (AdminController)
  */
 
+/**
+ * Server→client event names this client forwards as `message:received`.
+ * Exported so contract tests can cross-check against the AsyncAPI subscribe set.
+ */
+export const MESSAGE_TYPES = [
+  'sync:full',
+  'transaction:result',
+  'transaction:new',
+  'transaction:deleted',
+  'score:adjusted',
+  'scores:reset',
+  'session:update',
+  'session:overtime',
+  'device:connected',
+  'device:disconnected',
+  'group:completed',
+  'display:mode',
+  'gm:command:ack',
+  'offline:queue:processed',
+  'batch:ack',
+  'error',
+  'player:scan',
+  'cue:fired',
+  'cue:completed',
+  'cue:error',
+  'service:state', // Sole push mechanism for service domain state
+];
+
 export class OrchestratorClient extends EventTarget {
   constructor(config = {}) {
     super();
@@ -237,31 +265,7 @@ export class OrchestratorClient extends EventTarget {
    * @private
    */
   _setupMessageHandlers() {
-    const messageTypes = [
-      'sync:full',
-      'transaction:result',
-      'transaction:new',
-      'transaction:deleted',
-      'score:adjusted',
-      'scores:reset',
-      'session:update',
-      'session:overtime',
-      'device:connected',
-      'device:disconnected',
-      'group:completed',
-      'display:mode',
-      'gm:command:ack',
-      'offline:queue:processed',
-      'batch:ack',
-      'error',
-      'player:scan',
-      'cue:fired',
-      'cue:completed',
-      'cue:error',
-      'service:state',  // Sole push mechanism for service domain state
-    ];
-
-    messageTypes.forEach(type => {
+    MESSAGE_TYPES.forEach(type => {
       this.socket.on(type, (envelope) => {
         // Extract payload from AsyncAPI envelope
         const payload = envelope.data || envelope;
