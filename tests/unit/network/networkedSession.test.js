@@ -274,6 +274,16 @@ describe('NetworkedSession', () => {
       );
     });
 
+    it('should remove the queueManager transaction:failed forwarder on destroy (P3.4)', async () => {
+      await session.initialize();
+      await session.destroy();
+
+      expect(mockQueueManager.removeEventListener).toHaveBeenCalledWith(
+        'transaction:failed',
+        expect.any(Function)
+      );
+    });
+
     it('should reset state to disconnected', async () => {
       await session.initialize();
       await session.destroy();
