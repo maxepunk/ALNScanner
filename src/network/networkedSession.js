@@ -320,16 +320,24 @@ export class NetworkedSession extends EventTarget {
           }));
           break;
 
-        case 'error':
+        case 'error': {
           // Backend error event (AsyncAPI Decision #10: clients MUST display).
-          // Validation/QUEUE_FULL/AUTH errors were otherwise silently dropped.
-          if (payload?.code === 'AUTH_REQUIRED' || payload?.code === 'AUTH_INVALID') {
+          // AUTH-7: post-connection auth/permission failures route into the same
+          // auth:required flow the handshake path uses (app.js shows the wizard) and
+          // clear the now-known-bad token (L-5/AUTH-5 defense-in-depth, mirrors
+          // connectionManager's handshake-path clear). Broadened to any AUTH_* code
+          // + PERMISSION_DENIED. backend:error stays UNCONDITIONAL so a future
+          // auth-code toast consumer still fires (do NOT make it else-only).
+          const code = payload?.code;
+          if (typeof code === 'string' && (code.startsWith('AUTH_') || code === 'PERMISSION_DENIED')) {
+            try { localStorage.removeItem('aln_auth_token'); } catch (e) { /* private mode */ }
             this.dispatchEvent(new CustomEvent('auth:required'));
           }
           this.dispatchEvent(new CustomEvent('backend:error', {
-            detail: { code: payload?.code, message: payload?.message }
+            detail: { code, message: payload?.message }
           }));
           break;
+        }
 
         // Unified service:state → StateStore
         // All service domain state (video, cue, music, audio, bluetooth,

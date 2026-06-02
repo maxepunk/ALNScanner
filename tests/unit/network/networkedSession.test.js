@@ -555,6 +555,46 @@ describe('NetworkedSession', () => {
       expect(authSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('clears the stale token when an AUTH_* error arrives (AUTH-7)', () => {
+      const removeSpy = jest.spyOn(window.localStorage.__proto__, 'removeItem').mockImplementation(() => {});
+      const authSpy = jest.fn();
+      session.addEventListener('auth:required', authSpy);
+
+      messageHandler({ detail: { type: 'error', payload: { code: 'AUTH_REQUIRED', message: 'Authentication required' } } });
+
+      expect(authSpy).toHaveBeenCalledTimes(1);
+      // L-5/AUTH-5 defense-in-depth (new in AUTH-7): the now-known-bad token is cleared.
+      expect(removeSpy).toHaveBeenCalledWith('aln_auth_token');
+
+      removeSpy.mockRestore();
+    });
+
+    it('routes PERMISSION_DENIED into auth:required + clears token (AUTH-7)', () => {
+      const removeSpy = jest.spyOn(window.localStorage.__proto__, 'removeItem').mockImplementation(() => {});
+      const authSpy = jest.fn();
+      session.addEventListener('auth:required', authSpy);
+
+      messageHandler({ detail: { type: 'error', payload: { code: 'PERMISSION_DENIED', message: 'Denied' } } });
+
+      expect(authSpy).toHaveBeenCalledTimes(1);
+      expect(removeSpy).toHaveBeenCalledWith('aln_auth_token');
+
+      removeSpy.mockRestore();
+    });
+
+    it('does NOT route a non-auth error code into auth:required or clear the token (AUTH-7)', () => {
+      const removeSpy = jest.spyOn(window.localStorage.__proto__, 'removeItem').mockImplementation(() => {});
+      const authSpy = jest.fn();
+      session.addEventListener('auth:required', authSpy);
+
+      messageHandler({ detail: { type: 'error', payload: { code: 'VALIDATION_ERROR', message: 'bad payload' } } });
+
+      expect(authSpy).not.toHaveBeenCalled();
+      expect(removeSpy).not.toHaveBeenCalledWith('aln_auth_token');
+
+      removeSpy.mockRestore();
+    });
+
     it('should update DataManager on sync:full event with scores', () => {
       const scores = [
         { teamId: '001', currentScore: 5000 },
