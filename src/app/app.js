@@ -825,6 +825,12 @@ class App {
 
   finishTeam() {
     this.currentTeamId = '';
+    // Leaving the scan flow: stop NFC so it isn't armed with no team selected (an
+    // armed tap would be silently rejected by the !currentTeamId guard — a
+    // lost-scan risk) and so the lifecycle re-arm flag (_scanningActive) stays
+    // honest. NFC re-arms when the next team is confirmed (_startNFCScanning).
+    this.nfcHandler.stopScan();
+    this._scanningActive = false;
     // Note: Do NOT clear DataManager session here - scannedTokens must persist
     // across team switches for cross-team duplicate detection
     this.uiManager.updateTeamDisplay('');

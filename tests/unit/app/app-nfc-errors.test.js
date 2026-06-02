@@ -21,7 +21,8 @@ describe('App - NFC Error Handling', () => {
         showScreen: jest.fn(),
         showToast: jest.fn(),
         updateSessionStats: jest.fn(),
-        showTokenResult: jest.fn()
+        showTokenResult: jest.fn(),
+        updateTeamDisplay: jest.fn()
       },
       settings: {
         deviceId: 'TEST_001',
@@ -238,6 +239,16 @@ describe('App - NFC Error Handling', () => {
       app._scanningActive = false;
       await app.resumeNFCForForeground();
       expect(mockDependencies.nfcHandler.startScan).not.toHaveBeenCalled();
+    });
+
+    it('finishTeam() stops NFC and clears _scanningActive (no armed-without-team taps; honest re-arm flag)', () => {
+      app.nfcSupported = true;
+      app._scanningActive = true;
+      app.finishTeam();
+      // NFC must not stay armed on teamEntry (no team selected): an armed tap is
+      // silently rejected by the !currentTeamId guard — a lost-scan risk.
+      expect(mockDependencies.nfcHandler.stopScan).toHaveBeenCalled();
+      expect(app._scanningActive).toBe(false);
     });
   });
 });
