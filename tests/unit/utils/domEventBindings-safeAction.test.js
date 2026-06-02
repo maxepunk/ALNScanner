@@ -83,9 +83,14 @@ describe('domEventBindings - safeAdminAction', () => {
     log: jest.fn()
   };
 
+  const mockUiManager = {
+    showError: jest.fn(),
+    showToast: jest.fn()
+  };
+
   beforeAll(() => {
     jest.useFakeTimers();
-    bindDOMEvents(mockApp, {}, {}, mockDebug, {}, {}, {});
+    bindDOMEvents(mockApp, {}, {}, mockDebug, mockUiManager, {}, {});
   });
 
   beforeEach(() => {
@@ -132,6 +137,21 @@ describe('domEventBindings - safeAdminAction', () => {
     expect(mockDebug.log).toHaveBeenCalledWith(
       expect.stringContaining('Connection lost'),
       true
+    );
+  });
+
+  it('should surface a visible error toast when an admin action rejects (AC-2)', async () => {
+    mockMusicController.play.mockRejectedValueOnce(new Error('VLC service unavailable'));
+
+    const btn = document.createElement('button');
+    btn.dataset.action = 'admin.musicPlay';
+    document.body.appendChild(btn);
+
+    clickAction(btn);
+    await flushMicrotasks();
+
+    expect(mockUiManager.showError).toHaveBeenCalledWith(
+      expect.stringContaining('VLC service unavailable')
     );
   });
 
