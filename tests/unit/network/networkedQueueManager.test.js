@@ -441,6 +441,32 @@ describe('NetworkedQueueManager', () => {
 
       expect(result.tokenId).toBe('token6');
     });
+
+    it('should reject fast when a backend error matches the submission', async () => {
+      const transaction = { tokenId: 'token7', teamId: '007', clientTxId: 'ctx-7' };
+
+      mockClient.addEventListener.mockImplementation((eventType, handler) => {
+        setTimeout(() => {
+          handler({
+            detail: {
+              type: 'error',
+              payload: {
+                code: 'VALIDATION_ERROR',
+                message: 'Failed to process transaction',
+                clientTxId: 'ctx-7'
+              }
+            }
+          });
+        }, 10);
+      });
+
+      // Without the type==='error' branch, this falls through the
+      // 'if (type !== transaction:result) return' guard and hangs to the 30s
+      // timeout -> jest's 5s default fires first (RED via timeout).
+      await expect(queueManager.replayTransaction(transaction))
+        .rejects
+        .toThrow('Failed to process transaction');
+    });
   });
 
   describe('localStorage persistence', () => {

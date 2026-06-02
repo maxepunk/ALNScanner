@@ -310,6 +310,17 @@ export class NetworkedSession extends EventTarget {
           }));
           break;
 
+        case 'error':
+          // Backend error event (AsyncAPI Decision #10: clients MUST display).
+          // Validation/QUEUE_FULL/AUTH errors were otherwise silently dropped.
+          if (payload?.code === 'AUTH_REQUIRED' || payload?.code === 'AUTH_INVALID') {
+            this.dispatchEvent(new CustomEvent('auth:required'));
+          }
+          this.dispatchEvent(new CustomEvent('backend:error', {
+            detail: { code: payload?.code, message: payload?.message }
+          }));
+          break;
+
         // Unified service:state → StateStore
         // All service domain state (video, cue, music, audio, bluetooth,
         // lighting, health, held, gameclock) arrives via this single event

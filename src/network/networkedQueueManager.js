@@ -167,13 +167,30 @@ export class NetworkedQueueManager extends EventTarget {
       const handler = (event) => {
         const { type, payload } = event.detail;
 
+        // Backend validation/QUEUE_FULL errors arrive as 'error', NOT
+        // transaction:result. Match by correlation id when available so a
+        // rejected tx fails fast instead of hanging the full 30s timeout (TQ-2/CC-4).
+        if (type === 'error') {
+          if (!transaction.clientTxId || payload.clientTxId === transaction.clientTxId) {
+            cleanup(timeout, handler);
+            const err = new Error(payload.message || 'Transaction failed');
+            err.code = payload.code;
+            reject(err);
+          }
+          return;
+        }
+
         // Only process transaction:result events
         if (type !== 'transaction:result') return;
 
-        // Check if this result matches our transaction
-        // (tokenId + teamId should be unique enough for matching)
-        if (payload.tokenId === transaction.tokenId &&
-            payload.teamId === transaction.teamId) {
+        // Match by clientTxId when present (unambiguous across concurrent
+        // submissions), else fall back to tokenId+teamId.
+        const matches = transaction.clientTxId
+          ? payload.clientTxId === transaction.clientTxId
+          : (payload.tokenId === transaction.tokenId &&
+             payload.teamId === transaction.teamId);
+
+        if (matches) {
           cleanup(timeout, handler);
 
           if (payload.status === 'error') {
