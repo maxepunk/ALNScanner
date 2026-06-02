@@ -562,6 +562,26 @@ describe('NetworkedQueueManager', () => {
     });
   });
 
+  describe('reconcileWithServerState', () => {
+    it('drops queued entries already recorded on the server', () => {
+      queueManager.tempQueue = [
+        { tokenId: 'tDup', teamId: '001', clientTxId: 'a' },
+        { tokenId: 'tNew', teamId: '001', clientTxId: 'b' }
+      ];
+
+      queueManager.reconcileWithServerState(['tDup', 'tOther']);
+
+      expect(queueManager.tempQueue.map(t => t.tokenId)).toEqual(['tNew']);
+      expect(localStorageMock.setItem).toHaveBeenCalled();
+    });
+
+    it('is a no-op when given a non-array', () => {
+      queueManager.tempQueue = [{ tokenId: 'tNew', teamId: '001', clientTxId: 'b' }];
+      queueManager.reconcileWithServerState(undefined);
+      expect(queueManager.tempQueue).toHaveLength(1);
+    });
+  });
+
   describe('localStorage persistence', () => {
     it('should save queue to localStorage', () => {
       queueManager.tempQueue = [

@@ -168,12 +168,11 @@ export class NetworkedSession extends EventTarget {
   _wireEventHandlers() {
     // Store handler references for cleanup
     this._connectedHandler = () => {
-      // On connection: initialize admin and sync queue
+      // On connection: initialize admin only. Queue sync is DEFERRED to the
+      // sync:full handler so server state (deviceScannedTokens) is populated
+      // first and replays can be reconciled against already-recorded scans (TQ-6).
       if (this.services.adminController) {
         this.services.adminController.initialize();
-      }
-      if (this.services.queueManager) {
-        this.services.queueManager.syncQueue();
       }
     };
 
@@ -262,6 +261,17 @@ export class NetworkedSession extends EventTarget {
             this.services.client.dispatchEvent(new CustomEvent('message:received', {
               detail: { type: 'display:mode', payload: { mode: payload.displayStatus.currentMode } }
             }));
+          }
+
+          // After server state is restored, reconcile the offline queue against
+          // already-recorded scans, THEN flush remaining entries (TQ-6). Deferred
+          // here (not in _connectedHandler) so deviceScannedTokens is applied first
+          // and replays aren't double-counted against server state.
+          if (this.services?.queueManager) {
+            if (Array.isArray(payload.deviceScannedTokens)) {
+              this.services.queueManager.reconcileWithServerState(payload.deviceScannedTokens);
+            }
+            this.services.queueManager.syncQueue();
           }
           break;
 

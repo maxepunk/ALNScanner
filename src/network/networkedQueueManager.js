@@ -115,6 +115,24 @@ export class NetworkedQueueManager extends EventTarget {
   }
 
   /**
+   * Drop queued entries whose tokenId the server already recorded (from sync:full
+   * deviceScannedTokens), preventing duplicate replays after reconnect. TQ-6.
+   * @param {Array<string>} scannedTokenIds - token ids already recorded server-side
+   */
+  reconcileWithServerState(scannedTokenIds) {
+    if (!Array.isArray(scannedTokenIds) || scannedTokenIds.length === 0) return;
+    const recorded = new Set(scannedTokenIds);
+    const before = this.tempQueue.length;
+    this.tempQueue = this.tempQueue.filter(t => !recorded.has(t.tokenId));
+    if (this.tempQueue.length !== before) {
+      this.saveQueue();
+      this.dispatchEvent(new CustomEvent('queue:changed', {
+        detail: this.getStatus()
+      }));
+    }
+  }
+
+  /**
    * Sync queued transactions when connection restored
    * Replays each transaction via WebSocket for proper scoring/game mechanics
    *

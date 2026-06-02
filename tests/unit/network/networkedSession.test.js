@@ -43,6 +43,7 @@ describe('NetworkedSession', () => {
 
     mockQueueManager = {
       syncQueue: jest.fn(),
+      reconcileWithServerState: jest.fn(),
       destroy: jest.fn(),
     };
 
@@ -294,7 +295,7 @@ describe('NetworkedSession', () => {
   });
 
   describe('event wiring', () => {
-    it('should initialize admin and sync queue on connected event', async () => {
+    it('should initialize admin (NOT sync queue) on connected event', async () => {
       await session.initialize();
 
       // Get the connected handler that was registered
@@ -306,7 +307,9 @@ describe('NetworkedSession', () => {
       connectedHandler();
 
       expect(mockAdminController.initialize).toHaveBeenCalledTimes(1);
-      expect(mockQueueManager.syncQueue).toHaveBeenCalledTimes(1);
+      // Queue sync is DEFERRED to the sync:full handler (TQ-6) so replays can be
+      // reconciled against server state first — it must NOT fire on connect.
+      expect(mockQueueManager.syncQueue).not.toHaveBeenCalled();
     });
 
     it('should pause admin on disconnected event', async () => {
@@ -753,6 +756,23 @@ describe('NetworkedSession', () => {
         messageHandler({ detail: { type: 'sync:full', payload } });
 
         expect(mockDataManager.setScannedTokensFromServer).toHaveBeenCalledWith(deviceScannedTokens);
+      });
+
+      it('reconciles the queue against deviceScannedTokens then flushes on sync:full (TQ-6)', () => {
+        const deviceScannedTokens = ['token1', 'token2'];
+        const payload = {
+          session: { id: 'old-session-123' },
+          deviceScannedTokens,
+          scores: [],
+          recentTransactions: []
+        };
+
+        messageHandler({ detail: { type: 'sync:full', payload } });
+
+        // Queue flush is driven by sync:full (not the connected event), and the
+        // queue is reconciled against already-recorded scans before flushing.
+        expect(mockQueueManager.reconcileWithServerState).toHaveBeenCalledWith(deviceScannedTokens);
+        expect(mockQueueManager.syncQueue).toHaveBeenCalledTimes(1);
       });
     });
 
