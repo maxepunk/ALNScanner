@@ -54,6 +54,7 @@ class App {
     // Instance state
     this.currentTeamId = '';
     this.nfcSupported = false;
+    this._scanningActive = false; // true while NFC scanning is armed (on scan screen)
     this.currentInterventionTeamId = null; // For GM intervention features
     this.viewController = this._createViewController();
   }
@@ -615,12 +616,27 @@ class App {
         }
       );
 
+      this._scanningActive = true;
       this.debug.log('NFC scanning started automatically');
     } catch (error) {
       this.debug.log(`NFC start error: ${error.message}`, true);
       if (status) {
         status.textContent = 'NFC unavailable. Use Manual Entry.';
       }
+    }
+  }
+
+  /** Abort the live NFC scan when the page is backgrounded (NFC-3). */
+  pauseNFCForBackground() {
+    if (this.nfcSupported && this._scanningActive) {
+      this.nfcHandler.stopScan(); // NFC-1: aborts the AbortController + nulls the reader
+    }
+  }
+
+  /** Re-arm NFC when the page returns to the foreground, iff it was active (NFC-3). */
+  async resumeNFCForForeground() {
+    if (this.nfcSupported && this._scanningActive) {
+      await this._startNFCScanning(); // NFC-1: idempotent — aborts any prior scan first
     }
   }
 
@@ -796,6 +812,7 @@ class App {
 
   cancelScan() {
     this.nfcHandler.stopScan();
+    this._scanningActive = false;
     this.currentTeamId = '';
     this.uiManager.updateTeamDisplay('');
     this.uiManager.showScreen('teamEntry');

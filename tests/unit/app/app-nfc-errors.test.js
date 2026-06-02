@@ -216,4 +216,28 @@ describe('App - NFC Error Handling', () => {
       );
     });
   });
+
+  describe('NFC page-lifecycle teardown (NFC-3)', () => {
+    it('pauseNFCForBackground() aborts the active scan', () => {
+      app.nfcSupported = true;
+      app._scanningActive = true;
+      app.pauseNFCForBackground();
+      expect(mockDependencies.nfcHandler.stopScan).toHaveBeenCalledTimes(1);
+    });
+
+    it('resumeNFCForForeground() re-arms the scan only when it was active', async () => {
+      app.nfcSupported = true;
+      app._scanningActive = true;
+      mockDependencies.nfcHandler.startScan.mockResolvedValue();
+      await app.resumeNFCForForeground();
+      expect(mockDependencies.nfcHandler.startScan).toHaveBeenCalledTimes(1);
+    });
+
+    it('resumeNFCForForeground() does NOT re-arm when scanning was not active', async () => {
+      app.nfcSupported = true;
+      app._scanningActive = false;
+      await app.resumeNFCForForeground();
+      expect(mockDependencies.nfcHandler.startScan).not.toHaveBeenCalled();
+    });
+  });
 });

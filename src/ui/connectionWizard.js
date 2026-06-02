@@ -458,6 +458,7 @@ export class QueueStatusManager {
  */
 export function setupCleanupHandlers(app) {
   const closeSocket = () => {
+    app.pauseNFCForBackground?.(); // free the NFC radio on background (NFC-3, both modes)
     const client = app.networkedSession?.getService?.('client');
     if (client) {
       console.log('Page backgrounded - closing socket (BFCache-eligible, frees deviceId)');
@@ -466,6 +467,7 @@ export function setupCleanupHandlers(app) {
   };
 
   const reopenSocket = () => {
+    app.resumeNFCForForeground?.(); // re-arm NFC on foreground (NFC-3, both modes)
     const cm = app.networkedSession?.getService?.('connectionManager');
     if (cm) {
       console.log('Page foregrounded - reconnecting');
