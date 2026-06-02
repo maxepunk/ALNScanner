@@ -429,6 +429,8 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       await client.disconnect();
 
       expect(client.socket).toBeNull();
+      // Verify _cleanup() actually ran (not just a no-op null assignment).
+      expect(mockSocket.removeAllListeners).toHaveBeenCalled();
     });
   });
 

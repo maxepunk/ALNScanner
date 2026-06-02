@@ -226,7 +226,7 @@ describe('ConnectionManager - Connection Lifecycle', () => {
 
       // Mock connect to resolve immediately and call done
       jest.spyOn(connectionManager, 'connect').mockImplementation(async () => {
-        expect(true).toBe(true); // Reconnect was attempted
+        expect(connectionManager.state).toBe('disconnected'); // reconnect fired from a disconnected state
         done();
       });
 
@@ -270,7 +270,7 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       connectionManager.token = createValidToken();
 
       jest.spyOn(connectionManager, 'connect').mockImplementation(async () => {
-        expect(true).toBe(true); // reconnect was attempted
+        expect(connectionManager.state).toBe('disconnected'); // reconnect fired from a disconnected state
         done();
       });
 
@@ -284,7 +284,7 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       connectionManager.token = createValidToken();
 
       jest.spyOn(connectionManager, 'connect').mockImplementation(async () => {
-        expect(true).toBe(true);
+        expect(connectionManager.state).toBe('disconnected'); // reconnect fired from a disconnected state
         done();
       });
 
