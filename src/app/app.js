@@ -159,6 +159,20 @@ class App {
       const formattedBonus = bonus ? ` +$${bonus.toLocaleString()}` : '';
       this.uiManager.showToast(`Group completed by ${teamId || 'team'}${formattedBonus}`);
     });
+
+    // P3.4: a PERMANENT transaction rejection (backend status 'rejected', e.g.
+    // invalid token) surfaces to the operator AND unmarks the token so the GM can
+    // re-scan after correcting the cause (fixes the token-locked + no-feedback
+    // lost-scan-equivalent). Duplicates are NOT unmarked (genuinely claimed).
+    this.networkedSession.addEventListener('transaction:failed', (event) => {
+      const { transaction, status, message } = event.detail || {};
+      const tokenId = transaction?.tokenId;
+      if (status === 'duplicate') return;
+      this.uiManager.showError(`Scan rejected${tokenId ? ` (${tokenId})` : ''}: ${message || status || 'failed'}`);
+      if (tokenId) {
+        this.dataManager.unmarkTokenAsScanned(tokenId);
+      }
+    });
   }
 
   /**

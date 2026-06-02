@@ -98,6 +98,9 @@ export class NetworkedSession extends EventTarget {
     }
 
     if (this.services.queueManager) {
+      if (this._txFailedHandler) {
+        this.services.queueManager.removeEventListener('transaction:failed', this._txFailedHandler);
+      }
       this.services.queueManager.destroy();
     }
 
@@ -186,6 +189,13 @@ export class NetworkedSession extends EventTarget {
     this._authRequiredHandler = () => {
       // Forward auth:required event to session listeners
       this.dispatchEvent(new CustomEvent('auth:required'));
+    };
+
+    // P3.4: forward queueManager transaction:failed (a permanent rejection) onto
+    // the session so the app has ONE event source (the session) — mirrors how
+    // group:completed/backend:error are surfaced. App unmarks the token + toasts.
+    this._txFailedHandler = (e) => {
+      this.dispatchEvent(new CustomEvent('transaction:failed', { detail: e.detail }));
     };
 
     // Global WebSocket → DataManager/StateStore event handler
@@ -355,6 +365,7 @@ export class NetworkedSession extends EventTarget {
     this.services.connectionManager.addEventListener('disconnected', this._disconnectedHandler);
     this.services.connectionManager.addEventListener('auth:required', this._authRequiredHandler);
     this.services.client.addEventListener('message:received', this._messageHandler);
+    this.services.queueManager.addEventListener('transaction:failed', this._txFailedHandler);
   }
 
   /**

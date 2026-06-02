@@ -45,6 +45,8 @@ describe('NetworkedSession', () => {
       syncQueue: jest.fn(),
       reconcileWithServerState: jest.fn(),
       clearQueue: jest.fn(),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
       destroy: jest.fn(),
     };
 
@@ -593,6 +595,23 @@ describe('NetworkedSession', () => {
       expect(removeSpy).not.toHaveBeenCalledWith('aln_auth_token');
 
       removeSpy.mockRestore();
+    });
+
+    it('forwards queueManager transaction:failed as a session event (P3.4)', () => {
+      // The queueManager dispatches transaction:failed on a permanent rejection;
+      // the session re-dispatches it so app has ONE event source (the session).
+      const reg = mockQueueManager.addEventListener.mock.calls.find(c => c[0] === 'transaction:failed');
+      expect(reg).toBeDefined();
+      const queueHandler = reg[1];
+
+      const dispatchSpy = jest.spyOn(session, 'dispatchEvent');
+      queueHandler({ detail: { transaction: { tokenId: 'tX' }, status: 'rejected', message: 'Invalid token ID' } });
+
+      const fwd = dispatchSpy.mock.calls.find(c => c[0]?.type === 'transaction:failed');
+      expect(fwd).toBeDefined();
+      expect(fwd[0].detail).toEqual({ transaction: { tokenId: 'tX' }, status: 'rejected', message: 'Invalid token ID' });
+
+      dispatchSpy.mockRestore();
     });
 
     it('should update DataManager on sync:full event with scores', () => {
