@@ -210,6 +210,56 @@ describe('ConnectionWizard', () => {
       expect(statusDiv.textContent).toContain('Please fill in all fields');
       expect(mockFetch).not.toHaveBeenCalled();
     });
+
+    test('should show a timeout-specific message when the auth POST aborts', async () => {
+      const display = document.getElementById('stationNameDisplay');
+      display.textContent = 'GM_Station_1';
+      display.dataset.deviceId = 'GM_Station_1';
+
+      document.getElementById('serverUrl').value = 'http://localhost:3000';
+      document.getElementById('gmPassword').value = 'admin';
+
+      mockFetch
+        .mockResolvedValueOnce({ ok: true }) // health check passes
+        .mockRejectedValueOnce(
+          Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })
+        ); // auth POST times out
+
+      const event = new Event('submit');
+      event.preventDefault = jest.fn();
+
+      await wizard.handleConnectionSubmit(event);
+
+      const statusDiv = document.getElementById('connectionStatusMsg');
+      expect(statusDiv.textContent).toContain('timed out');
+      // must NOT proceed to networked init on a timeout
+      expect(mockApp.selectGameMode).not.toHaveBeenCalled();
+    });
+
+    test('should pass an AbortSignal to the auth POST', async () => {
+      const display = document.getElementById('stationNameDisplay');
+      display.textContent = 'GM_Station_1';
+      display.dataset.deviceId = 'GM_Station_1';
+
+      document.getElementById('serverUrl').value = 'http://localhost:3000';
+      document.getElementById('gmPassword').value = 'admin';
+
+      mockFetch
+        .mockResolvedValueOnce({ ok: true }) // health check
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 't' }) }); // auth
+
+      const event = new Event('submit');
+      event.preventDefault = jest.fn();
+
+      await wizard.handleConnectionSubmit(event);
+
+      // 2nd fetch call is the auth POST; assert it carried a signal
+      const authCall = mockFetch.mock.calls.find(([url]) =>
+        typeof url === 'string' && url.includes('/api/admin/auth')
+      );
+      expect(authCall).toBeDefined();
+      expect(authCall[1].signal).toBeInstanceOf(AbortSignal);
+    });
   });
 });
 

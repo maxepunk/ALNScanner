@@ -321,7 +321,8 @@ export class ConnectionWizard {
       const authResponse = await fetch(`${normalizedUrl}/api/admin/auth`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        body: JSON.stringify({ password }),
+        signal: AbortSignal.timeout(5000)
       });
 
       if (!authResponse.ok) {
@@ -367,7 +368,11 @@ export class ConnectionWizard {
       // (Modal close and UI transition happen in App._initializeNetworkedMode)
 
     } catch (error) {
-      statusDiv.textContent = `❌ Connection failed: ${error.message}`;
+      if (error.name === 'AbortError') {
+        statusDiv.textContent = '❌ Server timed out — check the orchestrator and retry.';
+      } else {
+        statusDiv.textContent = `❌ Connection failed: ${error.message}`;
+      }
       statusDiv.style.color = '#f44336';
     }
   }
