@@ -142,15 +142,38 @@ describe('ConnectionWizard', () => {
       expect(display.dataset.deviceId).toBe('GM_Station_3');
     });
 
-    test('should fallback to localStorage counter on network error', async () => {
+    test('should NOT assign a guessable ID when /api/state is unreachable', async () => {
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
-      Storage.prototype.getItem.mockReturnValue('5');
+      Storage.prototype.getItem.mockReturnValue('5'); // stale counter must be ignored
 
       await wizard.assignStationName('http://localhost:3000');
 
       const display = document.getElementById('stationNameDisplay');
-      expect(display.textContent).toBe('GM_Station_5');
-      expect(display.dataset.deviceId).toBe('GM_Station_5');
+      // No colliding fallback ID — display/dataset cleared so submit is blocked
+      expect(display.dataset.deviceId).toBe('');
+      expect(display.textContent).not.toMatch(/GM_Station_\d+/);
+
+      const statusDiv = document.getElementById('connectionStatusMsg');
+      expect(statusDiv.textContent).toContain('reach the orchestrator');
+    });
+
+    test('blocks submission when /api/state was unreachable (no deviceId assigned)', async () => {
+      // First-time assignment fails → no deviceId on the display
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      await wizard.assignStationName('http://localhost:3000');
+
+      document.getElementById('serverUrl').value = 'http://localhost:3000';
+      document.getElementById('gmPassword').value = 'admin';
+      mockFetch.mockClear();
+
+      const event = new Event('submit');
+      event.preventDefault = jest.fn();
+      await wizard.handleConnectionSubmit(event);
+
+      // No deviceId → submit guard fires, no auth attempt made
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(document.getElementById('connectionStatusMsg').textContent)
+        .toContain('Please fill in all fields');
     });
 
     test('should filter out non-GM devices and disconnected GMs', async () => {

@@ -216,15 +216,20 @@ export class ConnectionWizard {
 
       console.log(`[ConnectionWizard] Auto-assigned station name: ${nextStationId}`);
     } catch (error) {
-      // Fallback to localStorage counter on error
-      console.warn(`[ConnectionWizard] Failed to query /api/state, using localStorage fallback:`, error.message);
-
-      const stationNum = localStorage.getItem('lastStationNum') || '1';
-      const fallbackId = `GM_Station_${stationNum}`;
+      // RL-7: Do NOT hand out a guessable lastStationNum counter when /api/state
+      // is unreachable — an uncoordinated counter can collide with an already-
+      // connected station, causing a silent DEVICE_ID_COLLISION at handshake.
+      // Block instead: clear the assignment so the submit guard refuses to send.
+      console.warn(`[ConnectionWizard] Could not query /api/state for station assignment:`, error.message);
 
       if (stationNameDisplay) {
-        stationNameDisplay.textContent = fallbackId;
-        stationNameDisplay.dataset.deviceId = fallbackId;
+        stationNameDisplay.textContent = '⚠️ Cannot assign station — orchestrator unreachable';
+        stationNameDisplay.dataset.deviceId = '';
+      }
+      const statusDiv = document.getElementById('connectionStatusMsg');
+      if (statusDiv) {
+        statusDiv.textContent = '❌ Could not reach the orchestrator to assign a station number. Check the server URL and try again.';
+        statusDiv.style.color = '#f44336';
       }
     }
   }
@@ -353,12 +358,9 @@ export class ConnectionWizard {
       settings.stationName = deviceId;
       settings.save();
 
-      // Update localStorage counter for next session
-      const match = deviceId.match(/GM_Station_(\d+)$/);
-      if (match) {
-        const nextNum = parseInt(match[1], 10) + 1;
-        localStorage.setItem('lastStationNum', nextNum.toString());
-      }
+      // (removed) lastStationNum counter — no longer used; station IDs are assigned
+      // only from the server's connected-device list (see assignStationName). The
+      // counter could collide across stations when /api/state was unreachable (RL-7).
 
       // 4. Trigger networked mode initialization via App (event-driven pattern)
       // Per Architecture Refactoring 2025-11: App creates NetworkedSession, not wizard
