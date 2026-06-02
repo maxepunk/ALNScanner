@@ -30,4 +30,14 @@ describe('service worker build artifact (SW-1/SW-2)', () => {
     expect(sw).not.toContain('/socket.io-client/socket.io.min.js');
     expect(sw).not.toContain('./data/tokens.json');
   });
+
+  it('bypasses only by path, not by host/port (production cache must not be inert)', () => {
+    // At https://<IP>:3000/gm-scanner/ a host/port bypass matches EVERY app
+    // request, making the runtime cache inert. Bypass must be path-based only.
+    const sw = fs.readFileSync(DIST_SW, 'utf8');
+    expect(sw).not.toContain('\\d+\\.\\d+'); // no IP-octet regex
+    expect(sw).not.toContain('url.host');    // bypass must not key off host/port
+    expect(sw).toContain("startsWith('/api/')");
+    expect(sw).toContain("startsWith('/socket.io/')");
+  });
 });

@@ -21,11 +21,14 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Bypass backend traffic by PATH only. Host/port checks are wrong here: in
+// production the app and API share the origin https://<IP>:3000 (app at
+// /gm-scanner/), so a host/port bypass matches the app's OWN assets and makes
+// the runtime cache inert. In dev the app (localhost:8443) is a different
+// origin from the backend, so the SW scope already excludes backend requests.
 const isBypass = (url) =>
   url.pathname.startsWith('/api/') ||
-  url.pathname.startsWith('/socket.io/') ||
-  /:(3000|8080)(\/|$)/.test(url.host + url.pathname) ||
-  /\b\d+\.\d+\.\d+\.\d+\b/.test(url.host);
+  url.pathname.startsWith('/socket.io/');
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
