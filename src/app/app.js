@@ -684,6 +684,22 @@ class App {
       return;
     }
 
+    // GATE: in networked mode the backend is the authority and rejects transactions
+    // unless the session is active (FR 1.2: rejected when paused/in setup). Block the
+    // scan at the source so the GM gets immediate feedback and no token is marked,
+    // queued, or submitted for a paused/not-started/ended session. (A scan already
+    // in-flight when a pause lands is rejected via the transaction:result 'error'
+    // path — removed + unmarked + toast — so the operator re-scans after resume.)
+    if (this.sessionModeManager && this.sessionModeManager.isNetworked()) {
+      const sessionStatus = this.dataManager.sessionState?.status;
+      if (sessionStatus !== 'active') {
+        const label = (sessionStatus && sessionStatus !== 'disconnected') ? sessionStatus : 'not active';
+        this.debug.log(`Scan blocked: session is ${label}`, true);
+        this.uiManager.showError(`Cannot scan: session is ${label}`);
+        return;
+      }
+    }
+
     // Trim any whitespace
     const cleanId = result.id.trim();
     this.debug.log(`Cleaned ID: "${cleanId}" (length: ${cleanId.length})`);
