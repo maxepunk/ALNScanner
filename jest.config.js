@@ -10,6 +10,10 @@ const coverageThreshold = fs.existsSync(thresholdsPath)
 module.exports = {
   testEnvironment: 'jsdom',
   testMatch: ['**/tests/**/*.test.js'],
+  // Build-artifact tests (tests/build-artifacts/) run a full Vite build and are slow.
+  // They are gated out of the default `npm test` and run via `npm run test:build`
+  // (jest.build.config.js). See ALNScanner/CLAUDE.md "Run tests".
+  testPathIgnorePatterns: ['/node_modules/', '/tests/build-artifacts/'],
   setupFiles: ['./tests/helpers/test-setup.js'],
   setupFilesAfterEnv: ['./tests/helpers/test-hooks.js'],
 

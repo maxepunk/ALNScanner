@@ -45,7 +45,10 @@ npm run build         # Output to dist/
 npm run preview       # Test production build locally
 
 # Run tests
-npm test              # Jest unit tests (L1: 1116 tests, ~15-30s)
+npm test              # Jest unit tests (L1, ~30s) — EXCLUDES slow build-artifact tests
+npm run test:build    # Build-artifact tests (tests/build-artifacts/): runs a real `vite build`,
+                      #   asserts on dist/ output (e.g. dist/sw.js). Slow; gated out of `npm test`
+                      #   via jest.build.config.js. Used by the SW safety-net tests.
 npm run test:e2e      # Playwright E2E tests (L2: scanner only, ~2-3 min)
 npm run test:all      # All tests (L1 + L2)
 
