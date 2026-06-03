@@ -380,4 +380,22 @@ describe('SessionRenderer', () => {
       expect(renderer._clockTimer).toBeNull();
     });
   });
+
+  describe('XSS — session name escaping (SR-2)', () => {
+    it('should escape HTML in the session name in the setup template', () => {
+      renderer.render({ name: '<img src=x onerror="alert(1)">', status: 'setup' });
+
+      const header = container.querySelector('.session-header');
+      expect(header.innerHTML).not.toContain('<img');
+      expect(header.innerHTML).toContain('&lt;img');
+    });
+
+    it('should escape HTML in the session name in the active template', () => {
+      renderer.render({ name: '<b>boom</b>', status: 'active' });
+
+      const nameEl = container.querySelector('#session-name');
+      expect(nameEl.textContent).toBe('<b>boom</b>'); // rendered as text, not markup
+      expect(container.querySelector('.session-header').innerHTML).toContain('&lt;b&gt;');
+    });
+  });
 });
