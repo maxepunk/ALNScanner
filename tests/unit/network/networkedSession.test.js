@@ -940,6 +940,7 @@ describe('NetworkedSession', () => {
       beforeEach(async () => {
         mockStore = {
           update: jest.fn(),
+          replace: jest.fn(),
           get: jest.fn(),
           getAll: jest.fn(() => ({})),
         };
@@ -977,12 +978,12 @@ describe('NetworkedSession', () => {
         };
         storeMessageHandler({ detail: { type: 'sync:full', payload: { music } } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('music', music);
+        expect(mockStore.replace).toHaveBeenCalledWith('music', music);
       });
 
-      it('should not call store.update for music when payload.music is absent', () => {
+      it('should not call store.replace for music when payload.music is absent', () => {
         storeMessageHandler({ detail: { type: 'sync:full', payload: { heldItems: [] } } });
-        expect(mockStore.update).not.toHaveBeenCalledWith('music', expect.anything());
+        expect(mockStore.replace).not.toHaveBeenCalledWith('music', expect.anything());
       });
 
       it('should populate store with serviceHealth from sync:full', () => {
@@ -990,7 +991,7 @@ describe('NetworkedSession', () => {
         const payload = { serviceHealth };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('health', serviceHealth);
+        expect(mockStore.replace).toHaveBeenCalledWith('health', serviceHealth);
       });
 
       it('should populate store with environment state from sync:full', () => {
@@ -1003,23 +1004,23 @@ describe('NetworkedSession', () => {
         };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('bluetooth', { scanning: false, devices: [] });
-        expect(mockStore.update).toHaveBeenCalledWith('audio', { stream: 'video', sink: 'hdmi-stereo' });
-        expect(mockStore.update).toHaveBeenCalledWith('lighting', { currentScene: 'Pregame', connected: true });
+        expect(mockStore.replace).toHaveBeenCalledWith('bluetooth', { scanning: false, devices: [] });
+        expect(mockStore.replace).toHaveBeenCalledWith('audio', { stream: 'video', sink: 'hdmi-stereo' });
+        expect(mockStore.replace).toHaveBeenCalledWith('lighting', { currentScene: 'Pregame', connected: true });
       });
 
       it('should populate store with gameClock from sync:full', () => {
         const payload = { gameClock: { running: true, elapsed: 3600 } };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('gameclock', { running: true, elapsed: 3600 });
+        expect(mockStore.replace).toHaveBeenCalledWith('gameclock', { running: true, elapsed: 3600 });
       });
 
       it('should populate store with cueEngine from sync:full', () => {
         const payload = { cueEngine: { activeCues: [], standingCues: [] } };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('cueengine', { activeCues: [], standingCues: [] });
+        expect(mockStore.replace).toHaveBeenCalledWith('cueengine', { activeCues: [], standingCues: [] });
       });
 
       it('should populate store with heldItems from sync:full', () => {
@@ -1027,14 +1028,14 @@ describe('NetworkedSession', () => {
         const payload = { heldItems };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('held', { items: heldItems });
+        expect(mockStore.replace).toHaveBeenCalledWith('held', { items: heldItems });
       });
 
       it('should populate store with videoStatus from sync:full', () => {
         const payload = { videoStatus: { nowPlaying: 'jaw011.mp4', isPlaying: true } };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('video', { nowPlaying: 'jaw011.mp4', isPlaying: true });
+        expect(mockStore.replace).toHaveBeenCalledWith('video', { nowPlaying: 'jaw011.mp4', isPlaying: true });
       });
 
       it('should populate all service domains from a complete sync:full', () => {
@@ -1053,7 +1054,7 @@ describe('NetworkedSession', () => {
         };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledTimes(9);
+        expect(mockStore.replace).toHaveBeenCalledTimes(9);
       });
 
       it('should not populate store for missing sync:full fields', () => {
@@ -1061,7 +1062,7 @@ describe('NetworkedSession', () => {
         const payload = { scores: [{ teamId: '001', currentScore: 5000 }] };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).not.toHaveBeenCalled();
+        expect(mockStore.replace).not.toHaveBeenCalled();
       });
 
       it('should populate store (not UDM) for service state from sync:full', () => {
@@ -1072,8 +1073,8 @@ describe('NetworkedSession', () => {
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
         // Store is sole path for service state
-        expect(mockStore.update).toHaveBeenCalledWith('music', { connected: true, state: 'playing' });
-        expect(mockStore.update).toHaveBeenCalledWith('health', { vlc: { status: 'healthy' } });
+        expect(mockStore.replace).toHaveBeenCalledWith('music', { connected: true, state: 'playing' });
+        expect(mockStore.replace).toHaveBeenCalledWith('health', { vlc: { status: 'healthy' } });
       });
     });
 

@@ -254,16 +254,21 @@ export class NetworkedSession extends EventTarget {
 
           // Populate StateStore from sync:full (service domain state)
           if (this._store) {
-            if (payload.music) this._store.update('music', payload.music);
-            if (payload.serviceHealth) this._store.update('health', payload.serviceHealth);
-            if (payload.environment?.bluetooth) this._store.update('bluetooth', payload.environment.bluetooth);
-            if (payload.environment?.audio) this._store.update('audio', payload.environment.audio);
-            if (payload.environment?.lighting) this._store.update('lighting', payload.environment.lighting);
-            if (payload.gameClock) this._store.update('gameclock', payload.gameClock);
-            if (payload.cueEngine) this._store.update('cueengine', payload.cueEngine);
-            if (payload.heldItems) this._store.update('held', { items: payload.heldItems });
-            if (payload.videoStatus) this._store.update('video', payload.videoStatus);
-            if (payload.sound) this._store.update('sound', payload.sound);
+            // SR-3/SSR-2: sync:full is an authoritative snapshot — REPLACE each
+            // domain (drop stale keys) rather than merge. A partial/omitted domain
+            // therefore can't leave the renderer showing stale state, and the
+            // sync:full vs service:state shapes can't accumulate orphan keys.
+            // (service:state below stays update() — it's an incremental delta.)
+            if (payload.music) this._store.replace('music', payload.music);
+            if (payload.serviceHealth) this._store.replace('health', payload.serviceHealth);
+            if (payload.environment?.bluetooth) this._store.replace('bluetooth', payload.environment.bluetooth);
+            if (payload.environment?.audio) this._store.replace('audio', payload.environment.audio);
+            if (payload.environment?.lighting) this._store.replace('lighting', payload.environment.lighting);
+            if (payload.gameClock) this._store.replace('gameclock', payload.gameClock);
+            if (payload.cueEngine) this._store.replace('cueengine', payload.cueEngine);
+            if (payload.heldItems) this._store.replace('held', { items: payload.heldItems });
+            if (payload.videoStatus) this._store.replace('video', payload.videoStatus);
+            if (payload.sound) this._store.replace('sound', payload.sound);
           }
 
           // Restore display mode on reconnect (not a StateStore domain — routes to MonitoringDisplay)
