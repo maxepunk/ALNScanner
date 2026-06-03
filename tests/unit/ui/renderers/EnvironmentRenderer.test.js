@@ -359,6 +359,22 @@ describe('EnvironmentRenderer', () => {
   });
 
   describe('Bluetooth', () => {
+    it('should not render discovered (un-paired) devices — dead path removed (SR-4)', () => {
+      // discoveredDevices is NOT part of bluetoothService.getState(); it must be
+      // ignored even if present (operational model is pair-then-connect known speakers).
+      renderer.renderBluetooth({
+        scanning: false,
+        connectedDevices: [],
+        pairedDevices: [{ address: 'AA:BB', name: 'MaxEBeats' }],
+        discoveredDevices: [{ address: 'CC:DD', name: 'StrangerSpeaker' }],
+      });
+
+      const list = document.getElementById('bt-device-list');
+      expect(list.textContent).toContain('MaxEBeats');
+      expect(list.textContent).not.toContain('StrangerSpeaker');
+      expect(list.querySelectorAll('.bt-device-item')).toHaveLength(1);
+    });
+
     it('should render disconnect button for connected devices', () => {
       renderer.renderBluetooth({
         scanning: false,
@@ -380,17 +396,6 @@ describe('EnvironmentRenderer', () => {
       });
 
       const btn = document.querySelector('[data-action="admin.connectBtDevice"]');
-      expect(btn).not.toBeNull();
-    });
-
-    it('should show pair button for discovered devices', () => {
-      renderer.renderBluetooth({
-        scanning: false,
-        connectedDevices: [],
-        discoveredDevices: [{ address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker' }],
-      });
-
-      const btn = document.querySelector('[data-action="admin.pairBtDevice"]');
       expect(btn).not.toBeNull();
     });
 
@@ -440,7 +445,7 @@ describe('EnvironmentRenderer', () => {
       renderer.renderBluetooth({
         scanning: false,
         connectedDevices: [{ address: 'AA:BB', name: 'S1' }],
-        discoveredDevices: [{ address: 'CC:DD', name: 'S2' }],
+        pairedDevices: [{ address: 'CC:DD', name: 'S2' }],
       });
 
       expect(document.getElementById('bt-speaker-count').textContent).toBe('2');
@@ -483,8 +488,7 @@ describe('EnvironmentRenderer', () => {
     it('should use address as fallback name', () => {
       renderer.renderBluetooth({
         scanning: false,
-        connectedDevices: [],
-        discoveredDevices: [{ address: 'AA:BB:CC:DD:EE:FF' }],
+        connectedDevices: [{ address: 'AA:BB:CC:DD:EE:FF' }],
       });
 
       expect(document.querySelector('.bt-device-name').textContent).toBe('AA:BB:CC:DD:EE:FF');
@@ -513,36 +517,36 @@ describe('EnvironmentRenderer', () => {
       renderer.renderBluetooth({
         scanning: false,
         connectedDevices: [],
-        discoveredDevices: [{ address: 'AA:BB', name: 'S1' }],
+        pairedDevices: [{ address: 'AA:BB', name: 'S1' }],
       });
 
-      expect(document.querySelector('[data-action="admin.pairBtDevice"]')).toBeTruthy();
+      expect(document.querySelector('[data-action="admin.connectBtDevice"]')).toBeTruthy();
 
       // Device now connected
       renderer.renderBluetooth({
         scanning: false,
         connectedDevices: [{ address: 'AA:BB', name: 'S1' }],
-        discoveredDevices: [],
+        pairedDevices: [],
       });
 
       expect(document.querySelector('[data-action="admin.disconnectBtDevice"]')).toBeTruthy();
-      expect(document.querySelector('[data-action="admin.pairBtDevice"]')).toBeNull();
+      expect(document.querySelector('[data-action="admin.connectBtDevice"]')).toBeNull();
     });
 
     it('should rebuild when new device added', () => {
       renderer.renderBluetooth({
         scanning: false,
         connectedDevices: [],
-        discoveredDevices: [{ address: 'AA:BB', name: 'S1' }],
+        pairedDevices: [{ address: 'AA:BB', name: 'S1' }],
       });
 
       expect(document.querySelectorAll('.bt-device-item')).toHaveLength(1);
 
-      // New device discovered
+      // New device paired
       renderer.renderBluetooth({
         scanning: false,
         connectedDevices: [],
-        discoveredDevices: [
+        pairedDevices: [
           { address: 'AA:BB', name: 'S1' },
           { address: 'CC:DD', name: 'S2' },
         ],

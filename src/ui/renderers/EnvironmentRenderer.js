@@ -255,11 +255,15 @@ export class EnvironmentRenderer {
 
   /**
    * Render Bluetooth State (differential)
-   * @param {Object} btState - { scanning, discoveredDevices, connectedDevices, pairedDevices }
+   * @param {Object} btState - { scanning, connectedDevices, pairedDevices }
    * @param {Object|null} prev - Previous bluetooth state
    */
   renderBluetooth(btState, prev = null) {
-    const { scanning, discoveredDevices = [], connectedDevices = [] } = btState;
+    // SR-4: bluetoothService.getState() supplies only connected + paired devices
+    // (single A2DP stream on the Pi; pair-then-connect known speakers). There is
+    // no discoveredDevices over service:state, so we don't render arbitrary
+    // discovered devices.
+    const { scanning, connectedDevices = [] } = btState;
 
     // Scan button state
     if (this.btScanBtn) {
@@ -279,7 +283,7 @@ export class EnvironmentRenderer {
     // Device list
     if (!this.btDeviceList) return;
 
-    const allDevices = this._mergeDevices(connectedDevices, btState.pairedDevices, discoveredDevices);
+    const allDevices = this._mergeDevices(connectedDevices, btState.pairedDevices);
 
     if (allDevices.length === 0) {
       if (this._lastDeviceKey !== '') {
@@ -303,7 +307,7 @@ export class EnvironmentRenderer {
     }
   }
 
-  _mergeDevices(connectedDevices, pairedDevices, discoveredDevices) {
+  _mergeDevices(connectedDevices, pairedDevices) {
     const allDevices = [];
 
     // Connected devices first
@@ -319,13 +323,6 @@ export class EnvironmentRenderer {
         }
       });
     }
-
-    // Discovered (not already known)
-    discoveredDevices.forEach(d => {
-      if (!allDevices.some(ad => ad.address === d.address)) {
-        allDevices.push({ ...d, status: 'discovered' });
-      }
-    });
 
     return allDevices;
   }
@@ -350,20 +347,13 @@ export class EnvironmentRenderer {
           Disconnect
         </button>
       `;
-    } else if (isPaired) {
+    } else {
+      // Non-connected devices are always 'paired' now (discovered path removed, SR-4).
       actionBtn = `
         <button class="btn btn-xs btn-primary"
                 data-action="admin.connectBtDevice"
                 data-bt-address="${safeAddress}">
           Connect
-        </button>
-      `;
-    } else {
-      actionBtn = `
-        <button class="btn btn-xs btn-outline"
-                data-action="admin.pairBtDevice"
-                data-bt-address="${safeAddress}">
-          Pair
         </button>
       `;
     }
