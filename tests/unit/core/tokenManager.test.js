@@ -32,6 +32,7 @@ describe('TokenManager - ES6 Module', () => {
       global.fetch.mockResolvedValueOnce({
         ok: true,
         url: 'tokens.json',
+        headers: { get: () => 'application/json' },
         json: () => Promise.resolve(mockTokens)
       });
 
@@ -54,6 +55,7 @@ describe('TokenManager - ES6 Module', () => {
         .mockResolvedValueOnce({ // data/tokens.json succeeds (dev/back-compat)
           ok: true,
           url: 'data/tokens.json',
+          headers: { get: () => 'application/json' },
           json: () => Promise.resolve(mockTokens)
         });
 
@@ -72,6 +74,34 @@ describe('TokenManager - ES6 Module', () => {
       const result = await TokenManager.loadDatabase();
 
       // Database loading failed - returns false, database stays empty
+      expect(result).toBe(false);
+      expect(Object.keys(TokenManager.database).length).toBe(0);
+    });
+
+    it('should return false (not crash) when a 200 returns the HTML SPA shell (HTTP-4)', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        url: 'tokens.json',
+        headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'text/html' : null) },
+        json: () => Promise.reject(new SyntaxError('Unexpected token <'))
+      });
+
+      const result = await TokenManager.loadDatabase();
+
+      expect(result).toBe(false);
+      expect(Object.keys(TokenManager.database).length).toBe(0);
+    });
+
+    it('should reject a 200 that returns an empty/invalid token map (HTTP-4)', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        url: 'tokens.json',
+        headers: { get: () => 'application/json' },
+        json: () => Promise.resolve({})
+      });
+
+      const result = await TokenManager.loadDatabase();
+
       expect(result).toBe(false);
       expect(Object.keys(TokenManager.database).length).toBe(0);
     });

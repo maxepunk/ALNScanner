@@ -49,7 +49,23 @@ class TokenManagerClass {
           throw new Error('Failed to load tokens.json from root or data/');
         }
       }
-      this.database = await response.json();
+
+      // HTTP-4: a 200 can still be the SPA HTML shell for an unknown static path.
+      // Check the content-type before parsing so we fail with a clear cause
+      // instead of an opaque "Unexpected token <" SyntaxError.
+      const contentType = response.headers?.get?.('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error('Token database response was not JSON (got SPA shell?)');
+      }
+
+      const parsed = await response.json();
+      // A 200 returning {} or a non-object would otherwise set an empty/invalid
+      // database silently. Require a non-empty plain-object token map.
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.keys(parsed).length === 0) {
+        throw new Error('Token database is empty or not a token map');
+      }
+
+      this.database = parsed;
       Debug.log(`✅ Loaded ${Object.keys(this.database).length} tokens from ${response.url}`);
       Debug.log(`Sample keys: ${Object.keys(this.database).slice(0, 3).join(', ')}`);
 
