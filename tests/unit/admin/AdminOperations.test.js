@@ -22,28 +22,16 @@ describe('AdminOperations', () => {
     ops = new AdminOperations(mockConnection);
   });
 
-  // AC-4: these methods emit action strings that are NOT in the AsyncAPI
-  // GmCommand enum (system:restart / system:clear). They have zero callers.
-  // We must NOT assert the exact bad string (that cements the contract
-  // violation). Instead, assert they are not silently wired to a contract
-  // action. Real validity of every controller action is enforced by the
-  // action-enum conformance test (gmCommandActionConformance.test.js).
-  describe('non-contract emergency methods (AC-4)', () => {
-    const CONTRACT_ACTIONS = new Set([
-      'session:create', 'session:start', 'session:pause', 'session:resume', 'session:end',
-      'score:adjust', 'score:reset', 'transaction:delete', 'system:reset', 'service:check'
-    ]);
-
-    it('restartSystem does NOT emit a contract-defined action (it is dead/non-conformant)', async () => {
-      await ops.restartSystem();
-      const action = sendCommand.mock.calls[0][1];
-      expect(CONTRACT_ACTIONS.has(action)).toBe(false);
+  // AC-1/CC-6: the dead restartSystem()/clearData() methods (which emitted the
+  // non-contract actions system:restart / system:clear — backend returns
+  // "Unknown action") have been removed. They had zero production callers; the
+  // real reset is the inline system:reset in app.js.
+  describe('dead system actions removed (AC-1/CC-6)', () => {
+    it('no longer exposes restartSystem()', () => {
+      expect(typeof ops.restartSystem).toBe('undefined');
     });
-
-    it('clearData does NOT emit a contract-defined action (it is dead/non-conformant)', async () => {
-      await ops.clearData();
-      const action = sendCommand.mock.calls[0][1];
-      expect(CONTRACT_ACTIONS.has(action)).toBe(false);
+    it('no longer exposes clearData()', () => {
+      expect(typeof ops.clearData).toBe('undefined');
     });
   });
 
