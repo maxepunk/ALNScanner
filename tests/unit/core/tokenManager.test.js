@@ -24,40 +24,44 @@ describe('TokenManager - ES6 Module', () => {
   });
 
   describe('loadDatabase', () => {
-    it('should load tokens from data/tokens.json', async () => {
+    it('should fetch tokens.json (dist root) FIRST, before data/tokens.json (HTTP-3)', async () => {
       const mockTokens = {
         "token1": { SF_RFID: "token1", SF_ValueRating: 3, SF_MemoryType: "Technical" }
       };
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        url: 'data/tokens.json',
+        url: 'tokens.json',
         json: () => Promise.resolve(mockTokens)
       });
 
       const result = await TokenManager.loadDatabase();
 
       expect(result).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(1); // root hit on first try, no data/ round-trip
+      expect(global.fetch).toHaveBeenNthCalledWith(1, 'tokens.json');
       expect(TokenManager.database).toEqual(mockTokens);
       expect(TokenManager.groupInventory).toBeDefined();
     });
 
-    it('should fallback to root tokens.json if data/ fails', async () => {
+    it('should fall back to data/tokens.json when root is missing (HTTP-3)', async () => {
       const mockTokens = {
         "token2": { SF_RFID: "token2", SF_ValueRating: 5, SF_MemoryType: "Business" }
       };
 
       global.fetch
-        .mockResolvedValueOnce({ ok: false }) // data/tokens.json fails
-        .mockResolvedValueOnce({ // tokens.json succeeds
+        .mockResolvedValueOnce({ ok: false }) // tokens.json (root) missing
+        .mockResolvedValueOnce({ // data/tokens.json succeeds (dev/back-compat)
           ok: true,
-          url: 'tokens.json',
+          url: 'data/tokens.json',
           json: () => Promise.resolve(mockTokens)
         });
 
       const result = await TokenManager.loadDatabase();
 
       expect(result).toBe(true);
+      expect(global.fetch).toHaveBeenNthCalledWith(1, 'tokens.json');
+      expect(global.fetch).toHaveBeenNthCalledWith(2, 'data/tokens.json');
       expect(TokenManager.database).toEqual(mockTokens);
     });
 

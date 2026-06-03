@@ -36,14 +36,17 @@ class TokenManagerClass {
    */
   async loadDatabase() {
     try {
-      // Try loading from submodule path first
-      let response = await fetch('data/tokens.json');
+      // HTTP-3: the dist ROOT is the real location — vite publicDir:'data' copies
+      // the CONTENTS of data/ into the dist root, so data/tokens.json does not
+      // exist in production (it 404'd ~29x per session, logging an error on the
+      // critical path each load). Try the root first; keep data/ as a dev/
+      // back-compat fallback. A first-try miss is debug-level, not error-level.
+      let response = await fetch('tokens.json');
       if (!response.ok) {
-        Debug.log('Trying root directory for tokens.json');
-        // Fallback to root directory for backward compatibility
-        response = await fetch('tokens.json');
+        Debug.log('tokens.json not at root, trying data/ fallback'); // debug-level
+        response = await fetch('data/tokens.json');
         if (!response.ok) {
-          throw new Error('Failed to load tokens.json from data/ or root');
+          throw new Error('Failed to load tokens.json from root or data/');
         }
       }
       this.database = await response.json();
