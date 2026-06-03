@@ -1,4 +1,5 @@
 import { escapeHtml } from '../../utils/escapeHtml.js';
+import { escapeCssAttrValue } from '../../utils/escapeCssAttrValue.js';
 
 /**
  * EnvironmentRenderer - Differential DOM Rendering for Environment State
@@ -117,7 +118,7 @@ export class EnvironmentRenderer {
     // Cache element references
     this._sceneEls = {};
     for (const scene of scenes) {
-      const btn = this.sceneGrid.querySelector(`[data-scene-id="${scene.id}"]`);
+      const btn = this.sceneGrid.querySelector(`[data-scene-id="${escapeCssAttrValue(scene.id)}"]`);
       if (btn) this._sceneEls[scene.id] = btn;
     }
     this._activeSceneId = activeScene || null;

@@ -209,4 +209,16 @@ describe('HealthRenderer', () => {
       expect(vlcCard.querySelector('.health-service__message').textContent).toBe('Timeout after 5s');
     });
   });
+
+  describe('selector metachar safety (SR-5)', () => {
+    it('should cache the service card even when an id contains a selector metachar', () => {
+      // Force expanded (degraded) render with a metachar id in SERVICE_NAMES.
+      renderer.SERVICE_NAMES = { 'vlc"x': 'VLC X', music: 'Music' };
+      renderer.render({ serviceHealth: { 'vlc"x': { status: 'down', message: 'boom' }, music: { status: 'healthy' } } });
+
+      // Cache lookup must have found the card (no querySelector throw / no miss).
+      expect(renderer._serviceEls['vlc"x']).toBeDefined();
+      expect(renderer._serviceEls['vlc"x'].card).toBeTruthy();
+    });
+  });
 });
