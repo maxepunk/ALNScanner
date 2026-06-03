@@ -700,6 +700,19 @@ describe('NetworkedSession', () => {
       expect(mockDataManager.clearBackendScores).toHaveBeenCalled();
     });
 
+    it('should forward scoreboard:page as a CustomEvent on the session (P0.4/WS-2)', () => {
+      // Closes the routing seam: the raw message:received {type:'scoreboard:page'}
+      // socket event must be re-dispatched as a 'scoreboard:page' CustomEvent
+      // (app.js surfaces the confirmation toast). Without the networkedSession
+      // case this would be silently dropped.
+      const seen = [];
+      session.addEventListener('scoreboard:page', (e) => seen.push(e.detail));
+
+      messageHandler({ detail: { type: 'scoreboard:page', payload: { action: 'owner', owner: 'Ashe' } } });
+
+      expect(seen).toEqual([{ action: 'owner', owner: 'Ashe' }]);
+    });
+
     it('should not call dataManager methods for unhandled event types', () => {
       messageHandler({ detail: { type: 'display:mode', payload: { mode: 'VIDEO' } } });
 

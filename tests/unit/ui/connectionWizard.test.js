@@ -177,16 +177,20 @@ describe('ConnectionWizard', () => {
     });
 
     // CC-8b consumer guard: with connectionStatus now present in /api/state
-    // (backend exposes it via the syncHelpers device map), this asserts the
-    // wizard counts only CONNECTED GMs when assigning the next station id. The
-    // field name is effectively pinned here — if the consumer stopped reading
-    // connectionStatus, the disconnected GM below would no longer be filtered
-    // and the assigned id would be wrong.
+    // (backend exposes it via the syncHelpers device map), the wizard must count
+    // only CONNECTED GMs when assigning the next station id. The disconnected GM
+    // sits at the SEQUENTIAL id GM_Station_2 ON PURPOSE so this guard is
+    // discriminating: the gap-fill (connectionWizard.js _findNextStationId) walks
+    // up from 1, so connected={1} → GM_Station_2 (the disconnected slot is free to
+    // reuse), but if the consumer stopped filtering on connectionStatus it would
+    // see {1,2} → GM_Station_3. Asserting GM_Station_2 therefore FAILS if the
+    // connectionStatus filter is removed (verified). A disconnected GM at a
+    // gap-creating id like _5 would NOT distinguish (both yield _2) — a phantom.
     test('should filter out non-GM devices and disconnected GMs', async () => {
       const mockState = {
         devices: [
           { deviceId: 'GM_Station_1', type: 'gm', connectionStatus: 'connected' },
-          { deviceId: 'GM_Station_5', type: 'gm', connectionStatus: 'disconnected' },
+          { deviceId: 'GM_Station_2', type: 'gm', connectionStatus: 'disconnected' },
           { deviceId: 'player_1', type: 'player', connectionStatus: 'connected' },
           { deviceId: 'esp32_001', type: 'esp32', connectionStatus: 'connected' }
         ]
@@ -200,6 +204,8 @@ describe('ConnectionWizard', () => {
       await wizard.assignStationName('http://localhost:3000');
 
       const display = document.getElementById('stationNameDisplay');
+      // GM_Station_2 (disconnected) is the freed slot the filter reuses;
+      // without the connectionStatus filter this would be GM_Station_3.
       expect(display.textContent).toBe('GM_Station_2');
     });
   });
