@@ -39,6 +39,7 @@ export const MESSAGE_TYPES = [
   'batch:ack',
   'error',
   'player:scan',
+  'scoreboard:page',
   'cue:fired',
   'cue:completed',
   'cue:error',

@@ -160,6 +160,21 @@ class App {
       this.uiManager.showToast(`Group completed by ${teamId || 'team'}${formattedBonus}`);
     });
 
+    // scoreboard:page echo — the GM scanner SENT this navigation command; the
+    // backend rebroadcasts it to the gm room (consumed by the wall scoreboards).
+    // The GM scanner has no embedded scoreboard view, so surface a transient
+    // confirmation that the displays acted on the command. Parity-free: we
+    // reflect the owner / direction, never a page index.
+    this.networkedSession.addEventListener('scoreboard:page', (event) => {
+      const { action, owner } = event.detail || {};
+      let label;
+      if (action === 'owner') label = `Displays → ${owner || 'character'}`;
+      else if (action === 'next') label = 'Displays → next page';
+      else if (action === 'prev') label = 'Displays → prev page';
+      else label = 'Displays updated';
+      this.uiManager.showToast(label);
+    });
+
     // P3.4: a PERMANENT transaction rejection (backend status 'rejected', e.g.
     // invalid token) surfaces to the operator AND unmarks the token so the GM can
     // re-scan after correcting the cause (fixes the token-locked + no-feedback

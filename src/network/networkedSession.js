@@ -330,6 +330,18 @@ export class NetworkedSession extends EventTarget {
           }));
           break;
 
+        case 'scoreboard:page':
+          // Echo of a GM scoreboard navigation command (next/prev/owner). The
+          // GM scanner has no embedded scoreboard view (the wall displays render
+          // it), so we forward this for a transient operator confirmation only.
+          // Parity-free: we relay action/owner, never a page index (page sets
+          // are computed per-display from viewport height, so an index would
+          // desync). app.js surfaces the confirmation toast.
+          this.dispatchEvent(new CustomEvent('scoreboard:page', {
+            detail: payload
+          }));
+          break;
+
         case 'error': {
           // Backend error event (AsyncAPI Decision #10: clients MUST display).
           // AUTH-7: post-connection auth/permission failures route into the same
