@@ -73,7 +73,7 @@ describe('EnvironmentRenderer', () => {
     it('should mark active scene tile', () => {
       renderer.renderLighting({
         connected: true,
-        activeScene: { id: 'tension' },
+        activeScene: 'tension',   // backend sends the entity_id string (SR-1)
         scenes,
       });
 
@@ -125,7 +125,7 @@ describe('EnvironmentRenderer', () => {
     it('should toggle active scene without rebuilding grid', () => {
       renderer.renderLighting({
         connected: true,
-        activeScene: { id: 'arrival' },
+        activeScene: 'arrival',
         scenes,
       });
 
@@ -135,7 +135,7 @@ describe('EnvironmentRenderer', () => {
       // Change active scene
       renderer.renderLighting({
         connected: true,
-        activeScene: { id: 'tension' },
+        activeScene: 'tension',   // backend sends the entity_id string (SR-1)
         scenes,
       });
 
@@ -149,7 +149,7 @@ describe('EnvironmentRenderer', () => {
     it('should handle clearing active scene', () => {
       renderer.renderLighting({
         connected: true,
-        activeScene: { id: 'arrival' },
+        activeScene: 'arrival',
         scenes,
       });
 
@@ -165,7 +165,7 @@ describe('EnvironmentRenderer', () => {
     it('should reset scene cache when disconnected', () => {
       renderer.renderLighting({
         connected: true,
-        activeScene: { id: 'arrival' },
+        activeScene: 'arrival',
         scenes,
       });
 
@@ -175,7 +175,7 @@ describe('EnvironmentRenderer', () => {
       // Reconnect — should rebuild (not reuse stale cache)
       renderer.renderLighting({
         connected: true,
-        activeScene: { id: 'tension' },
+        activeScene: 'tension',   // backend sends the entity_id string (SR-1)
         scenes,
       });
 

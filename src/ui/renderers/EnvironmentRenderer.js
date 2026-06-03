@@ -93,7 +93,7 @@ export class EnvironmentRenderer {
     }
 
     // Differential: only toggle active class
-    const newActiveId = activeScene?.id || null;
+    const newActiveId = activeScene || null;
     if (newActiveId !== this._activeSceneId) {
       this._updateActiveScene(newActiveId);
     }
@@ -101,7 +101,7 @@ export class EnvironmentRenderer {
 
   _buildSceneGrid(scenes, activeScene) {
     this.sceneGrid.innerHTML = scenes.map(scene => {
-      const isActive = activeScene && (scene.id === activeScene.id);
+      const isActive = activeScene && (scene.id === activeScene);
       const safeId = escapeHtml(scene.id);
       const safeName = escapeHtml(scene.name);
 
@@ -120,7 +120,7 @@ export class EnvironmentRenderer {
       const btn = this.sceneGrid.querySelector(`[data-scene-id="${scene.id}"]`);
       if (btn) this._sceneEls[scene.id] = btn;
     }
-    this._activeSceneId = activeScene?.id || null;
+    this._activeSceneId = activeScene || null;
   }
 
   _updateActiveScene(newActiveId) {
