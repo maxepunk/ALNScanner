@@ -389,6 +389,14 @@ export class ConnectionWizard {
         statusDiv.textContent = `❌ Connection failed: ${error.message}`;
       }
       statusDiv.style.color = '#f44336';
+    } finally {
+      // AUTH-3: never retain the shared admin secret in the DOM/JS memory
+      // (recoverable via devtools for the whole session otherwise).
+      const passwordInput = document.getElementById('gmPassword');
+      if (passwordInput) {
+        passwordInput.value = '';
+        passwordInput.setAttribute('autocomplete', 'off');
+      }
     }
   }
 

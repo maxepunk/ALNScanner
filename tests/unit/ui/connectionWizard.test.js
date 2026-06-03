@@ -247,6 +247,40 @@ describe('ConnectionWizard', () => {
       expect(Storage.prototype.setItem).toHaveBeenCalledWith('aln_station_name', 'GM_Station_3');
     });
 
+    test('should clear the password field after a successful auth (AUTH-3)', async () => {
+      const display = document.getElementById('stationNameDisplay');
+      display.dataset.deviceId = 'GM_Station_1';
+      document.getElementById('serverUrl').value = 'http://localhost:3000';
+      document.getElementById('gmPassword').value = 'super-secret';
+
+      mockFetch
+        .mockResolvedValueOnce({ ok: true }) // health
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'jwt' }) }); // auth
+
+      const event = new Event('submit');
+      event.preventDefault = jest.fn();
+      await wizard.handleConnectionSubmit(event);
+
+      expect(document.getElementById('gmPassword').value).toBe('');
+    });
+
+    test('should clear the password field even when auth fails (AUTH-3)', async () => {
+      const display = document.getElementById('stationNameDisplay');
+      display.dataset.deviceId = 'GM_Station_1';
+      document.getElementById('serverUrl').value = 'http://localhost:3000';
+      document.getElementById('gmPassword').value = 'super-secret';
+
+      mockFetch
+        .mockResolvedValueOnce({ ok: true }) // health
+        .mockResolvedValueOnce({ ok: false }); // auth rejected
+
+      const event = new Event('submit');
+      event.preventDefault = jest.fn();
+      await wizard.handleConnectionSubmit(event);
+
+      expect(document.getElementById('gmPassword').value).toBe('');
+    });
+
     test('should reject submission if display has no deviceId', async () => {
       document.getElementById('serverUrl').value = 'http://localhost:3000';
       document.getElementById('gmPassword').value = 'admin';
