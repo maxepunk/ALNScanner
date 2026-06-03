@@ -284,6 +284,19 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       await connectPromise;
     });
 
+    it('should warn when a forwarded event lacks the AsyncAPI envelope (WS-7)', () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Emit a non-conforming event (no {event,data,timestamp} envelope)
+      mockSocket._simulateMessage('session:update', { id: 'sess-1', status: 'active' });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('non-conforming'),
+        'session:update'
+      );
+      warnSpy.mockRestore();
+    });
+
     it('should emit message:received event for all orchestrator messages', () => {
       const messageHandler = jest.fn();
       client.addEventListener('message:received', messageHandler);

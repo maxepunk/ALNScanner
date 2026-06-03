@@ -179,7 +179,10 @@ export class OrchestratorClient extends EventTarget {
       }, timeout);
 
       const handler = (envelope) => {
-        const data = envelope.data || envelope;
+        if (envelope == null || envelope.data === undefined) {
+          console.warn('OrchestratorClient: non-conforming gm:command:ack envelope');
+        }
+        const data = envelope?.data ?? envelope;
         if (data.action === action) {
           cleanup();
           resolve({
@@ -283,8 +286,13 @@ export class OrchestratorClient extends EventTarget {
   _setupMessageHandlers() {
     MESSAGE_TYPES.forEach(type => {
       this.socket.on(type, (envelope) => {
-        // Extract payload from AsyncAPI envelope
-        const payload = envelope.data || envelope;
+        // Extract payload from AsyncAPI envelope. WS-7: keep the fallback as a
+        // runtime safety net, but warn when it triggers so contract drift
+        // surfaces as a clear log instead of confusing undefined-field behavior.
+        if (envelope == null || envelope.data === undefined) {
+          console.warn('OrchestratorClient: received non-conforming (un-enveloped) event', type);
+        }
+        const payload = envelope?.data ?? envelope;
         // Forward as generic message:received event
         this.dispatchEvent(new CustomEvent('message:received', {
           detail: { type, payload }
