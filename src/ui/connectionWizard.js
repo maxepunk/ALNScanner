@@ -312,17 +312,19 @@ export class ConnectionWizard {
     const stationNameDisplay = document.getElementById('stationNameDisplay');
     const deviceId = stationNameDisplay ? stationNameDisplay.dataset.deviceId : null;
 
-    // Validate inputs
-    if (!serverUrl || !deviceId || !password) {
-      statusDiv.textContent = '⚠️ Please fill in all fields';
-      statusDiv.style.color = '#ff9800';
-      return;
-    }
-
-    statusDiv.textContent = '⏳ Connecting...';
-    statusDiv.style.color = '#2196F3';
-
     try {
+      // Validate inputs INSIDE the try so the finally below always clears the
+      // password (AUTH-3) — including on this early-return path, which is reached
+      // with a typed password when deviceId is empty (/api/state was unreachable).
+      if (!serverUrl || !deviceId || !password) {
+        statusDiv.textContent = '⚠️ Please fill in all fields';
+        statusDiv.style.color = '#ff9800';
+        return;
+      }
+
+      statusDiv.textContent = '⏳ Connecting...';
+      statusDiv.style.color = '#2196F3';
+
       // Normalize URL - prepend the page protocol if none specified
       let normalizedUrl = this._normalizeUrl(serverUrl);
       if (normalizedUrl !== serverUrl.trim()) {

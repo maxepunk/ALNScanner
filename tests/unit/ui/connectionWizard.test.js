@@ -236,10 +236,13 @@ describe('ConnectionWizard', () => {
       expect(document.querySelector('#discoveredServers img')).toBeNull();
     });
 
-    test('renders the url text without relying on a server.ip field', () => {
-      wizard.displayDiscoveredServers([{ url: 'http://10.0.0.7:3000' }]);
+    test('renders the url text and never consults the dead server.ip field', () => {
+      // Pass BOTH ip and url with differing values: the rendered text must use
+      // url (proving the dropped `server.ip ||` branch is truly gone).
+      wizard.displayDiscoveredServers([{ ip: '10.0.0.99-SHOULD-NOT-APPEAR', url: 'http://10.0.0.7:3000' }]);
       const span = document.querySelector('#discoveredServers .server-item span');
       expect(span.textContent).toContain('http://10.0.0.7:3000');
+      expect(span.textContent).not.toContain('SHOULD-NOT-APPEAR');
     });
   });
 
@@ -286,7 +289,9 @@ describe('ConnectionWizard', () => {
 
       await wizard.scanForServers();
 
-      expect(maxInFlight).toBeLessThanOrEqual(64); // batch of 32 => <= 64 in-flight fetches
+      // Pinned to the batch size (32): catches both the pre-fix unbounded ~509
+      // AND a regression that doubled the batch size.
+      expect(maxInFlight).toBeLessThanOrEqual(32);
     });
   });
 
@@ -405,6 +410,9 @@ describe('ConnectionWizard', () => {
       const statusDiv = document.getElementById('connectionStatusMsg');
       expect(statusDiv.textContent).toContain('Please fill in all fields');
       expect(mockFetch).not.toHaveBeenCalled();
+      // AUTH-3: the typed secret must be cleared even on this validation
+      // early-return (deviceId empty when /api/state was unreachable).
+      expect(document.getElementById('gmPassword').value).toBe('');
     });
 
     // AbortSignal.timeout() rejects with a TimeoutError DOMException in spec

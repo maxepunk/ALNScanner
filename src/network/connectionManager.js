@@ -178,7 +178,15 @@ export class ConnectionManager extends EventTarget {
       if (this.retryCount < this.maxRetries) {
         this._scheduleRetry();
       } else {
-        this._clearStaleToken(); // AUTH-5
+        // max_retries here is reached for TRANSIENT failures (DEVICE_ID_COLLISION,
+        // transport drop, ping timeout) — the token is NOT necessarily bad (auth
+        // failures throw above). Only clear it if it actually expired during the
+        // retry window; otherwise preserve it so a reload can auto-reconnect via
+        // the saved token without forcing the GM to re-type the admin password
+        // to recover from a network blip mid-show (AUTH-5).
+        if (!this.isTokenValid()) {
+          this._clearStaleToken();
+        }
         this.dispatchEvent(new CustomEvent('auth:required', {
           detail: { reason: 'max_retries' }
         }));

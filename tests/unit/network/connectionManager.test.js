@@ -632,6 +632,26 @@ describe('ConnectionManager - Connection Lifecycle', () => {
 
       expect(localStorage.getItem('aln_auth_token')).toBeNull();
     });
+
+    it('PRESERVES a still-valid token when retries are exhausted by a transient failure (AUTH-5)', async () => {
+      // max_retries is reached for transient drops (collision/transport), NOT bad
+      // credentials. A still-valid token must survive so a reload can auto-reconnect
+      // without forcing the GM to re-type the admin password mid-show.
+      global.fetch = jest.fn().mockResolvedValue({ ok: true });
+      mockClient.connect.mockRejectedValue(new Error('Connection failed')); // transient, not auth
+      connectionManager.maxRetries = 1; // first failure exhausts → max_retries branch
+      connectionManager.token = createValidToken();
+      localStorage.setItem('aln_auth_token', 'valid-jwt');
+
+      const authRequiredSpy = jest.fn();
+      connectionManager.addEventListener('auth:required', authRequiredSpy);
+
+      await expect(connectionManager.connect()).rejects.toThrow();
+
+      // max_retries was dispatched, but the valid token is NOT wiped.
+      expect(authRequiredSpy).toHaveBeenCalled();
+      expect(localStorage.getItem('aln_auth_token')).toBe('valid-jwt');
+    });
   });
 });
 

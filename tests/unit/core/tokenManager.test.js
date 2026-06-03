@@ -83,7 +83,10 @@ describe('TokenManager - ES6 Module', () => {
         ok: true,
         url: 'tokens.json',
         headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'text/html' : null) },
-        json: () => Promise.reject(new SyntaxError('Unexpected token <'))
+        // json() RESOLVES to a non-empty object so ONLY the content-type guard can
+        // produce the false/empty-DB outcome — deleting the guard would let this
+        // parse through to a "loaded" DB and make the test fail (no phantom pass).
+        json: () => Promise.resolve({ looksLikeAToken: { SF_RFID: 'x', SF_ValueRating: 1, SF_MemoryType: 'Personal' } })
       });
 
       const result = await TokenManager.loadDatabase();
