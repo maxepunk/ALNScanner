@@ -467,7 +467,7 @@ describe('UnifiedDataManager', () => {
       expect(manager.getExposedOwners()).toEqual([]);
     });
 
-    it('returns alphabetical unique owners from detective transactions', async () => {
+    it('returns owners most-recently-exposed first (matches wall display order, SR-parity)', async () => {
       // tokenManager.findToken returns { token, matchedId } — mirror that shape
       mockTokenManager.findToken = jest.fn(tokenId => {
         const owners = { t1: 'Alex Reeves', t2: 'Ashley White', t3: 'Alex Reeves', t4: 'Marcus Black' };
@@ -475,12 +475,15 @@ describe('UnifiedDataManager', () => {
           ? { token: { owner: owners[tokenId], SF_RFID: tokenId, SF_ValueRating: 3, SF_MemoryType: 'Personal' }, matchedId: tokenId }
           : null;
       });
-      await manager.addTransaction({ tokenId: 't1', teamId: 'A', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
-      await manager.addTransaction({ tokenId: 't2', teamId: 'B', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
-      await manager.addTransaction({ tokenId: 't3', teamId: 'C', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
-      await manager.addTransaction({ tokenId: 't4', teamId: 'D', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
+      // Distinct, increasing timestamps so recency order is deterministic.
+      // Alex is exposed twice (t1, then t3 last) → ranks by his MOST-RECENT exposure.
+      await manager.addTransaction({ tokenId: 't1', teamId: 'A', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: '2026-06-02T10:00:00.000Z' });
+      await manager.addTransaction({ tokenId: 't2', teamId: 'B', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: '2026-06-02T10:01:00.000Z' });
+      await manager.addTransaction({ tokenId: 't4', teamId: 'D', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: '2026-06-02T10:02:00.000Z' });
+      await manager.addTransaction({ tokenId: 't3', teamId: 'C', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: '2026-06-02T10:03:00.000Z' });
 
-      expect(manager.getExposedOwners()).toEqual(['Alex Reeves', 'Ashley White', 'Marcus Black']);
+      // Recency DESC: Alex (re-exposed @10:03) > Marcus (@10:02) > Ashley (@10:01).
+      expect(manager.getExposedOwners()).toEqual(['Alex Reeves', 'Marcus Black', 'Ashley White']);
     });
 
     it('excludes black-market (non-detective) transactions', async () => {
@@ -538,7 +541,9 @@ describe('UnifiedDataManager', () => {
       expect(manager.getExposedOwners()).toEqual(['Accepted Owner']);
     });
 
-    it('sorts owners with locale comparison', () => {
+    it('tie-breaks alphabetically (locale) when exposure times are equal', () => {
+      // No timestamps → all owners share lastExposed=0, so the recency-DESC
+      // primary sort is a tie and the alphabetical tie-break decides the order.
       manager._activeStrategy = {
         getTransactions: () => ([
           { tokenId: 'a', mode: 'detective', status: 'accepted', owner: 'Ørjan' },

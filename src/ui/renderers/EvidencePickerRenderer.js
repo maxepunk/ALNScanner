@@ -4,8 +4,9 @@ import { escapeHtml } from '../../utils/escapeHtml.js';
  * EvidencePickerRenderer - Scoreboard evidence navigation picker
  *
  * Populates the "Jump to Character" dropdown in the admin panel's
- * "Scoreboard Evidence" section with the alphabetical list of character
- * owners whose tokens have been exposed in the current session. Enables
+ * "Scoreboard Evidence" section with the character owners whose tokens have
+ * been exposed in the current session, ordered most-recently-exposed first to
+ * match the wall scoreboard's card order (DataManager.getExposedOwners). Enables
  * or disables the Prev / Next / Jump controls based on whether any
  * evidence exists.
  *
@@ -25,7 +26,7 @@ export class EvidencePickerRenderer {
 
   /**
    * Render the picker with the given list of owners.
-   * @param {string[]} owners - Alphabetical list of character owners
+   * @param {string[]} owners - Character owners, most-recently-exposed first
    */
   render(owners) {
     const list = Array.isArray(owners) ? owners : [];
