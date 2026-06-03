@@ -550,6 +550,34 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       expect(client.handleAuthRequired).toBeUndefined();
     });
   });
+
+  describe('sendCommand same-action serialization (WS-6 interim)', () => {
+    it('does not resolve a second same-action command on the first ack', async () => {
+      const p = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateConnect();
+      await p;
+
+      const r1 = client.sendCommand('session:addTeam', { teamId: 'A' });
+      const r2 = client.sendCommand('session:addTeam', { teamId: 'B' });
+
+      // First ack arrives — must resolve r1 only, not r2.
+      mockSocket._simulateMessage('gm:command:ack', { data: { action: 'session:addTeam', success: true, message: 'A added' } });
+
+      await expect(r1).resolves.toEqual({ success: true, message: 'A added' });
+
+      // Flush microtasks so the chain advances: r2's command is now sent and its
+      // ack handler registered, but r2 is still pending (no ack for it yet).
+      // Without serialization, the first ack above would have ALSO resolved r2
+      // (with 'A added'), so r2Settled would already be true here.
+      let r2Settled = false;
+      r2.then(() => { r2Settled = true; });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(r2Settled).toBe(false);
+
+      mockSocket._simulateMessage('gm:command:ack', { data: { action: 'session:addTeam', success: true, message: 'B added' } });
+      await expect(r2).resolves.toEqual({ success: true, message: 'B added' });
+    });
+  });
 });
 
 // Test Helper: Create mock socket.io socket

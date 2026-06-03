@@ -60,6 +60,7 @@ export class OrchestratorClient extends EventTarget {
     this.socket = null;
     this.isConnected = false;
     this.connectionTimeout = null; // Track timeout for cleanup
+    this._actionChains = {}; // WS-6: per-action in-flight chain (serialize same-action commands)
   }
 
   /**
@@ -172,6 +173,29 @@ export class OrchestratorClient extends EventTarget {
       throw new Error('Socket not connected');
     }
 
+    // WS-6 (interim): acks correlate only by action name, so two in-flight
+    // commands with the SAME action (e.g. rapid session:addTeam during churn)
+    // would cross-resolve on the first ack. Serialize same-action sends — a
+    // second one waits for the prior to settle before registering its handler.
+    // (Full per-command requestId correlation is a coordinated contract change,
+    // deferred.)
+    const prior = this._actionChains[action];
+    // The FIRST command for an action sends immediately (handler registered
+    // synchronously — no added latency). A same-action command that arrives
+    // while one is in flight waits for the prior to settle before sending, so
+    // by-action ack correlation can't cross-resolve.
+    const run = prior
+      ? prior.catch(() => {}).then(() => this._sendCommandOnce(action, payload, timeout))
+      : this._sendCommandOnce(action, payload, timeout);
+    // Keep the chain alive regardless of outcome; clear it when this is the tail.
+    const chainRef = run.catch(() => {}).finally(() => {
+      if (this._actionChains[action] === chainRef) this._actionChains[action] = null;
+    });
+    this._actionChains[action] = chainRef;
+    return run;
+  }
+
+  _sendCommandOnce(action, payload, timeout) {
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         cleanup();
