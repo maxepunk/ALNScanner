@@ -155,8 +155,8 @@ class App {
     });
 
     this.networkedSession.addEventListener('group:completed', (event) => {
-      const { teamId, bonus } = event.detail || {};
-      const formattedBonus = bonus ? ` +$${bonus.toLocaleString()}` : '';
+      const { teamId, bonusPoints } = event.detail || {};
+      const formattedBonus = bonusPoints ? ` +$${bonusPoints.toLocaleString()}` : '';
       this.uiManager.showToast(`Group completed by ${teamId || 'team'}${formattedBonus}`);
     });
 
