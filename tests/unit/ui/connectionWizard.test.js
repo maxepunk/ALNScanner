@@ -176,6 +176,12 @@ describe('ConnectionWizard', () => {
         .toContain('Please fill in all fields');
     });
 
+    // CC-8b consumer guard: with connectionStatus now present in /api/state
+    // (backend exposes it via the syncHelpers device map), this asserts the
+    // wizard counts only CONNECTED GMs when assigning the next station id. The
+    // field name is effectively pinned here — if the consumer stopped reading
+    // connectionStatus, the disconnected GM below would no longer be filtered
+    // and the assigned id would be wrong.
     test('should filter out non-GM devices and disconnected GMs', async () => {
       const mockState = {
         devices: [
