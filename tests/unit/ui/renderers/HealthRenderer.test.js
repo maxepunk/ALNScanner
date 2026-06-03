@@ -117,6 +117,19 @@ describe('HealthRenderer', () => {
       // Escaped version should be
       expect(container.innerHTML).toContain('&lt;script&gt;');
     });
+
+    it('should escape HTML in the backend-controlled status field', () => {
+      // status comes from the backend health map (data.serviceHealth[id].status).
+      // Anything other than 'healthy' renders in expanded mode via innerHTML.
+      renderer.render({
+        serviceHealth: {
+          vlc: { status: '<img src=x onerror=alert(1)>', message: 'OK' }
+        }
+      });
+
+      expect(container.innerHTML).not.toContain('<img src=x');
+      expect(container.innerHTML).toContain('&lt;img src=x');
+    });
   });
 
   describe('differential updates', () => {

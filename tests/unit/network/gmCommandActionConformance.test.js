@@ -5,8 +5,9 @@
  * emitted by the admin controllers (sendCommand(this.connection, '<action>', ...))
  * is a member. Turns action-string drift into a hard failure.
  *
- * EXPECTED RED until the AC-1/CC-6 fix: AdminOperations.restartSystem()/clearData()
- * emit 'system:restart'/'system:clear' which are NOT in the enum.
+ * Was RED for 'system:restart'/'system:clear'; GREEN since AC-1/CC-6 removed
+ * AdminOperations.restartSystem()/clearData() (those actions were never in the
+ * enum). This now guards against future action-string drift.
  */
 import { describe, it, expect } from '@jest/globals';
 import fs from 'fs';

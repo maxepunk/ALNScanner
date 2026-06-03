@@ -197,6 +197,16 @@ export class OrchestratorClient extends EventTarget {
 
   _sendCommandOnce(action, payload, timeout) {
     return new Promise((resolve, reject) => {
+      // A chained same-action command reaches here a microtask after the prior
+      // one settled. The socket may have been torn down in the meantime (the
+      // reconnect-churn scenario this serialization targets), so re-check the
+      // guard sendCommand() applies to the first command — otherwise registering
+      // the handler below throws a raw TypeError on a null socket.
+      if (!this.socket?.connected) {
+        reject(new Error('Socket not connected'));
+        return;
+      }
+
       const timeoutId = setTimeout(() => {
         cleanup();
         reject(new Error(`Command ${action} timed out`));
@@ -218,7 +228,8 @@ export class OrchestratorClient extends EventTarget {
 
       const cleanup = () => {
         clearTimeout(timeoutId);
-        this.socket.off('gm:command:ack', handler);
+        // Optional-chain: the timeout can fire after _cleanup() nulled the socket.
+        this.socket?.off('gm:command:ack', handler);
       };
 
       this.socket.on('gm:command:ack', handler);
@@ -357,6 +368,10 @@ export class OrchestratorClient extends EventTarget {
       this.socket = null;
     }
     this.isConnected = false;
+    // Drop in-flight same-action chains: they targeted the socket we just tore
+    // down, so a post-reconnect command must send immediately rather than queue
+    // behind a pre-reconnect command destined to time out (WS-6 reconnect churn).
+    this._actionChains = {};
   }
 }
 

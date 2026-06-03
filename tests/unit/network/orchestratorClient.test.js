@@ -577,6 +577,36 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       mockSocket._simulateMessage('gm:command:ack', { data: { action: 'session:addTeam', success: true, message: 'B added' } });
       await expect(r2).resolves.toEqual({ success: true, message: 'B added' });
     });
+
+    it('rejects a chained command with a clean error when the socket was torn down (WS-6)', async () => {
+      // Reconnect churn: _cleanup() nulls the socket between a first same-action
+      // command and a chained follower. The follower's _sendCommandOnce() must
+      // reject with a clean 'Socket not connected' — NOT a raw TypeError from
+      // touching this.socket.on on a null socket (the message a GM would see).
+      client.socket = null;
+      await expect(
+        client._sendCommandOnce('session:addTeam', { teamId: 'B' }, 30)
+      ).rejects.toThrow('Socket not connected');
+    });
+
+    it('clears in-flight action chains on cleanup so post-reconnect commands send immediately (WS-6)', async () => {
+      const p = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateConnect();
+      await p;
+
+      // A same-action command is in flight (never acked) — its chain entry is set.
+      const r1 = client.sendCommand('session:addTeam', { teamId: 'A' }, 30);
+      r1.catch(() => {}); // will reject on timeout after cleanup; swallow
+      expect(client._actionChains['session:addTeam']).toBeTruthy();
+
+      // Socket teardown during reconnect churn must drop the stale chain so a
+      // post-reconnect command doesn't queue behind a doomed pre-reconnect one.
+      client._cleanup();
+      expect(client._actionChains['session:addTeam']).toBeFalsy();
+
+      // Let the short timeout fire so no timer dangles into other tests.
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
   });
 });
 
