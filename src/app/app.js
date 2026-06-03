@@ -619,6 +619,23 @@ class App {
   }
 
   /**
+   * Record a consecutive NFC read failure and return the message to display.
+   * After 3 consecutive failures — hardware (readingerror) OR logical (a tag
+   * with no usable text record / no usable id) — escalates to the Manual Entry
+   * hint so a bad tag/reader can't dead-end the show (NFC-6). The counter is
+   * reset to 0 on any usable read (see processNFCRead).
+   * @param {string} transientMessage - message shown for the 1st/2nd failure
+   * @returns {string} the message to surface (transient or escalation)
+   * @private
+   */
+  _recordNfcReadFailure(transientMessage) {
+    this.nfcReadErrorCount++;
+    return this.nfcReadErrorCount >= 3
+      ? 'Reader trouble — use the Manual Entry button below.'
+      : transientMessage;
+  }
+
+  /**
    * Start NFC scanning without button state management
    * Called automatically on team confirmation
    * @private
@@ -639,14 +656,13 @@ class App {
       await this.nfcHandler.startScan(
         (result) => this.processNFCRead(result),
         (err) => {
-          this.nfcReadErrorCount++;
+          // NFC-6: hardware read error. Shares the consecutive-failure counter
+          // with the logical-failure paths in processNFCRead so 3 consecutive
+          // bad taps of EITHER kind surface the Manual Entry hint.
+          const msg = this._recordNfcReadFailure('Read error. Tap token again.');
           this.debug.log(`NFC read error #${this.nfcReadErrorCount} (type: ${err?.type || err?.message || 'unknown'})`, true);
           if (status) {
-            // NFC-6: after repeated consecutive read errors, point the GM at the
-            // existing Manual Entry button so a bad tag/reader can't dead-end the show.
-            status.textContent = this.nfcReadErrorCount >= 3
-              ? 'Reader trouble — use the Manual Entry button below.'
-              : 'Read error. Tap token again.';
+            status.textContent = msg;
           }
         }
       );
@@ -690,8 +706,11 @@ class App {
   async processNFCRead(result) {
     // Handle NFC read errors (no serial fallback - errors returned from NFCHandler)
     if (result.source === 'error') {
+      // Logical read failure (no usable text record, no NDEF records, etc.).
+      // Shares the consecutive-failure counter with hardware readingerror so a
+      // misprovisioned/foreign tag tapped repeatedly also escalates (NFC-6).
       this.debug.log(`NFC read failed: ${result.error}`, true);
-      this.uiManager.showError('Could not read token - please re-tap');
+      this.uiManager.showError(this._recordNfcReadFailure('Could not read token - please re-tap'));
       return;
     }
 
@@ -700,7 +719,7 @@ class App {
     // which would throw a TypeError in this async (un-awaited) handler.
     if (typeof result.id !== 'string' || result.id.trim() === '') {
       this.debug.log(`NFC read returned no usable id (source=${result.source})`, true);
-      this.uiManager.showError('Could not read token - please re-tap');
+      this.uiManager.showError(this._recordNfcReadFailure('Could not read token - please re-tap'));
       return;
     }
 
