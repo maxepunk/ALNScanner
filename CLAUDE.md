@@ -697,7 +697,9 @@ socket.emit('gm:command', {
 - Progress tracking via `service:state` domain `video`
 
 **Video List:**
-- Populated from `GET /api/videos` (backend's video directory)
+- No HTTP list endpoint exists. Manual video-add is WebSocket-only: the operator
+  supplies the exact filename to `video:queue:add` via `addToQueue(videoFile)`.
+  (A future picker UI would add a contracted `GET /api/videos` endpoint first.)
 
 ### Environment Controllers (Phase 0)
 
