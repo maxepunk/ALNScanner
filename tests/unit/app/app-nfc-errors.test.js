@@ -275,4 +275,46 @@ describe('App - NFC Error Handling', () => {
       expect(app._scanningActive).toBe(false);
     });
   });
+
+  describe('readingerror escalation (NFC-6)', () => {
+    let onErrorCb;
+
+    beforeEach(async () => {
+      app.nfcSupported = true;
+      // Capture the onError callback App passes into nfcHandler.startScan
+      mockDependencies.nfcHandler.startScan.mockImplementation((onRead, onError) => {
+        onErrorCb = onError;
+        return Promise.resolve();
+      });
+      document.getElementById('scanStatus').textContent = '';
+      await app._startNFCScanning();
+    });
+
+    it('shows the transient hint on the first read error', () => {
+      onErrorCb({ type: 'readingerror' });
+      expect(document.getElementById('scanStatus').textContent)
+        .toMatch(/Tap token again/i);
+    });
+
+    it('escalates to Manual Entry after repeated read errors', () => {
+      for (let i = 0; i < 3; i++) onErrorCb({ type: 'readingerror' });
+      expect(document.getElementById('scanStatus').textContent)
+        .toMatch(/Manual Entry/i);
+    });
+
+    it('resets the error counter after a successful read', async () => {
+      mockDependencies.tokenManager.findToken.mockReturnValue(null);
+
+      onErrorCb({ type: 'readingerror' });
+      onErrorCb({ type: 'readingerror' });
+      await app.processNFCRead({ id: 'token123', source: 'text-record', raw: 'token123' });
+      // After success the counter is back to 0, so one more error is transient again
+      onErrorCb({ type: 'readingerror' });
+
+      expect(document.getElementById('scanStatus').textContent)
+        .toMatch(/Tap token again/i);
+      expect(document.getElementById('scanStatus').textContent)
+        .not.toMatch(/Manual Entry/i);
+    });
+  });
 });

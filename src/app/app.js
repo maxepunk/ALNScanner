@@ -54,6 +54,7 @@ class App {
     // Instance state
     this.currentTeamId = '';
     this.nfcSupported = false;
+    this.nfcReadErrorCount = 0; // consecutive readingerror count → escalate to Manual Entry (NFC-6)
     this._scanningActive = false; // true while NFC scanning is armed (on scan screen)
     this.currentInterventionTeamId = null; // For GM intervention features
     this.viewController = this._createViewController();
@@ -638,9 +639,14 @@ class App {
       await this.nfcHandler.startScan(
         (result) => this.processNFCRead(result),
         (err) => {
-          this.debug.log(`NFC read error: ${err?.message || err}`, true);
+          this.nfcReadErrorCount++;
+          this.debug.log(`NFC read error #${this.nfcReadErrorCount} (type: ${err?.type || err?.message || 'unknown'})`, true);
           if (status) {
-            status.textContent = 'Read error. Tap token again.';
+            // NFC-6: after repeated consecutive read errors, point the GM at the
+            // existing Manual Entry button so a bad tag/reader can't dead-end the show.
+            status.textContent = this.nfcReadErrorCount >= 3
+              ? 'Reader trouble — use the Manual Entry button below.'
+              : 'Read error. Tap token again.';
           }
         }
       );
@@ -697,6 +703,10 @@ class App {
       this.uiManager.showError('Could not read token - please re-tap');
       return;
     }
+
+    // A usable read means the reader is working — clear any consecutive
+    // read-error escalation (NFC-6).
+    this.nfcReadErrorCount = 0;
 
     this.debug.log(`Processing token: "${result.id}" (from ${result.source})`);
     this.debug.log(`Token ID length: ${result.id.length} characters`);

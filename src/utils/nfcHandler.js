@@ -73,7 +73,9 @@ class NFCHandlerClass {
       });
 
       this.reader.addEventListener("readingerror", (event) => {
-        Debug.log(`NFC Read Error: ${event}`, true);
+        // readingerror events carry no `message`; log the event type (the only
+        // meaningful field) instead of stringifying the raw Event to [object Event].
+        Debug.log(`NFC Read Error (event type: ${event?.type || 'unknown'})`, true);
         if (onError) onError(event);
       });
 
