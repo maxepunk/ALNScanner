@@ -689,6 +689,15 @@ class App {
       return;
     }
 
+    // Defensive: any non-error source must still carry a usable string id.
+    // manualEntry/simulateScan/future record types could deliver id: null,
+    // which would throw a TypeError in this async (un-awaited) handler.
+    if (typeof result.id !== 'string' || result.id.trim() === '') {
+      this.debug.log(`NFC read returned no usable id (source=${result.source})`, true);
+      this.uiManager.showError('Could not read token - please re-tap');
+      return;
+    }
+
     this.debug.log(`Processing token: "${result.id}" (from ${result.source})`);
     this.debug.log(`Token ID length: ${result.id.length} characters`);
 

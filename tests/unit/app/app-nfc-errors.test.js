@@ -68,6 +68,30 @@ describe('App - NFC Error Handling', () => {
   });
 
   describe('processNFCRead error handling', () => {
+    it('does not throw when a non-error result has null id', async () => {
+      const badResult = { id: null, source: 'manual', raw: null };
+
+      await expect(app.processNFCRead(badResult)).resolves.not.toThrow();
+
+      // Should surface a user-facing error and NOT proceed to token lookup
+      expect(mockDependencies.uiManager.showError).toHaveBeenCalledWith(
+        'Could not read token - please re-tap'
+      );
+      expect(mockDependencies.tokenManager.findToken).not.toHaveBeenCalled();
+      expect(mockDependencies.dataManager.addTransaction).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when a non-error result has an empty/whitespace id', async () => {
+      const blankResult = { id: '   ', source: 'manual', raw: '   ' };
+
+      await expect(app.processNFCRead(blankResult)).resolves.not.toThrow();
+
+      expect(mockDependencies.uiManager.showError).toHaveBeenCalledWith(
+        'Could not read token - please re-tap'
+      );
+      expect(mockDependencies.tokenManager.findToken).not.toHaveBeenCalled();
+    });
+
     it('should show error and return early when result.source is "error" with no-ndef-records', async () => {
       const errorResult = {
         id: null,
