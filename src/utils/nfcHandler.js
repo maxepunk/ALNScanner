@@ -111,56 +111,38 @@ class NFCHandlerClass {
       };
     }
 
-    // Process records using the Web NFC API
+    // Production tags often carry BOTH a text record (the token id) AND a url
+    // record for purposes UNRELATED to the orchestrator. Always PREFER the text
+    // record regardless of record order — a url (or any other) record must never
+    // be treated as the token. Scan all records for the first usable text record.
     for (const record of message.records) {
       Debug.log(`Record type: ${record.recordType}`);
 
       if (record.recordType === "text") {
         const decoder = new TextDecoder(record.encoding || "utf-8");
         const text = decoder.decode(record.data);
-        Debug.log(`✅ Text record: ${text}`);
-        return {
-          id: text.trim(),
-          source: 'text-record',
-          raw: text
-        };
-      }
-
-      if (record.recordType === "url") {
-        const decoder = new TextDecoder();
-        const url = decoder.decode(record.data);
-        Debug.log(`✅ URL record: ${url}`);
-        return {
-          id: url,
-          source: 'url-record',
-          raw: url
-        };
-      }
-
-      // Try generic text decoding for other types
-      if (record.data) {
-        try {
-          const text = new TextDecoder().decode(record.data);
-          if (text && text.trim()) {
-            Debug.log(`✅ Generic decode: ${text}`);
-            return {
-              id: text.trim(),
-              source: 'generic-decode',
-              raw: text
-            };
-          }
-        } catch (e) {
-          Debug.log(`Decode failed: ${e.message}`);
+        const id = text.trim();
+        if (id) {
+          Debug.log(`✅ Text record: ${text}`);
+          return {
+            id,
+            source: 'text-record',
+            raw: text
+          };
         }
+        Debug.log('Text record present but empty — continuing');
       }
     }
 
-    // No readable records? Return error instead of serial fallback
-    Debug.log('No readable records found - returning error');
+    // No usable text record. url/other records are NOT token sources (NFC-5):
+    // do NOT best-effort-decode them (that queued junk Unknown transactions
+    // because findToken never matches a URL/foreign string). Hard-fail so the
+    // operator re-taps (or uses the Manual Entry button).
+    Debug.log('No usable text record found - returning error');
     return {
       id: null,
       source: 'error',
-      error: 'unreadable-records',
+      error: 'no-text-record',
       raw: serialNumber
     };
   }

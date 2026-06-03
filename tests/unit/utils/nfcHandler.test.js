@@ -69,22 +69,52 @@ describe('NFCHandler - ES6 Module', () => {
       expect(result.source).toBe('text-record');
     });
 
-    it('should extract URL record', () => {
-      const urlData = new TextEncoder().encode('https://example.com/token456');
+    it('prefers the text record even when a url record precedes it (NFC-5)', () => {
+      // Production tags carry BOTH a text record (the token) and a url record
+      // for unrelated purposes; record ORDER must not let the url win.
       const message = {
-        records: [{
-          recordType: 'url',
-          data: urlData
-        }]
+        records: [
+          { recordType: 'url', data: new TextEncoder().encode('https://example.com/unrelated') },
+          { recordType: 'text', encoding: 'utf-8', data: new TextEncoder().encode('token456') },
+        ]
       };
 
       const result = NFCHandler.extractTokenId(message, 'serial123');
 
-      expect(result.id).toBe('https://example.com/token456');
-      expect(result.source).toBe('url-record');
+      expect(result.source).toBe('text-record');
+      expect(result.id).toBe('token456');
     });
 
-    it('should return error when records are unreadable (not serial fallback)', () => {
+    it('uses the text record when it precedes the url record', () => {
+      const message = {
+        records: [
+          { recordType: 'text', encoding: 'utf-8', data: new TextEncoder().encode('token789') },
+          { recordType: 'url', data: new TextEncoder().encode('https://example.com/unrelated') },
+        ]
+      };
+
+      const result = NFCHandler.extractTokenId(message, 'serial123');
+
+      expect(result.source).toBe('text-record');
+      expect(result.id).toBe('token789');
+    });
+
+    it('hard-fails (re-tap) for a url-only tag — url records are NOT tokens (NFC-5)', () => {
+      // A url record must never become a token id; doing so queued a junk
+      // Unknown transaction. With no text record present, return an error so the
+      // operator re-taps rather than the backend recording a bogus scan.
+      const message = {
+        records: [{ recordType: 'url', data: new TextEncoder().encode('https://example.com/token456') }]
+      };
+
+      const result = NFCHandler.extractTokenId(message, 'serial123');
+
+      expect(result.source).toBe('error');
+      expect(result.error).toBe('no-text-record');
+      expect(result.id).toBeNull();
+    });
+
+    it('hard-fails when records are present but none is a usable text record', () => {
       const message = {
         records: [{
           recordType: 'unknown',
@@ -97,24 +127,22 @@ describe('NFCHandler - ES6 Module', () => {
       expect(result).toEqual({
         id: null,
         source: 'error',
-        error: 'unreadable-records',
+        error: 'no-text-record',
         raw: 'fallback789'
       });
     });
 
-    it('should extract generic data when decodable', () => {
-      const genericData = new TextEncoder().encode('generic-token');
+    it('does NOT decode a non-text record into a token (no generic-decode source, NFC-5)', () => {
+      // Previously a 'custom' decodable record became a 'generic-decode' token;
+      // that path queued junk Unknown transactions. Only text records are tokens.
       const message = {
-        records: [{
-          recordType: 'custom',
-          data: genericData
-        }]
+        records: [{ recordType: 'custom', data: new TextEncoder().encode('generic-token') }]
       };
 
       const result = NFCHandler.extractTokenId(message, 'serial');
 
-      expect(result.id).toBe('generic-token');
-      expect(result.source).toBe('generic-decode');
+      expect(result.source).toBe('error');
+      expect(result.error).toBe('no-text-record');
     });
   });
 
