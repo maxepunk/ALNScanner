@@ -50,6 +50,14 @@ describe('StateStore', () => {
       store.update('music', { connected: true });
       expect(cb).toHaveBeenCalledWith({ connected: true }, null);
     });
+
+    it('should NOT notify when the merged state is shallow-equal (no change)', () => {
+      store.update('music', { state: 'Playing' });
+      const cb = jest.fn();
+      store.on('music', cb);
+      store.update('music', { state: 'Playing' }); // identical → shallow-equal → skip
+      expect(cb).not.toHaveBeenCalled();
+    });
   });
 
   describe('on() / off()', () => {
@@ -219,6 +227,28 @@ describe('StateStore', () => {
       store.on('audio', cb);
       store.replace('audio', { sink: 'hdmi' });
       expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('should notify with prev=null when replacing a fresh domain', () => {
+      const cb = jest.fn();
+      store.on('gameclock', cb);
+      store.replace('gameclock', { status: 'running', elapsed: 0 });
+      expect(cb).toHaveBeenCalledWith({ status: 'running', elapsed: 0 }, null);
+    });
+
+    it('should continue calling remaining listeners if one throws', () => {
+      const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const badCb = jest.fn(() => { throw new Error('listener broke'); });
+      const goodCb = jest.fn();
+      store.on('video', badCb);
+      store.on('video', goodCb);
+
+      store.replace('video', { isPlaying: true });
+
+      expect(badCb).toHaveBeenCalled();
+      expect(goodCb).toHaveBeenCalled(); // not blocked by the thrown error
+      expect(store.get('video')).toEqual({ isPlaying: true }); // state still set
+      errSpy.mockRestore();
     });
   });
 });
