@@ -608,6 +608,31 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       );
     });
   });
+
+  describe('auth:required clears stale token (AUTH-5)', () => {
+    it('removes aln_auth_token when connecting with an expired token', async () => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true });
+      localStorage.setItem('aln_auth_token', 'stale-jwt');
+      connectionManager.token = createExpiredToken();
+
+      await expect(connectionManager.connect()).rejects.toThrow();
+
+      expect(localStorage.getItem('aln_auth_token')).toBeNull();
+    });
+
+    it('removes aln_auth_token when a server disconnect finds the token expired', async () => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true });
+      await connectionManager.connect(); // establish + register socket:disconnected handler
+      localStorage.setItem('aln_auth_token', 'stale-jwt');
+      connectionManager.token = createExpiredToken();
+
+      const disconnectHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'socket:disconnected')[1];
+      disconnectHandler({ detail: { reason: 'io server disconnect' } });
+
+      expect(localStorage.getItem('aln_auth_token')).toBeNull();
+    });
+  });
 });
 
 // Test Helpers

@@ -111,6 +111,7 @@ export class ConnectionManager extends EventTarget {
   async _doConnect() {
     // Validate token
     if (!this.isTokenValid()) {
+      this._clearStaleToken(); // AUTH-5
       this.dispatchEvent(new CustomEvent('auth:required', {
         detail: { reason: 'invalid_token' }
       }));
@@ -177,6 +178,7 @@ export class ConnectionManager extends EventTarget {
       if (this.retryCount < this.maxRetries) {
         this._scheduleRetry();
       } else {
+        this._clearStaleToken(); // AUTH-5
         this.dispatchEvent(new CustomEvent('auth:required', {
           detail: { reason: 'max_retries' }
         }));
@@ -233,6 +235,7 @@ export class ConnectionManager extends EventTarget {
       // Any other reason (transport close, ping timeout, transport error,
       // io server disconnect) is an unexpected drop — auto-reconnect, token permitting.
       if (!this.isTokenValid()) {
+        this._clearStaleToken(); // AUTH-5
         this.dispatchEvent(new CustomEvent('auth:required', {
           detail: { reason: 'token_expired' }
         }));
@@ -311,6 +314,21 @@ export class ConnectionManager extends EventTarget {
     // +/- 20% jitter to avoid lockstep reconnects across stations.
     const jitter = capped * 0.2 * (Math.random() * 2 - 1);
     return Math.round(capped + jitter);
+  }
+
+  /**
+   * Remove the known-bad auth token so the wizard re-auths cleanly. (AUTH-5)
+   * Called at each auth:required dispatch that means "token is bad" — defense
+   * in depth so the stale token can't be reused after it's known invalid.
+   * @private
+   */
+  _clearStaleToken() {
+    this.token = null;
+    try {
+      localStorage.removeItem('aln_auth_token');
+    } catch {
+      // localStorage unavailable (non-browser env) — nothing to clear
+    }
   }
 
   /**
