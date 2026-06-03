@@ -121,6 +121,21 @@ describe('StateStore', () => {
       state.volume = 0;  // Mutate the returned copy
       expect(store.get('music').volume).toBe(65);  // Internal state unchanged
     });
+
+    it('should deep-copy nested objects from get() (SSR-3)', () => {
+      store.update('video', { queue: [{ id: 'a' }, { id: 'b' }] });
+      const copy = store.get('video');
+      copy.queue.push({ id: 'c' });
+      copy.queue[0].id = 'mutated';
+      expect(store.get('video').queue).toEqual([{ id: 'a' }, { id: 'b' }]);
+    });
+
+    it('should deep-copy nested objects from getAll() (SSR-3)', () => {
+      store.update('health', { vlc: { status: 'healthy' } });
+      const all = store.getAll();
+      all.health.vlc.status = 'down';
+      expect(store.get('health')).toEqual({ vlc: { status: 'healthy' } });
+    });
   });
 
   describe('rapid updates', () => {

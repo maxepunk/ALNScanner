@@ -75,11 +75,14 @@ export class StateStore {
   }
 
   get(domain) {
+    // SSR-3: deep-copy so a consumer mutating a nested value (video.queue,
+    // health map, cueengine.cues) can't corrupt canonical state or defeat the
+    // shallow-equality change detection in update()/replace().
     const state = this._state[domain];
-    return state ? { ...state } : null;
+    return state ? structuredClone(state) : null;
   }
 
-  getAll() { return { ...this._state }; }
+  getAll() { return structuredClone(this._state); }
 
   on(domain, callback) {
     if (!this._listeners[domain]) this._listeners[domain] = new Set();

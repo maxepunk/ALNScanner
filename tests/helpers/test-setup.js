@@ -94,4 +94,13 @@ if (typeof global.TextEncoder === 'undefined') {
   global.TextDecoder = TextDecoder;
 }
 
+// Mock structuredClone. Node 17+ and all modern browsers expose it as a global
+// (production has it), but Jest's sandboxed test environment does not. The
+// service-domain state StateStore deep-clones (SSR-3) is plain JSON-serializable
+// data, so a JSON deep-clone is behaviorally equivalent here.
+if (typeof global.structuredClone === 'undefined') {
+  global.structuredClone = (value) =>
+    (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+}
+
 // Reset logic moved to test-hooks.js (uses setupFilesAfterEnv)
