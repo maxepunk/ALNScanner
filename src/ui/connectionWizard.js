@@ -135,12 +135,23 @@ export class ConnectionWizard {
     serversDiv.innerHTML = '';
 
     servers.forEach(server => {
+      if (!server || !server.url) return; // HTTP-7: guard malformed entries
+
       const serverEl = document.createElement('div');
       serverEl.className = 'server-item';
-      serverEl.innerHTML = `
-        <span>🎮 Game Server at ${server.ip || server.url}</span>
-        <button data-action="connectionWizard.selectServer" data-arg="${server.url}">Select</button>
-      `;
+
+      const span = document.createElement('span');
+      span.textContent = `🎮 Game Server at ${server.url}`;
+
+      const button = document.createElement('button');
+      button.textContent = 'Select';
+      button.setAttribute('data-action', 'connectionWizard.selectServer');
+      // AUTH-6: setAttribute escapes the value — no innerHTML interpolation, so a
+      // quote in a url from a rogue LAN responder can't break out of the attribute.
+      button.setAttribute('data-arg', server.url);
+
+      serverEl.appendChild(span);
+      serverEl.appendChild(button);
       serversDiv.appendChild(serverEl);
     });
   }
@@ -282,6 +293,7 @@ export class ConnectionWizard {
    * Select discovered server and pre-fill connection form
    */
   selectServer(url) {
+    if (!url) return; // HTTP-7: ignore a malformed/empty server entry
     document.getElementById('serverUrl').value = url;
     document.getElementById('discoveryStatus').textContent = '✅ Server selected';
 

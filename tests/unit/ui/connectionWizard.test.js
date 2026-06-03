@@ -221,6 +221,26 @@ describe('ConnectionWizard', () => {
     });
   });
 
+  describe('displayDiscoveredServers() (AUTH-6/HTTP-7)', () => {
+    test('does not allow a quote in the url to break out of the data-arg attribute', () => {
+      const evil = 'http://10.0.0.5:3000/"><img src=x onerror=alert(1)>';
+      wizard.displayDiscoveredServers([{ url: evil }]);
+
+      const btn = document.querySelector('#discoveredServers button[data-action="connectionWizard.selectServer"]');
+      expect(btn).not.toBeNull();
+      // The exact url survives intact in the attribute (escaped by the DOM API, not interpolated)
+      expect(btn.getAttribute('data-arg')).toBe(evil);
+      // No injected <img> element may exist
+      expect(document.querySelector('#discoveredServers img')).toBeNull();
+    });
+
+    test('renders the url text without relying on a server.ip field', () => {
+      wizard.displayDiscoveredServers([{ url: 'http://10.0.0.7:3000' }]);
+      const span = document.querySelector('#discoveredServers .server-item span');
+      expect(span.textContent).toContain('http://10.0.0.7:3000');
+    });
+  });
+
   describe('handleConnectionSubmit()', () => {
     test('should read deviceId from display dataset, not input field', async () => {
       const display = document.getElementById('stationNameDisplay');
