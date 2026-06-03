@@ -281,6 +281,45 @@ describe('ConnectionWizard', () => {
       expect(document.getElementById('gmPassword').value).toBe('');
     });
 
+    test('should surface a clear error when auth body is not JSON (AUTH-4/HTTP-2)', async () => {
+      const display = document.getElementById('stationNameDisplay');
+      display.dataset.deviceId = 'GM_Station_1';
+      document.getElementById('serverUrl').value = 'http://localhost:3000';
+      document.getElementById('gmPassword').value = 'admin';
+
+      mockFetch
+        .mockResolvedValueOnce({ ok: true }) // health
+        .mockResolvedValueOnce({ ok: true, json: async () => { throw new SyntaxError('Unexpected token <'); } });
+
+      const event = new Event('submit');
+      event.preventDefault = jest.fn();
+      await wizard.handleConnectionSubmit(event);
+
+      const statusDiv = document.getElementById('connectionStatusMsg');
+      expect(statusDiv.textContent).toContain('Invalid auth response');
+      expect(Storage.prototype.setItem).not.toHaveBeenCalledWith('aln_auth_token', expect.anything());
+      expect(mockApp.selectGameMode).not.toHaveBeenCalled();
+    });
+
+    test('should reject an auth body missing the token field (AUTH-4/HTTP-2)', async () => {
+      const display = document.getElementById('stationNameDisplay');
+      display.dataset.deviceId = 'GM_Station_1';
+      document.getElementById('serverUrl').value = 'http://localhost:3000';
+      document.getElementById('gmPassword').value = 'admin';
+
+      mockFetch
+        .mockResolvedValueOnce({ ok: true }) // health
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ expiresIn: 86400 }) }); // no token
+
+      const event = new Event('submit');
+      event.preventDefault = jest.fn();
+      await wizard.handleConnectionSubmit(event);
+
+      const statusDiv = document.getElementById('connectionStatusMsg');
+      expect(statusDiv.textContent).toContain('Invalid auth response');
+      expect(Storage.prototype.setItem).not.toHaveBeenCalledWith('aln_auth_token', expect.anything());
+    });
+
     test('should reject submission if display has no deviceId', async () => {
       document.getElementById('serverUrl').value = 'http://localhost:3000';
       document.getElementById('gmPassword').value = 'admin';

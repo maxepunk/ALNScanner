@@ -345,7 +345,23 @@ export class ConnectionWizard {
         return;
       }
 
-      const { token } = await authResponse.json();
+      // AUTH-4/HTTP-2: guard against non-JSON (a 200-but-HTML SPA shell) and a
+      // JSON body missing the token before persisting anything.
+      let authBody;
+      try {
+        authBody = await authResponse.json();
+      } catch {
+        statusDiv.textContent = '❌ Invalid auth response (not JSON)';
+        statusDiv.style.color = '#f44336';
+        return;
+      }
+
+      const token = authBody && authBody.token;
+      if (typeof token !== 'string' || token.length === 0) {
+        statusDiv.textContent = '❌ Invalid auth response (missing token)';
+        statusDiv.style.color = '#f44336';
+        return;
+      }
 
       // 3. Save configuration to localStorage
       localStorage.setItem('aln_orchestrator_url', normalizedUrl);
