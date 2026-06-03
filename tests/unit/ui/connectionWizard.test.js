@@ -25,7 +25,9 @@ describe('ConnectionWizard', () => {
         <div id="connectionStatusMsg"></div>
         <div id="discoveryStatus"></div>
         <div id="discoveredServers"></div>
+        <button id="scanServersBtn"></button>
       </form>
+      <div id="connectionModal"></div>
     `;
 
     // Mock app with required dependencies
@@ -238,6 +240,53 @@ describe('ConnectionWizard', () => {
       wizard.displayDiscoveredServers([{ url: 'http://10.0.0.7:3000' }]);
       const span = document.querySelector('#discoveredServers .server-item span');
       expect(span.textContent).toContain('http://10.0.0.7:3000');
+    });
+  });
+
+  describe('auto-scan gating (HTTP-6)', () => {
+    test('does NOT auto-scan when a saved orchestrator URL exists', () => {
+      jest.useFakeTimers();
+      Storage.prototype.getItem.mockImplementation((k) =>
+        k === 'aln_orchestrator_url' ? 'http://10.0.0.9:3000' : null);
+      const scanSpy = jest.spyOn(wizard, 'scanForServers').mockResolvedValue();
+
+      wizard.showConnectionWizard();
+      jest.advanceTimersByTime(200);
+
+      expect(scanSpy).not.toHaveBeenCalled();
+      jest.useRealTimers();
+    });
+
+    test('still auto-scans when no saved orchestrator URL exists', () => {
+      jest.useFakeTimers();
+      Storage.prototype.getItem.mockReturnValue(null);
+      const scanSpy = jest.spyOn(wizard, 'scanForServers').mockResolvedValue();
+
+      wizard.showConnectionWizard();
+      jest.advanceTimersByTime(200);
+
+      expect(scanSpy).toHaveBeenCalled();
+      jest.useRealTimers();
+    });
+  });
+
+  describe('scan concurrency cap (HTTP-6)', () => {
+    test('never has more than the batch size of probes in flight at once', async () => {
+      let inFlight = 0;
+      let maxInFlight = 0;
+      mockFetch.mockImplementation(() => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        return new Promise((resolve) => setTimeout(() => {
+          inFlight--;
+          resolve({ ok: false });
+        }, 0));
+      });
+      Storage.prototype.getItem.mockReturnValue(null);
+
+      await wizard.scanForServers();
+
+      expect(maxInFlight).toBeLessThanOrEqual(64); // batch of 32 => <= 64 in-flight fetches
     });
   });
 

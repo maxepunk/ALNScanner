@@ -67,40 +67,37 @@ export class ConnectionWizard {
       const commonPorts = [3000, 8080];
       // Use same protocol as current page to avoid mixed content blocking
       const protocol = window.location.protocol.replace(':', ''); // 'https' or 'http'
-      const promises = [];
 
-      // Scan detected subnet (254 IPs × 2 ports = 508 requests max)
-      // Browser connection pooling naturally rate-limits concurrent requests
+      // Build the candidate URL list first (no fetches yet).
+      const candidates = [];
       for (let i = 1; i <= 254; i++) {
         for (const port of commonPorts) {
-          const url = `${protocol}://${subnet}.${i}:${port}`;
-          promises.push(
-            fetch(`${url}/health`, {
-              method: 'GET',
-              mode: 'cors',
-              signal: AbortSignal.timeout(500)
-            })
-            .then(response => response.ok ? url : null)
-            .catch(() => null)
-          );
+          candidates.push(`${protocol}://${subnet}.${i}:${port}`);
         }
       }
+      candidates.push(`${protocol}://localhost:3000`);
 
-      // Also try localhost
-      promises.push(
-        fetch(`${protocol}://localhost:3000/health`, {
-          signal: AbortSignal.timeout(1000)
-        })
-        .then(response => response.ok ? `${protocol}://localhost:3000` : null)
-        .catch(() => null)
-      );
+      const probe = (url) =>
+        fetch(`${url}/health`, { method: 'GET', mode: 'cors', signal: AbortSignal.timeout(500) })
+          .then(response => (response.ok ? url : null))
+          .catch(() => null);
+
+      // HTTP-6: drain in bounded batches so we never open ~509 sockets at once
+      // (the unbounded fan-out spiked Pi CPU/memory and flooded the console with
+      //  CORS/network errors). Sequential batches, parallel within each batch.
+      const BATCH_SIZE = 32;
+      const results = [];
+      for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+        const batch = candidates.slice(i, i + BATCH_SIZE);
+        const settled = await Promise.all(batch.map(probe));
+        results.push(...settled);
+      }
 
       // Try current origin if served from orchestrator
       if (window.location.pathname.startsWith('/gm-scanner/')) {
-        promises.push(Promise.resolve(window.location.origin));
+        results.push(window.location.origin);
       }
 
-      const results = await Promise.all(promises);
       const foundServers = [...new Set(results.filter(url => url !== null))];
 
       if (foundServers.length > 0) {
@@ -452,8 +449,12 @@ export class ConnectionWizard {
     const modal = document.getElementById('connectionModal');
     modal.style.display = 'flex';
 
-    // Auto-scan on open for better UX (but don't block)
-    setTimeout(() => this.scanForServers(), 100);
+    // HTTP-6: only auto-scan when there's no saved orchestrator URL. With a
+    // saved URL the ~509-probe scan is wasted work (and a Pi CPU/console spike).
+    const savedUrl = localStorage.getItem('aln_orchestrator_url');
+    if (!savedUrl) {
+      setTimeout(() => this.scanForServers(), 100);
+    }
   }
 
 }
