@@ -103,8 +103,11 @@ export class OrchestratorClient extends EventTarget {
           this.connectionTimeout = null;
         }
         // No need to manually remove 'once' listeners - they auto-remove after firing
+        // WS-5: socket:connected is dispatched by the persistent on('connect')
+        // handler (single source) — here we only set state + resolve the
+        // connect() promise, so a future on-connect listener can't double-fire
+        // during reconnect churn.
         this.isConnected = true;
-        this.dispatchEvent(new CustomEvent('socket:connected'));
         resolve();
       };
 

@@ -89,6 +89,17 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       expect(client.isConnected).toBe(true);
     });
 
+    it('should dispatch socket:connected exactly once per connect (WS-5)', async () => {
+      const handler = jest.fn();
+      client.addEventListener('socket:connected', handler);
+
+      const p = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateConnect();
+      await p;
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
     it('should emit socket:error event on connection failure', async () => {
       const errorHandler = jest.fn();
       client.addEventListener('socket:error', errorHandler);
