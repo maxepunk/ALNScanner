@@ -182,4 +182,28 @@ describe('StateStore', () => {
       expect(store.get('video')).toEqual({ status: 'idle' });
     });
   });
+
+  describe('replace() — full-domain replacement (SSR-2)', () => {
+    it('should drop keys absent from the new state (no orphan merge)', () => {
+      store.update('gameclock', { status: 'running', elapsed: 10, startTime: 123, totalPausedMs: 0 });
+      store.replace('gameclock', { status: 'paused', elapsed: 10, expectedDuration: 7200 });
+      expect(store.get('gameclock')).toEqual({ status: 'paused', elapsed: 10, expectedDuration: 7200 });
+    });
+
+    it('should notify listeners with the replaced state and prev', () => {
+      store.update('video', { nowPlaying: 'a.mp4', isPlaying: true });
+      const cb = jest.fn();
+      store.on('video', cb);
+      store.replace('video', { isPlaying: false });
+      expect(cb).toHaveBeenCalledWith({ isPlaying: false }, { nowPlaying: 'a.mp4', isPlaying: true });
+    });
+
+    it('should not notify when the replacement is shallow-equal', () => {
+      store.update('audio', { sink: 'hdmi' });
+      const cb = jest.fn();
+      store.on('audio', cb);
+      store.replace('audio', { sink: 'hdmi' });
+      expect(cb).not.toHaveBeenCalled();
+    });
+  });
 });

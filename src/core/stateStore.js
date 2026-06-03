@@ -42,6 +42,38 @@ export class StateStore {
     }
   }
 
+  /**
+   * Replace a domain wholesale (SSR-2). Unlike update() (shallow merge), this
+   * DROPS keys absent from `state` — used by sync:full snapshot restore so a
+   * domain can't retain stale keys across the sync:full vs service:state shapes.
+   */
+  replace(domain, state) {
+    const prev = this._state[domain] || null;
+    const next = { ...state };
+
+    // Skip notification if nothing actually changed (shallow equality)
+    if (prev !== null) {
+      const keys = Object.keys(next);
+      const prevKeys = Object.keys(prev);
+      if (keys.length === prevKeys.length && keys.every(k => next[k] === prev[k])) {
+        return;
+      }
+    }
+
+    this._prev[domain] = prev;
+    this._state[domain] = next;
+    const listeners = this._listeners[domain];
+    if (listeners) {
+      for (const cb of listeners) {
+        try {
+          cb(this._state[domain], this._prev[domain]);
+        } catch (e) {
+          console.error(`StateStore listener error [${domain}]:`, e);
+        }
+      }
+    }
+  }
+
   get(domain) {
     const state = this._state[domain];
     return state ? { ...state } : null;
