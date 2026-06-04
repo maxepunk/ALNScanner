@@ -346,6 +346,32 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       await connectionManager.disconnect();
       expect(connectionManager.retryTimer).toBeNull();
     });
+
+    it('reschedules a retry when checkHealth() fails on an auto-reconnect (NC-1)', async () => {
+      jest.useFakeTimers();
+      try {
+        connectionManager.token = createValidToken();
+        const healthSpy = jest.spyOn(connectionManager, 'checkHealth').mockResolvedValue(false);
+
+        // A transport drop arms the first auto-reconnect timer.
+        const disconnectHandler = mockClient.addEventListener.mock.calls
+          .find(c => c[0] === 'socket:disconnected')[1];
+        disconnectHandler({ detail: { reason: 'transport close' } });
+        expect(connectionManager.retryTimer).not.toBeNull();
+
+        // Fire ONLY the currently-pending timer (the first reconnect attempt).
+        // runOnlyPendingTimersAsync does NOT run timers created during that execution,
+        // so the second-attempt timer (scheduled in the catch) stays pending.
+        await jest.runOnlyPendingTimersAsync();
+
+        expect(healthSpy).toHaveBeenCalled();
+        expect(connectionManager.retryCount).toBeGreaterThanOrEqual(1); // catch ran
+        expect(connectionManager.retryTimer).not.toBeNull();            // loop self-perpetuates
+      } finally {
+        connectionManager._clearRetryTimer();
+        jest.useRealTimers();
+      }
+    });
   });
 
   describe('retry logic', () => {

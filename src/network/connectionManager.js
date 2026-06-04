@@ -118,12 +118,6 @@ export class ConnectionManager extends EventTarget {
       throw new Error('Invalid or expired token');
     }
 
-    // Check health
-    const healthy = await this.checkHealth();
-    if (!healthy) {
-      throw new Error('Orchestrator unreachable');
-    }
-
     // Clear any pending retry timer
     this._clearRetryTimer();
 
@@ -138,6 +132,14 @@ export class ConnectionManager extends EventTarget {
     this._setupErrorHandler();
 
     try {
+      // NC-1: health check INSIDE try → a failed check flows through
+      // retryCount++/_scheduleRetry() so a sustained outage self-heals via
+      // exponential backoff rather than giving up after a single unreachable check.
+      const healthy = await this.checkHealth();
+      if (!healthy) {
+        throw new Error('Orchestrator unreachable');
+      }
+
       // Delegate WebSocket connection to OrchestratorClient
       await this.client.connect(this.token, {
         deviceId: this.config.deviceId,
