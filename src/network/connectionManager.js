@@ -37,6 +37,7 @@ export class ConnectionManager extends EventTarget {
     this.disconnectHandler = null;
     this.errorHandler = null;
     this._lastErrorReason = null;
+    this._connectedAt = 0; // ms timestamp of last successful connect (NC-2 min-uptime gate)
     this._connectInFlight = null;
 
     // Wire global connection status indicator updates
@@ -148,7 +149,7 @@ export class ConnectionManager extends EventTarget {
 
       // Connection successful
       this.state = 'connected';
-      this.retryCount = 0;
+      this._connectedAt = Date.now();   // NC-2: uptime start (retryCount is NOT reset here — see disconnect handler gate)
       this._lastErrorReason = null; // NC-3: don't let a stale connect_error reason leak into a later reject
       this.dispatchEvent(new CustomEvent('connected'));
 
@@ -252,6 +253,14 @@ export class ConnectionManager extends EventTarget {
         }));
         return;
       }
+
+      // Reset backoff ONLY if the just-dropped session was stable long enough; a
+      // flapping connect-then-drop must keep escalating toward the 30s cap (NC-2).
+      const MIN_STABLE_MS = 10000;
+      if (this._connectedAt && (Date.now() - this._connectedAt) >= MIN_STABLE_MS) {
+        this.retryCount = 0;
+      }
+      this._connectedAt = 0;
 
       // Schedule the reconnect on the cancellable retryTimer (cleared first), so
       // rapid repeated drops don't stack competing reconnects and an explicit

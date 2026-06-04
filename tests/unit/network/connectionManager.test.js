@@ -185,12 +185,18 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       expect(connectionManager.state).toBe('connected');
     });
 
-    it('should reset retry count on successful connection', async () => {
+    it('does NOT reset retryCount on successful connection — reset happens on stable-session drop (NC-2)', async () => {
+      // NC-2: retryCount is no longer zeroed on every connect. A flapping endpoint
+      // (connect succeeds → server kicks → reconnect) would have reset the backoff on
+      // each brief success, forever hammering at ~1s. Instead, retryCount resets ONLY
+      // when a session lasted ≥ MIN_STABLE_MS before dropping (see _setupReconnectionHandler).
       connectionManager.retryCount = 3;
 
       await connectionManager.connect();
 
-      expect(connectionManager.retryCount).toBe(0);
+      // retryCount stays 3 — the connect did NOT reset it.
+      // (A fresh ConnectionManager naturally starts at 0, so the normal case is unaffected.)
+      expect(connectionManager.retryCount).toBe(3);
     });
 
     it('should emit auth:required on token expiry', async () => {
@@ -367,6 +373,34 @@ describe('ConnectionManager - Connection Lifecycle', () => {
         expect(healthSpy).toHaveBeenCalled();
         expect(connectionManager.retryCount).toBeGreaterThanOrEqual(1); // catch ran
         expect(connectionManager.retryTimer).not.toBeNull();            // loop self-perpetuates
+      } finally {
+        connectionManager._clearRetryTimer();
+        jest.useRealTimers();
+      }
+    });
+
+    it('escalates backoff for a flapping endpoint and resets only after a stable session (NC-2)', async () => {
+      jest.useFakeTimers();
+      try {
+        connectionManager.token = createValidToken();
+        jest.spyOn(connectionManager, 'checkHealth').mockResolvedValue(true);
+        const disconnectHandler = mockClient.addEventListener.mock.calls
+          .find(c => c[0] === 'socket:disconnected')[1];
+
+        // Seed an elevated backoff (as if prior retries climbed).
+        connectionManager.retryCount = 3;
+
+        // FLAP: a sub-MIN_STABLE_MS session that drops must NOT reset retryCount.
+        connectionManager._connectedAt = Date.now(); // "just connected"
+        disconnectHandler({ detail: { reason: 'transport close' } });
+        expect(connectionManager.retryCount).toBe(3); // not reset by a brief session
+
+        connectionManager._clearRetryTimer();
+
+        // STABLE: a session that lasted >= MIN_STABLE_MS resets backoff on drop.
+        connectionManager._connectedAt = Date.now() - 15000; // 15s uptime
+        disconnectHandler({ detail: { reason: 'transport close' } });
+        expect(connectionManager.retryCount).toBe(0);
       } finally {
         connectionManager._clearRetryTimer();
         jest.useRealTimers();
