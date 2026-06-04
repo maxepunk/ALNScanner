@@ -26,7 +26,7 @@ ALNScanner is the **Game Master (GM) Scanner** for "About Last Night" - a PWA fo
 - ES6 module architecture with Vite 7.x build system
 - Dual operation modes: Networked (WebSocket) OR Standalone (offline)
 - Two game modes: Detective (star ratings) OR Black Market (currency)
-- Android Chrome/Edge 89+ required for NFC
+- Android Chrome/Edge 107+ (Vite 7 default build target `baseline-widely-available` = chrome107; Web NFC needs 89+, `structuredClone` 98+ — 107 is the binding floor). No explicit `build.target` set in vite.config.js.
 - Automated testing: Jest (926 unit tests) + Playwright (E2E)
 - Automated deployment to GitHub Pages
 
