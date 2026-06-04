@@ -147,6 +147,7 @@ export class ConnectionManager extends EventTarget {
       // Connection successful
       this.state = 'connected';
       this.retryCount = 0;
+      this._lastErrorReason = null; // NC-3: don't let a stale connect_error reason leak into a later reject
       this.dispatchEvent(new CustomEvent('connected'));
 
       // Setup reconnection handler
@@ -266,12 +267,15 @@ export class ConnectionManager extends EventTarget {
 
   /**
    * Listen for handshake errors so we can capture the reject reason.
+   * Clears any stale _lastErrorReason from a prior session so only a fresh
+   * socket:error from THIS attempt can set the reason (NC-3).
    * @private
    */
   _setupErrorHandler() {
     if (this.errorHandler) {
       this.client.removeEventListener('socket:error', this.errorHandler);
     }
+    this._lastErrorReason = null; // NC-3: reset before each attempt; only this attempt's socket:error should set it
     this.errorHandler = (event) => {
       this._lastErrorReason = event.detail?.reason || null;
     };

@@ -459,9 +459,19 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       const authHandler = jest.fn();
       connectionManager.addEventListener('auth:required', authHandler);
 
-      // Simulate handshake rejected for bad token
-      mockClient.connect.mockRejectedValueOnce(new Error('AUTH_INVALID: Invalid or expired token'));
-      connectionManager._lastErrorReason = 'AUTH_INVALID';
+      // Simulate a real failing handshake: OrchestratorClient fires socket:error
+      // (carrying the reason) and THEN client.connect() rejects. The reason is set
+      // via the freshly-registered error handler so it survives _setupErrorHandler()'s
+      // NC-3 stale-clear (NC-3 resets _lastErrorReason when _setupErrorHandler runs).
+      mockClient.connect.mockImplementationOnce(async () => {
+        // Fire the error handler that _setupErrorHandler() just registered for THIS attempt.
+        const calls = mockClient.addEventListener.mock.calls.filter(c => c[0] === 'socket:error');
+        const currentErrorHandler = calls[calls.length - 1]?.[1];
+        if (currentErrorHandler) {
+          currentErrorHandler({ detail: { reason: 'AUTH_INVALID', error: new Error('AUTH_INVALID: bad token') } });
+        }
+        throw new Error('AUTH_INVALID: Invalid or expired token');
+      });
       connectionManager.token = createValidToken(); // token passes local expiry check; server rejected it
 
       await expect(connectionManager.connect()).rejects.toThrow('AUTH_INVALID');
@@ -474,13 +484,47 @@ describe('ConnectionManager - Connection Lifecycle', () => {
     });
 
     it('should still schedule a retry on DEVICE_ID_COLLISION', async () => {
-      mockClient.connect.mockRejectedValueOnce(new Error('DEVICE_ID_COLLISION: in use'));
-      connectionManager._lastErrorReason = 'DEVICE_ID_COLLISION';
+      // Simulate a real failing handshake: OrchestratorClient fires socket:error
+      // (carrying the reason) and THEN client.connect() rejects.
+      mockClient.connect.mockImplementationOnce(async () => {
+        const calls = mockClient.addEventListener.mock.calls.filter(c => c[0] === 'socket:error');
+        const currentErrorHandler = calls[calls.length - 1]?.[1];
+        if (currentErrorHandler) {
+          currentErrorHandler({ detail: { reason: 'DEVICE_ID_COLLISION', error: new Error('x') } });
+        }
+        throw new Error('DEVICE_ID_COLLISION: in use');
+      });
       connectionManager.token = createValidToken();
 
       await expect(connectionManager.connect()).rejects.toThrow('DEVICE_ID_COLLISION');
 
       expect(connectionManager.retryTimer).not.toBeNull();
+      expect(connectionManager.retryCount).toBe(1);
+    });
+
+    it('does not mis-apply a stale AUTH_* reason from an earlier session to a later transient reject (NC-3)', async () => {
+      // beforeEach already established a successful connect. Grab the registered socket:error handler.
+      const errorHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'socket:error')[1];
+
+      // A late connect_error during the healthy session writes _lastErrorReason.
+      errorHandler({ detail: { reason: 'AUTH_INVALID', error: new Error('x') } });
+
+      const authHandler = jest.fn();
+      connectionManager.addEventListener('auth:required', authHandler);
+
+      // A SUBSEQUENT reconnect rejects transiently with NO fresh socket:error
+      // (mirrors OrchestratorClient's 'Connection timeout' reject path).
+      mockClient.connect.mockRejectedValueOnce(new Error('Connection timeout'));
+      connectionManager.token = createValidToken();
+
+      await expect(connectionManager.connect()).rejects.toThrow('Connection timeout');
+
+      expect(authHandler).not.toHaveBeenCalledWith(expect.objectContaining({
+        detail: { reason: 'auth_failed' }
+      }));
+      expect(connectionManager.token).not.toBeNull();      // token preserved
+      expect(connectionManager.retryTimer).not.toBeNull();  // retry scheduled
       expect(connectionManager.retryCount).toBe(1);
     });
   });
