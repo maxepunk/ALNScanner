@@ -7,9 +7,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import OrchestratorClient, { MESSAGE_TYPES } from '../../../src/network/orchestratorClient.js';
-import fs from 'fs';
-import path from 'path';
-import yaml from 'js-yaml';
 
 describe('OrchestratorClient - Dumb Pipe', () => {
   let client;
@@ -319,19 +316,10 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       }));
     });
 
-    it('MESSAGE_TYPES equals the AsyncAPI server->client subscribe set (WS-2)', () => {
-      const contractPath = path.resolve(__dirname, '../../../../backend/contracts/asyncapi.yaml');
-      const doc = yaml.load(fs.readFileSync(contractPath, 'utf8'));
-
-      const contractEvents = doc.channels['/'].subscribe.message.oneOf
-        .map(ref => ref['$ref'].split('/').pop())     // message key, e.g. 'SyncFull'
-        .map(key => doc.components.messages[key].name) // event name, e.g. 'sync:full'
-        .sort();
-
-      const clientEvents = [...MESSAGE_TYPES].sort();
-
-      expect(clientEvents).toEqual(contractEvents);
-    });
+    // NOTE: the MESSAGE_TYPES↔AsyncAPI subscribe-set conformance check (WS-2) is a
+    // cross-component test that needs the backend contract. It lives in the monorepo
+    // backend contract layer: backend/tests/contract/scanner/client-contract-conformance.test.js
+    // (the backend repo always has contracts/asyncapi.yaml; ALNScanner standalone CI does not).
 
     it('forwards every event in the exported production MESSAGE_TYPES array', () => {
       const messageHandler = jest.fn();
