@@ -521,7 +521,13 @@ export function setupCleanupHandlers(app) {
     // Use ConnectionManager.disconnect() (not client.disconnect()): it cancels any
     // pending reconnect timer + removes the reconnect handler before closing the
     // socket, so a queued reconnect can't fire while backgrounded and defeat BFCache.
-    const cm = app.networkedSession?.getService?.('connectionManager');
+    // NOTE: Do NOT use getService('connectionManager') here — getService() throws
+    // synchronously with 'Session not initialized' when services===null. This happens
+    // in two real windows: INIT (networkedSession assigned before initialize() populates
+    // services) and DESTROY (destroy() nulls services before app nulls networkedSession).
+    // Optional chaining (?.) only guards null/undefined — it does NOT catch synchronous
+    // throws. Use the null-safe property path instead (returns undefined, never throws).
+    const cm = app.networkedSession?.services?.connectionManager;
     if (cm) {
       console.log('Page backgrounded - closing socket (BFCache-eligible, frees deviceId)');
       Promise.resolve(cm.disconnect()).catch(() => {});
@@ -530,7 +536,8 @@ export function setupCleanupHandlers(app) {
 
   const reopenSocket = () => {
     app.resumeNFCForForeground?.(); // re-arm NFC on foreground (NFC-3, both modes)
-    const cm = app.networkedSession?.getService?.('connectionManager');
+    // Same null-safe path as closeSocket — see comment above re: getService() throws.
+    const cm = app.networkedSession?.services?.connectionManager;
     if (cm) {
       console.log('Page foregrounded - reconnecting');
       Promise.resolve(cm.connect()).catch(() => {}); // connect() revalidates + sync:full

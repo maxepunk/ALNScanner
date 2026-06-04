@@ -497,6 +497,10 @@ describe('setupCleanupHandlers() — page lifecycle (RL-2)', () => {
     mockConnectionManager = cm;
     lifecycleApp = {
       networkedSession: {
+        // services property: null-safe property path used by lifecycle handlers
+        // (getService() throws when services===null — see BFCACHE fix in connectionWizard.js)
+        services: { connectionManager: cm, client: client },
+        // keep getService so any assertions that still test it continue to work
         getService: jest.fn((name) =>
           name === 'client' ? client
             : name === 'connectionManager' ? cm
@@ -544,6 +548,50 @@ describe('setupCleanupHandlers() — page lifecycle (RL-2)', () => {
     setupCleanupHandlers(nfcApp);
     setVisibility('hidden');
     document.dispatchEvent(new Event('visibilitychange'));
+    expect(pauseNFC).toHaveBeenCalledTimes(1);
+  });
+
+  // BFCACHE fix: getService() throws 'Session not initialized' when services===null.
+  // This occurs in two real windows: INIT (networkedSession assigned, services not yet
+  // populated by initialize()) and DESTROY (destroy() sets services=null before app
+  // nulls networkedSession). The lifecycle handlers must NOT throw in these windows —
+  // they should no-op silently so that BFCache eligibility and NFC hooks still work.
+  it('does not throw during the init/destroy window (visibilitychange) when networkedSession.services is null', () => {
+    const pauseNFC = jest.fn();
+    const resumeNFC = jest.fn();
+    // Simulate init/destroy window: networkedSession is a live object, services=null,
+    // getService() throws synchronously (as the real implementation does).
+    const initWindowApp = {
+      pauseNFCForBackground: pauseNFC,
+      resumeNFCForForeground: resumeNFC,
+      networkedSession: {
+        services: null,
+        getService: jest.fn(() => { throw new Error('Session not initialized'); })
+      }
+    };
+    setupCleanupHandlers(initWindowApp);
+    setVisibility('hidden');
+    // jsdom propagates a synchronous listener throw out of dispatchEvent — so this
+    // assertion is a deterministic fail if closeSocket calls getService().
+    expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow();
+    // NFC hook must still fire even when cm lookup is a no-op
+    expect(pauseNFC).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not throw during the init/destroy window (pagehide) when networkedSession.services is null', () => {
+    const pauseNFC = jest.fn();
+    const initWindowApp = {
+      pauseNFCForBackground: pauseNFC,
+      resumeNFCForForeground: jest.fn(),
+      networkedSession: {
+        services: null,
+        getService: jest.fn(() => { throw new Error('Session not initialized'); })
+      }
+    };
+    setupCleanupHandlers(initWindowApp);
+    // pagehide fires closeSocket — must not throw even with services=null
+    expect(() => window.dispatchEvent(new Event('pagehide'))).not.toThrow();
+    // NFC hook must still fire
     expect(pauseNFC).toHaveBeenCalledTimes(1);
   });
 });
