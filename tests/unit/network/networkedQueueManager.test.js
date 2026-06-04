@@ -697,6 +697,36 @@ describe('NetworkedQueueManager', () => {
 
       expect(queueManager.activeHandlers.size).toBe(0);
     });
+
+    it('same clientTxId independent: two replays of identical clientTxId get distinct handler keys (NQ-2)', async () => {
+      // Regression guard for the reconnect re-send bug: a connected _submitDurable
+      // that never got a definitive result stays in tempQueue and is re-replayed by
+      // syncQueue after reconnect. Both calls share the same clientTxId 'X'. Before
+      // the fix, call B's activeHandlers.set() overwrote call A's entry under the
+      // same key, and when timeoutA fired it looked up the key, got handlerB, and
+      // de-registered B's still-live listener — leaving B hanging for its own 30s
+      // even though a valid transaction:result for X arrived.
+      const handlers = [];
+      mockClient.addEventListener.mockImplementation((type, h) => {
+        if (type === 'message:received') handlers.push(h);
+      });
+
+      // Two replays with the SAME clientTxId (simulates reconnect re-send of same tx).
+      const p1 = queueManager.replayTransaction({ tokenId: 'tk', teamId: '1', clientTxId: 'X' });
+      const p2 = queueManager.replayTransaction({ tokenId: 'tk', teamId: '1', clientTxId: 'X' });
+
+      // Each replay must occupy its own map slot so one cleanup can't clobber the other.
+      expect(queueManager.activeHandlers.size).toBe(2);
+
+      // Fire one transaction:result for X to BOTH handlers (as the real broadcast would).
+      handlers.forEach(h => h({ detail: { type: 'transaction:result', payload: { clientTxId: 'X', status: 'accepted' } } }));
+
+      // Both promises must resolve (neither hangs to its 30s timeout).
+      await Promise.all([p1, p2]);
+
+      // Both handlers cleaned up independently.
+      expect(queueManager.activeHandlers.size).toBe(0);
+    });
   });
 
   describe('reconcileWithServerState', () => {

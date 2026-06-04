@@ -14,6 +14,8 @@
  * - Transaction processing (backend)
  */
 
+let _attemptSeq = 0; // monotonic per-attempt nonce for activeHandlers keys (NQ-2)
+
 export class NetworkedQueueManager extends EventTarget {
   constructor(config = {}) {
     super();
@@ -55,9 +57,12 @@ export class NetworkedQueueManager extends EventTarget {
     if (this.client && this.client.isConnected) {
       // Connected: submit now and remove only on a definitive result. A fresh
       // connected scan is submitted immediately here; offline-enqueued entries are
-      // flushed by syncQueue() on reconnect. No overlap for a given entry —
-      // syncQueue processes only the entries present at its start, and this one is
-      // already in-flight via _submitDurable.
+      // flushed by syncQueue() on reconnect. The same clientTxId CAN be in flight
+      // twice: if a connected _submitDurable never gets a definitive result (e.g.
+      // disconnect mid-flight), the entry stays in tempQueue and is re-replayed by
+      // syncQueue on reconnect. Each replay call gets a unique activeHandlers key
+      // (NQ-2) so one cleanup cannot de-register the other's listener. Backend GM
+      // dedup + reconcileWithServerState prevent double-scoring.
       this._submitDurable(tx);
     } else {
       this.debug.log('Transaction queued (offline)', {
@@ -251,10 +256,15 @@ export class NetworkedQueueManager extends EventTarget {
    */
   replayTransaction(transaction) {
     return new Promise((resolve, reject) => {
-      // Key by clientTxId (unique per submission) so concurrent same-token replays
-      // can't collide in activeHandlers and delete the wrong handler / leak a
-      // listener on timeout. Fall back to tokenId-teamId for any caller without one.
-      const handlerKey = transaction.clientTxId || `${transaction.tokenId}-${transaction.teamId}`;
+      // Key per ATTEMPT (not per clientTxId) so a reconnect re-send of the same
+      // clientTxId can't overwrite the first attempt's map entry. The same clientTxId
+      // can be in flight twice (a connected _submitDurable that never got a definitive
+      // result stays in tempQueue and is re-replayed by syncQueue after reconnect);
+      // each gets a unique slot so one cleanup() can't de-register the other's listener.
+      // Result MATCHING in the handler body still uses transaction.clientTxId (wire
+      // identity) — unchanged. Backend dedup + reconcile prevent double-scoring. NQ-2.
+      const matchId = transaction.clientTxId || `${transaction.tokenId}-${transaction.teamId}`;
+      const handlerKey = `${matchId}#${++_attemptSeq}`;
 
       // Helper to cleanup handler and timeout
       const cleanup = (timeout, handler) => {
