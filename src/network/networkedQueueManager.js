@@ -214,8 +214,15 @@ export class NetworkedQueueManager extends EventTarget {
         kept: survivors.length
       });
 
-      // Keep only transient/queued survivors for the next reconnect
-      this.tempQueue = survivors;
+      // Remove ONLY the batch entries that reached a definitive result from the LIVE
+      // queue — never wholesale-reassign. A queueTransaction() that landed mid-flush
+      // (during a replay await) pushed a new entry into this.tempQueue that is in
+      // neither `batch` nor `survivors`; reassigning would silently drop it (NQ-1).
+      // Identity-keyed (Set of object refs): survivors hold the SAME references as
+      // batch, so this also works for legacy entries that lack a clientTxId.
+      const survivorSet = new Set(survivors);
+      const done = new Set(batch.filter(t => !survivorSet.has(t)));
+      this.tempQueue = this.tempQueue.filter(t => !done.has(t));
       this.saveQueue();
 
     } catch (error) {

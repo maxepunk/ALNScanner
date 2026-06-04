@@ -458,6 +458,29 @@ describe('NetworkedQueueManager', () => {
         expect.objectContaining({ status: 'rejected', message: 'No active session' })
       );
     });
+
+    it('keeps an entry enqueued mid-flush (during a replay await) — does not wholesale-clobber the live queue (NQ-1)', async () => {
+      queueManager.tempQueue = [{ tokenId: 'offline1', teamId: '001', clientTxId: 'off-1' }];
+
+      let midScanId;
+      jest.spyOn(queueManager, 'replayTransaction').mockImplementation(async (tx) => {
+        if (tx.clientTxId === 'off-1') {
+          // A live GM scan lands WHILE we await the offline entry's replay. From now
+          // replays resolve 'queued' so the mid-flush entry's own _submitDurable does
+          // NOT remove it — syncQueue's surgical removal must preserve it.
+          queueManager.replayTransaction.mockResolvedValue({ status: 'queued' });
+          midScanId = queueManager.queueTransaction({ tokenId: 'midScan', teamId: '002' });
+          return { status: 'accepted', clientTxId: 'off-1' };
+        }
+        return { status: 'queued' };
+      });
+
+      await queueManager.syncQueue();
+      await new Promise(resolve => setTimeout(resolve, 0)); // flush _submitDurable microtasks
+
+      expect(queueManager.tempQueue.some(t => t.clientTxId === 'off-1')).toBe(false);   // processed → gone
+      expect(queueManager.tempQueue.some(t => t.clientTxId === midScanId)).toBe(true);  // survives (was dropped pre-fix)
+    });
   });
 
   describe('replayTransaction', () => {
