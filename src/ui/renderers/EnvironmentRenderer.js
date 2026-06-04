@@ -160,7 +160,7 @@ export class EnvironmentRenderer {
         // Re-apply routes after rebuilding dropdowns (they were wiped by rebuild)
         if (routes) {
           Object.entries(routes).forEach(([stream, sink]) => {
-            const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${stream}"]`);
+            const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${escapeCssAttrValue(stream)}"]`);
             if (dropdown) {
               dropdown.value = sink;
               // Fallback if sink doesn't match any option (consistent with differential path)
@@ -179,7 +179,7 @@ export class EnvironmentRenderer {
     // Update selection values (differential — only change if different)
     if (routes) {
       Object.entries(routes).forEach(([stream, sink]) => {
-        const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${stream}"]`);
+        const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${escapeCssAttrValue(stream)}"]`);
         if (dropdown && dropdown.value !== sink) {
           dropdown.value = sink;
           // Fallback if sink doesn't match any option
@@ -242,7 +242,7 @@ export class EnvironmentRenderer {
       this._volumeValues[stream] = value;
 
       if (!this.audioRoutingContainer) continue;
-      const slider = this.audioRoutingContainer.querySelector(`input[data-stream="${stream}"]`);
+      const slider = this.audioRoutingContainer.querySelector(`input[data-stream="${escapeCssAttrValue(stream)}"]`);
       if (slider && String(slider.value) !== String(value)) {
         slider.value = String(value);
         const item = slider.closest('.audio-control-item');

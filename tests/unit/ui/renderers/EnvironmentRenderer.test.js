@@ -556,6 +556,79 @@ describe('EnvironmentRenderer', () => {
     });
   });
 
+  describe('Audio Routing - selector escaping', () => {
+    // These tests verify that CSS metacharacters in stream keys (routes / volumes)
+    // do NOT cause querySelector SyntaxErrors that abort the update loop before
+    // reaching legitimate enum keys (video / music / sound).
+    //
+    // Pre-fix behaviour: `select[data-stream="a"b"]` is invalid CSS — jsdom throws
+    // DOMException (SyntaxError), aborting the forEach before 'video' is updated.
+    // Post-fix: escapeCssAttrValue escapes the quote, making an invalid-but-safe
+    // selector that simply matches nothing; the loop continues to 'video'.
+
+    const sinks = [
+      { name: 'hdmi', label: 'HDMI' },
+      { name: 'bluetooth', label: 'BT' },
+    ];
+
+    it('routes metachar key (rebuild path, ~L163): does not throw and video dropdown is still updated', () => {
+      // First call with sinks to prime _lastSinkKey
+      renderer.renderAudio({ availableSinks: sinks, routes: { video: 'hdmi' } });
+
+      // New sink set triggers dropdown rebuild; re-apply routes via L163 path.
+      // 'a"b' is before 'video' alphabetically in Object.entries order, so if
+      // the loop aborts on the bad key, video will never be set to 'bluetooth'.
+      const newSinks = [...sinks, { name: 'extra', label: 'Extra' }];
+      expect(() => {
+        renderer.renderAudio({
+          availableSinks: newSinks,
+          routes: { 'a"b': 'hdmi', video: 'bluetooth' },
+        });
+      }).not.toThrow();
+
+      // If loop completed past the bad key, the video dropdown should be 'bluetooth'
+      const videoDropdown = document.querySelector('select[data-stream="video"]');
+      expect(videoDropdown).not.toBeNull();
+      expect(videoDropdown.value).toBe('bluetooth');
+    });
+
+    it('routes metachar key (differential path, ~L182): does not throw and video dropdown is still updated', () => {
+      // Prime the renderer with sinks so _lastSinkKey is set (differential path)
+      renderer.renderAudio({ availableSinks: sinks, routes: { video: 'hdmi' } });
+
+      // Same sinks → goes to differential update path (L182), NOT rebuild.
+      // Bad key 'a"b' is processed first; if unescaped it aborts the loop before video.
+      expect(() => {
+        renderer.renderAudio({
+          availableSinks: sinks,
+          routes: { 'a"b': 'hdmi', video: 'bluetooth' },
+        });
+      }).not.toThrow();
+
+      const videoDropdown = document.querySelector('select[data-stream="video"]');
+      expect(videoDropdown).not.toBeNull();
+      expect(videoDropdown.value).toBe('bluetooth');
+    });
+
+    it('volumes metachar key (_applyVolumes, ~L245): does not throw and video slider is still updated', () => {
+      // Build dropdowns first so the slider DOM exists
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: { video: 100 } });
+
+      // Pass bad volumes key before 'video' so an unescaped querySelector aborts before updating slider
+      expect(() => {
+        renderer.renderAudio({
+          availableSinks: sinks,
+          routes: {},
+          volumes: { 'a"b': 50, video: 42 },
+        });
+      }).not.toThrow();
+
+      const videoSlider = document.querySelector('input[data-stream="video"]');
+      expect(videoSlider).not.toBeNull();
+      expect(videoSlider.value).toBe('42');
+    });
+  });
+
   describe('render() combined', () => {
     it('should render all three sub-domains', () => {
       renderer.render({
