@@ -26,7 +26,7 @@ ALNScanner is the **Game Master (GM) Scanner** for "About Last Night" - a PWA fo
 - ES6 module architecture with Vite 7.x build system
 - Dual operation modes: Networked (WebSocket) OR Standalone (offline)
 - Two game modes: Detective (star ratings) OR Black Market (currency)
-- Android Chrome/Edge 89+ required for NFC
+- Android Chrome/Edge 107+ (Vite 7 default build target `baseline-widely-available` = chrome107; Web NFC needs 89+, `structuredClone` 98+ — 107 is the binding floor). No explicit `build.target` set in vite.config.js.
 - Automated testing: Jest (926 unit tests) + Playwright (E2E)
 - Automated deployment to GitHub Pages
 
@@ -45,7 +45,10 @@ npm run build         # Output to dist/
 npm run preview       # Test production build locally
 
 # Run tests
-npm test              # Jest unit tests (L1: 1116 tests, ~15-30s)
+npm test              # Jest unit tests (L1, ~30s) — EXCLUDES slow build-artifact tests
+npm run test:build    # Build-artifact tests (tests/build-artifacts/): runs a real `vite build`,
+                      #   asserts on dist/ output (e.g. dist/sw.js). Slow; gated out of `npm test`
+                      #   via jest.build.config.js. Used by the SW safety-net tests.
 npm run test:e2e      # Playwright E2E tests (L2: scanner only, ~2-3 min)
 npm run test:all      # All tests (L1 + L2)
 
@@ -694,7 +697,9 @@ socket.emit('gm:command', {
 - Progress tracking via `service:state` domain `video`
 
 **Video List:**
-- Populated from `GET /api/videos` (backend's video directory)
+- No HTTP list endpoint exists. Manual video-add is WebSocket-only: the operator
+  supplies the exact filename to `video:queue:add` via `addToQueue(videoFile)`.
+  (A future picker UI would add a contracted `GET /api/videos` endpoint first.)
 
 ### Environment Controllers (Phase 0)
 

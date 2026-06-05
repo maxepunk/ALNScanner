@@ -54,6 +54,8 @@ class App {
     // Instance state
     this.currentTeamId = '';
     this.nfcSupported = false;
+    this.nfcReadErrorCount = 0; // consecutive readingerror count → escalate to Manual Entry (NFC-6)
+    this._scanningActive = false; // true while NFC scanning is armed (on scan screen)
     this.currentInterventionTeamId = null; // For GM intervention features
     this.viewController = this._createViewController();
   }
@@ -154,9 +156,38 @@ class App {
     });
 
     this.networkedSession.addEventListener('group:completed', (event) => {
-      const { teamId, bonus } = event.detail || {};
-      const formattedBonus = bonus ? ` +$${bonus.toLocaleString()}` : '';
+      const { teamId, bonusPoints } = event.detail || {};
+      const formattedBonus = bonusPoints ? ` +$${bonusPoints.toLocaleString()}` : '';
       this.uiManager.showToast(`Group completed by ${teamId || 'team'}${formattedBonus}`);
+    });
+
+    // scoreboard:page echo — the GM scanner SENT this navigation command; the
+    // backend rebroadcasts it to the gm room (consumed by the wall scoreboards).
+    // The GM scanner has no embedded scoreboard view, so surface a transient
+    // confirmation that the displays acted on the command. Parity-free: we
+    // reflect the owner / direction, never a page index.
+    this.networkedSession.addEventListener('scoreboard:page', (event) => {
+      const { action, owner } = event.detail || {};
+      let label;
+      if (action === 'owner') label = `Displays → ${owner || 'character'}`;
+      else if (action === 'next') label = 'Displays → next page';
+      else if (action === 'prev') label = 'Displays → prev page';
+      else label = 'Displays updated';
+      this.uiManager.showToast(label);
+    });
+
+    // P3.4: a PERMANENT transaction rejection (backend status 'rejected', e.g.
+    // invalid token) surfaces to the operator AND unmarks the token so the GM can
+    // re-scan after correcting the cause (fixes the token-locked + no-feedback
+    // lost-scan-equivalent). Duplicates are NOT unmarked (genuinely claimed).
+    this.networkedSession.addEventListener('transaction:failed', (event) => {
+      const { transaction, status, message } = event.detail || {};
+      const tokenId = transaction?.tokenId;
+      if (status === 'duplicate') return;
+      this.uiManager.showError(`Scan rejected${tokenId ? ` (${tokenId})` : ''}: ${message || status || 'failed'}`);
+      if (tokenId) {
+        this.dataManager.unmarkTokenAsScanned(tokenId);
+      }
     });
   }
 
@@ -588,6 +619,23 @@ class App {
   }
 
   /**
+   * Record a consecutive NFC read failure and return the message to display.
+   * After 3 consecutive failures — hardware (readingerror) OR logical (a tag
+   * with no usable text record / no usable id) — escalates to the Manual Entry
+   * hint so a bad tag/reader can't dead-end the show (NFC-6). The counter is
+   * reset to 0 on any usable read (see processNFCRead).
+   * @param {string} transientMessage - message shown for the 1st/2nd failure
+   * @returns {string} the message to surface (transient or escalation)
+   * @private
+   */
+  _recordNfcReadFailure(transientMessage) {
+    this.nfcReadErrorCount++;
+    return this.nfcReadErrorCount >= 3
+      ? 'Reader trouble — use the Manual Entry button below.'
+      : transientMessage;
+  }
+
+  /**
    * Start NFC scanning without button state management
    * Called automatically on team confirmation
    * @private
@@ -608,19 +656,38 @@ class App {
       await this.nfcHandler.startScan(
         (result) => this.processNFCRead(result),
         (err) => {
-          this.debug.log(`NFC read error: ${err?.message || err}`, true);
+          // NFC-6: hardware read error. Shares the consecutive-failure counter
+          // with the logical-failure paths in processNFCRead so 3 consecutive
+          // bad taps of EITHER kind surface the Manual Entry hint.
+          const msg = this._recordNfcReadFailure('Read error. Tap token again.');
+          this.debug.log(`NFC read error #${this.nfcReadErrorCount} (type: ${err?.type || err?.message || 'unknown'})`, true);
           if (status) {
-            status.textContent = 'Read error. Tap token again.';
+            status.textContent = msg;
           }
         }
       );
 
+      this._scanningActive = true;
       this.debug.log('NFC scanning started automatically');
     } catch (error) {
       this.debug.log(`NFC start error: ${error.message}`, true);
       if (status) {
         status.textContent = 'NFC unavailable. Use Manual Entry.';
       }
+    }
+  }
+
+  /** Abort the live NFC scan when the page is backgrounded (NFC-3). */
+  pauseNFCForBackground() {
+    if (this.nfcSupported && this._scanningActive) {
+      this.nfcHandler.stopScan(); // NFC-1: aborts the AbortController + nulls the reader
+    }
+  }
+
+  /** Re-arm NFC when the page returns to the foreground, iff it was active (NFC-3). */
+  async resumeNFCForForeground() {
+    if (this.nfcSupported && this._scanningActive) {
+      await this._startNFCScanning(); // NFC-1: idempotent — aborts any prior scan first
     }
   }
 
@@ -639,10 +706,26 @@ class App {
   async processNFCRead(result) {
     // Handle NFC read errors (no serial fallback - errors returned from NFCHandler)
     if (result.source === 'error') {
+      // Logical read failure (no usable text record, no NDEF records, etc.).
+      // Shares the consecutive-failure counter with hardware readingerror so a
+      // misprovisioned/foreign tag tapped repeatedly also escalates (NFC-6).
       this.debug.log(`NFC read failed: ${result.error}`, true);
-      this.uiManager.showError('Could not read token - please re-tap');
+      this.uiManager.showError(this._recordNfcReadFailure('Could not read token - please re-tap'));
       return;
     }
+
+    // Defensive: any non-error source must still carry a usable string id.
+    // manualEntry/simulateScan/future record types could deliver id: null,
+    // which would throw a TypeError in this async (un-awaited) handler.
+    if (typeof result.id !== 'string' || result.id.trim() === '') {
+      this.debug.log(`NFC read returned no usable id (source=${result.source})`, true);
+      this.uiManager.showError(this._recordNfcReadFailure('Could not read token - please re-tap'));
+      return;
+    }
+
+    // A usable read means the reader is working — clear any consecutive
+    // read-error escalation (NFC-6).
+    this.nfcReadErrorCount = 0;
 
     this.debug.log(`Processing token: "${result.id}" (from ${result.source})`);
     this.debug.log(`Token ID length: ${result.id.length} characters`);
@@ -652,6 +735,22 @@ class App {
       this.debug.log('ERROR: No team selected - cannot process token', true);
       this.uiManager.showError('Please select a team before scanning tokens');
       return;
+    }
+
+    // GATE: in networked mode the backend is the authority and rejects transactions
+    // unless the session is active (FR 1.2: rejected when paused/in setup). Block the
+    // scan at the source so the GM gets immediate feedback and no token is marked,
+    // queued, or submitted for a paused/not-started/ended session. (A scan already
+    // in-flight when a pause lands is rejected via the transaction:result 'error'
+    // path — removed + unmarked + toast — so the operator re-scans after resume.)
+    if (this.sessionModeManager && this.sessionModeManager.isNetworked()) {
+      const sessionStatus = this.dataManager.sessionState?.status;
+      if (sessionStatus !== 'active') {
+        const label = (sessionStatus && sessionStatus !== 'disconnected') ? sessionStatus : 'not active';
+        this.debug.log(`Scan blocked: session is ${label}`, true);
+        this.uiManager.showError(`Cannot scan: session is ${label}`);
+        return;
+      }
     }
 
     // Trim any whitespace
@@ -796,6 +895,7 @@ class App {
 
   cancelScan() {
     this.nfcHandler.stopScan();
+    this._scanningActive = false;
     this.currentTeamId = '';
     this.uiManager.updateTeamDisplay('');
     this.uiManager.showScreen('teamEntry');
@@ -808,6 +908,12 @@ class App {
 
   finishTeam() {
     this.currentTeamId = '';
+    // Leaving the scan flow: stop NFC so it isn't armed with no team selected (an
+    // armed tap would be silently rejected by the !currentTeamId guard — a
+    // lost-scan risk) and so the lifecycle re-arm flag (_scanningActive) stays
+    // honest. NFC re-arms when the next team is confirmed (_startNFCScanning).
+    this.nfcHandler.stopScan();
+    this._scanningActive = false;
     // Note: Do NOT clear DataManager session here - scannedTokens must persist
     // across team switches for cross-team duplicate detection
     this.uiManager.updateTeamDisplay('');
@@ -1100,12 +1206,27 @@ class App {
 
       await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
+          // Remove the currently-armed one-shot listener on timeout, else a late
+          // ack would re-invoke ackHandler and re-arm forever (leak). socket/
+          // ackHandler are initialized by the time this fires (+5s).
+          socket.off('gm:command:ack', ackHandler);
           reject(new Error('System reset timeout (5s)'));
         }, 5000);
 
         const socket = this.viewController.adminInstances.sessionManager.connection.socket;
 
-        socket.once('gm:command:ack', (response) => {
+        // AC-3: filter the ack by action. socket.once self-removes after each
+        // fire, so a racing ack for a DIFFERENT command would consume the one-shot
+        // and let the genuine system:reset ack be dropped (false "reset timeout").
+        // Re-arm until response.data.action === 'system:reset' (CommandSender
+        // pattern). Arrow + self-referencing const preserves lexical `this` and
+        // the resolve/reject/timeout closures across re-arms.
+        const ackHandler = (response) => {
+          if (response.data?.action !== 'system:reset') {
+            socket.once('gm:command:ack', ackHandler);
+            return;
+          }
+
           clearTimeout(timeout);
 
           if (response.data && response.data.success) {
@@ -1115,7 +1236,9 @@ class App {
             const errorMsg = response.data?.message || 'Reset failed';
             reject(new Error(errorMsg));
           }
-        });
+        };
+
+        socket.once('gm:command:ack', ackHandler);
 
         socket.emit('gm:command', {
           event: 'gm:command',

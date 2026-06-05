@@ -94,4 +94,20 @@ if (typeof global.TextEncoder === 'undefined') {
   global.TextDecoder = TextDecoder;
 }
 
+// Mock structuredClone. Node 17+ and all modern browsers expose it as a global
+// (production has it), but Jest's sandboxed test environment does not.
+// EQUIVALENCE CAVEAT: this JSON deep-clone matches native structuredClone ONLY
+// while StateStore domains hold strictly JSON-serializable data (no Date / Map /
+// Set / explicit `undefined` values). That holds today — every service domain is
+// deserialized from JSON over the WebSocket. If a future domain ever carried a
+// Date or an explicit `undefined`, native and JSON clone would diverge (native
+// preserves them; JSON stringifies Dates and drops `undefined` keys), which could
+// silently change replace()'s shallow-equality / notification behavior in prod
+// while the test (running the JSON clone) wouldn't see it. Revisit this polyfill
+// if a non-serializable domain is ever added.
+if (typeof global.structuredClone === 'undefined') {
+  global.structuredClone = (value) =>
+    (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+}
+
 // Reset logic moved to test-hooks.js (uses setupFilesAfterEnv)

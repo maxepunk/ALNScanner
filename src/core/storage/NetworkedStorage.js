@@ -54,13 +54,55 @@ export class NetworkedStorage extends IStorageStrategy {
     });
   }
 
+  /** @private Session-scoped localStorage key for the dedup guard. */
+  _scannedKey() {
+    return this.currentSessionId ? `networkedScannedTokens:${this.currentSessionId}` : null;
+  }
+
+  /**
+   * Persist the dedup guard (scannedTokens) under a session-scoped key so it
+   * survives a page reload before sync:full re-populates it (TQ-7).
+   */
+  persistScannedTokens() {
+    const key = this._scannedKey();
+    if (!key) return;
+    try {
+      localStorage.setItem(key, JSON.stringify([...this.scannedTokens]));
+    } catch (e) {
+      this.debug?.log?.(`[NetworkedStorage] persist scannedTokens failed: ${e.message}`, true);
+    }
+  }
+
+  /**
+   * Rehydrate the dedup guard from persisted state (covers the pre-sync:full
+   * window after a reload). Mutates the Set IN PLACE to preserve the shared
+   * reference UnifiedDataManager adopts via _syncScannedTokens.
+   * @private
+   */
+  _rehydrateScannedTokens() {
+    try {
+      const sid = localStorage.getItem('networkedSessionId');
+      if (!sid) return;
+      this.currentSessionId = sid;
+      const saved = localStorage.getItem(this._scannedKey());
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr)) arr.forEach(t => this.scannedTokens.add(t));
+      }
+    } catch (e) {
+      this.debug?.log?.(`[NetworkedStorage] rehydrate scannedTokens failed: ${e.message}`, true);
+    }
+  }
+
   /**
    * Initialize storage
    * Event listeners are handled by NetworkedSession which owns the socket.
+   * Rehydrates the dedup guard so duplicate detection survives reloads even
+   * before sync:full arrives (TQ-7).
    * @returns {Promise<void>}
    */
   async initialize() {
-    // No-op: NetworkedSession handles socket event wiring
+    this._rehydrateScannedTokens();
   }
 
   /**
@@ -88,13 +130,21 @@ export class NetworkedStorage extends IStorageStrategy {
 
     this.debug?.log(`[NetworkedStorage] Submitting transaction: ${transaction.tokenId} for team ${transaction.teamId}`);
 
+    // Backend STRICTLY requires the AsyncAPI envelope {event, data, timestamp}
+    // (adminEvents.js rejects an unwrapped payload with VALIDATION_ERROR). Mirror
+    // the same envelope _emitCommand uses. CC-5.
     this.socket.emit('transaction:submit', {
-      tokenId: transaction.tokenId,
-      teamId: transaction.teamId,
-      deviceId: transaction.deviceId,
-      deviceType: 'gm',
-      mode: transaction.mode,
-      timestamp: transaction.timestamp || new Date().toISOString()
+      event: 'transaction:submit',
+      data: {
+        tokenId: transaction.tokenId,
+        teamId: transaction.teamId,
+        deviceId: transaction.deviceId,
+        deviceType: 'gm',
+        mode: transaction.mode,
+        summary: transaction.summary ?? null,
+        timestamp: transaction.timestamp || new Date().toISOString()
+      },
+      timestamp: new Date().toISOString()
     });
 
     // Mark locally for duplicate prevention
@@ -359,7 +409,12 @@ export class NetworkedStorage extends IStorageStrategy {
    * @param {Array} tokens
    */
   setScannedTokens(tokens) {
-    this.scannedTokens = new Set(tokens);
+    // UNION in place (NOT `new Set`): a gap-scanned-but-unconfirmed token must
+    // survive the server sync, and replacing the Set would desync the reference
+    // UnifiedDataManager shares via _syncScannedTokens. Explicit removals flow
+    // through unmarkTokenAsScanned; new sessions clear via resetForNewSession. TQ-7.
+    (tokens || []).forEach(t => this.scannedTokens.add(t));
+    this.persistScannedTokens();
   }
 
   /**
@@ -387,6 +442,8 @@ export class NetworkedStorage extends IStorageStrategy {
    */
   setSessionId(sessionId) {
     this.currentSessionId = sessionId;
+    // Persist so a future reload can rehydrate the right session-scoped guard (TQ-7).
+    try { localStorage.setItem('networkedSessionId', sessionId); } catch { /* ignore */ }
   }
 
   /**

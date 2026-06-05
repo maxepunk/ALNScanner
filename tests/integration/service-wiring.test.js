@@ -160,7 +160,7 @@ describe('Service Wiring Integration', () => {
       // Note: Verifying initialized === true implicitly confirms admin modules were created
     });
 
-    it('should wire services so connected event triggers queue sync', async () => {
+    it('should NOT sync queue on the connected event (deferred to sync:full, TQ-6)', async () => {
       const initPromise = session.initialize();
 
       // Simulate socket connection
@@ -169,15 +169,15 @@ describe('Service Wiring Integration', () => {
 
       await initPromise;
 
-      // QueueManager should sync after connection
       const queueManager = session.getService('queueManager');
-      // Spy on syncQueue to verify it was called
       const syncSpy = jest.spyOn(queueManager, 'syncQueue');
 
-      // Trigger connected event again to verify wiring
+      // Trigger connected event again. Queue sync is now DEFERRED to the sync:full
+      // handler so replays are reconciled against server state first — the
+      // connected event must NOT trigger it (reconnect-churn / double-replay fix).
       session.services.connectionManager.dispatchEvent(new Event('connected'));
 
-      expect(syncSpy).toHaveBeenCalled();
+      expect(syncSpy).not.toHaveBeenCalled();
     });
 
     it('should use real ConnectionManager for token validation', async () => {

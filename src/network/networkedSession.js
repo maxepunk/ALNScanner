@@ -98,6 +98,9 @@ export class NetworkedSession extends EventTarget {
     }
 
     if (this.services.queueManager) {
+      if (this._txFailedHandler) {
+        this.services.queueManager.removeEventListener('transaction:failed', this._txFailedHandler);
+      }
       this.services.queueManager.destroy();
     }
 
@@ -168,12 +171,11 @@ export class NetworkedSession extends EventTarget {
   _wireEventHandlers() {
     // Store handler references for cleanup
     this._connectedHandler = () => {
-      // On connection: initialize admin and sync queue
+      // On connection: initialize admin only. Queue sync is DEFERRED to the
+      // sync:full handler so server state (deviceScannedTokens) is populated
+      // first and replays can be reconciled against already-recorded scans (TQ-6).
       if (this.services.adminController) {
         this.services.adminController.initialize();
-      }
-      if (this.services.queueManager) {
-        this.services.queueManager.syncQueue();
       }
     };
 
@@ -187,6 +189,13 @@ export class NetworkedSession extends EventTarget {
     this._authRequiredHandler = () => {
       // Forward auth:required event to session listeners
       this.dispatchEvent(new CustomEvent('auth:required'));
+    };
+
+    // P3.4: forward queueManager transaction:failed (a permanent rejection) onto
+    // the session so the app has ONE event source (the session) — mirrors how
+    // group:completed/backend:error are surfaced. App unmarks the token + toasts.
+    this._txFailedHandler = (e) => {
+      this.dispatchEvent(new CustomEvent('transaction:failed', { detail: e.detail }));
     };
 
     // Global WebSocket → DataManager/StateStore event handler
@@ -245,16 +254,21 @@ export class NetworkedSession extends EventTarget {
 
           // Populate StateStore from sync:full (service domain state)
           if (this._store) {
-            if (payload.music) this._store.update('music', payload.music);
-            if (payload.serviceHealth) this._store.update('health', payload.serviceHealth);
-            if (payload.environment?.bluetooth) this._store.update('bluetooth', payload.environment.bluetooth);
-            if (payload.environment?.audio) this._store.update('audio', payload.environment.audio);
-            if (payload.environment?.lighting) this._store.update('lighting', payload.environment.lighting);
-            if (payload.gameClock) this._store.update('gameclock', payload.gameClock);
-            if (payload.cueEngine) this._store.update('cueengine', payload.cueEngine);
-            if (payload.heldItems) this._store.update('held', { items: payload.heldItems });
-            if (payload.videoStatus) this._store.update('video', payload.videoStatus);
-            if (payload.sound) this._store.update('sound', payload.sound);
+            // SR-3/SSR-2: sync:full is an authoritative snapshot — REPLACE each
+            // domain (drop stale keys) rather than merge. A partial/omitted domain
+            // therefore can't leave the renderer showing stale state, and the
+            // sync:full vs service:state shapes can't accumulate orphan keys.
+            // (service:state below stays update() — it's an incremental delta.)
+            if (payload.music) this._store.replace('music', payload.music);
+            if (payload.serviceHealth) this._store.replace('health', payload.serviceHealth);
+            if (payload.environment?.bluetooth) this._store.replace('bluetooth', payload.environment.bluetooth);
+            if (payload.environment?.audio) this._store.replace('audio', payload.environment.audio);
+            if (payload.environment?.lighting) this._store.replace('lighting', payload.environment.lighting);
+            if (payload.gameClock) this._store.replace('gameclock', payload.gameClock);
+            if (payload.cueEngine) this._store.replace('cueengine', payload.cueEngine);
+            if (payload.heldItems) this._store.replace('held', { items: payload.heldItems });
+            if (payload.videoStatus) this._store.replace('video', payload.videoStatus);
+            if (payload.sound) this._store.replace('sound', payload.sound);
           }
 
           // Restore display mode on reconnect (not a StateStore domain — routes to MonitoringDisplay)
@@ -262,6 +276,17 @@ export class NetworkedSession extends EventTarget {
             this.services.client.dispatchEvent(new CustomEvent('message:received', {
               detail: { type: 'display:mode', payload: { mode: payload.displayStatus.currentMode } }
             }));
+          }
+
+          // After server state is restored, reconcile the offline queue against
+          // already-recorded scans, THEN flush remaining entries (TQ-6). Deferred
+          // here (not in _connectedHandler) so deviceScannedTokens is applied first
+          // and replays aren't double-counted against server state.
+          if (this.services?.queueManager) {
+            if (Array.isArray(payload.deviceScannedTokens)) {
+              this.services.queueManager.reconcileWithServerState(payload.deviceScannedTokens);
+            }
+            this.services.queueManager.syncQueue();
           }
           break;
 
@@ -310,6 +335,37 @@ export class NetworkedSession extends EventTarget {
           }));
           break;
 
+        case 'scoreboard:page':
+          // Echo of a GM scoreboard navigation command (next/prev/owner). The
+          // GM scanner has no embedded scoreboard view (the wall displays render
+          // it), so we forward this for a transient operator confirmation only.
+          // Parity-free: we relay action/owner, never a page index (page sets
+          // are computed per-display from viewport height, so an index would
+          // desync). app.js surfaces the confirmation toast.
+          this.dispatchEvent(new CustomEvent('scoreboard:page', {
+            detail: payload
+          }));
+          break;
+
+        case 'error': {
+          // Backend error event (AsyncAPI Decision #10: clients MUST display).
+          // AUTH-7: post-connection auth/permission failures route into the same
+          // auth:required flow the handshake path uses (app.js shows the wizard) and
+          // clear the now-known-bad token (L-5/AUTH-5 defense-in-depth, mirrors
+          // connectionManager's handshake-path clear). Broadened to any AUTH_* code
+          // + PERMISSION_DENIED. backend:error stays UNCONDITIONAL so a future
+          // auth-code toast consumer still fires (do NOT make it else-only).
+          const code = payload?.code;
+          if (typeof code === 'string' && (code.startsWith('AUTH_') || code === 'PERMISSION_DENIED')) {
+            try { localStorage.removeItem('aln_auth_token'); } catch (e) { /* private mode */ }
+            this.dispatchEvent(new CustomEvent('auth:required'));
+          }
+          this.dispatchEvent(new CustomEvent('backend:error', {
+            detail: { code, message: payload?.message }
+          }));
+          break;
+        }
+
         // Unified service:state → StateStore
         // All service domain state (video, cue, music, audio, bluetooth,
         // lighting, health, held, gameclock) arrives via this single event
@@ -326,6 +382,7 @@ export class NetworkedSession extends EventTarget {
     this.services.connectionManager.addEventListener('disconnected', this._disconnectedHandler);
     this.services.connectionManager.addEventListener('auth:required', this._authRequiredHandler);
     this.services.client.addEventListener('message:received', this._messageHandler);
+    this.services.queueManager.addEventListener('transaction:failed', this._txFailedHandler);
   }
 
   /**
@@ -340,6 +397,13 @@ export class NetworkedSession extends EventTarget {
     // Only reset when session ID actually changes (new session started)
     if (newSessionId && newSessionId !== currentSessionId) {
       this.dataManager.resetForNewSession(newSessionId);
+      // A genuine NEW session means any offline-queued scans belong to a DEAD
+      // session — discard them so syncQueue doesn't replay them into the new
+      // session (the backend would score them, since the tokens aren't yet
+      // scanned there → phantom transactions / score inflation). A transient
+      // orchestrator restart restores the SAME id (no boundary), so same-session
+      // offline scans are preserved and still flush. Review fix (cross-session).
+      this.services?.queueManager?.clearQueue();
     }
   }
 

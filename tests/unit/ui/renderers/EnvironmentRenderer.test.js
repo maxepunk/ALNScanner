@@ -73,7 +73,7 @@ describe('EnvironmentRenderer', () => {
     it('should mark active scene tile', () => {
       renderer.renderLighting({
         connected: true,
-        activeScene: { id: 'tension' },
+        activeScene: 'tension',   // backend sends the entity_id string (SR-1)
         scenes,
       });
 
@@ -125,7 +125,7 @@ describe('EnvironmentRenderer', () => {
     it('should toggle active scene without rebuilding grid', () => {
       renderer.renderLighting({
         connected: true,
-        activeScene: { id: 'arrival' },
+        activeScene: 'arrival',
         scenes,
       });
 
@@ -135,7 +135,7 @@ describe('EnvironmentRenderer', () => {
       // Change active scene
       renderer.renderLighting({
         connected: true,
-        activeScene: { id: 'tension' },
+        activeScene: 'tension',   // backend sends the entity_id string (SR-1)
         scenes,
       });
 
@@ -149,7 +149,7 @@ describe('EnvironmentRenderer', () => {
     it('should handle clearing active scene', () => {
       renderer.renderLighting({
         connected: true,
-        activeScene: { id: 'arrival' },
+        activeScene: 'arrival',
         scenes,
       });
 
@@ -165,7 +165,7 @@ describe('EnvironmentRenderer', () => {
     it('should reset scene cache when disconnected', () => {
       renderer.renderLighting({
         connected: true,
-        activeScene: { id: 'arrival' },
+        activeScene: 'arrival',
         scenes,
       });
 
@@ -175,7 +175,7 @@ describe('EnvironmentRenderer', () => {
       // Reconnect — should rebuild (not reuse stale cache)
       renderer.renderLighting({
         connected: true,
-        activeScene: { id: 'tension' },
+        activeScene: 'tension',   // backend sends the entity_id string (SR-1)
         scenes,
       });
 
@@ -359,6 +359,22 @@ describe('EnvironmentRenderer', () => {
   });
 
   describe('Bluetooth', () => {
+    it('should not render discovered (un-paired) devices — dead path removed (SR-4)', () => {
+      // discoveredDevices is NOT part of bluetoothService.getState(); it must be
+      // ignored even if present (operational model is pair-then-connect known speakers).
+      renderer.renderBluetooth({
+        scanning: false,
+        connectedDevices: [],
+        pairedDevices: [{ address: 'AA:BB', name: 'MaxEBeats' }],
+        discoveredDevices: [{ address: 'CC:DD', name: 'StrangerSpeaker' }],
+      });
+
+      const list = document.getElementById('bt-device-list');
+      expect(list.textContent).toContain('MaxEBeats');
+      expect(list.textContent).not.toContain('StrangerSpeaker');
+      expect(list.querySelectorAll('.bt-device-item')).toHaveLength(1);
+    });
+
     it('should render disconnect button for connected devices', () => {
       renderer.renderBluetooth({
         scanning: false,
@@ -380,17 +396,6 @@ describe('EnvironmentRenderer', () => {
       });
 
       const btn = document.querySelector('[data-action="admin.connectBtDevice"]');
-      expect(btn).not.toBeNull();
-    });
-
-    it('should show pair button for discovered devices', () => {
-      renderer.renderBluetooth({
-        scanning: false,
-        connectedDevices: [],
-        discoveredDevices: [{ address: 'AA:BB:CC:DD:EE:FF', name: 'Speaker' }],
-      });
-
-      const btn = document.querySelector('[data-action="admin.pairBtDevice"]');
       expect(btn).not.toBeNull();
     });
 
@@ -440,7 +445,7 @@ describe('EnvironmentRenderer', () => {
       renderer.renderBluetooth({
         scanning: false,
         connectedDevices: [{ address: 'AA:BB', name: 'S1' }],
-        discoveredDevices: [{ address: 'CC:DD', name: 'S2' }],
+        pairedDevices: [{ address: 'CC:DD', name: 'S2' }],
       });
 
       expect(document.getElementById('bt-speaker-count').textContent).toBe('2');
@@ -483,8 +488,7 @@ describe('EnvironmentRenderer', () => {
     it('should use address as fallback name', () => {
       renderer.renderBluetooth({
         scanning: false,
-        connectedDevices: [],
-        discoveredDevices: [{ address: 'AA:BB:CC:DD:EE:FF' }],
+        connectedDevices: [{ address: 'AA:BB:CC:DD:EE:FF' }],
       });
 
       expect(document.querySelector('.bt-device-name').textContent).toBe('AA:BB:CC:DD:EE:FF');
@@ -513,42 +517,115 @@ describe('EnvironmentRenderer', () => {
       renderer.renderBluetooth({
         scanning: false,
         connectedDevices: [],
-        discoveredDevices: [{ address: 'AA:BB', name: 'S1' }],
+        pairedDevices: [{ address: 'AA:BB', name: 'S1' }],
       });
 
-      expect(document.querySelector('[data-action="admin.pairBtDevice"]')).toBeTruthy();
+      expect(document.querySelector('[data-action="admin.connectBtDevice"]')).toBeTruthy();
 
       // Device now connected
       renderer.renderBluetooth({
         scanning: false,
         connectedDevices: [{ address: 'AA:BB', name: 'S1' }],
-        discoveredDevices: [],
+        pairedDevices: [],
       });
 
       expect(document.querySelector('[data-action="admin.disconnectBtDevice"]')).toBeTruthy();
-      expect(document.querySelector('[data-action="admin.pairBtDevice"]')).toBeNull();
+      expect(document.querySelector('[data-action="admin.connectBtDevice"]')).toBeNull();
     });
 
     it('should rebuild when new device added', () => {
       renderer.renderBluetooth({
         scanning: false,
         connectedDevices: [],
-        discoveredDevices: [{ address: 'AA:BB', name: 'S1' }],
+        pairedDevices: [{ address: 'AA:BB', name: 'S1' }],
       });
 
       expect(document.querySelectorAll('.bt-device-item')).toHaveLength(1);
 
-      // New device discovered
+      // New device paired
       renderer.renderBluetooth({
         scanning: false,
         connectedDevices: [],
-        discoveredDevices: [
+        pairedDevices: [
           { address: 'AA:BB', name: 'S1' },
           { address: 'CC:DD', name: 'S2' },
         ],
       });
 
       expect(document.querySelectorAll('.bt-device-item')).toHaveLength(2);
+    });
+  });
+
+  describe('Audio Routing - selector escaping', () => {
+    // These tests verify that CSS metacharacters in stream keys (routes / volumes)
+    // do NOT cause querySelector SyntaxErrors that abort the update loop before
+    // reaching legitimate enum keys (video / music / sound).
+    //
+    // Pre-fix behaviour: `select[data-stream="a"b"]` is invalid CSS — jsdom throws
+    // DOMException (SyntaxError), aborting the forEach before 'video' is updated.
+    // Post-fix: escapeCssAttrValue escapes the quote, making an invalid-but-safe
+    // selector that simply matches nothing; the loop continues to 'video'.
+
+    const sinks = [
+      { name: 'hdmi', label: 'HDMI' },
+      { name: 'bluetooth', label: 'BT' },
+    ];
+
+    it('routes metachar key (rebuild path, ~L163): does not throw and video dropdown is still updated', () => {
+      // First call with sinks to prime _lastSinkKey
+      renderer.renderAudio({ availableSinks: sinks, routes: { video: 'hdmi' } });
+
+      // New sink set triggers dropdown rebuild; re-apply routes via L163 path.
+      // 'a"b' is before 'video' alphabetically in Object.entries order, so if
+      // the loop aborts on the bad key, video will never be set to 'bluetooth'.
+      const newSinks = [...sinks, { name: 'extra', label: 'Extra' }];
+      expect(() => {
+        renderer.renderAudio({
+          availableSinks: newSinks,
+          routes: { 'a"b': 'hdmi', video: 'bluetooth' },
+        });
+      }).not.toThrow();
+
+      // If loop completed past the bad key, the video dropdown should be 'bluetooth'
+      const videoDropdown = document.querySelector('select[data-stream="video"]');
+      expect(videoDropdown).not.toBeNull();
+      expect(videoDropdown.value).toBe('bluetooth');
+    });
+
+    it('routes metachar key (differential path, ~L182): does not throw and video dropdown is still updated', () => {
+      // Prime the renderer with sinks so _lastSinkKey is set (differential path)
+      renderer.renderAudio({ availableSinks: sinks, routes: { video: 'hdmi' } });
+
+      // Same sinks → goes to differential update path (L182), NOT rebuild.
+      // Bad key 'a"b' is processed first; if unescaped it aborts the loop before video.
+      expect(() => {
+        renderer.renderAudio({
+          availableSinks: sinks,
+          routes: { 'a"b': 'hdmi', video: 'bluetooth' },
+        });
+      }).not.toThrow();
+
+      const videoDropdown = document.querySelector('select[data-stream="video"]');
+      expect(videoDropdown).not.toBeNull();
+      expect(videoDropdown.value).toBe('bluetooth');
+    });
+
+    it('volumes metachar key (_applyVolumes, ~L245): does not throw and video slider is still updated', () => {
+      // Build dropdowns first so the slider DOM exists
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: { video: 100 } });
+
+      // Pass bad volumes key before 'video' so an unescaped querySelector aborts before updating slider
+      expect(() => {
+        renderer.renderAudio({
+          availableSinks: sinks,
+          routes: {},
+          volumes: { 'a"b': 50, video: 42 },
+        });
+      }).not.toThrow();
+
+      const videoSlider = document.querySelector('input[data-stream="video"]');
+      expect(videoSlider).not.toBeNull();
+      expect(videoSlider.value).toBe('42');
     });
   });
 

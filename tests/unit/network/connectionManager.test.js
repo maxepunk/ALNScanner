@@ -185,12 +185,18 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       expect(connectionManager.state).toBe('connected');
     });
 
-    it('should reset retry count on successful connection', async () => {
+    it('does NOT reset retryCount on successful connection — reset happens on stable-session drop (NC-2)', async () => {
+      // NC-2: retryCount is no longer zeroed on every connect. A flapping endpoint
+      // (connect succeeds → server kicks → reconnect) would have reset the backoff on
+      // each brief success, forever hammering at ~1s. Instead, retryCount resets ONLY
+      // when a session lasted ≥ MIN_STABLE_MS before dropping (see _setupReconnectionHandler).
       connectionManager.retryCount = 3;
 
       await connectionManager.connect();
 
-      expect(connectionManager.retryCount).toBe(0);
+      // retryCount stays 3 — the connect did NOT reset it.
+      // (A fresh ConnectionManager naturally starts at 0, so the normal case is unaffected.)
+      expect(connectionManager.retryCount).toBe(3);
     });
 
     it('should emit auth:required on token expiry', async () => {
@@ -226,7 +232,7 @@ describe('ConnectionManager - Connection Lifecycle', () => {
 
       // Mock connect to resolve immediately and call done
       jest.spyOn(connectionManager, 'connect').mockImplementation(async () => {
-        expect(true).toBe(true); // Reconnect was attempted
+        expect(connectionManager.state).toBe('disconnected'); // reconnect fired from a disconnected state
         done();
       });
 
@@ -266,20 +272,139 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       expect(connectSpy).not.toHaveBeenCalled();
     });
 
-    it('should emit disconnected event on disconnect', async () => {
-      const disconnectedHandler = jest.fn();
-      connectionManager.addEventListener('disconnected', disconnectedHandler);
+    it('should auto-reconnect on transport close (Wi-Fi blip)', (done) => {
+      connectionManager.token = createValidToken();
 
-      // Simulate disconnect
+      jest.spyOn(connectionManager, 'connect').mockImplementation(async () => {
+        expect(connectionManager.state).toBe('disconnected'); // reconnect fired from a disconnected state
+        done();
+      });
+
       const disconnectHandler = mockClient.addEventListener.mock.calls
         .find(c => c[0] === 'socket:disconnected')[1];
 
       disconnectHandler({ detail: { reason: 'transport close' } });
+    });
+
+    it('should auto-reconnect on ping timeout', (done) => {
+      connectionManager.token = createValidToken();
+
+      jest.spyOn(connectionManager, 'connect').mockImplementation(async () => {
+        expect(connectionManager.state).toBe('disconnected'); // reconnect fired from a disconnected state
+        done();
+      });
+
+      const disconnectHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'socket:disconnected')[1];
+
+      disconnectHandler({ detail: { reason: 'ping timeout' } });
+    });
+
+    it('should emit disconnected event on disconnect', async () => {
+      const disconnectedHandler = jest.fn();
+      connectionManager.addEventListener('disconnected', disconnectedHandler);
+
+      // Use a client-initiated reason so no reconnect timer is scheduled.
+      const disconnectHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'socket:disconnected')[1];
+
+      disconnectHandler({ detail: { reason: 'io client disconnect' } });
 
       expect(disconnectedHandler).toHaveBeenCalledWith(expect.objectContaining({
-        detail: { reason: 'transport close' }
+        detail: { reason: 'io client disconnect' }
       }));
       expect(connectionManager.state).toBe('disconnected');
+    });
+
+    it('does not stack multiple reconnects on rapid repeated disconnects (M2)', () => {
+      jest.useFakeTimers();
+      try {
+        connectionManager.token = createValidToken();
+        const connectSpy = jest.spyOn(connectionManager, 'connect').mockResolvedValue();
+
+        const disconnectHandler = mockClient.addEventListener.mock.calls
+          .find(c => c[0] === 'socket:disconnected')[1];
+
+        // Two rapid transport drops must not schedule two competing reconnects.
+        disconnectHandler({ detail: { reason: 'transport close' } });
+        disconnectHandler({ detail: { reason: 'transport close' } });
+
+        jest.advanceTimersByTime(60000); // cover any jittered backoff + 30s cap
+
+        expect(connectSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('disconnect() cancels a pending auto-reconnect (M2)', async () => {
+      connectionManager.token = createValidToken();
+      jest.spyOn(connectionManager, 'connect').mockResolvedValue();
+
+      const disconnectHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'socket:disconnected')[1];
+
+      // A transport drop schedules a cancellable reconnect...
+      disconnectHandler({ detail: { reason: 'transport close' } });
+      expect(connectionManager.retryTimer).not.toBeNull();
+
+      // ...which an explicit disconnect() must cancel.
+      await connectionManager.disconnect();
+      expect(connectionManager.retryTimer).toBeNull();
+    });
+
+    it('reschedules a retry when checkHealth() fails on an auto-reconnect (NC-1)', async () => {
+      jest.useFakeTimers();
+      try {
+        connectionManager.token = createValidToken();
+        const healthSpy = jest.spyOn(connectionManager, 'checkHealth').mockResolvedValue(false);
+
+        // A transport drop arms the first auto-reconnect timer.
+        const disconnectHandler = mockClient.addEventListener.mock.calls
+          .find(c => c[0] === 'socket:disconnected')[1];
+        disconnectHandler({ detail: { reason: 'transport close' } });
+        expect(connectionManager.retryTimer).not.toBeNull();
+
+        // Fire ONLY the currently-pending timer (the first reconnect attempt).
+        // runOnlyPendingTimersAsync does NOT run timers created during that execution,
+        // so the second-attempt timer (scheduled in the catch) stays pending.
+        await jest.runOnlyPendingTimersAsync();
+
+        expect(healthSpy).toHaveBeenCalled();
+        expect(connectionManager.retryCount).toBeGreaterThanOrEqual(1); // catch ran
+        expect(connectionManager.retryTimer).not.toBeNull();            // loop self-perpetuates
+      } finally {
+        connectionManager._clearRetryTimer();
+        jest.useRealTimers();
+      }
+    });
+
+    it('escalates backoff for a flapping endpoint and resets only after a stable session (NC-2)', async () => {
+      jest.useFakeTimers();
+      try {
+        connectionManager.token = createValidToken();
+        jest.spyOn(connectionManager, 'checkHealth').mockResolvedValue(true);
+        const disconnectHandler = mockClient.addEventListener.mock.calls
+          .find(c => c[0] === 'socket:disconnected')[1];
+
+        // Seed an elevated backoff (as if prior retries climbed).
+        connectionManager.retryCount = 3;
+
+        // FLAP: a sub-MIN_STABLE_MS session that drops must NOT reset retryCount.
+        connectionManager._connectedAt = Date.now(); // "just connected"
+        disconnectHandler({ detail: { reason: 'transport close' } });
+        expect(connectionManager.retryCount).toBe(3); // not reset by a brief session
+
+        connectionManager._clearRetryTimer();
+
+        // STABLE: a session that lasted >= MIN_STABLE_MS resets backoff on drop.
+        connectionManager._connectedAt = Date.now() - 15000; // 15s uptime
+        disconnectHandler({ detail: { reason: 'transport close' } });
+        expect(connectionManager.retryCount).toBe(0);
+      } finally {
+        connectionManager._clearRetryTimer();
+        jest.useRealTimers();
+      }
     });
   });
 
@@ -305,24 +430,25 @@ describe('ConnectionManager - Connection Lifecycle', () => {
       jest.useRealTimers();
     });
 
-    it('should use exponential backoff delays (1s, 2s, 4s, 8s, 16s, 30s max)', async () => {
-      const delays = [];
+    it('should use jittered exponential backoff with 1s base for the first retry', () => {
+      // retryCount is the post-increment value: 1 = first retry.
+      // base * 2^(retryCount-1), capped at 30s, +/- 20% jitter.
+      const cases = [
+        { retryCount: 1, center: 1000 },
+        { retryCount: 2, center: 2000 },
+        { retryCount: 3, center: 4000 },
+        { retryCount: 4, center: 8000 },
+        { retryCount: 5, center: 16000 },
+        { retryCount: 6, center: 30000 }, // capped
+        { retryCount: 7, center: 30000 }, // capped
+      ];
 
-      for (let i = 0; i < 7; i++) {
-        connectionManager.retryCount = i;
+      for (const { retryCount, center } of cases) {
+        connectionManager.retryCount = retryCount;
         const delay = connectionManager._calculateRetryDelay();
-        delays.push(delay);
+        expect(delay).toBeGreaterThanOrEqual(center * 0.8);
+        expect(delay).toBeLessThanOrEqual(center * 1.2);
       }
-
-      expect(delays).toEqual([
-        1000,  // 1s
-        2000,  // 2s
-        4000,  // 4s
-        8000,  // 8s
-        16000, // 16s
-        30000, // 30s (capped)
-        30000  // 30s (capped)
-      ]);
     });
 
     it('should emit auth:required after max retries', (done) => {
@@ -357,6 +483,177 @@ describe('ConnectionManager - Connection Lifecycle', () => {
 
       // Should not schedule retry (retryTimer stays null)
       expect(connectionManager.retryTimer).toBeNull();
+    });
+  });
+
+  describe('connect_error handling', () => {
+    beforeEach(async () => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true });
+      await connectionManager.connect();
+    });
+
+    // Defensive: P1a.4's DEVICE_ID_COLLISION test schedules a real retry timer.
+    // Clear it after each test so it can't fire during a later test (pollution)
+    // or keep the Jest worker alive (open handle).
+    afterEach(() => {
+      connectionManager._clearRetryTimer();
+    });
+
+    it('should register a socket:error listener on the client', () => {
+      expect(mockClient.addEventListener).toHaveBeenCalledWith(
+        'socket:error',
+        expect.any(Function)
+      );
+    });
+
+    it('should capture the reject reason from socket:error', () => {
+      const errorHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'socket:error')[1];
+
+      errorHandler({ detail: { reason: 'DEVICE_ID_COLLISION', error: new Error('x') } });
+
+      expect(connectionManager._lastErrorReason).toBe('DEVICE_ID_COLLISION');
+    });
+
+    it('should skip retries and dispatch auth:required on AUTH_INVALID', async () => {
+      const authHandler = jest.fn();
+      connectionManager.addEventListener('auth:required', authHandler);
+
+      // Simulate a real failing handshake: OrchestratorClient fires socket:error
+      // (carrying the reason) and THEN client.connect() rejects. The reason is set
+      // via the freshly-registered error handler so it survives _setupErrorHandler()'s
+      // NC-3 stale-clear (NC-3 resets _lastErrorReason when _setupErrorHandler runs).
+      mockClient.connect.mockImplementationOnce(async () => {
+        // Fire the error handler that _setupErrorHandler() just registered for THIS attempt.
+        const calls = mockClient.addEventListener.mock.calls.filter(c => c[0] === 'socket:error');
+        const currentErrorHandler = calls[calls.length - 1]?.[1];
+        if (currentErrorHandler) {
+          currentErrorHandler({ detail: { reason: 'AUTH_INVALID', error: new Error('AUTH_INVALID: bad token') } });
+        }
+        throw new Error('AUTH_INVALID: Invalid or expired token');
+      });
+      connectionManager.token = createValidToken(); // token passes local expiry check; server rejected it
+
+      await expect(connectionManager.connect()).rejects.toThrow('AUTH_INVALID');
+
+      expect(authHandler).toHaveBeenCalledWith(expect.objectContaining({
+        detail: { reason: 'auth_failed' }
+      }));
+      expect(connectionManager.retryTimer).toBeNull(); // no retry scheduled
+      expect(connectionManager.token).toBeNull();       // stale token cleared
+    });
+
+    it('should still schedule a retry on DEVICE_ID_COLLISION', async () => {
+      // Simulate a real failing handshake: OrchestratorClient fires socket:error
+      // (carrying the reason) and THEN client.connect() rejects.
+      mockClient.connect.mockImplementationOnce(async () => {
+        const calls = mockClient.addEventListener.mock.calls.filter(c => c[0] === 'socket:error');
+        const currentErrorHandler = calls[calls.length - 1]?.[1];
+        if (currentErrorHandler) {
+          currentErrorHandler({ detail: { reason: 'DEVICE_ID_COLLISION', error: new Error('x') } });
+        }
+        throw new Error('DEVICE_ID_COLLISION: in use');
+      });
+      connectionManager.token = createValidToken();
+
+      await expect(connectionManager.connect()).rejects.toThrow('DEVICE_ID_COLLISION');
+
+      expect(connectionManager.retryTimer).not.toBeNull();
+      expect(connectionManager.retryCount).toBe(1);
+    });
+
+    it('does not mis-apply a stale AUTH_* reason from an earlier session to a later transient reject (NC-3)', async () => {
+      // beforeEach already established a successful connect. Grab the registered socket:error handler.
+      const errorHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'socket:error')[1];
+
+      // A late connect_error during the healthy session writes _lastErrorReason.
+      errorHandler({ detail: { reason: 'AUTH_INVALID', error: new Error('x') } });
+
+      const authHandler = jest.fn();
+      connectionManager.addEventListener('auth:required', authHandler);
+
+      // A SUBSEQUENT reconnect rejects transiently with NO fresh socket:error
+      // (mirrors OrchestratorClient's 'Connection timeout' reject path).
+      mockClient.connect.mockRejectedValueOnce(new Error('Connection timeout'));
+      connectionManager.token = createValidToken();
+
+      await expect(connectionManager.connect()).rejects.toThrow('Connection timeout');
+
+      expect(authHandler).not.toHaveBeenCalledWith(expect.objectContaining({
+        detail: { reason: 'auth_failed' }
+      }));
+      expect(connectionManager.token).not.toBeNull();      // token preserved
+      expect(connectionManager.retryTimer).not.toBeNull();  // retry scheduled
+      expect(connectionManager.retryCount).toBe(1);
+    });
+  });
+
+  describe('first-connect error capture (M1)', () => {
+    beforeEach(() => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true });
+    });
+
+    afterEach(() => {
+      connectionManager._clearRetryTimer();
+    });
+
+    it('captures AUTH_INVALID on the very first connect and re-prompts (no prior successful connect)', async () => {
+      const authHandler = jest.fn();
+      connectionManager.addEventListener('auth:required', authHandler);
+
+      // Simulate a real failing handshake: OrchestratorClient fires socket:error
+      // (carrying the reason) and THEN client.connect() rejects. This exercises the
+      // real capture chain (socket:error -> _lastErrorReason -> catch), unlike the
+      // sibling tests that pre-set _lastErrorReason directly.
+      mockClient.connect.mockImplementation(async () => {
+        const errorHandler = mockClient.addEventListener.mock.calls
+          .find(c => c[0] === 'socket:error')?.[1];
+        if (errorHandler) {
+          errorHandler({ detail: { reason: 'AUTH_INVALID', error: new Error('AUTH_INVALID: bad token') } });
+        }
+        throw new Error('AUTH_INVALID: bad token');
+      });
+      connectionManager.token = createValidToken();
+
+      await expect(connectionManager.connect()).rejects.toThrow('AUTH_INVALID');
+
+      // The error handler must have been registered BEFORE the handshake so the
+      // reason was captured and the catch re-prompted instead of blindly retrying.
+      expect(authHandler).toHaveBeenCalledWith(expect.objectContaining({
+        detail: { reason: 'auth_failed' }
+      }));
+      expect(connectionManager.token).toBeNull();
+      expect(connectionManager.retryTimer).toBeNull();
+    });
+  });
+
+  describe('concurrent connect (single-flight)', () => {
+    beforeEach(() => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true });
+    });
+
+    it('dedups concurrent connect() calls so only one socket is opened', async () => {
+      connectionManager.token = createValidToken();
+
+      // Two callers race (e.g. a reconnect/retry timer firing while a manual or
+      // page-foreground connect is already in flight).
+      const p1 = connectionManager.connect();
+      const p2 = connectionManager.connect();
+      await Promise.all([p1, p2]);
+
+      // Single-flight: the underlying client.connect runs exactly once.
+      expect(mockClient.connect).toHaveBeenCalledTimes(1);
+    });
+
+    it('allows a fresh connect after the in-flight one settles', async () => {
+      connectionManager.token = createValidToken();
+
+      await connectionManager.connect();
+      await connectionManager.connect();
+
+      // Sequential (non-overlapping) connects are NOT deduped.
+      expect(mockClient.connect).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -413,6 +710,51 @@ describe('ConnectionManager - Connection Lifecycle', () => {
         newToken,
         expect.any(Object)
       );
+    });
+  });
+
+  describe('auth:required clears stale token (AUTH-5)', () => {
+    it('removes aln_auth_token when connecting with an expired token', async () => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true });
+      localStorage.setItem('aln_auth_token', 'stale-jwt');
+      connectionManager.token = createExpiredToken();
+
+      await expect(connectionManager.connect()).rejects.toThrow();
+
+      expect(localStorage.getItem('aln_auth_token')).toBeNull();
+    });
+
+    it('removes aln_auth_token when a server disconnect finds the token expired', async () => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true });
+      await connectionManager.connect(); // establish + register socket:disconnected handler
+      localStorage.setItem('aln_auth_token', 'stale-jwt');
+      connectionManager.token = createExpiredToken();
+
+      const disconnectHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'socket:disconnected')[1];
+      disconnectHandler({ detail: { reason: 'io server disconnect' } });
+
+      expect(localStorage.getItem('aln_auth_token')).toBeNull();
+    });
+
+    it('PRESERVES a still-valid token when retries are exhausted by a transient failure (AUTH-5)', async () => {
+      // max_retries is reached for transient drops (collision/transport), NOT bad
+      // credentials. A still-valid token must survive so a reload can auto-reconnect
+      // without forcing the GM to re-type the admin password mid-show.
+      global.fetch = jest.fn().mockResolvedValue({ ok: true });
+      mockClient.connect.mockRejectedValue(new Error('Connection failed')); // transient, not auth
+      connectionManager.maxRetries = 1; // first failure exhausts → max_retries branch
+      connectionManager.token = createValidToken();
+      localStorage.setItem('aln_auth_token', 'valid-jwt');
+
+      const authRequiredSpy = jest.fn();
+      connectionManager.addEventListener('auth:required', authRequiredSpy);
+
+      await expect(connectionManager.connect()).rejects.toThrow();
+
+      // max_retries was dispatched, but the valid token is NOT wiped.
+      expect(authRequiredSpy).toHaveBeenCalled();
+      expect(localStorage.getItem('aln_auth_token')).toBe('valid-jwt');
     });
   });
 });

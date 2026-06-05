@@ -24,40 +24,46 @@ describe('TokenManager - ES6 Module', () => {
   });
 
   describe('loadDatabase', () => {
-    it('should load tokens from data/tokens.json', async () => {
+    it('should fetch tokens.json (dist root) FIRST, before data/tokens.json (HTTP-3)', async () => {
       const mockTokens = {
         "token1": { SF_RFID: "token1", SF_ValueRating: 3, SF_MemoryType: "Technical" }
       };
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        url: 'data/tokens.json',
+        url: 'tokens.json',
+        headers: { get: () => 'application/json' },
         json: () => Promise.resolve(mockTokens)
       });
 
       const result = await TokenManager.loadDatabase();
 
       expect(result).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(1); // root hit on first try, no data/ round-trip
+      expect(global.fetch).toHaveBeenNthCalledWith(1, 'tokens.json');
       expect(TokenManager.database).toEqual(mockTokens);
       expect(TokenManager.groupInventory).toBeDefined();
     });
 
-    it('should fallback to root tokens.json if data/ fails', async () => {
+    it('should fall back to data/tokens.json when root is missing (HTTP-3)', async () => {
       const mockTokens = {
         "token2": { SF_RFID: "token2", SF_ValueRating: 5, SF_MemoryType: "Business" }
       };
 
       global.fetch
-        .mockResolvedValueOnce({ ok: false }) // data/tokens.json fails
-        .mockResolvedValueOnce({ // tokens.json succeeds
+        .mockResolvedValueOnce({ ok: false }) // tokens.json (root) missing
+        .mockResolvedValueOnce({ // data/tokens.json succeeds (dev/back-compat)
           ok: true,
-          url: 'tokens.json',
+          url: 'data/tokens.json',
+          headers: { get: () => 'application/json' },
           json: () => Promise.resolve(mockTokens)
         });
 
       const result = await TokenManager.loadDatabase();
 
       expect(result).toBe(true);
+      expect(global.fetch).toHaveBeenNthCalledWith(1, 'tokens.json');
+      expect(global.fetch).toHaveBeenNthCalledWith(2, 'data/tokens.json');
       expect(TokenManager.database).toEqual(mockTokens);
     });
 
@@ -68,6 +74,37 @@ describe('TokenManager - ES6 Module', () => {
       const result = await TokenManager.loadDatabase();
 
       // Database loading failed - returns false, database stays empty
+      expect(result).toBe(false);
+      expect(Object.keys(TokenManager.database).length).toBe(0);
+    });
+
+    it('should return false (not crash) when a 200 returns the HTML SPA shell (HTTP-4)', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        url: 'tokens.json',
+        headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'text/html' : null) },
+        // json() RESOLVES to a non-empty object so ONLY the content-type guard can
+        // produce the false/empty-DB outcome — deleting the guard would let this
+        // parse through to a "loaded" DB and make the test fail (no phantom pass).
+        json: () => Promise.resolve({ looksLikeAToken: { SF_RFID: 'x', SF_ValueRating: 1, SF_MemoryType: 'Personal' } })
+      });
+
+      const result = await TokenManager.loadDatabase();
+
+      expect(result).toBe(false);
+      expect(Object.keys(TokenManager.database).length).toBe(0);
+    });
+
+    it('should reject a 200 that returns an empty/invalid token map (HTTP-4)', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        url: 'tokens.json',
+        headers: { get: () => 'application/json' },
+        json: () => Promise.resolve({})
+      });
+
+      const result = await TokenManager.loadDatabase();
+
       expect(result).toBe(false);
       expect(Object.keys(TokenManager.database).length).toBe(0);
     });

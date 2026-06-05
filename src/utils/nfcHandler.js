@@ -9,6 +9,7 @@ import Debug from './debug.js';
 class NFCHandlerClass {
   constructor() {
     this.reader = null;
+    this.abortController = null;
     this.isScanning = false;
     this.lastRead = null;       // { id: string, timestamp: number }
     this.debounceMs = 2000;     // Ignore same tag within 2 seconds
@@ -33,7 +34,15 @@ class NFCHandlerClass {
     }
 
     try {
+      // Idempotent re-arm: tear down any prior scan before starting a new one
+      // (called on every team confirmation + lifecycle resume — prevents leaked
+      //  readers/listeners and a single tap processed by more than one listener).
+      if (this.abortController) {
+        this.stopScan();
+      }
+
       this.reader = new NDEFReader();
+      this.abortController = new AbortController();
 
       // CRITICAL: Attach event listeners BEFORE calling scan()
       // Otherwise events may fire before listeners are registered
@@ -64,12 +73,15 @@ class NFCHandlerClass {
       });
 
       this.reader.addEventListener("readingerror", (event) => {
-        Debug.log(`NFC Read Error: ${event}`, true);
+        // readingerror events carry no `message`; log the event type (the only
+        // meaningful field) instead of stringifying the raw Event to [object Event].
+        Debug.log(`NFC Read Error (event type: ${event?.type || 'unknown'})`, true);
         if (onError) onError(event);
       });
 
-      // NOW start scanning - listeners are ready to catch events
-      await this.reader.scan();
+      // NOW start scanning - listeners are ready to catch events.
+      // Pass the abort signal so stopScan() can truly stop the radio.
+      await this.reader.scan({ signal: this.abortController.signal });
       this.isScanning = true;
 
     } catch (error) {
@@ -101,65 +113,52 @@ class NFCHandlerClass {
       };
     }
 
-    // Process records using the Web NFC API
+    // Production tags often carry BOTH a text record (the token id) AND a url
+    // record for purposes UNRELATED to the orchestrator. Always PREFER the text
+    // record regardless of record order — a url (or any other) record must never
+    // be treated as the token. Scan all records for the first usable text record.
     for (const record of message.records) {
       Debug.log(`Record type: ${record.recordType}`);
 
       if (record.recordType === "text") {
         const decoder = new TextDecoder(record.encoding || "utf-8");
         const text = decoder.decode(record.data);
-        Debug.log(`✅ Text record: ${text}`);
-        return {
-          id: text.trim(),
-          source: 'text-record',
-          raw: text
-        };
-      }
-
-      if (record.recordType === "url") {
-        const decoder = new TextDecoder();
-        const url = decoder.decode(record.data);
-        Debug.log(`✅ URL record: ${url}`);
-        return {
-          id: url,
-          source: 'url-record',
-          raw: url
-        };
-      }
-
-      // Try generic text decoding for other types
-      if (record.data) {
-        try {
-          const text = new TextDecoder().decode(record.data);
-          if (text && text.trim()) {
-            Debug.log(`✅ Generic decode: ${text}`);
-            return {
-              id: text.trim(),
-              source: 'generic-decode',
-              raw: text
-            };
-          }
-        } catch (e) {
-          Debug.log(`Decode failed: ${e.message}`);
+        const id = text.trim();
+        if (id) {
+          Debug.log(`✅ Text record: ${text}`);
+          return {
+            id,
+            source: 'text-record',
+            raw: text
+          };
         }
+        Debug.log('Text record present but empty — continuing');
       }
     }
 
-    // No readable records? Return error instead of serial fallback
-    Debug.log('No readable records found - returning error');
+    // No usable text record. url/other records are NOT token sources (NFC-5):
+    // do NOT best-effort-decode them (that queued junk Unknown transactions
+    // because findToken never matches a URL/foreign string). Hard-fail so the
+    // operator re-taps (or uses the Manual Entry button).
+    Debug.log('No usable text record found - returning error');
     return {
       id: null,
       source: 'error',
-      error: 'unreadable-records',
+      error: 'no-text-record',
       raw: serialNumber
     };
   }
 
   /**
-   * Stop NFC scanning
-   * Note: Web NFC doesn't have explicit stop - scan continues until page closes
+   * Stop NFC scanning by aborting the active scan.
+   * Web NFC DOES support stopping via AbortController (NDEFReader.scan({signal})).
    */
   stopScan() {
+    if (this.abortController) {
+      this.abortController.abort();
+    }
+    this.abortController = null;
+    this.reader = null;
     this.isScanning = false;
   }
 

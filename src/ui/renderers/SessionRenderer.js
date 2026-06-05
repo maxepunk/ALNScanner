@@ -9,6 +9,8 @@
  * @module ui/renderers/SessionRenderer
  */
 
+import { escapeHtml } from '../../utils/escapeHtml.js';
+
 export class SessionRenderer {
   /**
    * @param {Object} elements - DOM elements map (for DI/testing)
@@ -178,7 +180,9 @@ export class SessionRenderer {
   }
 
   _getTemplate(viewState, session) {
-    const sessionName = session?.name || 'New Session';
+    // SR-2: escape the backend-provided name before interpolating into innerHTML
+    // (escapeHtml returns '' for non-strings, so the fallback still fires).
+    const sessionName = escapeHtml(session?.name) || 'New Session';
 
     if (viewState === 'no-session') {
       return `

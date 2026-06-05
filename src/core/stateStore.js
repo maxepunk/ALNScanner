@@ -42,12 +42,47 @@ export class StateStore {
     }
   }
 
-  get(domain) {
-    const state = this._state[domain];
-    return state ? { ...state } : null;
+  /**
+   * Replace a domain wholesale (SSR-2). Unlike update() (shallow merge), this
+   * DROPS keys absent from `state` — used by sync:full snapshot restore so a
+   * domain can't retain stale keys across the sync:full vs service:state shapes.
+   */
+  replace(domain, state) {
+    const prev = this._state[domain] || null;
+    const next = { ...state };
+
+    // Skip notification if nothing actually changed (shallow equality)
+    if (prev !== null) {
+      const keys = Object.keys(next);
+      const prevKeys = Object.keys(prev);
+      if (keys.length === prevKeys.length && keys.every(k => next[k] === prev[k])) {
+        return;
+      }
+    }
+
+    this._prev[domain] = prev;
+    this._state[domain] = next;
+    const listeners = this._listeners[domain];
+    if (listeners) {
+      for (const cb of listeners) {
+        try {
+          cb(this._state[domain], this._prev[domain]);
+        } catch (e) {
+          console.error(`StateStore listener error [${domain}]:`, e);
+        }
+      }
+    }
   }
 
-  getAll() { return { ...this._state }; }
+  get(domain) {
+    // SSR-3: deep-copy so a consumer mutating a nested value (video.queue,
+    // health map, cueengine.cues) can't corrupt canonical state or defeat the
+    // shallow-equality change detection in update()/replace().
+    const state = this._state[domain];
+    return state ? structuredClone(state) : null;
+  }
+
+  getAll() { return structuredClone(this._state); }
 
   on(domain, callback) {
     if (!this._listeners[domain]) this._listeners[domain] = new Set();

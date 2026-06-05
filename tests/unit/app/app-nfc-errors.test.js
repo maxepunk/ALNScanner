@@ -21,7 +21,8 @@ describe('App - NFC Error Handling', () => {
         showScreen: jest.fn(),
         showToast: jest.fn(),
         updateSessionStats: jest.fn(),
-        showTokenResult: jest.fn()
+        showTokenResult: jest.fn(),
+        updateTeamDisplay: jest.fn()
       },
       settings: {
         deviceId: 'TEST_001',
@@ -67,6 +68,30 @@ describe('App - NFC Error Handling', () => {
   });
 
   describe('processNFCRead error handling', () => {
+    it('does not throw when a non-error result has null id', async () => {
+      const badResult = { id: null, source: 'manual', raw: null };
+
+      await expect(app.processNFCRead(badResult)).resolves.not.toThrow();
+
+      // Should surface a user-facing error and NOT proceed to token lookup
+      expect(mockDependencies.uiManager.showError).toHaveBeenCalledWith(
+        'Could not read token - please re-tap'
+      );
+      expect(mockDependencies.tokenManager.findToken).not.toHaveBeenCalled();
+      expect(mockDependencies.dataManager.addTransaction).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when a non-error result has an empty/whitespace id', async () => {
+      const blankResult = { id: '   ', source: 'manual', raw: '   ' };
+
+      await expect(app.processNFCRead(blankResult)).resolves.not.toThrow();
+
+      expect(mockDependencies.uiManager.showError).toHaveBeenCalledWith(
+        'Could not read token - please re-tap'
+      );
+      expect(mockDependencies.tokenManager.findToken).not.toHaveBeenCalled();
+    });
+
     it('should show error and return early when result.source is "error" with no-ndef-records', async () => {
       const errorResult = {
         id: null,
@@ -94,11 +119,11 @@ describe('App - NFC Error Handling', () => {
       expect(mockDependencies.dataManager.addTransaction).not.toHaveBeenCalled();
     });
 
-    it('should show error and return early when result.source is "error" with unreadable-records', async () => {
+    it('should show error and return early when result.source is "error" with no-text-record', async () => {
       const errorResult = {
         id: null,
         source: 'error',
-        error: 'unreadable-records',
+        error: 'no-text-record',
         raw: 'fallback789'
       };
 
@@ -106,7 +131,7 @@ describe('App - NFC Error Handling', () => {
 
       // Should log the error
       expect(mockDependencies.debug.log).toHaveBeenCalledWith(
-        'NFC read failed: unreadable-records',
+        'NFC read failed: no-text-record',
         true
       );
 
@@ -139,41 +164,45 @@ describe('App - NFC Error Handling', () => {
       expect(mockDependencies.tokenManager.findToken).toHaveBeenCalledWith('token123');
     });
 
-    it('should NOT call showError for successful reads with url-record source', async () => {
-      const successResult = {
-        id: 'https://example.com/token456',
-        source: 'url-record',
-        raw: 'https://example.com/token456'
-      };
+    it('escalates to Manual Entry after repeated LOGICAL read failures (NFC-6)', async () => {
+      // A misprovisioned/foreign tag (no usable text record) hard-fails as
+      // source:'error'. Tapping it repeatedly must escalate to the Manual Entry
+      // hint just like a hardware reader fault — they share one counter.
+      const badTag = { id: null, source: 'error', error: 'no-text-record', raw: 'serial' };
 
-      mockDependencies.tokenManager.findToken.mockReturnValue(null);
+      await app.processNFCRead(badTag);
+      await app.processNFCRead(badTag);
+      expect(mockDependencies.uiManager.showError).toHaveBeenLastCalledWith(
+        'Could not read token - please re-tap'
+      );
 
-      await app.processNFCRead(successResult);
-
-      // Should NOT show error for successful read
-      expect(mockDependencies.uiManager.showError).not.toHaveBeenCalled();
-
-      // SHOULD proceed with token processing
-      expect(mockDependencies.tokenManager.findToken).toHaveBeenCalled();
+      await app.processNFCRead(badTag);
+      expect(mockDependencies.uiManager.showError).toHaveBeenLastCalledWith(
+        'Reader trouble — use the Manual Entry button below.'
+      );
     });
 
-    it('should NOT call showError for successful reads with generic-decode source', async () => {
-      const successResult = {
-        id: 'generic-token',
-        source: 'generic-decode',
-        raw: 'generic-token'
-      };
-
+    it('a usable read resets the logical-failure escalation (NFC-6)', async () => {
       mockDependencies.tokenManager.findToken.mockReturnValue(null);
+      const badTag = { id: null, source: 'error', error: 'no-text-record', raw: 'serial' };
 
-      await app.processNFCRead(successResult);
+      await app.processNFCRead(badTag);
+      await app.processNFCRead(badTag);
+      // A usable read clears the counter...
+      await app.processNFCRead({ id: 'token123', source: 'text-record', raw: 'token123' });
+      // ...so the next bad tap is transient again, not escalated.
+      await app.processNFCRead(badTag);
 
-      // Should NOT show error for successful read
-      expect(mockDependencies.uiManager.showError).not.toHaveBeenCalled();
-
-      // SHOULD proceed with token processing
-      expect(mockDependencies.tokenManager.findToken).toHaveBeenCalled();
+      expect(mockDependencies.uiManager.showError).toHaveBeenLastCalledWith(
+        'Could not read token - please re-tap'
+      );
     });
+    // (Removed the 'url-record' and 'generic-decode' source pass-through tests:
+    //  P4b.4 made those sources unproducible by extractTokenId, and processNFCRead
+    //  branches only on source==='error' — so they asserted behavior for impossible
+    //  inputs. The 'text-record' case above + the null/blank-id guards cover the
+    //  real "non-error source + valid id proceeds" contract; nfcHandler.test.js
+    //  covers the url/foreign hard-fail at its true boundary.)
 
     it('should check error condition BEFORE accessing result.id', async () => {
       // Error result has null id - accessing id.trim() would throw
@@ -214,6 +243,82 @@ describe('App - NFC Error Handling', () => {
         'ERROR: No team selected - cannot process token',
         true
       );
+    });
+  });
+
+  describe('NFC page-lifecycle teardown (NFC-3)', () => {
+    it('pauseNFCForBackground() aborts the active scan', () => {
+      app.nfcSupported = true;
+      app._scanningActive = true;
+      app.pauseNFCForBackground();
+      expect(mockDependencies.nfcHandler.stopScan).toHaveBeenCalledTimes(1);
+    });
+
+    it('resumeNFCForForeground() re-arms the scan only when it was active', async () => {
+      app.nfcSupported = true;
+      app._scanningActive = true;
+      mockDependencies.nfcHandler.startScan.mockResolvedValue();
+      await app.resumeNFCForForeground();
+      expect(mockDependencies.nfcHandler.startScan).toHaveBeenCalledTimes(1);
+    });
+
+    it('resumeNFCForForeground() does NOT re-arm when scanning was not active', async () => {
+      app.nfcSupported = true;
+      app._scanningActive = false;
+      await app.resumeNFCForForeground();
+      expect(mockDependencies.nfcHandler.startScan).not.toHaveBeenCalled();
+    });
+
+    it('finishTeam() stops NFC and clears _scanningActive (no armed-without-team taps; honest re-arm flag)', () => {
+      app.nfcSupported = true;
+      app._scanningActive = true;
+      app.finishTeam();
+      // NFC must not stay armed on teamEntry (no team selected): an armed tap is
+      // silently rejected by the !currentTeamId guard — a lost-scan risk.
+      expect(mockDependencies.nfcHandler.stopScan).toHaveBeenCalled();
+      expect(app._scanningActive).toBe(false);
+    });
+  });
+
+  describe('readingerror escalation (NFC-6)', () => {
+    let onErrorCb;
+
+    beforeEach(async () => {
+      app.nfcSupported = true;
+      // Capture the onError callback App passes into nfcHandler.startScan
+      mockDependencies.nfcHandler.startScan.mockImplementation((onRead, onError) => {
+        onErrorCb = onError;
+        return Promise.resolve();
+      });
+      document.getElementById('scanStatus').textContent = '';
+      await app._startNFCScanning();
+    });
+
+    it('shows the transient hint on the first read error', () => {
+      onErrorCb({ type: 'readingerror' });
+      expect(document.getElementById('scanStatus').textContent)
+        .toMatch(/Tap token again/i);
+    });
+
+    it('escalates to Manual Entry after repeated read errors', () => {
+      for (let i = 0; i < 3; i++) onErrorCb({ type: 'readingerror' });
+      expect(document.getElementById('scanStatus').textContent)
+        .toMatch(/Manual Entry/i);
+    });
+
+    it('resets the error counter after a successful read', async () => {
+      mockDependencies.tokenManager.findToken.mockReturnValue(null);
+
+      onErrorCb({ type: 'readingerror' });
+      onErrorCb({ type: 'readingerror' });
+      await app.processNFCRead({ id: 'token123', source: 'text-record', raw: 'token123' });
+      // After success the counter is back to 0, so one more error is transient again
+      onErrorCb({ type: 'readingerror' });
+
+      expect(document.getElementById('scanStatus').textContent)
+        .toMatch(/Tap token again/i);
+      expect(document.getElementById('scanStatus').textContent)
+        .not.toMatch(/Manual Entry/i);
     });
   });
 });

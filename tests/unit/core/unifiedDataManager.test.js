@@ -30,6 +30,55 @@ describe('UnifiedDataManager', () => {
     });
   });
 
+  describe('scannedTokens reload durability (TQ-7)', () => {
+    const mockSocket = { on: jest.fn(), off: jest.fn(), emit: jest.fn(), connected: true };
+
+    beforeEach(() => {
+      // jsdom localStorage persists per-file; isolate each test to prevent bleed.
+      localStorage.clear();
+      mockSessionModeManager.isNetworked.mockReturnValue(true);
+      mockSessionModeManager.isStandalone.mockReturnValue(false);
+    });
+
+    it('rehydrates the duplicate guard from persisted state BEFORE sync:full', async () => {
+      // A prior session persisted a scan, then the page reloaded.
+      localStorage.setItem('networkedSessionId', 'sess-1');
+      localStorage.setItem('networkedScannedTokens:sess-1', JSON.stringify(['tok-9']));
+
+      manager = new UnifiedDataManager({ tokenManager: mockTokenManager, sessionModeManager: mockSessionModeManager });
+      await manager.initializeNetworkedMode(mockSocket); // NO sync:full yet
+
+      // Assert via the FACADE (the guard app.js actually uses), not the strategy Set.
+      expect(manager.isTokenScanned('tok-9')).toBe(true);
+    });
+
+    it('keeps a gap-scanned token after the server overwrite (union, not replace)', async () => {
+      localStorage.setItem('networkedSessionId', 'sess-1');
+      manager = new UnifiedDataManager({ tokenManager: mockTokenManager, sessionModeManager: mockSessionModeManager });
+      await manager.initializeNetworkedMode(mockSocket);
+
+      manager.markTokenAsScanned('tok-gap');              // scanned during the reconnect gap (still queued)
+      manager.setScannedTokensFromServer(['tok-server']); // sync:full that does not yet know about tok-gap
+
+      expect(manager.isTokenScanned('tok-gap')).toBe(true);    // survived the overwrite
+      expect(manager.isTokenScanned('tok-server')).toBe(true); // server mark added
+    });
+
+    it('persists marks and unmarks so a reload reflects the latest guard state', async () => {
+      localStorage.setItem('networkedSessionId', 'sess-1');
+      manager = new UnifiedDataManager({ tokenManager: mockTokenManager, sessionModeManager: mockSessionModeManager });
+      await manager.initializeNetworkedMode(mockSocket);
+
+      manager.markTokenAsScanned('tok-x');
+      expect(JSON.parse(localStorage.getItem('networkedScannedTokens:sess-1') || '[]')).toContain('tok-x');
+
+      // Admin deleted the transaction -> re-scan allowed; the removal must persist
+      // too, else rehydrate after a reload would re-block the token.
+      manager.unmarkTokenAsScanned('tok-x');
+      expect(JSON.parse(localStorage.getItem('networkedScannedTokens:sess-1') || '[]')).not.toContain('tok-x');
+    });
+  });
+
   describe('strategy initialization', () => {
     it('should initialize standalone mode with LocalStorage', async () => {
       mockSessionModeManager.isStandalone.mockReturnValue(true);
@@ -418,7 +467,7 @@ describe('UnifiedDataManager', () => {
       expect(manager.getExposedOwners()).toEqual([]);
     });
 
-    it('returns alphabetical unique owners from detective transactions', async () => {
+    it('returns owners most-recently-exposed first (matches wall display order, SR-parity)', async () => {
       // tokenManager.findToken returns { token, matchedId } — mirror that shape
       mockTokenManager.findToken = jest.fn(tokenId => {
         const owners = { t1: 'Alex Reeves', t2: 'Ashley White', t3: 'Alex Reeves', t4: 'Marcus Black' };
@@ -426,12 +475,15 @@ describe('UnifiedDataManager', () => {
           ? { token: { owner: owners[tokenId], SF_RFID: tokenId, SF_ValueRating: 3, SF_MemoryType: 'Personal' }, matchedId: tokenId }
           : null;
       });
-      await manager.addTransaction({ tokenId: 't1', teamId: 'A', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
-      await manager.addTransaction({ tokenId: 't2', teamId: 'B', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
-      await manager.addTransaction({ tokenId: 't3', teamId: 'C', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
-      await manager.addTransaction({ tokenId: 't4', teamId: 'D', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: new Date().toISOString() });
+      // Distinct, increasing timestamps so recency order is deterministic.
+      // Alex is exposed twice (t1, then t3 last) → ranks by his MOST-RECENT exposure.
+      await manager.addTransaction({ tokenId: 't1', teamId: 'A', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: '2026-06-02T10:00:00.000Z' });
+      await manager.addTransaction({ tokenId: 't2', teamId: 'B', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: '2026-06-02T10:01:00.000Z' });
+      await manager.addTransaction({ tokenId: 't4', teamId: 'D', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: '2026-06-02T10:02:00.000Z' });
+      await manager.addTransaction({ tokenId: 't3', teamId: 'C', mode: 'detective', valueRating: 3, memoryType: 'Personal', points: 0, timestamp: '2026-06-02T10:03:00.000Z' });
 
-      expect(manager.getExposedOwners()).toEqual(['Alex Reeves', 'Ashley White', 'Marcus Black']);
+      // Recency DESC: Alex (re-exposed @10:03) > Marcus (@10:02) > Ashley (@10:01).
+      expect(manager.getExposedOwners()).toEqual(['Alex Reeves', 'Marcus Black', 'Ashley White']);
     });
 
     it('excludes black-market (non-detective) transactions', async () => {
@@ -489,7 +541,9 @@ describe('UnifiedDataManager', () => {
       expect(manager.getExposedOwners()).toEqual(['Accepted Owner']);
     });
 
-    it('sorts owners with locale comparison', () => {
+    it('tie-breaks alphabetically (locale) when exposure times are equal', () => {
+      // No timestamps → all owners share lastExposed=0, so the recency-DESC
+      // primary sort is a tie and the alphabetical tie-break decides the order.
       manager._activeStrategy = {
         getTransactions: () => ([
           { tokenId: 'a', mode: 'detective', status: 'accepted', owner: 'Ørjan' },

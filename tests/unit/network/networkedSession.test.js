@@ -43,6 +43,10 @@ describe('NetworkedSession', () => {
 
     mockQueueManager = {
       syncQueue: jest.fn(),
+      reconcileWithServerState: jest.fn(),
+      clearQueue: jest.fn(),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
       destroy: jest.fn(),
     };
 
@@ -270,6 +274,16 @@ describe('NetworkedSession', () => {
       );
     });
 
+    it('should remove the queueManager transaction:failed forwarder on destroy (P3.4)', async () => {
+      await session.initialize();
+      await session.destroy();
+
+      expect(mockQueueManager.removeEventListener).toHaveBeenCalledWith(
+        'transaction:failed',
+        expect.any(Function)
+      );
+    });
+
     it('should reset state to disconnected', async () => {
       await session.initialize();
       await session.destroy();
@@ -294,7 +308,7 @@ describe('NetworkedSession', () => {
   });
 
   describe('event wiring', () => {
-    it('should initialize admin and sync queue on connected event', async () => {
+    it('should initialize admin (NOT sync queue) on connected event', async () => {
       await session.initialize();
 
       // Get the connected handler that was registered
@@ -306,7 +320,9 @@ describe('NetworkedSession', () => {
       connectedHandler();
 
       expect(mockAdminController.initialize).toHaveBeenCalledTimes(1);
-      expect(mockQueueManager.syncQueue).toHaveBeenCalledTimes(1);
+      // Queue sync is DEFERRED to the sync:full handler (TQ-6) so replays can be
+      // reconciled against server state first — it must NOT fire on connect.
+      expect(mockQueueManager.syncQueue).not.toHaveBeenCalled();
     });
 
     it('should pause admin on disconnected event', async () => {
@@ -533,6 +549,81 @@ describe('NetworkedSession', () => {
       expect(mockDataManager.updateTeamScoreFromBackend).not.toHaveBeenCalled();
     });
 
+    it('dispatches backend:error when a backend error event arrives', () => {
+      const seen = [];
+      session.addEventListener('backend:error', (e) => seen.push(e.detail));
+
+      messageHandler({ detail: { type: 'error', payload: { code: 'QUEUE_FULL', message: 'Offline queue is full' } } });
+
+      expect(seen).toEqual([{ code: 'QUEUE_FULL', message: 'Offline queue is full' }]);
+    });
+
+    it('routes AUTH_REQUIRED error into the auth:required flow', () => {
+      const authSpy = jest.fn();
+      session.addEventListener('auth:required', authSpy);
+
+      messageHandler({ detail: { type: 'error', payload: { code: 'AUTH_REQUIRED', message: 'Not identified' } } });
+
+      expect(authSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears the stale token when an AUTH_* error arrives (AUTH-7)', () => {
+      const removeSpy = jest.spyOn(window.localStorage.__proto__, 'removeItem').mockImplementation(() => {});
+      const authSpy = jest.fn();
+      session.addEventListener('auth:required', authSpy);
+
+      messageHandler({ detail: { type: 'error', payload: { code: 'AUTH_REQUIRED', message: 'Authentication required' } } });
+
+      expect(authSpy).toHaveBeenCalledTimes(1);
+      // L-5/AUTH-5 defense-in-depth (new in AUTH-7): the now-known-bad token is cleared.
+      expect(removeSpy).toHaveBeenCalledWith('aln_auth_token');
+
+      removeSpy.mockRestore();
+    });
+
+    it('routes PERMISSION_DENIED into auth:required + clears token (AUTH-7)', () => {
+      const removeSpy = jest.spyOn(window.localStorage.__proto__, 'removeItem').mockImplementation(() => {});
+      const authSpy = jest.fn();
+      session.addEventListener('auth:required', authSpy);
+
+      messageHandler({ detail: { type: 'error', payload: { code: 'PERMISSION_DENIED', message: 'Denied' } } });
+
+      expect(authSpy).toHaveBeenCalledTimes(1);
+      expect(removeSpy).toHaveBeenCalledWith('aln_auth_token');
+
+      removeSpy.mockRestore();
+    });
+
+    it('does NOT route a non-auth error code into auth:required or clear the token (AUTH-7)', () => {
+      const removeSpy = jest.spyOn(window.localStorage.__proto__, 'removeItem').mockImplementation(() => {});
+      const authSpy = jest.fn();
+      session.addEventListener('auth:required', authSpy);
+
+      messageHandler({ detail: { type: 'error', payload: { code: 'VALIDATION_ERROR', message: 'bad payload' } } });
+
+      expect(authSpy).not.toHaveBeenCalled();
+      expect(removeSpy).not.toHaveBeenCalledWith('aln_auth_token');
+
+      removeSpy.mockRestore();
+    });
+
+    it('forwards queueManager transaction:failed as a session event (P3.4)', () => {
+      // The queueManager dispatches transaction:failed on a permanent rejection;
+      // the session re-dispatches it so app has ONE event source (the session).
+      const reg = mockQueueManager.addEventListener.mock.calls.find(c => c[0] === 'transaction:failed');
+      expect(reg).toBeDefined();
+      const queueHandler = reg[1];
+
+      const dispatchSpy = jest.spyOn(session, 'dispatchEvent');
+      queueHandler({ detail: { transaction: { tokenId: 'tX' }, status: 'rejected', message: 'Invalid token ID' } });
+
+      const fwd = dispatchSpy.mock.calls.find(c => c[0]?.type === 'transaction:failed');
+      expect(fwd).toBeDefined();
+      expect(fwd[0].detail).toEqual({ transaction: { tokenId: 'tX' }, status: 'rejected', message: 'Invalid token ID' });
+
+      dispatchSpy.mockRestore();
+    });
+
     it('should update DataManager on sync:full event with scores', () => {
       const scores = [
         { teamId: '001', currentScore: 5000 },
@@ -607,6 +698,19 @@ describe('NetworkedSession', () => {
       messageHandler({ detail: { type: 'scores:reset', payload: {} } });
 
       expect(mockDataManager.clearBackendScores).toHaveBeenCalled();
+    });
+
+    it('should forward scoreboard:page as a CustomEvent on the session (P0.4/WS-2)', () => {
+      // Closes the routing seam: the raw message:received {type:'scoreboard:page'}
+      // socket event must be re-dispatched as a 'scoreboard:page' CustomEvent
+      // (app.js surfaces the confirmation toast). Without the networkedSession
+      // case this would be silently dropped.
+      const seen = [];
+      session.addEventListener('scoreboard:page', (e) => seen.push(e.detail));
+
+      messageHandler({ detail: { type: 'scoreboard:page', payload: { action: 'owner', owner: 'Ashe' } } });
+
+      expect(seen).toEqual([{ action: 'owner', owner: 'Ashe' }]);
     });
 
     it('should not call dataManager methods for unhandled event types', () => {
@@ -723,6 +827,27 @@ describe('NetworkedSession', () => {
         expect(mockDataManager.resetForNewSession).not.toHaveBeenCalled();
       });
 
+      it('clears the offline queue on a NEW session boundary (no cross-session replay)', () => {
+        const payload = { session: { id: 'new-session-456' }, scores: [], recentTransactions: [] };
+
+        messageHandler({ detail: { type: 'sync:full', payload } });
+
+        // A genuine new session => old-session offline scans must be discarded,
+        // else syncQueue replays them and the backend scores them into the NEW
+        // session (phantom transactions / score inflation).
+        expect(mockQueueManager.clearQueue).toHaveBeenCalledTimes(1);
+      });
+
+      it('does NOT clear the offline queue when the session id is unchanged (transient restart)', () => {
+        const payload = { session: { id: 'old-session-123' }, scores: [], recentTransactions: [] };
+
+        messageHandler({ detail: { type: 'sync:full', payload } });
+
+        // Same id (e.g. orchestrator restart restoring the persisted session) =>
+        // same-session offline scans must still flush, not be dropped.
+        expect(mockQueueManager.clearQueue).not.toHaveBeenCalled();
+      });
+
       it('should call setScannedTokensFromServer when deviceScannedTokens present', () => {
         const deviceScannedTokens = ['token1', 'token2'];
         const payload = {
@@ -735,6 +860,23 @@ describe('NetworkedSession', () => {
         messageHandler({ detail: { type: 'sync:full', payload } });
 
         expect(mockDataManager.setScannedTokensFromServer).toHaveBeenCalledWith(deviceScannedTokens);
+      });
+
+      it('reconciles the queue against deviceScannedTokens then flushes on sync:full (TQ-6)', () => {
+        const deviceScannedTokens = ['token1', 'token2'];
+        const payload = {
+          session: { id: 'old-session-123' },
+          deviceScannedTokens,
+          scores: [],
+          recentTransactions: []
+        };
+
+        messageHandler({ detail: { type: 'sync:full', payload } });
+
+        // Queue flush is driven by sync:full (not the connected event), and the
+        // queue is reconciled against already-recorded scans before flushing.
+        expect(mockQueueManager.reconcileWithServerState).toHaveBeenCalledWith(deviceScannedTokens);
+        expect(mockQueueManager.syncQueue).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -798,6 +940,7 @@ describe('NetworkedSession', () => {
       beforeEach(async () => {
         mockStore = {
           update: jest.fn(),
+          replace: jest.fn(),
           get: jest.fn(),
           getAll: jest.fn(() => ({})),
         };
@@ -835,12 +978,12 @@ describe('NetworkedSession', () => {
         };
         storeMessageHandler({ detail: { type: 'sync:full', payload: { music } } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('music', music);
+        expect(mockStore.replace).toHaveBeenCalledWith('music', music);
       });
 
-      it('should not call store.update for music when payload.music is absent', () => {
+      it('should not call store.replace for music when payload.music is absent', () => {
         storeMessageHandler({ detail: { type: 'sync:full', payload: { heldItems: [] } } });
-        expect(mockStore.update).not.toHaveBeenCalledWith('music', expect.anything());
+        expect(mockStore.replace).not.toHaveBeenCalledWith('music', expect.anything());
       });
 
       it('should populate store with serviceHealth from sync:full', () => {
@@ -848,7 +991,7 @@ describe('NetworkedSession', () => {
         const payload = { serviceHealth };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('health', serviceHealth);
+        expect(mockStore.replace).toHaveBeenCalledWith('health', serviceHealth);
       });
 
       it('should populate store with environment state from sync:full', () => {
@@ -861,23 +1004,23 @@ describe('NetworkedSession', () => {
         };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('bluetooth', { scanning: false, devices: [] });
-        expect(mockStore.update).toHaveBeenCalledWith('audio', { stream: 'video', sink: 'hdmi-stereo' });
-        expect(mockStore.update).toHaveBeenCalledWith('lighting', { currentScene: 'Pregame', connected: true });
+        expect(mockStore.replace).toHaveBeenCalledWith('bluetooth', { scanning: false, devices: [] });
+        expect(mockStore.replace).toHaveBeenCalledWith('audio', { stream: 'video', sink: 'hdmi-stereo' });
+        expect(mockStore.replace).toHaveBeenCalledWith('lighting', { currentScene: 'Pregame', connected: true });
       });
 
       it('should populate store with gameClock from sync:full', () => {
         const payload = { gameClock: { running: true, elapsed: 3600 } };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('gameclock', { running: true, elapsed: 3600 });
+        expect(mockStore.replace).toHaveBeenCalledWith('gameclock', { running: true, elapsed: 3600 });
       });
 
       it('should populate store with cueEngine from sync:full', () => {
         const payload = { cueEngine: { activeCues: [], standingCues: [] } };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('cueengine', { activeCues: [], standingCues: [] });
+        expect(mockStore.replace).toHaveBeenCalledWith('cueengine', { activeCues: [], standingCues: [] });
       });
 
       it('should populate store with heldItems from sync:full', () => {
@@ -885,14 +1028,14 @@ describe('NetworkedSession', () => {
         const payload = { heldItems };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('held', { items: heldItems });
+        expect(mockStore.replace).toHaveBeenCalledWith('held', { items: heldItems });
       });
 
       it('should populate store with videoStatus from sync:full', () => {
         const payload = { videoStatus: { nowPlaying: 'jaw011.mp4', isPlaying: true } };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledWith('video', { nowPlaying: 'jaw011.mp4', isPlaying: true });
+        expect(mockStore.replace).toHaveBeenCalledWith('video', { nowPlaying: 'jaw011.mp4', isPlaying: true });
       });
 
       it('should populate all service domains from a complete sync:full', () => {
@@ -911,7 +1054,7 @@ describe('NetworkedSession', () => {
         };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).toHaveBeenCalledTimes(9);
+        expect(mockStore.replace).toHaveBeenCalledTimes(9);
       });
 
       it('should not populate store for missing sync:full fields', () => {
@@ -919,7 +1062,7 @@ describe('NetworkedSession', () => {
         const payload = { scores: [{ teamId: '001', currentScore: 5000 }] };
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
-        expect(mockStore.update).not.toHaveBeenCalled();
+        expect(mockStore.replace).not.toHaveBeenCalled();
       });
 
       it('should populate store (not UDM) for service state from sync:full', () => {
@@ -930,8 +1073,8 @@ describe('NetworkedSession', () => {
         storeMessageHandler({ detail: { type: 'sync:full', payload } });
 
         // Store is sole path for service state
-        expect(mockStore.update).toHaveBeenCalledWith('music', { connected: true, state: 'playing' });
-        expect(mockStore.update).toHaveBeenCalledWith('health', { vlc: { status: 'healthy' } });
+        expect(mockStore.replace).toHaveBeenCalledWith('music', { connected: true, state: 'playing' });
+        expect(mockStore.replace).toHaveBeenCalledWith('health', { vlc: { status: 'healthy' } });
       });
     });
 

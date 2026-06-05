@@ -35,6 +35,10 @@ export class ConnectionManager extends EventTarget {
     this.maxRetries = config.maxRetries || 5;
     this.retryTimer = null;
     this.disconnectHandler = null;
+    this.errorHandler = null;
+    this._lastErrorReason = null;
+    this._connectedAt = 0; // ms timestamp of last successful connect (NC-2 min-uptime gate)
+    this._connectInFlight = null;
 
     // Wire global connection status indicator updates
     this.addEventListener('connecting', () => this._updateGlobalConnectionStatus('connecting'));
@@ -74,7 +78,12 @@ export class ConnectionManager extends EventTarget {
   }
 
   /**
-   * Connect to orchestrator
+   * Connect to orchestrator.
+   *
+   * Single-flight: if a connect attempt is already in progress, concurrent
+   * callers (e.g. a reconnect/retry timer firing while a manual or page-
+   * foreground connect is in flight) receive the SAME in-flight promise instead
+   * of opening a competing socket and corrupting the shared _lastErrorReason.
    * @returns {Promise<void>}
    * @emits connecting - Connection attempt started
    * @emits connected - Connection established
@@ -82,18 +91,32 @@ export class ConnectionManager extends EventTarget {
    * @throws {Error} If validation or connection fails
    */
   async connect() {
+    if (this._connectInFlight) {
+      return this._connectInFlight;
+    }
+    this._connectInFlight = this._doConnect();
+    try {
+      return await this._connectInFlight;
+    } finally {
+      this._connectInFlight = null;
+    }
+  }
+
+  /**
+   * Perform a single connection attempt (token + health validation, handshake,
+   * reconnect/error-handler setup, retry-on-failure). Wrapped by connect() for
+   * single-flight dedup — do not call directly.
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _doConnect() {
     // Validate token
     if (!this.isTokenValid()) {
+      this._clearStaleToken(); // AUTH-5
       this.dispatchEvent(new CustomEvent('auth:required', {
         detail: { reason: 'invalid_token' }
       }));
       throw new Error('Invalid or expired token');
-    }
-
-    // Check health
-    const healthy = await this.checkHealth();
-    if (!healthy) {
-      throw new Error('Orchestrator unreachable');
     }
 
     // Clear any pending retry timer
@@ -103,7 +126,21 @@ export class ConnectionManager extends EventTarget {
     this.state = 'connecting';
     this.dispatchEvent(new CustomEvent('connecting'));
 
+    // Register the handshake-error listener BEFORE connecting so an AUTH_*/
+    // collision reject is captured even on the very FIRST connect — socket:error
+    // fires during the handshake, before client.connect() rejects (idempotent:
+    // _setupErrorHandler removes any prior listener first).
+    this._setupErrorHandler();
+
     try {
+      // NC-1: health check INSIDE try → a failed check flows through
+      // retryCount++/_scheduleRetry() so a sustained outage self-heals via
+      // exponential backoff rather than giving up after a single unreachable check.
+      const healthy = await this.checkHealth();
+      if (!healthy) {
+        throw new Error('Orchestrator unreachable');
+      }
+
       // Delegate WebSocket connection to OrchestratorClient
       await this.client.connect(this.token, {
         deviceId: this.config.deviceId,
@@ -112,7 +149,8 @@ export class ConnectionManager extends EventTarget {
 
       // Connection successful
       this.state = 'connected';
-      this.retryCount = 0;
+      this._connectedAt = Date.now();   // NC-2: uptime start (retryCount is NOT reset here — see disconnect handler gate)
+      this._lastErrorReason = null; // NC-3: don't let a stale connect_error reason leak into a later reject
       this.dispatchEvent(new CustomEvent('connected'));
 
       // Setup reconnection handler
@@ -121,11 +159,38 @@ export class ConnectionManager extends EventTarget {
     } catch (error) {
       this.state = 'disconnected';
 
-      // Schedule retry
+      const reason = this._lastErrorReason;
+      this._lastErrorReason = null; // consume
+
+      // Auth failures are NOT transient — retrying a known-bad credential
+      // just hammers the server. Clear the stale token and re-prompt.
+      if (reason === 'AUTH_INVALID' || reason === 'AUTH_REQUIRED') {
+        this.token = null;
+        try {
+          localStorage.removeItem('aln_auth_token');
+        } catch { /* localStorage may be unavailable */ }
+        this.dispatchEvent(new CustomEvent('auth:required', {
+          detail: { reason: 'auth_failed' }
+        }));
+        throw error;
+      }
+
+      // DEVICE_ID_COLLISION and transient transport errors: retry with
+      // jittered backoff (which spaces retries past the server's stale-socket
+      // teardown window — see RL-5/RL-6).
       this.retryCount++;
       if (this.retryCount < this.maxRetries) {
         this._scheduleRetry();
       } else {
+        // max_retries here is reached for TRANSIENT failures (DEVICE_ID_COLLISION,
+        // transport drop, ping timeout) — the token is NOT necessarily bad (auth
+        // failures throw above). Only clear it if it actually expired during the
+        // retry window; otherwise preserve it so a reload can auto-reconnect via
+        // the saved token without forcing the GM to re-type the admin password
+        // to recover from a network blip mid-show (AUTH-5).
+        if (!this.isTokenValid()) {
+          this._clearStaleToken();
+        }
         this.dispatchEvent(new CustomEvent('auth:required', {
           detail: { reason: 'max_retries' }
         }));
@@ -173,26 +238,59 @@ export class ConnectionManager extends EventTarget {
       this.state = 'disconnected';
       this.dispatchEvent(new CustomEvent('disconnected', { detail: { reason } }));
 
-      // Only auto-reconnect on server-initiated disconnect
-      if (reason === 'io server disconnect') {
-        // Check if token still valid
-        if (!this.isTokenValid()) {
-          this.dispatchEvent(new CustomEvent('auth:required', {
-            detail: { reason: 'token_expired' }
-          }));
-          return;
-        }
-
-        // Schedule reconnection
-        setTimeout(() => {
-          this.connect().catch(() => {
-            // Retry logic handles failures
-          });
-        }, 1000);
+      // Client-initiated disconnects are intentional — never auto-reconnect.
+      const CLIENT_INITIATED = ['io client disconnect', 'client namespace disconnect'];
+      if (CLIENT_INITIATED.includes(reason)) {
+        return;
       }
+
+      // Any other reason (transport close, ping timeout, transport error,
+      // io server disconnect) is an unexpected drop — auto-reconnect, token permitting.
+      if (!this.isTokenValid()) {
+        this._clearStaleToken(); // AUTH-5
+        this.dispatchEvent(new CustomEvent('auth:required', {
+          detail: { reason: 'token_expired' }
+        }));
+        return;
+      }
+
+      // Reset backoff ONLY if the just-dropped session was stable long enough; a
+      // flapping connect-then-drop must keep escalating toward the 30s cap (NC-2).
+      const MIN_STABLE_MS = 10000;
+      if (this._connectedAt && (Date.now() - this._connectedAt) >= MIN_STABLE_MS) {
+        this.retryCount = 0;
+      }
+      this._connectedAt = 0;
+
+      // Schedule the reconnect on the cancellable retryTimer (cleared first), so
+      // rapid repeated drops don't stack competing reconnects and an explicit
+      // disconnect() can cancel a pending reconnect.
+      this._clearRetryTimer();
+      this.retryTimer = setTimeout(() => {
+        this.connect().catch(() => {
+          // Retry logic handles failures
+        });
+      }, this._calculateRetryDelay());
     };
 
     this.client.addEventListener('socket:disconnected', this.disconnectHandler);
+  }
+
+  /**
+   * Listen for handshake errors so we can capture the reject reason.
+   * Clears any stale _lastErrorReason from a prior session so only a fresh
+   * socket:error from THIS attempt can set the reason (NC-3).
+   * @private
+   */
+  _setupErrorHandler() {
+    if (this.errorHandler) {
+      this.client.removeEventListener('socket:error', this.errorHandler);
+    }
+    this._lastErrorReason = null; // NC-3: reset before each attempt; only this attempt's socket:error should set it
+    this.errorHandler = (event) => {
+      this._lastErrorReason = event.detail?.reason || null;
+    };
+    this.client.addEventListener('socket:error', this.errorHandler);
   }
 
   /**
@@ -203,6 +301,10 @@ export class ConnectionManager extends EventTarget {
     if (this.disconnectHandler) {
       this.client.removeEventListener('socket:disconnected', this.disconnectHandler);
       this.disconnectHandler = null;
+    }
+    if (this.errorHandler) {
+      this.client.removeEventListener('socket:error', this.errorHandler);
+      this.errorHandler = null;
     }
   }
 
@@ -226,10 +328,30 @@ export class ConnectionManager extends EventTarget {
    * @private
    */
   _calculateRetryDelay() {
-    const baseDelay = 1000; // 1 second
-    const maxDelay = 30000; // 30 seconds
-    const delay = baseDelay * Math.pow(2, this.retryCount);
-    return Math.min(delay, maxDelay);
+    const baseDelay = 1000;  // 1 second
+    const maxDelay = 30000;  // 30 seconds
+    // retryCount is post-increment (1 = first retry), so 2^(retryCount-1)
+    // makes the first retry use the 1s base.
+    const exp = Math.max(0, this.retryCount - 1);
+    const capped = Math.min(baseDelay * Math.pow(2, exp), maxDelay);
+    // +/- 20% jitter to avoid lockstep reconnects across stations.
+    const jitter = capped * 0.2 * (Math.random() * 2 - 1);
+    return Math.round(capped + jitter);
+  }
+
+  /**
+   * Remove the known-bad auth token so the wizard re-auths cleanly. (AUTH-5)
+   * Called at each auth:required dispatch that means "token is bad" — defense
+   * in depth so the stale token can't be reused after it's known invalid.
+   * @private
+   */
+  _clearStaleToken() {
+    this.token = null;
+    try {
+      localStorage.removeItem('aln_auth_token');
+    } catch {
+      // localStorage unavailable (non-browser env) — nothing to clear
+    }
   }
 
   /**

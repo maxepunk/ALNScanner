@@ -117,6 +117,19 @@ describe('HealthRenderer', () => {
       // Escaped version should be
       expect(container.innerHTML).toContain('&lt;script&gt;');
     });
+
+    it('should escape HTML in the backend-controlled status field', () => {
+      // status comes from the backend health map (data.serviceHealth[id].status).
+      // Anything other than 'healthy' renders in expanded mode via innerHTML.
+      renderer.render({
+        serviceHealth: {
+          vlc: { status: '<img src=x onerror=alert(1)>', message: 'OK' }
+        }
+      });
+
+      expect(container.innerHTML).not.toContain('<img src=x');
+      expect(container.innerHTML).toContain('&lt;img src=x');
+    });
   });
 
   describe('differential updates', () => {
@@ -207,6 +220,18 @@ describe('HealthRenderer', () => {
 
       const vlcCard = container.querySelector('[data-service="vlc"]');
       expect(vlcCard.querySelector('.health-service__message').textContent).toBe('Timeout after 5s');
+    });
+  });
+
+  describe('selector metachar safety (SR-5)', () => {
+    it('should cache the service card even when an id contains a selector metachar', () => {
+      // Force expanded (degraded) render with a metachar id in SERVICE_NAMES.
+      renderer.SERVICE_NAMES = { 'vlc"x': 'VLC X', music: 'Music' };
+      renderer.render({ serviceHealth: { 'vlc"x': { status: 'down', message: 'boom' }, music: { status: 'healthy' } } });
+
+      // Cache lookup must have found the card (no querySelector throw / no miss).
+      expect(renderer._serviceEls['vlc"x']).toBeDefined();
+      expect(renderer._serviceEls['vlc"x'].card).toBeTruthy();
     });
   });
 });

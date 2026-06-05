@@ -44,6 +44,37 @@ describe('NetworkedStorage Strategy', () => {
     });
   });
 
+  describe('scannedTokens persistence (TQ-7)', () => {
+    beforeEach(() => {
+      localStorage.clear(); // jsdom localStorage persists per-file; isolate each test
+    });
+
+    it('persists marks under a session-scoped key when marked', () => {
+      storage.setSessionId('sess-1');
+      storage.scannedTokens.add('tok-1');
+      storage.persistScannedTokens();
+      expect(JSON.parse(localStorage.getItem('networkedScannedTokens:sess-1'))).toContain('tok-1');
+    });
+
+    it('rehydrates marks for the persisted session at init', async () => {
+      localStorage.setItem('networkedSessionId', 'sess-2');
+      localStorage.setItem('networkedScannedTokens:sess-2', JSON.stringify(['tok-9']));
+      const s = new NetworkedStorage({ socket: { connected: false }, tokenManager: mockTokenManager, debug: mockDebug });
+      await s.initialize();
+      expect(s.scannedTokens.has('tok-9')).toBe(true);
+    });
+
+    it('unions (does not replace) on setScannedTokens, preserving the Set reference', () => {
+      storage.setSessionId('sess-1');
+      const ref = storage.scannedTokens;
+      storage.scannedTokens.add('tok-gap');
+      storage.setScannedTokens(['tok-server']);
+      expect(storage.scannedTokens).toBe(ref);          // same reference (no desync)
+      expect(storage.scannedTokens.has('tok-gap')).toBe(true);
+      expect(storage.scannedTokens.has('tok-server')).toBe(true);
+    });
+  });
+
   describe('isReady', () => {
     it('should return true when socket is connected', () => {
       mockSocket.connected = true;
@@ -68,7 +99,7 @@ describe('NetworkedStorage Strategy', () => {
   });
 
   describe('addTransaction', () => {
-    it('should emit transaction:submit to socket', async () => {
+    it('should emit transaction:submit wrapped in the AsyncAPI envelope', async () => {
       const tx = {
         tokenId: 'token1',
         teamId: '001',
@@ -77,12 +108,18 @@ describe('NetworkedStorage Strategy', () => {
 
       await storage.addTransaction(tx);
 
+      // Backend strictly rejects an unwrapped payload (adminEvents.js requires
+      // {event, data, timestamp}). CC-5.
       expect(mockSocket.emit).toHaveBeenCalledWith(
         'transaction:submit',
         expect.objectContaining({
-          tokenId: 'token1',
-          teamId: '001',
-          deviceType: 'gm'
+          event: 'transaction:submit',
+          timestamp: expect.any(String),
+          data: expect.objectContaining({
+            tokenId: 'token1',
+            teamId: '001',
+            deviceType: 'gm'
+          })
         })
       );
     });

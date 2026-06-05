@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import OrchestratorClient from '../../../src/network/orchestratorClient.js';
+import OrchestratorClient, { MESSAGE_TYPES } from '../../../src/network/orchestratorClient.js';
 
 describe('OrchestratorClient - Dumb Pipe', () => {
   let client;
@@ -86,6 +86,17 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       expect(client.isConnected).toBe(true);
     });
 
+    it('should dispatch socket:connected exactly once per connect (WS-5)', async () => {
+      const handler = jest.fn();
+      client.addEventListener('socket:connected', handler);
+
+      const p = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateConnect();
+      await p;
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
     it('should emit socket:error event on connection failure', async () => {
       const errorHandler = jest.fn();
       client.addEventListener('socket:error', errorHandler);
@@ -95,7 +106,23 @@ describe('OrchestratorClient - Dumb Pipe', () => {
 
       await expect(connectPromise).rejects.toThrow('Connection failed');
       expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({
-        detail: { error: expect.any(Error) }
+        detail: expect.objectContaining({ error: expect.any(Error) })
+      }));
+    });
+
+    it('should expose backend reject reason on socket:error detail', async () => {
+      const errorHandler = jest.fn();
+      client.addEventListener('socket:error', errorHandler);
+
+      const connectPromise = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateError(new Error('DEVICE_ID_COLLISION: This device ID is already connected from another location'));
+
+      await expect(connectPromise).rejects.toThrow('DEVICE_ID_COLLISION');
+      expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({
+        detail: expect.objectContaining({
+          reason: 'DEVICE_ID_COLLISION',
+          error: expect.any(Error)
+        })
       }));
     });
 
@@ -119,13 +146,72 @@ describe('OrchestratorClient - Dumb Pipe', () => {
 
       const oldSocket = client.socket;
 
-      // Second connection (should cleanup first)
+      // Second connection now gracefully tears down the live socket first (RL-5):
+      // it awaits the server-confirmed disconnect before opening a new socket.
       const connectPromise2 = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateDisconnect('io client disconnect');
+      await new Promise(resolve => setTimeout(resolve, 0));
       mockSocket._simulateConnect();
       await connectPromise2;
 
       expect(oldSocket.removeAllListeners).toHaveBeenCalled();
       expect(oldSocket.disconnect).toHaveBeenCalled();
+    });
+
+    it('should await prior socket teardown before opening a new socket (RL-5)', async () => {
+      // First connection
+      const p1 = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateConnect();
+      await p1;
+      expect(global.io).toHaveBeenCalledTimes(1);
+
+      // Prior socket is still "connected"
+      mockSocket.connected = true;
+
+      // Second connect should gracefully disconnect the prior socket first
+      const p2 = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+
+      // The graceful disconnect was requested on the OLD socket...
+      expect(mockSocket.disconnect).toHaveBeenCalled();
+      // ...but the NEW io() socket must NOT be created until teardown settles.
+      expect(global.io).toHaveBeenCalledTimes(1);
+
+      // Drive the server-confirmed disconnect of the old socket.
+      mockSocket._simulateDisconnect('io client disconnect');
+      // Let connect() resume past `await this.disconnect()` and open the new
+      // socket (registering its once('connect')) before we simulate connection.
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // Now the new socket is created and we can complete the handshake.
+      mockSocket._simulateConnect();
+      await p2;
+      expect(global.io).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not tear down a freshly reconnected socket after the 1s disconnect fallback (RL-5 regression)', async () => {
+      // First connection
+      const p1 = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateConnect();
+      await p1;
+
+      // Prior socket still connected → reconnect awaits graceful teardown (RL-5).
+      mockSocket.connected = true;
+      const p2 = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      // Server confirms the OLD socket's disconnect quickly (well under 1s).
+      mockSocket._simulateDisconnect('io client disconnect');
+      // Let connect() resume and open the new socket.
+      await new Promise(resolve => setTimeout(resolve, 0));
+      mockSocket._simulateConnect();
+      await p2;
+
+      expect(client.socket).not.toBeNull();
+      expect(client.isConnected).toBe(true);
+
+      // The OLD disconnect()'s 1s fallback timer must NOT fire late and tear down
+      // the freshly-opened socket (it must be cleared when the disconnect event arrived).
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      expect(client.socket).not.toBeNull();
+      expect(client.isConnected).toBe(true);
     });
 
     it('should NOT validate token (that is ConnectionManager responsibility)', async () => {
@@ -195,6 +281,19 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       await connectPromise;
     });
 
+    it('should warn when a forwarded event lacks the AsyncAPI envelope (WS-7)', () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Emit a non-conforming event (no {event,data,timestamp} envelope)
+      mockSocket._simulateMessage('session:update', { id: 'sess-1', status: 'active' });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('non-conforming'),
+        'session:update'
+      );
+      warnSpy.mockRestore();
+    });
+
     it('should emit message:received event for all orchestrator messages', () => {
       const messageHandler = jest.fn();
       client.addEventListener('message:received', messageHandler);
@@ -217,30 +316,16 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       }));
     });
 
-    it('should forward all AsyncAPI message types', () => {
+    // NOTE: the MESSAGE_TYPES↔AsyncAPI subscribe-set conformance check (WS-2) is a
+    // cross-component test that needs the backend contract. It lives in the monorepo
+    // backend contract layer: backend/tests/contract/scanner/client-contract-conformance.test.js
+    // (the backend repo always has contracts/asyncapi.yaml; ALNScanner standalone CI does not).
+
+    it('forwards every event in the exported production MESSAGE_TYPES array', () => {
       const messageHandler = jest.fn();
       client.addEventListener('message:received', messageHandler);
 
-      const messageTypes = [
-        'sync:full',
-        'transaction:result',
-        'transaction:new',
-        'score:adjusted',
-        'session:update',
-        'device:connected',
-        'device:disconnected',
-        'group:completed',
-        'gm:command:ack',
-        'offline:queue:processed',
-        'batch:ack',
-        'error',
-        'cue:fired',
-        'cue:completed',
-        'cue:error',
-        'service:state',
-      ];
-
-      messageTypes.forEach(type => {
+      MESSAGE_TYPES.forEach(type => {
         mockSocket._simulateMessage(type, {
           event: type,
           data: { test: 'data' },
@@ -248,7 +333,9 @@ describe('OrchestratorClient - Dumb Pipe', () => {
         });
       });
 
-      expect(messageHandler).toHaveBeenCalledTimes(messageTypes.length);
+      expect(messageHandler).toHaveBeenCalledTimes(MESSAGE_TYPES.length);
+      // Confirm the production array is non-trivial (guards against an empty export)
+      expect(MESSAGE_TYPES.length).toBeGreaterThanOrEqual(20);
     });
 
     it('should NOT process messages (just forward them)', () => {
@@ -345,10 +432,8 @@ describe('OrchestratorClient - Dumb Pipe', () => {
     });
 
     it('should handle disconnect when socket exists but not connected', async () => {
-      const connectPromise = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
-      mockSocket._simulateConnect();
-      await connectPromise;
-
+      // beforeEach already established a connected socket; re-connecting here is
+      // redundant and (post-RL-5) would await a teardown this test never drives.
       // Simulate unexpected disconnection (socket exists but not connected)
       mockSocket.connected = false;
       client.isConnected = false;
@@ -356,6 +441,8 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       await client.disconnect();
 
       expect(client.socket).toBeNull();
+      // Verify _cleanup() actually ran (not just a no-op null assignment).
+      expect(mockSocket.removeAllListeners).toHaveBeenCalled();
     });
   });
 
@@ -449,6 +536,64 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       expect(client.checkTokenExpiry).toBeUndefined();
       expect(client.refreshToken).toBeUndefined();
       expect(client.handleAuthRequired).toBeUndefined();
+    });
+  });
+
+  describe('sendCommand same-action serialization (WS-6 interim)', () => {
+    it('does not resolve a second same-action command on the first ack', async () => {
+      const p = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateConnect();
+      await p;
+
+      const r1 = client.sendCommand('session:addTeam', { teamId: 'A' });
+      const r2 = client.sendCommand('session:addTeam', { teamId: 'B' });
+
+      // First ack arrives — must resolve r1 only, not r2.
+      mockSocket._simulateMessage('gm:command:ack', { data: { action: 'session:addTeam', success: true, message: 'A added' } });
+
+      await expect(r1).resolves.toEqual({ success: true, message: 'A added' });
+
+      // Flush microtasks so the chain advances: r2's command is now sent and its
+      // ack handler registered, but r2 is still pending (no ack for it yet).
+      // Without serialization, the first ack above would have ALSO resolved r2
+      // (with 'A added'), so r2Settled would already be true here.
+      let r2Settled = false;
+      r2.then(() => { r2Settled = true; });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(r2Settled).toBe(false);
+
+      mockSocket._simulateMessage('gm:command:ack', { data: { action: 'session:addTeam', success: true, message: 'B added' } });
+      await expect(r2).resolves.toEqual({ success: true, message: 'B added' });
+    });
+
+    it('rejects a chained command with a clean error when the socket was torn down (WS-6)', async () => {
+      // Reconnect churn: _cleanup() nulls the socket between a first same-action
+      // command and a chained follower. The follower's _sendCommandOnce() must
+      // reject with a clean 'Socket not connected' — NOT a raw TypeError from
+      // touching this.socket.on on a null socket (the message a GM would see).
+      client.socket = null;
+      await expect(
+        client._sendCommandOnce('session:addTeam', { teamId: 'B' }, 30)
+      ).rejects.toThrow('Socket not connected');
+    });
+
+    it('clears in-flight action chains on cleanup so post-reconnect commands send immediately (WS-6)', async () => {
+      const p = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      mockSocket._simulateConnect();
+      await p;
+
+      // A same-action command is in flight (never acked) — its chain entry is set.
+      const r1 = client.sendCommand('session:addTeam', { teamId: 'A' }, 30);
+      r1.catch(() => {}); // will reject on timeout after cleanup; swallow
+      expect(client._actionChains['session:addTeam']).toBeTruthy();
+
+      // Socket teardown during reconnect churn must drop the stale chain so a
+      // post-reconnect command doesn't queue behind a doomed pre-reconnect one.
+      client._cleanup();
+      expect(client._actionChains['session:addTeam']).toBeFalsy();
+
+      // Let the short timeout fire so no timer dangles into other tests.
+      await new Promise(resolve => setTimeout(resolve, 50));
     });
   });
 });

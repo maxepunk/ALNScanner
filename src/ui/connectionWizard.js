@@ -67,40 +67,37 @@ export class ConnectionWizard {
       const commonPorts = [3000, 8080];
       // Use same protocol as current page to avoid mixed content blocking
       const protocol = window.location.protocol.replace(':', ''); // 'https' or 'http'
-      const promises = [];
 
-      // Scan detected subnet (254 IPs × 2 ports = 508 requests max)
-      // Browser connection pooling naturally rate-limits concurrent requests
+      // Build the candidate URL list first (no fetches yet).
+      const candidates = [];
       for (let i = 1; i <= 254; i++) {
         for (const port of commonPorts) {
-          const url = `${protocol}://${subnet}.${i}:${port}`;
-          promises.push(
-            fetch(`${url}/health`, {
-              method: 'GET',
-              mode: 'cors',
-              signal: AbortSignal.timeout(500)
-            })
-            .then(response => response.ok ? url : null)
-            .catch(() => null)
-          );
+          candidates.push(`${protocol}://${subnet}.${i}:${port}`);
         }
       }
+      candidates.push(`${protocol}://localhost:3000`);
 
-      // Also try localhost
-      promises.push(
-        fetch(`${protocol}://localhost:3000/health`, {
-          signal: AbortSignal.timeout(1000)
-        })
-        .then(response => response.ok ? `${protocol}://localhost:3000` : null)
-        .catch(() => null)
-      );
+      const probe = (url) =>
+        fetch(`${url}/health`, { method: 'GET', mode: 'cors', signal: AbortSignal.timeout(500) })
+          .then(response => (response.ok ? url : null))
+          .catch(() => null);
+
+      // HTTP-6: drain in bounded batches so we never open ~509 sockets at once
+      // (the unbounded fan-out spiked Pi CPU/memory and flooded the console with
+      //  CORS/network errors). Sequential batches, parallel within each batch.
+      const BATCH_SIZE = 32;
+      const results = [];
+      for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+        const batch = candidates.slice(i, i + BATCH_SIZE);
+        const settled = await Promise.all(batch.map(probe));
+        results.push(...settled);
+      }
 
       // Try current origin if served from orchestrator
       if (window.location.pathname.startsWith('/gm-scanner/')) {
-        promises.push(Promise.resolve(window.location.origin));
+        results.push(window.location.origin);
       }
 
-      const results = await Promise.all(promises);
       const foundServers = [...new Set(results.filter(url => url !== null))];
 
       if (foundServers.length > 0) {
@@ -135,12 +132,23 @@ export class ConnectionWizard {
     serversDiv.innerHTML = '';
 
     servers.forEach(server => {
+      if (!server || !server.url) return; // HTTP-7: guard malformed entries
+
       const serverEl = document.createElement('div');
       serverEl.className = 'server-item';
-      serverEl.innerHTML = `
-        <span>🎮 Game Server at ${server.ip || server.url}</span>
-        <button data-action="connectionWizard.selectServer" data-arg="${server.url}">Select</button>
-      `;
+
+      const span = document.createElement('span');
+      span.textContent = `🎮 Game Server at ${server.url}`;
+
+      const button = document.createElement('button');
+      button.textContent = 'Select';
+      button.setAttribute('data-action', 'connectionWizard.selectServer');
+      // AUTH-6: setAttribute escapes the value — no innerHTML interpolation, so a
+      // quote in a url from a rogue LAN responder can't break out of the attribute.
+      button.setAttribute('data-arg', server.url);
+
+      serverEl.appendChild(span);
+      serverEl.appendChild(button);
       serversDiv.appendChild(serverEl);
     });
   }
@@ -162,11 +170,7 @@ export class ConnectionWizard {
       debounceTimer = setTimeout(() => {
         const url = serverUrlInput.value.trim();
         if (url) {
-          // Normalize URL (add protocol if missing)
-          let normalizedUrl = url;
-          if (!normalizedUrl.match(/^https?:\/\//i)) {
-            normalizedUrl = `http://${normalizedUrl}`;
-          }
+          const normalizedUrl = this._normalizeUrl(url);
           this.assignStationName(normalizedUrl);
         }
       }, DEBOUNCE_MS);
@@ -220,15 +224,20 @@ export class ConnectionWizard {
 
       console.log(`[ConnectionWizard] Auto-assigned station name: ${nextStationId}`);
     } catch (error) {
-      // Fallback to localStorage counter on error
-      console.warn(`[ConnectionWizard] Failed to query /api/state, using localStorage fallback:`, error.message);
-
-      const stationNum = localStorage.getItem('lastStationNum') || '1';
-      const fallbackId = `GM_Station_${stationNum}`;
+      // RL-7: Do NOT hand out a guessable lastStationNum counter when /api/state
+      // is unreachable — an uncoordinated counter can collide with an already-
+      // connected station, causing a silent DEVICE_ID_COLLISION at handshake.
+      // Block instead: clear the assignment so the submit guard refuses to send.
+      console.warn(`[ConnectionWizard] Could not query /api/state for station assignment:`, error.message);
 
       if (stationNameDisplay) {
-        stationNameDisplay.textContent = fallbackId;
-        stationNameDisplay.dataset.deviceId = fallbackId;
+        stationNameDisplay.textContent = '⚠️ Cannot assign station — orchestrator unreachable';
+        stationNameDisplay.dataset.deviceId = '';
+      }
+      const statusDiv = document.getElementById('connectionStatusMsg');
+      if (statusDiv) {
+        statusDiv.textContent = '❌ Could not reach the orchestrator to assign a station number. Check the server URL and try again.';
+        statusDiv.style.color = '#f44336';
       }
     }
   }
@@ -264,9 +273,24 @@ export class ConnectionWizard {
   }
 
   /**
+   * Normalize a typed server URL — prepend the PAGE protocol (not hardcoded
+   * http://) so a bare host:port isn't mixed-content-blocked on an HTTPS scanner.
+   * @param {string} url
+   * @returns {string}
+   * @private
+   */
+  _normalizeUrl(url) {
+    const trimmed = url.trim();
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    return `${protocol}//${trimmed}`;
+  }
+
+  /**
    * Select discovered server and pre-fill connection form
    */
   selectServer(url) {
+    if (!url) return; // HTTP-7: ignore a malformed/empty server entry
     document.getElementById('serverUrl').value = url;
     document.getElementById('discoveryStatus').textContent = '✅ Server selected';
 
@@ -288,21 +312,22 @@ export class ConnectionWizard {
     const stationNameDisplay = document.getElementById('stationNameDisplay');
     const deviceId = stationNameDisplay ? stationNameDisplay.dataset.deviceId : null;
 
-    // Validate inputs
-    if (!serverUrl || !deviceId || !password) {
-      statusDiv.textContent = '⚠️ Please fill in all fields';
-      statusDiv.style.color = '#ff9800';
-      return;
-    }
-
-    statusDiv.textContent = '⏳ Connecting...';
-    statusDiv.style.color = '#2196F3';
-
     try {
-      // Normalize URL - add http:// if no protocol specified
-      let normalizedUrl = serverUrl.trim();
-      if (!normalizedUrl.match(/^https?:\/\//i)) {
-        normalizedUrl = `http://${normalizedUrl}`;
+      // Validate inputs INSIDE the try so the finally below always clears the
+      // password (AUTH-3) — including on this early-return path, which is reached
+      // with a typed password when deviceId is empty (/api/state was unreachable).
+      if (!serverUrl || !deviceId || !password) {
+        statusDiv.textContent = '⚠️ Please fill in all fields';
+        statusDiv.style.color = '#ff9800';
+        return;
+      }
+
+      statusDiv.textContent = '⏳ Connecting...';
+      statusDiv.style.color = '#2196F3';
+
+      // Normalize URL - prepend the page protocol if none specified
+      let normalizedUrl = this._normalizeUrl(serverUrl);
+      if (normalizedUrl !== serverUrl.trim()) {
         statusDiv.textContent = `🔧 Using ${normalizedUrl}`;
       }
 
@@ -321,7 +346,8 @@ export class ConnectionWizard {
       const authResponse = await fetch(`${normalizedUrl}/api/admin/auth`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        body: JSON.stringify({ password }),
+        signal: AbortSignal.timeout(5000)
       });
 
       if (!authResponse.ok) {
@@ -330,7 +356,23 @@ export class ConnectionWizard {
         return;
       }
 
-      const { token } = await authResponse.json();
+      // AUTH-4/HTTP-2: guard against non-JSON (a 200-but-HTML SPA shell) and a
+      // JSON body missing the token before persisting anything.
+      let authBody;
+      try {
+        authBody = await authResponse.json();
+      } catch {
+        statusDiv.textContent = '❌ Invalid auth response (not JSON)';
+        statusDiv.style.color = '#f44336';
+        return;
+      }
+
+      const token = authBody && authBody.token;
+      if (typeof token !== 'string' || token.length === 0) {
+        statusDiv.textContent = '❌ Invalid auth response (missing token)';
+        statusDiv.style.color = '#f44336';
+        return;
+      }
 
       // 3. Save configuration to localStorage
       localStorage.setItem('aln_orchestrator_url', normalizedUrl);
@@ -343,12 +385,9 @@ export class ConnectionWizard {
       settings.stationName = deviceId;
       settings.save();
 
-      // Update localStorage counter for next session
-      const match = deviceId.match(/GM_Station_(\d+)$/);
-      if (match) {
-        const nextNum = parseInt(match[1], 10) + 1;
-        localStorage.setItem('lastStationNum', nextNum.toString());
-      }
+      // (removed) lastStationNum counter — no longer used; station IDs are assigned
+      // only from the server's connected-device list (see assignStationName). The
+      // counter could collide across stations when /api/state was unreachable (RL-7).
 
       // 4. Trigger networked mode initialization via App (event-driven pattern)
       // Per Architecture Refactoring 2025-11: App creates NetworkedSession, not wizard
@@ -367,8 +406,24 @@ export class ConnectionWizard {
       // (Modal close and UI transition happen in App._initializeNetworkedMode)
 
     } catch (error) {
-      statusDiv.textContent = `❌ Connection failed: ${error.message}`;
+      // AbortSignal.timeout() rejects with a TimeoutError DOMException in spec
+      // browsers (Chrome/Edge — the production runtime); undici/Node may surface
+      // AbortError. Treat both as a timeout so the operator gets an actionable
+      // message (covers both the health-check and the auth-POST timeouts).
+      if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+        statusDiv.textContent = '❌ Server timed out — check the orchestrator and retry.';
+      } else {
+        statusDiv.textContent = `❌ Connection failed: ${error.message}`;
+      }
       statusDiv.style.color = '#f44336';
+    } finally {
+      // AUTH-3: never retain the shared admin secret in the DOM/JS memory
+      // (recoverable via devtools for the whole session otherwise).
+      const passwordInput = document.getElementById('gmPassword');
+      if (passwordInput) {
+        passwordInput.value = '';
+        passwordInput.setAttribute('autocomplete', 'off');
+      }
     }
   }
 
@@ -396,8 +451,12 @@ export class ConnectionWizard {
     const modal = document.getElementById('connectionModal');
     modal.style.display = 'flex';
 
-    // Auto-scan on open for better UX (but don't block)
-    setTimeout(() => this.scanForServers(), 100);
+    // HTTP-6: only auto-scan when there's no saved orchestrator URL. With a
+    // saved URL the ~509-probe scan is wasted work (and a Pi CPU/console spike).
+    const savedUrl = localStorage.getItem('aln_orchestrator_url');
+    if (!savedUrl) {
+      setTimeout(() => this.scanForServers(), 100);
+    }
   }
 
 }
@@ -449,14 +508,52 @@ export class QueueStatusManager {
 }
 
 /**
- * Cleanup handler for page unload
- * Ensures graceful disconnect when page is closing
+ * Page-lifecycle controller (RL-2).
+ * On background (visibility→hidden / pagehide / freeze) we proactively close the
+ * socket: this makes the page BFCache-eligible AND frees the deviceId server-side,
+ * preventing the DEVICE_ID_COLLISION churn that full reloads cause. On foreground
+ * (visibility→visible / pageshow / resume) we reconnect via ConnectionManager,
+ * which revalidates token + health and triggers sync:full.
  */
 export function setupCleanupHandlers(app) {
-  window.addEventListener('beforeunload', () => {
-    if (app.networkedSession?.services?.client) {
-      console.log('Page unloading - disconnecting socket');
-      app.networkedSession.services.client.disconnect();
+  const closeSocket = () => {
+    app.pauseNFCForBackground?.(); // free the NFC radio on background (NFC-3, both modes)
+    // Use ConnectionManager.disconnect() (not client.disconnect()): it cancels any
+    // pending reconnect timer + removes the reconnect handler before closing the
+    // socket, so a queued reconnect can't fire while backgrounded and defeat BFCache.
+    // NOTE: Do NOT use getService('connectionManager') here — getService() throws
+    // synchronously with 'Session not initialized' when services===null. This happens
+    // in two real windows: INIT (networkedSession assigned before initialize() populates
+    // services) and DESTROY (destroy() nulls services before app nulls networkedSession).
+    // Optional chaining (?.) only guards null/undefined — it does NOT catch synchronous
+    // throws. Use the null-safe property path instead (returns undefined, never throws).
+    const cm = app.networkedSession?.services?.connectionManager;
+    if (cm) {
+      console.log('Page backgrounded - closing socket (BFCache-eligible, frees deviceId)');
+      Promise.resolve(cm.disconnect()).catch(() => {});
     }
+  };
+
+  const reopenSocket = () => {
+    app.resumeNFCForForeground?.(); // re-arm NFC on foreground (NFC-3, both modes)
+    // Same null-safe path as closeSocket — see comment above re: getService() throws.
+    const cm = app.networkedSession?.services?.connectionManager;
+    if (cm) {
+      console.log('Page foregrounded - reconnecting');
+      Promise.resolve(cm.connect()).catch(() => {}); // connect() revalidates + sync:full
+    }
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') closeSocket();
+    else reopenSocket();
+  });
+
+  // pagehide replaces beforeunload (beforeunload disqualifies BFCache).
+  window.addEventListener('pagehide', closeSocket);
+  window.addEventListener('freeze', closeSocket);
+  window.addEventListener('resume', reopenSocket);
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) reopenSocket(); // restored from BFCache
   });
 }

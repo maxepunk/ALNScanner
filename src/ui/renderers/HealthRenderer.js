@@ -1,4 +1,5 @@
 import { escapeHtml } from '../../utils/escapeHtml.js';
+import { escapeCssAttrValue } from '../../utils/escapeCssAttrValue.js';
 
 /**
  * HealthRenderer - Differential Service Health Dashboard
@@ -81,12 +82,12 @@ export class HealthRenderer {
     const serviceCards = statuses.map(s => {
       const isDown = s.status !== 'healthy';
       return `
-        <div class="health-service ${isDown ? 'health-service--down' : 'health-service--ok'}" data-service="${s.id}">
+        <div class="health-service ${isDown ? 'health-service--down' : 'health-service--ok'}" data-service="${escapeHtml(s.id)}">
           <div class="health-service__name">${escapeHtml(s.name)}</div>
-          <div class="health-service__status">${s.status}</div>
+          <div class="health-service__status">${escapeHtml(s.status)}</div>
           ${s.message ? `<div class="health-service__message">${escapeHtml(s.message)}</div>` : '<div class="health-service__message" style="display:none"></div>'}
           <div class="health-service__btn-slot">
-            ${isDown ? `<button class="btn btn-sm" data-action="admin.serviceCheck" data-service-id="${s.id}">Check Now</button>` : ''}
+            ${isDown ? `<button class="btn btn-sm" data-action="admin.serviceCheck" data-service-id="${escapeHtml(s.id)}">Check Now</button>` : ''}
           </div>
         </div>
       `;
@@ -109,7 +110,7 @@ export class HealthRenderer {
     this._summaryTextEl = this.container.querySelector('.health-dashboard__summary-text');
     this._serviceEls = {};
     for (const s of statuses) {
-      const card = this.container.querySelector(`[data-service="${s.id}"]`);
+      const card = this.container.querySelector(`[data-service="${escapeCssAttrValue(s.id)}"]`);
       if (card) {
         this._serviceEls[s.id] = {
           card,
@@ -152,7 +153,7 @@ export class HealthRenderer {
       // Check Now button
       if (isDown) {
         if (!els.btnSlot.querySelector('button')) {
-          els.btnSlot.innerHTML = `<button class="btn btn-sm" data-action="admin.serviceCheck" data-service-id="${s.id}">Check Now</button>`;
+          els.btnSlot.innerHTML = `<button class="btn btn-sm" data-action="admin.serviceCheck" data-service-id="${escapeHtml(s.id)}">Check Now</button>`;
         }
       } else {
         els.btnSlot.innerHTML = '';

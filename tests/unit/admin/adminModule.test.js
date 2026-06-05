@@ -247,39 +247,8 @@ describe('AdminModule - ES6 Exports', () => {
   // SystemMonitor — DELETED (Phase 4). Replaced by event-driven HealthRenderer.
 
   describe('AdminOperations', () => {
-    it('should send system restart command', async () => {
-      const ops = new AdminOperations(mockConnection);
-
-      setTimeout(() => {
-        mockConnection.dispatchEvent(
-          new CustomEvent('message:received', {
-            detail: {
-              type: 'gm:command:ack',
-              payload: { action: 'system:restart', success: true }
-            }
-          })
-        );
-      }, 10);
-
-      await expect(ops.restartSystem()).resolves.toEqual({ action: 'system:restart', success: true });
-    });
-
-    it('should send clear data command', async () => {
-      const ops = new AdminOperations(mockConnection);
-
-      setTimeout(() => {
-        mockConnection.dispatchEvent(
-          new CustomEvent('message:received', {
-            detail: {
-              type: 'gm:command:ack',
-              payload: { action: 'system:clear', success: true }
-            }
-          })
-        );
-      }, 10);
-
-      await expect(ops.clearData()).resolves.toEqual({ action: 'system:clear', success: true });
-    });
+    // (removed 'system restart'/'clear data' cases — restartSystem()/clearData()
+    //  were dead methods emitting non-contract actions; deleted in AC-1/CC-6.)
 
     describe('Score Management', () => {
       it('should reset scores via _sendCommand', async () => {

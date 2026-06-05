@@ -22,25 +22,16 @@ describe('AdminOperations', () => {
     ops = new AdminOperations(mockConnection);
   });
 
-  describe('restartSystem', () => {
-    it('sends system:restart command', async () => {
-      await ops.restartSystem();
-      expect(sendCommand).toHaveBeenCalledWith(
-        mockConnection,
-        'system:restart',
-        expect.any(Object)
-      );
+  // AC-1/CC-6: the dead restartSystem()/clearData() methods (which emitted the
+  // non-contract actions system:restart / system:clear — backend returns
+  // "Unknown action") have been removed. They had zero production callers; the
+  // real reset is the inline system:reset in app.js.
+  describe('dead system actions removed (AC-1/CC-6)', () => {
+    it('no longer exposes restartSystem()', () => {
+      expect(typeof ops.restartSystem).toBe('undefined');
     });
-  });
-
-  describe('clearData', () => {
-    it('sends system:clear command', async () => {
-      await ops.clearData();
-      expect(sendCommand).toHaveBeenCalledWith(
-        mockConnection,
-        'system:clear',
-        expect.any(Object)
-      );
+    it('no longer exposes clearData()', () => {
+      expect(typeof ops.clearData).toBe('undefined');
     });
   });
 

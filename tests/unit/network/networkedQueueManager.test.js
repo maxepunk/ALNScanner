@@ -107,10 +107,12 @@ describe('NetworkedQueueManager', () => {
 
       queueManager.queueTransaction(transaction);
 
-      expect(queueManager.tempQueue).toContainEqual(transaction);
+      expect(queueManager.tempQueue).toContainEqual(
+        expect.objectContaining({ tokenId: 'token1', teamId: '001' })
+      );
       expect(localStorageMock.setItem).toHaveBeenCalledWith(
         'networkedTempQueue',
-        JSON.stringify([transaction])
+        expect.stringContaining('token1')
       );
       expect(eventSpy).toHaveBeenCalledTimes(1);
       expect(eventSpy.mock.calls[0][0].detail).toEqual({
@@ -119,19 +121,134 @@ describe('NetworkedQueueManager', () => {
       });
     });
 
-    it('should send transaction immediately when connected', () => {
-      const transaction = {
-        tokenId: 'token2',
-        teamId: '002',
-        timestamp: new Date().toISOString()
-      };
-
+    it('should persist before emitting on the connected path', () => {
+      const transaction = { tokenId: 'token2', teamId: '002', timestamp: new Date().toISOString() };
       mockClient.isConnected = true;
 
-      queueManager.queueTransaction(transaction);
+      const id = queueManager.queueTransaction(transaction);
 
-      expect(mockClient.send).toHaveBeenCalledWith('transaction:submit', transaction);
-      expect(queueManager.tempQueue).toHaveLength(0);
+      // Durable (TQ-1): entry is in the queue AND persisted at emit time
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(
+        'networkedTempQueue',
+        expect.stringContaining(id)
+      );
+      // And it was emitted via the durable submit path
+      expect(mockClient.send).toHaveBeenCalledWith(
+        'transaction:submit',
+        expect.objectContaining({ clientTxId: id })
+      );
+
+      // ORDERING: persisted BEFORE emitting. Guards against re-introducing the
+      // fire-and-forget loss window (saveQueue's setItem must precede client.send).
+      expect(localStorageMock.setItem.mock.invocationCallOrder[0])
+        .toBeLessThan(mockClient.send.mock.invocationCallOrder[0]);
+
+      // Resolve the in-flight replay so the 30s timer is cleared (no leaked timer)
+      const replayHandler = mockClient.addEventListener.mock.calls
+        .find(c => c[0] === 'message:received')[1];
+      replayHandler({ detail: { type: 'transaction:result', payload: { clientTxId: id, status: 'accepted' } } });
+    });
+
+    it('should remove the entry after a definitive accepted result', async () => {
+      const transaction = { tokenId: 'token2', teamId: '002', timestamp: new Date().toISOString() };
+      mockClient.isConnected = true;
+      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'accepted' });
+
+      const id = queueManager.queueTransaction(transaction);
+
+      // STRENGTHENED: prove durability THEN removal so the test cannot pass
+      // accidentally pre-fix (where the connected path never queued the entry).
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);  // present after queue
+
+      // _submitDurable is fire-and-forget; setTimeout(0) is a macrotask that runs
+      // AFTER the .then()->_removeByClientTxId microtask chain (deterministic).
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(false); // absent after result
+    });
+
+    it('removes the entry and surfaces transaction:failed on a definitive rejected result (connected)', async () => {
+      mockClient.isConnected = true;
+      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'rejected', message: 'No active session' });
+
+      const failedSpy = jest.fn();
+      queueManager.addEventListener('transaction:failed', failedSpy);
+
+      const id = queueManager.queueTransaction({ tokenId: 'tR', teamId: '001' });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(false);  // permanent: removed
+      expect(failedSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('in-flight paused: connected scan + REAL error result → removed + transaction:failed (no mock)', async () => {
+      // Edge case: a scan submitted while active, but the session paused before the
+      // backend processed it → transaction:result status 'error'. Now DEFINITIVE
+      // (remove + unmark + toast via transaction:failed), NOT kept-and-stuck. GM
+      // re-scans after resume (the gate blocks scanning while paused).
+      mockClient.isConnected = true;
+      const handlers = [];
+      mockClient.addEventListener.mockImplementation((type, h) => {
+        if (type === 'message:received') handlers.push(h);
+      });
+      const failedSpy = jest.fn();
+      queueManager.addEventListener('transaction:failed', failedSpy);
+
+      const id = queueManager.queueTransaction({ tokenId: 'tPause', teamId: '001' });
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);  // queued at emit time
+
+      handlers.forEach(h => h({ detail: { type: 'transaction:result', payload: { clientTxId: id, status: 'error', tokenId: 'tPause', teamId: '001', message: 'Session is paused' } } }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(false);  // removed (definitive)
+      expect(failedSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the entry persisted when the durable submit throws (transient, connected)', async () => {
+      mockClient.isConnected = true;
+      jest.spyOn(queueManager, 'replayTransaction').mockRejectedValue(new Error('connection lost'));
+
+      const id = queueManager.queueTransaction({ tokenId: 'tT', teamId: '001' });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // Transient failure: leave persisted for syncQueue to retry on reconnect
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);
+    });
+
+    it('keeps the entry persisted when the connected result is queued', async () => {
+      mockClient.isConnected = true;
+      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'queued' });
+
+      const id = queueManager.queueTransaction({ tokenId: 'tQ', teamId: '001' });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);
+    });
+
+    it('durable connected flow end-to-end: queue -> submit -> REAL result -> removed (no replayTransaction mock)', async () => {
+      // Exercises the full scanner-side durable path through the REAL replayTransaction
+      // matcher against the true backend wire payload (as OrchestratorClient unwraps
+      // it to {type, payload}). Guards the phantom-mock class: a change to the envelope
+      // shape or matcher would break this without a mock hiding it.
+      mockClient.isConnected = true;
+      const handlers = [];
+      mockClient.addEventListener.mockImplementation((type, h) => {
+        if (type === 'message:received') handlers.push(h);
+      });
+
+      const id = queueManager.queueTransaction({ tokenId: 'tE2E', teamId: '001' });
+
+      // Persisted + submitted via the real _submitDurable -> replayTransaction path.
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(true);
+      expect(mockClient.send).toHaveBeenCalledWith('transaction:submit', expect.objectContaining({ clientTxId: id }));
+
+      // Real backend transaction:result envelope, matched by clientTxId.
+      handlers.forEach(h => h({ detail: { type: 'transaction:result', payload: { clientTxId: id, status: 'accepted', tokenId: 'tE2E', teamId: '001', points: 100 } } }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // Real matcher resolved -> _submitDurable removed it. End to end, no mock.
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(false);
     });
 
     it('should handle missing client gracefully', () => {
@@ -140,7 +257,20 @@ describe('NetworkedQueueManager', () => {
       const transaction = { tokenId: 'token3', teamId: '003' };
       queueManager.queueTransaction(transaction);
 
-      expect(queueManager.tempQueue).toContainEqual(transaction);
+      expect(queueManager.tempQueue).toContainEqual(
+        expect.objectContaining({ tokenId: 'token3', teamId: '003' })
+      );
+    });
+
+    it('should generate and return a clientTxId, persisting it', () => {
+      mockClient.isConnected = false;
+      const tx = { tokenId: 'tokenX', teamId: '009', timestamp: new Date().toISOString() };
+
+      const id = queueManager.queueTransaction(tx);
+
+      expect(typeof id).toBe('string');
+      expect(id.length).toBeGreaterThan(0);
+      expect(queueManager.tempQueue[0].clientTxId).toBe(id);
     });
   });
 
@@ -183,7 +313,7 @@ describe('NetworkedQueueManager', () => {
       queueManager.tempQueue = [...transactions];
 
       // Mock successful replay
-      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'success' });
+      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'accepted' });
 
       await queueManager.syncQueue();
 
@@ -194,21 +324,21 @@ describe('NetworkedQueueManager', () => {
       expect(localStorageMock.removeItem).toHaveBeenCalledWith('networkedTempQueue');
     });
 
-    it('should clear queue even if some transactions fail', async () => {
+    it('should keep a transient-failed entry and remove the succeeded one', async () => {
       const transactions = [
         { tokenId: 'token1', teamId: '001' },
         { tokenId: 'token2', teamId: '002' }
       ];
       queueManager.tempQueue = [...transactions];
 
-      // Mock mixed results
+      // First accepted (removed), second throws (transient -> kept for reconnect)
       jest.spyOn(queueManager, 'replayTransaction')
-        .mockResolvedValueOnce({ status: 'success' })
+        .mockResolvedValueOnce({ status: 'accepted' })
         .mockRejectedValueOnce(new Error('Validation error'));
 
       await queueManager.syncQueue();
 
-      expect(queueManager.tempQueue).toHaveLength(0);
+      expect(queueManager.tempQueue).toHaveLength(1);
 
       // Find the call with 'Queue sync complete'
       const syncCompleteCall = mockDebug.log.mock.calls.find(
@@ -219,7 +349,8 @@ describe('NetworkedQueueManager', () => {
       expect(syncCompleteCall[1]).toEqual({
         total: 2,
         success: 1,
-        failed: 1
+        failed: 1,
+        kept: 1
       });
     });
 
@@ -249,7 +380,7 @@ describe('NetworkedQueueManager', () => {
 
     it('should emit queue:changed event after sync', async () => {
       queueManager.tempQueue = [{ tokenId: 'token1', teamId: '001' }];
-      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'success' });
+      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({ status: 'accepted' });
 
       const eventSpy = jest.fn();
       queueManager.addEventListener('queue:changed', eventSpy);
@@ -263,19 +394,92 @@ describe('NetworkedQueueManager', () => {
       });
     });
 
-    it('should preserve queue on sync failure', async () => {
-      const transactions = [{ tokenId: 'token1', teamId: '001' }];
+    it('should preserve queue when a replay throws (transient/connection error)', async () => {
+      const transactions = [{ tokenId: 'token1', teamId: '001', clientTxId: 'ctx-1' }];
       queueManager.tempQueue = [...transactions];
 
-      // Mock sync failure (throw before any replays)
-      jest.spyOn(queueManager, 'replayTransaction').mockImplementation(() => {
-        throw new Error('Network failure');
-      });
+      jest.spyOn(queueManager, 'replayTransaction').mockRejectedValue(new Error('connection lost'));
 
       await queueManager.syncQueue();
 
-      // Queue should be cleared despite failures (per spec)
+      // Transient failure: keep for next reconnect (was wrongly cleared before)
+      expect(queueManager.tempQueue).toContainEqual(transactions[0]);
+    });
+
+    it('should remove accepted and duplicate entries', async () => {
+      queueManager.tempQueue = [
+        { tokenId: 'tA', teamId: '001', clientTxId: 'a' },
+        { tokenId: 'tB', teamId: '002', clientTxId: 'b' }
+      ];
+      jest.spyOn(queueManager, 'replayTransaction')
+        .mockResolvedValueOnce({ status: 'accepted', clientTxId: 'a' })
+        .mockResolvedValueOnce({ status: 'duplicate', clientTxId: 'b' });
+
+      await queueManager.syncQueue();
+
       expect(queueManager.tempQueue).toHaveLength(0);
+    });
+
+    it('should remove rejected entries (permanent fail) and not retry them', async () => {
+      const tx = { tokenId: 'tC', teamId: '003', clientTxId: 'c' };
+      queueManager.tempQueue = [tx];
+      jest.spyOn(queueManager, 'replayTransaction')
+        .mockResolvedValueOnce({ status: 'rejected', clientTxId: 'c', message: 'No active session' });
+
+      await queueManager.syncQueue();
+
+      expect(queueManager.tempQueue).toHaveLength(0); // permanent: removed, not looped forever
+    });
+
+    it('should keep queued entries for the next reconnect', async () => {
+      const tx = { tokenId: 'tD', teamId: '004', clientTxId: 'd' };
+      queueManager.tempQueue = [tx];
+      jest.spyOn(queueManager, 'replayTransaction')
+        .mockResolvedValueOnce({ status: 'queued', clientTxId: 'd' });
+
+      await queueManager.syncQueue();
+
+      expect(queueManager.tempQueue).toContainEqual(tx);
+    });
+
+    it('should surface a transaction:failed event on permanent rejection', async () => {
+      const tx = { tokenId: 'tE', teamId: '005', clientTxId: 'e' };
+      queueManager.tempQueue = [tx];
+      jest.spyOn(queueManager, 'replayTransaction')
+        .mockResolvedValueOnce({ status: 'rejected', clientTxId: 'e', message: 'No active session' });
+
+      const failedSpy = jest.fn();
+      queueManager.addEventListener('transaction:failed', failedSpy);
+
+      await queueManager.syncQueue();
+
+      expect(failedSpy).toHaveBeenCalledTimes(1);
+      expect(failedSpy.mock.calls[0][0].detail).toEqual(
+        expect.objectContaining({ status: 'rejected', message: 'No active session' })
+      );
+    });
+
+    it('keeps an entry enqueued mid-flush (during a replay await) — does not wholesale-clobber the live queue (NQ-1)', async () => {
+      queueManager.tempQueue = [{ tokenId: 'offline1', teamId: '001', clientTxId: 'off-1' }];
+
+      let midScanId;
+      jest.spyOn(queueManager, 'replayTransaction').mockImplementation(async (tx) => {
+        if (tx.clientTxId === 'off-1') {
+          // A live GM scan lands WHILE we await the offline entry's replay. From now
+          // replays resolve 'queued' so the mid-flush entry's own _submitDurable does
+          // NOT remove it — syncQueue's surgical removal must preserve it.
+          queueManager.replayTransaction.mockResolvedValue({ status: 'queued' });
+          midScanId = queueManager.queueTransaction({ tokenId: 'midScan', teamId: '002' });
+          return { status: 'accepted', clientTxId: 'off-1' };
+        }
+        return { status: 'queued' };
+      });
+
+      await queueManager.syncQueue();
+      await new Promise(resolve => setTimeout(resolve, 0)); // flush _submitDurable microtasks
+
+      expect(queueManager.tempQueue.some(t => t.clientTxId === 'off-1')).toBe(false);   // processed → gone
+      expect(queueManager.tempQueue.some(t => t.clientTxId === midScanId)).toBe(true);  // survives (was dropped pre-fix)
     });
   });
 
@@ -341,7 +545,7 @@ describe('NetworkedQueueManager', () => {
       });
     });
 
-    it('should reject on error status', async () => {
+    it('should resolve with the payload on a definitive error status (caller treats as failure)', async () => {
       const transaction = { tokenId: 'token3', teamId: '003' };
 
       mockClient.addEventListener.mockImplementation((eventType, handler) => {
@@ -353,16 +557,20 @@ describe('NetworkedQueueManager', () => {
                 tokenId: 'token3',
                 teamId: '003',
                 status: 'error',
-                message: 'Invalid token'
+                message: 'Session is paused'
               }
             }
           });
         }, 10);
       });
 
+      // status 'error' (paused/not-active, in-flight) RESOLVES now — the caller
+      // (_submitDurable/syncQueue) treats it as a DEFINITIVE failure (remove +
+      // transaction:failed), like 'rejected'. Only the 30s timeout and type==='error'
+      // EVENTS reject (transient → keep).
       await expect(queueManager.replayTransaction(transaction))
-        .rejects
-        .toThrow('Invalid token');
+        .resolves
+        .toMatchObject({ status: 'error', message: 'Session is paused' });
     });
 
     it('should timeout after 30s', async () => {
@@ -440,6 +648,120 @@ describe('NetworkedQueueManager', () => {
       const result = await queueManager.replayTransaction(transaction);
 
       expect(result.tokenId).toBe('token6');
+    });
+
+    it('should reject fast when a backend error matches the submission', async () => {
+      const transaction = { tokenId: 'token7', teamId: '007', clientTxId: 'ctx-7' };
+
+      mockClient.addEventListener.mockImplementation((eventType, handler) => {
+        setTimeout(() => {
+          handler({
+            detail: {
+              type: 'error',
+              payload: {
+                code: 'VALIDATION_ERROR',
+                message: 'Failed to process transaction',
+                clientTxId: 'ctx-7'
+              }
+            }
+          });
+        }, 10);
+      });
+
+      // Without the type==='error' branch, this falls through the
+      // 'if (type !== transaction:result) return' guard and hangs to the 30s
+      // timeout -> jest's 5s default fires first (RED via timeout).
+      await expect(queueManager.replayTransaction(transaction))
+        .rejects
+        .toThrow('Failed to process transaction');
+    });
+
+    it('tracks concurrent same-token replays under distinct handler keys (clientTxId)', async () => {
+      const handlers = [];
+      mockClient.addEventListener.mockImplementation((type, h) => {
+        if (type === 'message:received') handlers.push(h);
+      });
+
+      const p1 = queueManager.replayTransaction({ tokenId: 'tk', teamId: '1', clientTxId: 'c1' });
+      const p2 = queueManager.replayTransaction({ tokenId: 'tk', teamId: '1', clientTxId: 'c2' });
+
+      // Distinct keys: the old tokenId-teamId key collided two same-token replays
+      // into ONE map entry (size 1), which could delete the wrong handler and leak
+      // a listener on timeout. Keyed by clientTxId they stay distinct.
+      expect(queueManager.activeHandlers.size).toBe(2);
+
+      // Settle both (clears their 30s timers), each matched by its own clientTxId.
+      handlers.forEach(h => h({ detail: { type: 'transaction:result', payload: { clientTxId: 'c1', status: 'accepted' } } }));
+      handlers.forEach(h => h({ detail: { type: 'transaction:result', payload: { clientTxId: 'c2', status: 'accepted' } } }));
+      await Promise.all([p1, p2]);
+
+      expect(queueManager.activeHandlers.size).toBe(0);
+    });
+
+    it('same clientTxId independent: two replays of identical clientTxId get distinct handler keys (NQ-2)', async () => {
+      // Regression guard for the reconnect re-send bug: a connected _submitDurable
+      // that never got a definitive result stays in tempQueue and is re-replayed by
+      // syncQueue after reconnect. Both calls share the same clientTxId 'X'. Before
+      // the fix, call B's activeHandlers.set() overwrote call A's entry under the
+      // same key, and when timeoutA fired it looked up the key, got handlerB, and
+      // de-registered B's still-live listener — leaving B hanging for its own 30s
+      // even though a valid transaction:result for X arrived.
+      const handlers = [];
+      mockClient.addEventListener.mockImplementation((type, h) => {
+        if (type === 'message:received') handlers.push(h);
+      });
+
+      // Two replays with the SAME clientTxId (simulates reconnect re-send of same tx).
+      const p1 = queueManager.replayTransaction({ tokenId: 'tk', teamId: '1', clientTxId: 'X' });
+      const p2 = queueManager.replayTransaction({ tokenId: 'tk', teamId: '1', clientTxId: 'X' });
+
+      // Each replay must occupy its own map slot so one cleanup can't clobber the other.
+      expect(queueManager.activeHandlers.size).toBe(2);
+
+      // Fire one transaction:result for X to BOTH handlers (as the real broadcast would).
+      handlers.forEach(h => h({ detail: { type: 'transaction:result', payload: { clientTxId: 'X', status: 'accepted' } } }));
+
+      // Both promises must resolve (neither hangs to its 30s timeout).
+      await Promise.all([p1, p2]);
+
+      // Both handlers cleaned up independently.
+      expect(queueManager.activeHandlers.size).toBe(0);
+    });
+  });
+
+  describe('reconcileWithServerState', () => {
+    it('drops queued entries already recorded on the server', () => {
+      queueManager.tempQueue = [
+        { tokenId: 'tDup', teamId: '001', clientTxId: 'a' },
+        { tokenId: 'tNew', teamId: '001', clientTxId: 'b' }
+      ];
+
+      queueManager.reconcileWithServerState(['tDup', 'tOther']);
+
+      expect(queueManager.tempQueue.map(t => t.tokenId)).toEqual(['tNew']);
+      expect(localStorageMock.setItem).toHaveBeenCalled();
+    });
+
+    it('is a no-op when given a non-array', () => {
+      queueManager.tempQueue = [{ tokenId: 'tNew', teamId: '001', clientTxId: 'b' }];
+      queueManager.reconcileWithServerState(undefined);
+      expect(queueManager.tempQueue).toHaveLength(1);
+    });
+
+    it('is a no-op for an empty array (fresh-session sync:full delivers [])', () => {
+      queueManager.tempQueue = [{ tokenId: 'tNew', teamId: '001', clientTxId: 'b' }];
+      localStorageMock.setItem.mockClear();
+      queueManager.reconcileWithServerState([]);
+      expect(queueManager.tempQueue).toHaveLength(1);
+      expect(localStorageMock.setItem).not.toHaveBeenCalled();
+    });
+
+    it('does not persist or emit when nothing matches', () => {
+      queueManager.tempQueue = [{ tokenId: 'tNew', teamId: '001', clientTxId: 'b' }];
+      localStorageMock.setItem.mockClear();
+      queueManager.reconcileWithServerState(['tOther']);
+      expect(queueManager.tempQueue).toHaveLength(1);
+      expect(localStorageMock.setItem).not.toHaveBeenCalled();
     });
   });
 

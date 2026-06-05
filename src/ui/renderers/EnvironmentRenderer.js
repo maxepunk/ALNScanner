@@ -1,4 +1,5 @@
 import { escapeHtml } from '../../utils/escapeHtml.js';
+import { escapeCssAttrValue } from '../../utils/escapeCssAttrValue.js';
 
 /**
  * EnvironmentRenderer - Differential DOM Rendering for Environment State
@@ -93,7 +94,7 @@ export class EnvironmentRenderer {
     }
 
     // Differential: only toggle active class
-    const newActiveId = activeScene?.id || null;
+    const newActiveId = activeScene || null;
     if (newActiveId !== this._activeSceneId) {
       this._updateActiveScene(newActiveId);
     }
@@ -101,7 +102,7 @@ export class EnvironmentRenderer {
 
   _buildSceneGrid(scenes, activeScene) {
     this.sceneGrid.innerHTML = scenes.map(scene => {
-      const isActive = activeScene && (scene.id === activeScene.id);
+      const isActive = activeScene && (scene.id === activeScene);
       const safeId = escapeHtml(scene.id);
       const safeName = escapeHtml(scene.name);
 
@@ -117,10 +118,10 @@ export class EnvironmentRenderer {
     // Cache element references
     this._sceneEls = {};
     for (const scene of scenes) {
-      const btn = this.sceneGrid.querySelector(`[data-scene-id="${scene.id}"]`);
+      const btn = this.sceneGrid.querySelector(`[data-scene-id="${escapeCssAttrValue(scene.id)}"]`);
       if (btn) this._sceneEls[scene.id] = btn;
     }
-    this._activeSceneId = activeScene?.id || null;
+    this._activeSceneId = activeScene || null;
   }
 
   _updateActiveScene(newActiveId) {
@@ -159,7 +160,7 @@ export class EnvironmentRenderer {
         // Re-apply routes after rebuilding dropdowns (they were wiped by rebuild)
         if (routes) {
           Object.entries(routes).forEach(([stream, sink]) => {
-            const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${stream}"]`);
+            const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${escapeCssAttrValue(stream)}"]`);
             if (dropdown) {
               dropdown.value = sink;
               // Fallback if sink doesn't match any option (consistent with differential path)
@@ -178,7 +179,7 @@ export class EnvironmentRenderer {
     // Update selection values (differential — only change if different)
     if (routes) {
       Object.entries(routes).forEach(([stream, sink]) => {
-        const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${stream}"]`);
+        const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${escapeCssAttrValue(stream)}"]`);
         if (dropdown && dropdown.value !== sink) {
           dropdown.value = sink;
           // Fallback if sink doesn't match any option
@@ -241,7 +242,7 @@ export class EnvironmentRenderer {
       this._volumeValues[stream] = value;
 
       if (!this.audioRoutingContainer) continue;
-      const slider = this.audioRoutingContainer.querySelector(`input[data-stream="${stream}"]`);
+      const slider = this.audioRoutingContainer.querySelector(`input[data-stream="${escapeCssAttrValue(stream)}"]`);
       if (slider && String(slider.value) !== String(value)) {
         slider.value = String(value);
         const item = slider.closest('.audio-control-item');
@@ -255,11 +256,15 @@ export class EnvironmentRenderer {
 
   /**
    * Render Bluetooth State (differential)
-   * @param {Object} btState - { scanning, discoveredDevices, connectedDevices, pairedDevices }
+   * @param {Object} btState - { scanning, connectedDevices, pairedDevices }
    * @param {Object|null} prev - Previous bluetooth state
    */
   renderBluetooth(btState, prev = null) {
-    const { scanning, discoveredDevices = [], connectedDevices = [] } = btState;
+    // SR-4: bluetoothService.getState() supplies only connected + paired devices
+    // (single A2DP stream on the Pi; pair-then-connect known speakers). There is
+    // no discoveredDevices over service:state, so we don't render arbitrary
+    // discovered devices.
+    const { scanning, connectedDevices = [] } = btState;
 
     // Scan button state
     if (this.btScanBtn) {
@@ -279,7 +284,7 @@ export class EnvironmentRenderer {
     // Device list
     if (!this.btDeviceList) return;
 
-    const allDevices = this._mergeDevices(connectedDevices, btState.pairedDevices, discoveredDevices);
+    const allDevices = this._mergeDevices(connectedDevices, btState.pairedDevices);
 
     if (allDevices.length === 0) {
       if (this._lastDeviceKey !== '') {
@@ -303,7 +308,7 @@ export class EnvironmentRenderer {
     }
   }
 
-  _mergeDevices(connectedDevices, pairedDevices, discoveredDevices) {
+  _mergeDevices(connectedDevices, pairedDevices) {
     const allDevices = [];
 
     // Connected devices first
@@ -319,13 +324,6 @@ export class EnvironmentRenderer {
         }
       });
     }
-
-    // Discovered (not already known)
-    discoveredDevices.forEach(d => {
-      if (!allDevices.some(ad => ad.address === d.address)) {
-        allDevices.push({ ...d, status: 'discovered' });
-      }
-    });
 
     return allDevices;
   }
@@ -350,20 +348,13 @@ export class EnvironmentRenderer {
           Disconnect
         </button>
       `;
-    } else if (isPaired) {
+    } else {
+      // Non-connected devices are always 'paired' now (discovered path removed, SR-4).
       actionBtn = `
         <button class="btn btn-xs btn-primary"
                 data-action="admin.connectBtDevice"
                 data-bt-address="${safeAddress}">
           Connect
-        </button>
-      `;
-    } else {
-      actionBtn = `
-        <button class="btn btn-xs btn-outline"
-                data-action="admin.pairBtDevice"
-                data-bt-address="${safeAddress}">
-          Pair
         </button>
       `;
     }

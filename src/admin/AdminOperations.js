@@ -6,7 +6,6 @@
  * - GM resets all team scores to zero
  * - GM adjusts individual team scores (add/subtract points)
  * - GM deletes erroneous transactions
- * - GM restarts system or clears data (emergency operations)
  *
  * @module admin/AdminOperations
  */
@@ -19,22 +18,6 @@ export class AdminOperations {
    */
   constructor(connection) {
     this.connection = connection;
-  }
-
-  /**
-   * Restart the orchestrator system
-   * @returns {Promise<Object>} Restart response
-   */
-  async restartSystem() {
-    return sendCommand(this.connection, 'system:restart', {});
-  }
-
-  /**
-   * Clear all system data
-   * @returns {Promise<Object>} Clear response
-   */
-  async clearData() {
-    return sendCommand(this.connection, 'system:clear', {});
   }
 
   /**

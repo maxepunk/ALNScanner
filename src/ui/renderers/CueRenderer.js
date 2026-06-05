@@ -1,4 +1,5 @@
 import { escapeHtml } from '../../utils/escapeHtml.js';
+import { escapeCssAttrValue } from '../../utils/escapeCssAttrValue.js';
 
 /**
  * CueRenderer - Differential DOM Rendering for Cue System
@@ -118,7 +119,7 @@ export class CueRenderer {
     // Cache element references
     this._standingEls = {};
     for (const cue of standingCues) {
-      const item = this.standingListEl.querySelector(`[data-cue-id="${cue.id}"]`);
+      const item = this.standingListEl.querySelector(`[data-cue-id="${escapeCssAttrValue(cue.id)}"]`);
       if (item) {
         this._standingEls[cue.id] = {
           item,
@@ -212,7 +213,7 @@ export class CueRenderer {
     // Cache element references
     this._activeEls = {};
     for (const [cueId] of entries) {
-      const item = this.activeListEl.querySelector(`[data-cue-id="${cueId}"]`);
+      const item = this.activeListEl.querySelector(`[data-cue-id="${escapeCssAttrValue(cueId)}"]`);
       if (item) {
         this._activeEls[cueId] = {
           item,

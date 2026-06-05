@@ -1,116 +1,59 @@
 /**
- * Service Worker for ALN GM Scanner
- * Enables PWA functionality and offline support for standalone mode
+ * Service Worker for ALN GM Scanner.
+ * Strategy: NO precache list (avoids atomic-install 404s — SW-2). App shell is
+ * runtime-cached on first fetch; navigations fall back to the cached shell when
+ * offline. API + discovery + socket.io traffic always goes to the network.
  */
+const CACHE_NAME = 'aln-gm-scanner-runtime-v1';
 
-const CACHE_NAME = 'aln-gm-scanner-v3-local-socketio';
-const urlsToCache = [
-  './',
-  './index.html',
-  './data/tokens.json',
-  '/socket.io-client/socket.io.min.js'
-];
+self.addEventListener('install', () => {
+  // No addAll() — nothing to fail. Activate immediately.
+  self.skipWaiting();
+});
 
-// Install event - cache resources
-self.addEventListener('install', event => {
+self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Service Worker: Caching files');
-        return cache.addAll(urlsToCache);
-      })
-      .then(() => {
-        // Force the waiting service worker to become the active service worker
-        self.skipWaiting();
-      })
+    caches.keys()
+      .then((names) => Promise.all(
+        names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n))
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
-// Activate event - clean up old caches
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Service Worker: Clearing old cache');
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => {
-      // Claim all clients immediately
-      return self.clients.claim();
-    })
-  );
-});
+// Bypass backend traffic by PATH only. Host/port checks are wrong here: in
+// production the app and API share the origin https://<IP>:3000 (app at
+// /gm-scanner/), so a host/port bypass matches the app's OWN assets and makes
+// the runtime cache inert. In dev the app (localhost:8443) is a different
+// origin from the backend, so the SW scope already excludes backend requests.
+const isBypass = (url) =>
+  url.pathname.startsWith('/api/') ||
+  url.pathname.startsWith('/socket.io/');
 
-// Fetch event - serve from cache when available
-self.addEventListener('fetch', event => {
-  const url = new URL(event.request.url);
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (request.method !== 'GET') return;
 
-  // Skip caching for API requests and discovery scans
-  if (url.pathname.startsWith('/api/') ||
-      event.request.url.includes('/api/') ||
-      event.request.url.includes('localhost:3000') ||
-      event.request.url.includes(':8080') ||
-      event.request.url.match(/192\.168\.\d+\.\d+/)) {
-    // Let API and discovery requests go directly to network
-    return;
-  }
+  const url = new URL(request.url);
+  if (isBypass(url)) return; // let network handle it
 
+  // Network-first for everything (navigations + assets): always serve fresh when
+  // online so an updated build / token data after a redeploy is never masked by a
+  // stale cache (the cache name is static and tokens.json is a non-hashed,
+  // same-origin fetch). Fall back to the cache ONLY when the network is
+  // unavailable (Wi-Fi blip / offline reload). The cache is a resilience net,
+  // not the source of truth.
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Cache hit - return response from cache
-        if (response) {
-          return response;
+    fetch(request)
+      .then((resp) => {
+        if (resp && resp.status === 200 && resp.type === 'basic') {
+          const copy = resp.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(request, copy));
         }
-
-        // Clone the request for fetch
-        const fetchRequest = event.request.clone();
-
-        return fetch(fetchRequest).then(response => {
-          // Check if valid response
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
-          }
-
-          // Clone response for cache
-          const responseToCache = response.clone();
-
-          // Only cache GET requests
-          if (event.request.method === 'GET') {
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                cache.put(event.request, responseToCache);
-              });
-          }
-
-          return response;
-        }).catch((error) => {
-          // Network request failed
-          console.log('Service Worker: Fetch failed for', event.request.url, error);
-
-          // For navigation requests, return cached index page
-          if (event.request.destination === 'document') {
-            return caches.match('./index.html');
-          }
-
-          // For API requests, let them fail naturally (don't intercept)
-          if (event.request.url.includes('/api/')) {
-            throw error;
-          }
-
-          // Return a proper error response for other requests
-          return new Response('Network request failed', {
-            status: 503,
-            statusText: 'Service Unavailable',
-            headers: new Headers({
-              'Content-Type': 'text/plain'
-            })
-          });
-        });
+        return resp;
       })
+      .catch(() => caches.match(request).then(
+        (cached) => cached || (request.mode === 'navigate' ? caches.match('./') : undefined)
+      ))
   );
 });

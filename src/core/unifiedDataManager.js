@@ -279,12 +279,16 @@ export class UnifiedDataManager extends EventTarget {
    * (`transaction.mode !== 'detective'` → rejected). Used by the GM scanner
    * admin panel to populate the "Jump to Character" dropdown.
    *
-   * @returns {string[]} Unique owner names sorted with locale comparison.
+   * @returns {string[]} Unique owner names, most-recently-exposed first
+   *   (matches the wall scoreboard card order); alphabetical tie-break.
    */
   getExposedOwners() {
     if (!this._activeStrategy) return [];
     const transactions = this._activeStrategy.getTransactions() || [];
-    const owners = new Set();
+    // Track each owner's MOST-RECENT exposure time so the picker order matches
+    // the wall scoreboard, which sorts character cards by recency (lastExposed
+    // DESC). Mirrors backend/public/scoreboard.html.
+    const lastExposed = new Map();
     for (const tx of transactions) {
       if (!tx || tx.mode !== 'detective') continue;
       if (tx.status && tx.status !== 'accepted') continue;
@@ -296,9 +300,18 @@ export class UnifiedDataManager extends EventTarget {
         const match = this.tokenManager.findToken(tx.tokenId);
         owner = match?.token?.owner || null;
       }
-      if (owner) owners.add(owner);
+      if (!owner) continue;
+      const parsed = new Date(tx.timestamp).getTime();
+      const ts = Number.isFinite(parsed) ? parsed : 0;
+      const prev = lastExposed.get(owner);
+      if (prev === undefined || ts > prev) lastExposed.set(owner, ts);
     }
-    return [...owners].sort((a, b) => a.localeCompare(b));
+    // Most-recently-exposed first (matches the wall scoreboard card order);
+    // alphabetical tie-break for stable ordering when times are equal/absent.
+    return [...lastExposed.keys()].sort((a, b) => {
+      const diff = lastExposed.get(b) - lastExposed.get(a);
+      return diff !== 0 ? diff : a.localeCompare(b);
+    });
   }
 
   /**
@@ -447,6 +460,9 @@ export class UnifiedDataManager extends EventTarget {
    */
   markTokenAsScanned(tokenId) {
     this.scannedTokens.add(tokenId);
+    // Persist so the dedup guard survives a reload in networked mode (TQ-7).
+    // Optional chain is the mode guard (_networkedStrategy is null in standalone).
+    this._networkedStrategy?.persistScannedTokens?.();
   }
 
   /**
@@ -455,6 +471,9 @@ export class UnifiedDataManager extends EventTarget {
    */
   unmarkTokenAsScanned(tokenId) {
     this.scannedTokens.delete(tokenId);
+    // Persist the removal too — else an admin transaction-delete that re-enables a
+    // re-scan would be undone by rehydrate after a reload (TQ-7 follow-through).
+    this._networkedStrategy?.persistScannedTokens?.();
   }
 
   /**

@@ -22,6 +22,11 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
     if (actionPromise && typeof actionPromise.catch === 'function') {
       actionPromise.catch(err => {
         debug.log(`Command failed: ${actionName} — ${err.message}`, true);
+        // AC-2: surface to the operator, not just the debug panel.
+        // Guarded for test harnesses that may not inject a uiManager.
+        if (uiManager && typeof uiManager.showError === 'function') {
+          uiManager.showError(`Command failed: ${err.message}`);
+        }
       });
     }
   }

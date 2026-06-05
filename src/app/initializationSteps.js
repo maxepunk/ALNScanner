@@ -118,10 +118,11 @@ export async function registerServiceWorker(navigatorObj, uiManager) {
       console.warn('Service Worker not available due to self-signed certificate. Offline features disabled.');
       return false;
     } else {
-      // Other errors should still be reported
-      Debug.log('Service Worker registration failed');
-      console.error('Service Worker registration failed:', error);
-      uiManager.showError('Service Worker registration failed. Offline features may not work.');
+      // Non-critical: a missing/failed service worker only disables offline PWA
+      // features. NEVER surface this to the operator mid-show (SW-3) — it is noise
+      // that erodes trust and can mask real errors.
+      Debug.log(`Service Worker registration failed: ${error.message}`, true);
+      console.warn('Service Worker registration failed:', error);
       return false;
     }
   }

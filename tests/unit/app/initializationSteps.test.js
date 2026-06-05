@@ -211,16 +211,18 @@ describe('InitializationSteps - ES6 Module', () => {
       expect(mockUIManager.showError).not.toHaveBeenCalled();
     });
 
-    it('should show error for non-SSL errors', async () => {
+    it('should NOT show an error toast for non-SSL errors (logs to Debug instead)', async () => {
       const genericError = new Error('Generic error');
       mockNavigator.serviceWorker.register.mockRejectedValue(genericError);
 
+      const initialCount = Debug.messages.length;
       const result = await registerServiceWorker(mockNavigator, mockUIManager);
 
       expect(result).toBe(false);
-      expect(mockUIManager.showError).toHaveBeenCalledWith(
-        'Service Worker registration failed. Offline features may not work.'
-      );
+      // A failed (non-critical) SW registration must never alarm the operator mid-show
+      expect(mockUIManager.showError).not.toHaveBeenCalled();
+      // ...but it must still be logged for diagnosis
+      expect(Debug.messages.length).toBeGreaterThan(initialCount);
     });
   });
 

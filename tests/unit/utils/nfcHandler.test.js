@@ -69,22 +69,52 @@ describe('NFCHandler - ES6 Module', () => {
       expect(result.source).toBe('text-record');
     });
 
-    it('should extract URL record', () => {
-      const urlData = new TextEncoder().encode('https://example.com/token456');
+    it('prefers the text record even when a url record precedes it (NFC-5)', () => {
+      // Production tags carry BOTH a text record (the token) and a url record
+      // for unrelated purposes; record ORDER must not let the url win.
       const message = {
-        records: [{
-          recordType: 'url',
-          data: urlData
-        }]
+        records: [
+          { recordType: 'url', data: new TextEncoder().encode('https://example.com/unrelated') },
+          { recordType: 'text', encoding: 'utf-8', data: new TextEncoder().encode('token456') },
+        ]
       };
 
       const result = NFCHandler.extractTokenId(message, 'serial123');
 
-      expect(result.id).toBe('https://example.com/token456');
-      expect(result.source).toBe('url-record');
+      expect(result.source).toBe('text-record');
+      expect(result.id).toBe('token456');
     });
 
-    it('should return error when records are unreadable (not serial fallback)', () => {
+    it('uses the text record when it precedes the url record', () => {
+      const message = {
+        records: [
+          { recordType: 'text', encoding: 'utf-8', data: new TextEncoder().encode('token789') },
+          { recordType: 'url', data: new TextEncoder().encode('https://example.com/unrelated') },
+        ]
+      };
+
+      const result = NFCHandler.extractTokenId(message, 'serial123');
+
+      expect(result.source).toBe('text-record');
+      expect(result.id).toBe('token789');
+    });
+
+    it('hard-fails (re-tap) for a url-only tag — url records are NOT tokens (NFC-5)', () => {
+      // A url record must never become a token id; doing so queued a junk
+      // Unknown transaction. With no text record present, return an error so the
+      // operator re-taps rather than the backend recording a bogus scan.
+      const message = {
+        records: [{ recordType: 'url', data: new TextEncoder().encode('https://example.com/token456') }]
+      };
+
+      const result = NFCHandler.extractTokenId(message, 'serial123');
+
+      expect(result.source).toBe('error');
+      expect(result.error).toBe('no-text-record');
+      expect(result.id).toBeNull();
+    });
+
+    it('hard-fails when records are present but none is a usable text record', () => {
       const message = {
         records: [{
           recordType: 'unknown',
@@ -97,24 +127,22 @@ describe('NFCHandler - ES6 Module', () => {
       expect(result).toEqual({
         id: null,
         source: 'error',
-        error: 'unreadable-records',
+        error: 'no-text-record',
         raw: 'fallback789'
       });
     });
 
-    it('should extract generic data when decodable', () => {
-      const genericData = new TextEncoder().encode('generic-token');
+    it('does NOT decode a non-text record into a token (no generic-decode source, NFC-5)', () => {
+      // Previously a 'custom' decodable record became a 'generic-decode' token;
+      // that path queued junk Unknown transactions. Only text records are tokens.
       const message = {
-        records: [{
-          recordType: 'custom',
-          data: genericData
-        }]
+        records: [{ recordType: 'custom', data: new TextEncoder().encode('generic-token') }]
       };
 
       const result = NFCHandler.extractTokenId(message, 'serial');
 
-      expect(result.id).toBe('generic-token');
-      expect(result.source).toBe('generic-decode');
+      expect(result.source).toBe('error');
+      expect(result.error).toBe('no-text-record');
     });
   });
 
@@ -141,11 +169,80 @@ describe('NFCHandler - ES6 Module', () => {
     });
   });
 
+  describe('startScan AbortController', () => {
+    let scanSpy;
+
+    beforeEach(() => {
+      scanSpy = jest.fn().mockResolvedValue(undefined);
+      // Minimal NDEFReader mock that records the options passed to scan()
+      global.window.NDEFReader = class {
+        constructor() { this.addEventListener = jest.fn(); }
+        scan(opts) { return scanSpy(opts); }
+      };
+    });
+
+    afterEach(() => {
+      delete global.window.NDEFReader;
+    });
+
+    it('passes an AbortSignal to reader.scan()', async () => {
+      const handler = new NFCHandlerClass();
+      await handler.startScan(() => {}, () => {});
+
+      expect(scanSpy).toHaveBeenCalledTimes(1);
+      const opts = scanSpy.mock.calls[0][0];
+      expect(opts).toBeDefined();
+      expect(opts.signal).toBeInstanceOf(AbortSignal);
+      expect(opts.signal.aborted).toBe(false);
+    });
+
+    it('aborts a prior scan before re-arming (idempotent re-entry)', async () => {
+      const handler = new NFCHandlerClass();
+
+      await handler.startScan(() => {}, () => {});
+      const firstSignal = handler.abortController.signal;
+      expect(firstSignal.aborted).toBe(false);
+
+      // Re-enter (simulates a second team confirmation / lifecycle re-arm) WITHOUT stopScan
+      await handler.startScan(() => {}, () => {});
+
+      // The first scan's signal must have been aborted by the re-arm
+      expect(firstSignal.aborted).toBe(true);
+      // A fresh controller is now in place and not aborted
+      expect(handler.abortController.signal).not.toBe(firstSignal);
+      expect(handler.abortController.signal.aborted).toBe(false);
+    });
+  });
+
   describe('stopScan', () => {
+    beforeEach(() => {
+      global.window.NDEFReader = class {
+        constructor() { this.addEventListener = jest.fn(); }
+        scan() { return Promise.resolve(); }
+      };
+    });
+
+    afterEach(() => {
+      delete global.window.NDEFReader;
+    });
+
     it('should set isScanning to false', () => {
       NFCHandler.isScanning = true;
       NFCHandler.stopScan();
       expect(NFCHandler.isScanning).toBe(false);
+    });
+
+    it('aborts the active scan and clears reader/controller', async () => {
+      const handler = new NFCHandlerClass();
+      await handler.startScan(() => {}, () => {});
+      const signal = handler.abortController.signal;
+
+      handler.stopScan();
+
+      expect(signal.aborted).toBe(true);
+      expect(handler.reader).toBe(null);
+      expect(handler.abortController).toBe(null);
+      expect(handler.isScanning).toBe(false);
     });
   });
 

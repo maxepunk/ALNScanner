@@ -12,6 +12,7 @@
  */
 
 import { escapeHtml } from '../utils/escapeHtml.js';
+import { formatCurrency } from '../utils/formatCurrency.js';
 
 class UIManager {
   /**
@@ -248,7 +249,7 @@ class UIManager {
 
     if (valueElement) {
       if (this.settings.mode === 'blackmarket') {
-        valueElement.textContent = `$${stats.totalScore.toLocaleString()}`;
+        valueElement.textContent = formatCurrency(stats.totalScore);
         if (labelElement) labelElement.textContent = 'Score';
       } else {
         valueElement.textContent = stats.totalValue;
@@ -342,7 +343,7 @@ class UIManager {
             Team ${team.teamId}
             <span class="scoreboard-tokens">(${team.tokenCount} tokens)</span>
           </div>
-          <div class="scoreboard-score">$${team.score.toLocaleString()}</div>
+          <div class="scoreboard-score">${formatCurrency(team.score)}</div>
         </div>
       `;
     }).join('');
@@ -489,7 +490,7 @@ class UIManager {
                 <span class="completion-text">COMPLETE</span>
               </div>
               <div class="bonus-amount">
-                +$${group.bonusValue.toLocaleString()} bonus (${group.multiplier}x)
+                +${formatCurrency(group.bonusValue)} bonus (${group.multiplier}x)
               </div>
             </div>`;
 
@@ -586,9 +587,9 @@ class UIManager {
     const bonusScoreEl = document.getElementById('teamBonusScore');
     const totalScoreEl = document.getElementById('teamTotalScore');
 
-    if (baseScoreEl) baseScoreEl.textContent = `$${displayBaseScore.toLocaleString()}`;
-    if (bonusScoreEl) bonusScoreEl.textContent = `$${displayBonusScore.toLocaleString()}`;
-    if (totalScoreEl) totalScoreEl.textContent = `$${displayTotalScore.toLocaleString()}`;
+    if (baseScoreEl) baseScoreEl.textContent = formatCurrency(displayBaseScore);
+    if (bonusScoreEl) bonusScoreEl.textContent = formatCurrency(displayBonusScore);
+    if (totalScoreEl) totalScoreEl.textContent = formatCurrency(displayTotalScore);
 
     // Display admin adjustments if present
     const adjustmentsSection = document.getElementById('teamAdminAdjustmentsSection');
@@ -600,7 +601,7 @@ class UIManager {
         <div class="transaction-detail" style="margin: 8px 0; padding: 12px; background: rgba(255, 193, 7, 0.1); border-left: 4px solid #ffc107; border-radius: 4px;">
           <label style="color: #856404; font-weight: bold;">⚠️ Admin Adjustments:</label>
           <span class="value" style="color: ${totalAdjustment >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">
-            ${totalAdjustment >= 0 ? '+' : ''}$${Math.abs(totalAdjustment).toLocaleString()}
+            ${totalAdjustment >= 0 ? '+' : ''}${formatCurrency(Math.abs(totalAdjustment))}
           </span>
         </div>
         <div style="margin-left: 20px; font-size: 12px; color: #666;">
@@ -611,7 +612,7 @@ class UIManager {
         adjHtml += `
           <div style="margin: 4px 0; padding: 6px; background: #f8f9fa; border-radius: 3px;">
             <span style="color: ${adj.delta >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">
-              ${adj.delta >= 0 ? '+' : ''}$${Math.abs(adj.delta).toLocaleString()}
+              ${adj.delta >= 0 ? '+' : ''}${formatCurrency(Math.abs(adj.delta))}
             </span>
             - ${adj.reason || 'No reason provided'}
             <br><span style="font-size: 10px; color: #999;">${date} by ${adj.gmStation}</span>
@@ -671,12 +672,12 @@ class UIManager {
           <strong>${baseValue.toLocaleString()}</strong> ×
           <strong>${multiplier}x</strong> ${token.memoryType} ×
           <strong>${groupInfo.multiplier}x</strong> group =
-          <strong>$${finalValue.toLocaleString()}</strong>`;
+          <strong>${formatCurrency(finalValue)}</strong>`;
       } else {
         calculationText = `
           <strong>${baseValue.toLocaleString()}</strong> ×
           <strong>${multiplier}x</strong> ${token.memoryType} =
-          <strong>$${tokenValue.toLocaleString()}</strong>`;
+          <strong>${formatCurrency(tokenValue)}</strong>`;
       }
     } else {
       calculationText = 'Unknown token - No value';
@@ -698,7 +699,7 @@ class UIManager {
         <div class="token-detail-header">
           <span>${token.group}</span>
           <span class="token-detail-value" style="display: flex; align-items: center;">
-            <span style="margin-right: 8px;">$${displayValue.toLocaleString()}</span>
+            <span style="margin-right: 8px;">${formatCurrency(displayValue)}</span>
             ${deleteButton}
           </span>
         </div>
@@ -758,7 +759,7 @@ class UIManager {
         <div>
           <div style="font-weight: bold; margin-bottom: 5px;">Group Completed!</div>
           <div style="font-size: 14px;">Team ${data.teamId} - ${data.groupId}</div>
-          <div style="font-size: 14px;">Bonus: +$${data.bonus.toLocaleString()} (${data.multiplier}x)</div>
+          <div style="font-size: 14px;">Bonus: +${formatCurrency(data.bonus)} (${data.multiplier}x)</div>
         </div>
       </div>
     `;
@@ -827,7 +828,7 @@ class UIManager {
           memoryType: token.SF_MemoryType,
           isUnknown: false
         });
-        valueEl.textContent = `$${tokenScore.toLocaleString()}`;
+        valueEl.textContent = formatCurrency(tokenScore);
       } else {
         valueEl.textContent = '⭐'.repeat(token.SF_ValueRating || 0);
       }
@@ -963,15 +964,15 @@ class UIManager {
     if (status === 'claimed' && claimEvent?.mode === 'blackmarket') {
       // Black Market: Show earned value
       statusContent = `<span class="status-icon">💰</span> SOLD to ${escapeHtml(claimEvent?.teamId || 'Unknown')}
-        <span class="points">$${(claimEvent?.points || 0).toLocaleString()}</span>`;
+        <span class="points">${formatCurrency(claimEvent?.points)}</span>`;
     } else if (status === 'claimed' && claimEvent?.mode === 'detective') {
       // Detective: Show what they gave up
       statusContent = `<span class="status-icon">🔍</span> EXPOSED by ${escapeHtml(claimEvent?.teamId || 'Unknown')}
-        <span class="points potential">Worth: $${(potentialValue || 0).toLocaleString()}</span>`;
+        <span class="points potential">Worth: ${formatCurrency(potentialValue)}</span>`;
     } else {
       // Available: Show potential value
       statusContent = `○ AVAILABLE
-        <span class="points potential">Worth: $${(potentialValue || 0).toLocaleString()}</span>`;
+        <span class="points potential">Worth: ${formatCurrency(potentialValue)}</span>`;
     }
 
     return `
@@ -1065,7 +1066,7 @@ class UIManager {
             <span class="label">${event.mode === 'blackmarket' ? 'Black Market' : 'Detective'}</span>
             <span class="team">${escapeHtml(event.teamId)}</span>
             <span class="time">${time}</span>
-            <span class="points">$${(event.points || 0).toLocaleString()}</span>
+            <span class="points">${formatCurrency(event.points)}</span>
             ${event.groupProgress ? `
               <div class="group-progress">
                 ${escapeHtml(event.groupProgress.name)} (${event.groupProgress.found}/${event.groupProgress.total})

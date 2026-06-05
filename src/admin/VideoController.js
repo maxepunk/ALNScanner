@@ -54,7 +54,9 @@ export class VideoController {
   }
 
   /**
-   * Add a video to the playback queue
+   * Add a video to the playback queue (WebSocket-only).
+   * No /api/videos list endpoint exists — the caller must supply the exact
+   * filename present in the backend video directory.
    * @param {string} videoFile - Video filename (e.g., "jaw001.mp4")
    * @returns {Promise<Object>} Add response
    */

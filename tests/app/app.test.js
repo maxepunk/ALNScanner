@@ -626,6 +626,42 @@ describe('App', () => {
       expect(app.dataManager.markTokenAsScanned).toHaveBeenCalledWith('test123');
       expect(UIManager.showTokenResult).toHaveBeenCalled();
     });
+
+    it('should BLOCK scanning when the networked session is not active (paused)', async () => {
+      const UIManager = require('../../src/ui/uiManager.js').default;
+      mockSessionModeManager.isNetworked.mockReturnValue(true);
+      mockSessionModeManager.isStandalone.mockReturnValue(false);
+      app.currentTeamId = '123';
+      app.dataManager.isTokenScanned.mockReturnValue(false);
+      app.dataManager.sessionState = { status: 'paused' };
+      // networkedSession mock so the (pre-gate) recordTransaction path doesn't throw,
+      // making the RED a clean assertion failure rather than an unhandled rejection.
+      app.networkedSession = { getService: () => ({ queueTransaction: jest.fn() }) };
+
+      await app.processNFCRead({ id: 'test123', source: 'nfc', raw: 'test123' });
+
+      // Gated: visible feedback, and NO token mark / queue / submit.
+      expect(UIManager.showError).toHaveBeenCalledWith(expect.stringContaining('paused'));
+      expect(app.dataManager.markTokenAsScanned).not.toHaveBeenCalled();
+    });
+
+    it('should ALLOW scanning when the networked session is active (gate passes)', async () => {
+      const TokenManager = require('../../src/core/tokenManager.js').default;
+      TokenManager.findToken.mockReturnValue({
+        token: { SF_MemoryType: 'Technical', SF_ValueRating: 5 },
+        matchedId: 'test123'
+      });
+      mockSessionModeManager.isNetworked.mockReturnValue(true);
+      mockSessionModeManager.isStandalone.mockReturnValue(false);
+      app.currentTeamId = '123';
+      app.dataManager.isTokenScanned.mockReturnValue(false);
+      app.dataManager.sessionState = { status: 'active' };
+      app.networkedSession = { getService: () => ({ queueTransaction: jest.fn() }) };
+
+      await app.processNFCRead({ id: 'test123', source: 'nfc', raw: 'test123' });
+
+      expect(app.dataManager.markTokenAsScanned).toHaveBeenCalledWith('test123');
+    });
   });
 
   describe('Transaction Recording', () => {
