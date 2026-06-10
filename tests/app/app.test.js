@@ -857,21 +857,21 @@ describe('App', () => {
       expect(app.viewController.adminInstances.monitoring.refreshAllDisplays).toHaveBeenCalled();
     });
 
-    it('should render local scores in standalone mode', () => {
-      const testTransactions = [
-        { teamId: '001', mode: 'blackmarket' },
-        { teamId: '001', mode: 'blackmarket' },
-        { teamId: '002', mode: 'blackmarket' }
-      ];
-      // Mock getTransactions to return test data (not just set property)
-      app.dataManager.getTransactions.mockReturnValue(testTransactions);
+    it('renders the unified scoreboard in standalone mode too (F-GMS-13: no divergent fallback)', () => {
+      // The old fallback recomputed scores inline (calculateTokenValue per tx),
+      // ignoring group bonuses AND admin adjustments — admin-view totals
+      // disagreed with the scoreboard screen. renderScoreboard works in both
+      // modes (LocalStorage.getTeamScores includes bonusPoints).
+      const UIManager = require('../../src/ui/uiManager.js').default;
       app.viewController.adminInstances = null;
 
       app.updateAdminPanel();
 
       const scoreBoard = document.getElementById('admin-score-board');
-      expect(scoreBoard.innerHTML).toContain('001');
-      expect(scoreBoard.innerHTML).toContain('002');
+      expect(UIManager.renderScoreboard).toHaveBeenCalledWith(scoreBoard);
+      // The divergent hand-built fallback table must not be rendered
+      expect(scoreBoard.innerHTML).not.toContain('score-table');
+      expect(app.dataManager.calculateTokenValue).not.toHaveBeenCalled();
     });
   });
 
