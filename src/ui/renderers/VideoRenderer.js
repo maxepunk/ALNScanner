@@ -25,6 +25,53 @@ export class VideoRenderer {
     this._positionTimestamp = 0;
     this._duration = 0;
     this._animFrame = null;
+
+    // Now Showing single-writer state (F-GMCMD-06): this renderer is the
+    // ONLY writer of #now-showing-value/#now-showing-icon. It reconciles the
+    // display mode (from display:mode events, via setDisplayMode) with the
+    // video domain state — while the TV shows the scoreboard, video pushes
+    // must not repaint "Scoreboard" away.
+    this._displayMode = null;       // 'SCOREBOARD' | 'IDLE_LOOP' | 'VIDEO' | null
+    this._lastVideoState = null;    // { nowPlaying, isPlaying, isPaused }
+  }
+
+  /**
+   * Set the current HDMI display mode (called from MonitoringDisplay on
+   * display:mode events) and repaint Now Showing accordingly.
+   * @param {string} mode - 'SCOREBOARD' | 'IDLE_LOOP' | 'VIDEO'
+   */
+  setDisplayMode(mode) {
+    this._displayMode = mode;
+    this._renderNowShowing();
+  }
+
+  /**
+   * Single writer for Now Showing (F-GMCMD-06).
+   * SCOREBOARD mode wins; otherwise reflect the video domain state.
+   * Elements are looked up lazily — MonitoringDisplay constructs this
+   * renderer before the admin panel markup may exist.
+   * @private
+   */
+  _renderNowShowing() {
+    if (!this._nowPlayingEl && typeof document !== 'undefined') {
+      this._nowPlayingEl = document.getElementById('now-showing-value');
+    }
+    if (!this._nowPlayingIcon && typeof document !== 'undefined') {
+      this._nowPlayingIcon = document.getElementById('now-showing-icon');
+    }
+    if (!this._nowPlayingEl) return;
+
+    if (this._displayMode === 'SCOREBOARD') {
+      this._nowPlayingEl.textContent = 'Scoreboard';
+      if (this._nowPlayingIcon) this._nowPlayingIcon.textContent = '🏆';
+      return;
+    }
+
+    const { nowPlaying, isPlaying } = this._lastVideoState || {};
+    this._nowPlayingEl.textContent = nowPlaying || 'Idle Loop';
+    if (this._nowPlayingIcon) {
+      this._nowPlayingIcon.textContent = nowPlaying ? (isPlaying ? '▶️' : '⏸️') : '🔄';
+    }
   }
 
   /**
@@ -33,21 +80,15 @@ export class VideoRenderer {
    * @param {Object|null} prev - Previous state (null on first render)
    */
   render(state, prev = null) {
-    if (!this._nowPlayingEl) return;
-
     const { nowPlaying, isPlaying, isPaused, progress, duration } = state || {};
     const statusChanged = isPlaying !== prev?.isPlaying || isPaused !== prev?.isPaused;
 
-    // Now Playing text
-    if (nowPlaying !== prev?.nowPlaying) {
-      this._nowPlayingEl.textContent = nowPlaying || 'Idle Loop';
-    }
-
-    // Icon
-    if (nowPlaying !== prev?.nowPlaying || statusChanged) {
-      if (this._nowPlayingIcon) {
-        this._nowPlayingIcon.textContent = nowPlaying ? (isPlaying ? '▶️' : '⏸️') : '🔄';
-      }
+    // Now Showing text + icon — via the single display-mode-aware writer
+    // (F-GMCMD-06): a video push while the scoreboard is up must not
+    // repaint "Scoreboard" away.
+    this._lastVideoState = { nowPlaying: nowPlaying || null, isPlaying: !!isPlaying, isPaused: !!isPaused };
+    if (nowPlaying !== prev?.nowPlaying || statusChanged || !prev) {
+      this._renderNowShowing();
     }
 
     // Status badge (F-GMCMD-01: paused is a first-class state — the backend

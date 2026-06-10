@@ -275,6 +275,34 @@ describe('VideoRenderer', () => {
     });
   });
 
+  describe('setDisplayMode() — single Now Showing writer (F-GMCMD-06)', () => {
+    test('SCOREBOARD mode shows Scoreboard and blocks video-state overwrites', () => {
+      renderer.setDisplayMode('SCOREBOARD');
+      expect(nowPlayingEl.textContent).toBe('Scoreboard');
+      expect(nowPlayingIcon.textContent).toBe('🏆');
+
+      // Video pushes while scoreboard is up must not repaint Now Showing
+      renderer.render({ nowPlaying: 'behind.mp4', isPlaying: true, progress: 0.1, duration: 60 });
+      expect(nowPlayingEl.textContent).toBe('Scoreboard');
+
+      renderer.render(
+        { nowPlaying: null, isPlaying: false, progress: 0, duration: 0 },
+        { nowPlaying: 'behind.mp4', isPlaying: true, progress: 0.1, duration: 60 }
+      );
+      expect(nowPlayingEl.textContent).toBe('Scoreboard');
+    });
+
+    test('leaving SCOREBOARD repaints Now Showing from the last video state', () => {
+      renderer.render({ nowPlaying: 'movie.mp4', isPlaying: true, progress: 0.2, duration: 60 });
+      renderer.setDisplayMode('SCOREBOARD');
+      expect(nowPlayingEl.textContent).toBe('Scoreboard');
+
+      renderer.setDisplayMode('VIDEO');
+      expect(nowPlayingEl.textContent).toBe('movie.mp4');
+      expect(nowPlayingIcon.textContent).toBe('▶️');
+    });
+  });
+
   describe('renderQueue()', () => {
     test('should render queue items', () => {
       renderer.renderQueue([

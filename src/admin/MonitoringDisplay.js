@@ -230,19 +230,13 @@ export class MonitoringDisplay {
   }
 
   _handleDisplayMode(payload) {
-    const nowShowingVal = document.getElementById('now-showing-value');
-    const nowShowingIcon = document.getElementById('now-showing-icon');
     const btnIdle = document.getElementById('btn-idle-loop');
     const btnScore = document.getElementById('btn-scoreboard');
 
-    if (payload.mode === 'SCOREBOARD') {
-      if (nowShowingVal) nowShowingVal.textContent = 'Scoreboard';
-      if (nowShowingIcon) nowShowingIcon.textContent = '\uD83C\uDFC6';
-    } else if (payload.mode === 'IDLE_LOOP') {
-      if (nowShowingVal) nowShowingVal.textContent = 'Idle Loop';
-      if (nowShowingIcon) nowShowingIcon.textContent = '\uD83D\uDD04';
-    }
-    // VIDEO mode: nowPlaying text handled by VideoRenderer via service:state
+    // F-GMCMD-06: VideoRenderer is the SINGLE writer of Now Showing \u2014 it
+    // reconciles the display mode with the video domain state, so a video
+    // push behind the scoreboard can no longer overwrite "Scoreboard".
+    this.videoRenderer.setDisplayMode(payload.mode);
 
     if (btnIdle) btnIdle.classList.toggle('active', payload.mode === 'IDLE_LOOP');
     if (btnScore) btnScore.classList.toggle('active', payload.mode === 'SCOREBOARD');
