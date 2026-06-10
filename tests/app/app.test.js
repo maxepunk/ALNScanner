@@ -363,6 +363,18 @@ describe('App', () => {
       expect(Settings.mode).toBe('detective');
       expect(UIManager.updateModeDisplay).toHaveBeenCalledWith('detective');
     });
+
+    it('should persist the toggled mode via settings.save() (F-GMS-06)', () => {
+      // Without save(), a reload reverts the station to the last-saved mode
+      // (default 'detective'), silently changing scoring behavior mid-show.
+      const Settings = require('../../src/ui/settings.js').default;
+      Settings.mode = 'detective';
+      Settings.save.mockClear();
+
+      app.toggleMode();
+
+      expect(Settings.save).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Team Entry', () => {

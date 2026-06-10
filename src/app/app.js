@@ -315,8 +315,10 @@ class App {
   toggleMode() {
     this.settings.mode = this.settings.mode === 'detective' ? 'blackmarket' : 'detective';
 
-    // Mode is stored in Settings and localStorage only
-    // No need to sync to services (they read from Settings)
+    // Persist immediately (F-GMS-06): without save() a reload reverts the
+    // station to the last-saved mode, silently changing scoring mid-show.
+    // No need to sync to services (they read from Settings).
+    this.settings.save();
 
     this.uiManager.updateModeDisplay(this.settings.mode);
 
