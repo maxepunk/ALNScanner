@@ -19,6 +19,7 @@ import OrchestratorClient from './orchestratorClient.js';
 import ConnectionManager from './connectionManager.js';
 import NetworkedQueueManager from './networkedQueueManager.js';
 import AdminController from '../app/adminController.js';
+import { gameOpsRouter, sharedInfraRouter, gameAdminRouter, showControlRouter } from './messageRouters.js';
 
 export class NetworkedSession extends EventTarget {
   constructor(config, dataManager, teamRegistry = null, store = null) {
@@ -198,185 +199,33 @@ export class NetworkedSession extends EventTarget {
       this.dispatchEvent(new CustomEvent('transaction:failed', { detail: e.detail }));
     };
 
-    // Global WebSocket → DataManager/StateStore event handler
-    // Routes session/transaction data to DataManager, service state to StateStore
+    // Global WebSocket → DataManager/StateStore event handler.
+    // Routes messages to per-domain routers (Phase-2 structural split).
+    // Evaluation order: Game Ops first (most frequent), then Shared Infra
+    // (sync:full/error/service:state), then Game Admin (session lifecycle).
+    // Show Control router is a placeholder (display:mode consumed by
+    // MonitoringDisplay._handleMessage directly — no session-level routing needed).
     this._messageHandler = (event) => {
       const { type, payload } = event.detail;
 
-      switch (type) {
-        case 'score:adjusted':
-          // Admin score adjustments — payload wraps score in .teamScore
-          if (payload.teamScore) {
-            this.dataManager.updateTeamScoreFromBackend(payload.teamScore);
-          }
-          break;
+      const sessionRef = this; // for dispatchEvent inside routers
+      const boundaryFn = this._handleSessionBoundary.bind(this);
+      const services = this.services;
+      const store = this._store;
+      const dm = this.dataManager;
 
-        case 'sync:full':
-          // Session boundary detection (DRY: same logic as session:update)
-          this._handleSessionBoundary(payload.session?.id);
-
-          // Restore scanned tokens from server state (handles reconnection)
-          if (payload.deviceScannedTokens) {
-            this.dataManager.setScannedTokensFromServer(payload.deviceScannedTokens);
-          }
-
-          // Sync scores and transactions
-          if (payload.scores) {
-            payload.scores.forEach(s => this.dataManager.updateTeamScoreFromBackend(s));
-          }
-          if (payload.recentTransactions) {
-            // Bulk restore — does NOT re-submit to backend (addTransaction would re-submit)
-            if (typeof this.dataManager.setTransactions === 'function') {
-              this.dataManager.setTransactions(payload.recentTransactions);
-            } else {
-              // Fallback: add individually without re-submission
-              payload.recentTransactions.forEach(tx => {
-                this.dataManager.addTransactionFromBroadcast(tx);
-              });
-            }
-          }
-
-          // Sync player scans from server (Game Activity feature)
-          if (payload.playerScans) {
-            this.dataManager.setPlayerScansFromServer(payload.playerScans);
-          }
-
-          // Update Session State
-          // Only update if session field is explicitly present in payload.
-          // A missing session field (e.g. from a partial sync:full after score reset)
-          // should NOT null out an active session — that's a different semantic than
-          // an explicit session: null (server restart with no active session).
-          if (payload.session) {
-            this.dataManager.updateSessionState(payload.session);
-          } else if ('session' in payload && payload.session === null) {
-            this.dataManager.updateSessionState(null);
-          }
-
-          // Populate StateStore from sync:full (service domain state)
-          if (this._store) {
-            // SR-3/SSR-2: sync:full is an authoritative snapshot — REPLACE each
-            // domain (drop stale keys) rather than merge. A partial/omitted domain
-            // therefore can't leave the renderer showing stale state, and the
-            // sync:full vs service:state shapes can't accumulate orphan keys.
-            // (service:state below stays update() — it's an incremental delta.)
-            if (payload.music) this._store.replace('music', payload.music);
-            if (payload.serviceHealth) this._store.replace('health', payload.serviceHealth);
-            if (payload.environment?.bluetooth) this._store.replace('bluetooth', payload.environment.bluetooth);
-            if (payload.environment?.audio) this._store.replace('audio', payload.environment.audio);
-            if (payload.environment?.lighting) this._store.replace('lighting', payload.environment.lighting);
-            if (payload.gameClock) this._store.replace('gameclock', payload.gameClock);
-            if (payload.cueEngine) this._store.replace('cueengine', payload.cueEngine);
-            if (payload.heldItems) this._store.replace('held', { items: payload.heldItems });
-            if (payload.videoStatus) this._store.replace('video', payload.videoStatus);
-            if (payload.sound) this._store.replace('sound', payload.sound);
-          }
-
-          // Restore display mode on reconnect (not a StateStore domain — routes to MonitoringDisplay)
-          if (payload.displayStatus && this.services?.client) {
-            this.services.client.dispatchEvent(new CustomEvent('message:received', {
-              detail: { type: 'display:mode', payload: { mode: payload.displayStatus.currentMode } }
-            }));
-          }
-
-          // After server state is restored, reconcile the offline queue against
-          // already-recorded scans, THEN flush remaining entries (TQ-6). Deferred
-          // here (not in _connectedHandler) so deviceScannedTokens is applied first
-          // and replays aren't double-counted against server state.
-          if (this.services?.queueManager) {
-            if (Array.isArray(payload.deviceScannedTokens)) {
-              this.services.queueManager.reconcileWithServerState(payload.deviceScannedTokens);
-            }
-            this.services.queueManager.syncQueue();
-          }
-          break;
-
-        case 'session:update':
-          // Session lifecycle: detect boundary changes
-          // NOTE: Do NOT reset on session end — data must survive for report download.
-          // Reset only happens when a NEW session ID arrives (handled by _handleSessionBoundary).
-          if (payload.status !== 'ended') {
-            this._handleSessionBoundary(payload.id);
-          }
-          // Update session state for UI (SessionRenderer)
-          this.dataManager.updateSessionState(payload);
-          break;
-
-        case 'transaction:new':
-          if (payload.transaction) {
-            this.dataManager.addTransactionFromBroadcast(payload.transaction);
-          }
-          // Live score update from transaction
-          if (payload.teamScore) {
-            this.dataManager.updateTeamScoreFromBackend(payload.teamScore);
-          }
-          break;
-
-        case 'transaction:deleted':
-          if (payload.transactionId) {
-            // Cache-only prune (F-GMS-03): removeTransaction would re-emit
-            // gm:command transaction:delete from EVERY GM receiving the
-            // broadcast (N-station echo) and never touch the local cache.
-            this.dataManager.removeTransactionFromBroadcast(payload.transactionId);
-          }
-          // Update score after deletion (score changed by removing transaction)
-          if (payload.updatedTeamScore) {
-            this.dataManager.updateTeamScoreFromBackend(payload.updatedTeamScore);
-          }
-          break;
-
-        case 'scores:reset':
-          this.dataManager.clearBackendScores();
-          break;
-
-        case 'player:scan':
-          this.dataManager.handlePlayerScan(payload);
-          break;
-
-        case 'group:completed':
-          this.dispatchEvent(new CustomEvent('group:completed', {
-            detail: payload
-          }));
-          break;
-
-        case 'scoreboard:page':
-          // Echo of a GM scoreboard navigation command (next/prev/owner). The
-          // GM scanner has no embedded scoreboard view (the wall displays render
-          // it), so we forward this for a transient operator confirmation only.
-          // Parity-free: we relay action/owner, never a page index (page sets
-          // are computed per-display from viewport height, so an index would
-          // desync). app.js surfaces the confirmation toast.
-          this.dispatchEvent(new CustomEvent('scoreboard:page', {
-            detail: payload
-          }));
-          break;
-
-        case 'error': {
-          // Backend error event (AsyncAPI Decision #10: clients MUST display).
-          // AUTH-7: post-connection auth/permission failures route into the same
-          // auth:required flow the handshake path uses (app.js shows the wizard) and
-          // clear the now-known-bad token (L-5/AUTH-5 defense-in-depth, mirrors
-          // connectionManager's handshake-path clear). Broadened to any AUTH_* code
-          // + PERMISSION_DENIED. backend:error stays UNCONDITIONAL so a future
-          // auth-code toast consumer still fires (do NOT make it else-only).
-          const code = payload?.code;
-          if (typeof code === 'string' && (code.startsWith('AUTH_') || code === 'PERMISSION_DENIED')) {
-            try { localStorage.removeItem('aln_auth_token'); } catch (e) { /* private mode */ }
-            this.dispatchEvent(new CustomEvent('auth:required'));
-          }
-          this.dispatchEvent(new CustomEvent('backend:error', {
-            detail: { code, message: payload?.message }
-          }));
-          break;
-        }
-
-        // Unified service:state → StateStore
-        // All service domain state (video, cue, music, audio, bluetooth,
-        // lighting, health, held, gameclock) arrives via this single event
-        case 'service:state':
-          if (this._store && payload.domain && payload.state) {
-            this._store.update(payload.domain, payload.state);
-          }
-          break;
+      // Try each domain router in turn. A router may return true without being
+      // the only handler — sync:full intentionally touches multiple domains
+      // (sharedInfraRouter handles it entirely; it calls updateSessionState
+      // which is the Game Admin concern embedded there for DRY reasons).
+      if (
+        gameOpsRouter(type, payload, dm, sessionRef) ||
+        sharedInfraRouter(type, payload, dm, sessionRef, store, services, boundaryFn) ||
+        gameAdminRouter(type, payload, dm, boundaryFn) ||
+        showControlRouter(type, payload)
+      ) {
+        // Message was handled by one (or more) domain routers.
+        return;
       }
     };
 
