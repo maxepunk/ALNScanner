@@ -11,6 +11,8 @@
  * @module app/domains/gameAdmin
  */
 
+import { formatDuration } from '../../utils/formatDuration.js';
+
 export class GameAdminDomain {
   /**
    * @param {import('../app.js').App} app - The App instance (provides collaborators)
@@ -322,23 +324,12 @@ GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 
 
   /**
    * Format a duration in milliseconds to a human-readable string.
+   * Delegates to shared formatDuration utility (F-GMS-14 consolidation).
    * @param {number} ms
    * @returns {string}
    */
   formatSessionDuration(ms) {
-    if (ms == null || ms < 0) return 'Unknown';
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    const parts = [];
-    if (days > 0) parts.push(`${days}d`);
-    if (hours % 24 > 0) parts.push(`${hours % 24}h`);
-    if (minutes % 60 > 0 && parts.length < 2) parts.push(`${minutes % 60}m`);
-    if (seconds % 60 > 0 && parts.length < 2) parts.push(`${seconds % 60}s`);
-
-    return parts.length > 0 ? parts.join(' ') : '0s';
+    return formatDuration(ms, { fallback: 'Unknown' });
   }
 
   // ========== Admin Session Display ==========
