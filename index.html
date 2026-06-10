@@ -320,14 +320,40 @@
 
         <!-- Admin View (Hidden by default) -->
         <div id="admin-view" class="view-content" style="display: none;">
+
+            <!-- ═══════════════════════════════════════════════════════════
+                 GAME ADMIN DOMAIN — pregame setup, session lifecycle,
+                 device tracking, service health (decision C1)
+                 ═══════════════════════════════════════════════════════════ -->
+
             <!-- Session Management Section -->
             <section class="admin-section">
                 <h3>Session Management</h3>
-                <!-- Dynamic status container updated by MonitoringDisplay.updateSessionDisplay() -->
+                <!-- Dynamic status container updated by UIManager.renderSessionStatus() -->
                 <div id="session-status-container">
-                    <!-- Content rendered by updateSessionDisplay() based on session state -->
+                    <!-- Content rendered based on session state -->
                 </div>
             </section>
+
+            <!-- Health Dashboard (Phase 4 — replaces System Status) -->
+            <section class="admin-section" data-requires="networked" id="health-dashboard-section">
+                <h3>Service Health</h3>
+                <div id="health-dashboard">
+                    <!-- Populated by HealthRenderer -->
+                </div>
+                <div class="status-grid" style="margin-top: 0.5rem;">
+                    <div class="status-item">
+                        <span>Devices:</span>
+                        <span id="device-count">0</span>
+                    </div>
+                </div>
+                <div id="device-list" class="device-list"></div>
+            </section>
+
+            <!-- ═══════════════════════════════════════════════════════════
+                 SHOW CONTROL DOMAIN — video transport + queue, display
+                 mode, cues, sound, music, held items (decision C1)
+                 ═══════════════════════════════════════════════════════════ -->
 
             <!-- Video Controls Section (Networked mode only - requires WebSocket) -->
             <section id="video-control-panel" class="admin-section" data-requires="networked">
@@ -384,7 +410,7 @@
                     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
                         <input type="text" id="manual-video-input" placeholder="jaw001.mp4" list="available-videos" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
                         <datalist id="available-videos">
-                            <!-- Populated by loadAvailableVideos() -->
+                            <!-- No video-list endpoint exists; operator supplies filename directly -->
                         </datalist>
                         <button class="btn" data-action="app.adminAddVideoToQueue">Add to Queue</button>
                     </div>
@@ -417,11 +443,11 @@
                     <!-- Populated by HeldItemsRenderer -->
                 </div>
 
-                <!-- Active Compound Cues (Phase 2 - populated by MonitoringDisplay) -->
+                <!-- Active Compound Cues (populated by MonitoringDisplay via CueRenderer) -->
                 <div class="subsection">
                     <h4>Active Cues</h4>
                     <div id="active-cues-list">
-                        <!-- Populated dynamically by MonitoringDisplay._renderActiveCues() -->
+                        <!-- Populated dynamically by CueRenderer -->
                     </div>
                 </div>
 
@@ -434,13 +460,18 @@
                 <div id="sound-status"></div>
             </section>
 
+            <!-- ═══════════════════════════════════════════════════════════
+                 ENVIRONMENT DOMAIN — bluetooth, audio routing/volume,
+                 lighting (decision C1)
+                 ═══════════════════════════════════════════════════════════ -->
+
             <!-- Audio Output Section (Networked mode only - Phase 3 Per-Stream Routing) -->
             <section class="admin-section" data-requires="networked" id="audio-output-section">
                 <h3>Audio Output <span id="bt-speaker-count" class="section-badge"></span></h3>
 
-                <!-- Per-Stream Routing Dropdowns (Phase 3: populated by MonitoringDisplay) -->
+                <!-- Per-Stream Routing Dropdowns (Phase 3: populated by EnvironmentRenderer) -->
                 <div id="audio-routing-dropdowns">
-                    <!-- Dynamically rendered by MonitoringDisplay._renderAudioRoutingDropdowns() -->
+                    <!-- Dynamically rendered by EnvironmentRenderer -->
                 </div>
 
                 <!-- BT Fallback Warning (hidden by default) -->
@@ -457,7 +488,7 @@
                     <span class="spinner-sm"></span> Scanning...
                 </div>
                 <div id="bt-device-list" class="device-list">
-                    <!-- Populated dynamically by MonitoringDisplay -->
+                    <!-- Populated dynamically by EnvironmentRenderer -->
                     <p class="empty-state">No speakers found. Put your speaker in pairing mode and tap Scan.</p>
                 </div>
             </section>
@@ -466,24 +497,14 @@
             <section class="admin-section" data-requires="networked" id="lighting-section" style="display:none;">
                 <h3>Lighting</h3>
                 <div id="lighting-scenes" class="scene-grid">
-                    <!-- Populated dynamically by MonitoringDisplay -->
+                    <!-- Populated dynamically by EnvironmentRenderer -->
                 </div>
             </section>
 
-            <!-- Health Dashboard (Phase 4 — replaces System Status) -->
-            <section class="admin-section" data-requires="networked" id="health-dashboard-section">
-                <h3>Service Health</h3>
-                <div id="health-dashboard">
-                    <!-- Populated by HealthRenderer -->
-                </div>
-                <div class="status-grid" style="margin-top: 0.5rem;">
-                    <div class="status-item">
-                        <span>Devices:</span>
-                        <span id="device-count">0</span>
-                    </div>
-                </div>
-                <div id="device-list" class="device-list"></div>
-            </section>
+            <!-- ═══════════════════════════════════════════════════════════
+                 GAME OPS DOMAIN — scanning, scores, transactions, game
+                 activity, scoreboard evidence (decision C1)
+                 ═══════════════════════════════════════════════════════════ -->
 
             <!-- Scoreboard Evidence Navigation (Networked mode only) -->
             <section class="admin-section" data-requires="networked" id="scoreboard-evidence-section">
@@ -505,7 +526,7 @@
             <section class="admin-section">
                 <h3>Team Scores</h3>
                 <div id="admin-score-board" class="score-board">
-                    <!-- Rendered by UIManager.renderScoreboard() via ScreenUpdateManager -->
+                    <!-- Rendered by UIManager.renderScoreboard() -->
                 </div>
                 <button class="btn btn-danger" data-action="app.adminResetScores">Reset All Scores</button>
             </section>
@@ -514,7 +535,7 @@
             <section class="admin-section">
                 <h3>Game Activity</h3>
                 <div id="admin-game-activity" class="game-activity-container">
-                    <!-- Rendered by UIManager.renderGameActivity() via ScreenUpdateManager -->
+                    <!-- Rendered by UIManager.renderGameActivity() -->
                 </div>
                 <button class="btn btn-secondary" data-action="app.viewFullHistory" style="margin-right: 10px;">
                     View Full History
