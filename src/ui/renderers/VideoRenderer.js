@@ -29,13 +29,14 @@ export class VideoRenderer {
 
   /**
    * Render the current video state (differential)
-   * @param {Object} state - { nowPlaying, isPlaying, progress, duration, queue? }
+   * @param {Object} state - { nowPlaying, isPlaying, isPaused, progress, duration, queue? }
    * @param {Object|null} prev - Previous state (null on first render)
    */
   render(state, prev = null) {
     if (!this._nowPlayingEl) return;
 
-    const { nowPlaying, isPlaying, progress, duration } = state || {};
+    const { nowPlaying, isPlaying, isPaused, progress, duration } = state || {};
+    const statusChanged = isPlaying !== prev?.isPlaying || isPaused !== prev?.isPaused;
 
     // Now Playing text
     if (nowPlaying !== prev?.nowPlaying) {
@@ -43,18 +44,22 @@ export class VideoRenderer {
     }
 
     // Icon
-    if (nowPlaying !== prev?.nowPlaying || isPlaying !== prev?.isPlaying) {
+    if (nowPlaying !== prev?.nowPlaying || statusChanged) {
       if (this._nowPlayingIcon) {
         this._nowPlayingIcon.textContent = nowPlaying ? (isPlaying ? '▶️' : '⏸️') : '🔄';
       }
     }
 
-    // Status badge
-    if (isPlaying !== prev?.isPlaying) {
+    // Status badge (F-GMCMD-01: paused is a first-class state — the backend
+    // video domain emits status 'paused' with a frozen position)
+    if (statusChanged) {
       if (this._statusBadge) {
         if (isPlaying) {
           this._statusBadge.textContent = 'Playing';
           this._statusBadge.className = 'badge badge-success';
+        } else if (isPaused) {
+          this._statusBadge.textContent = 'Paused';
+          this._statusBadge.className = 'badge badge-warning';
         } else {
           this._statusBadge.textContent = 'Idle';
           this._statusBadge.className = 'badge';
@@ -64,14 +69,20 @@ export class VideoRenderer {
 
     // Progress bar & interpolation
     if (this._progressContainer && this._progressBar) {
+      const posSeconds = (progress || 0) * (duration || 0);
       if (isPlaying) {
         this._progressContainer.style.display = 'block';
         // Only restart interpolation if position/duration actually changed
-        if (progress !== prev?.progress || duration !== prev?.duration || !prev?.isPlaying) {
-          const posSeconds = (progress || 0) * (duration || 0);
+        if (progress !== prev?.progress || duration !== prev?.duration || statusChanged || !prev) {
           this._startInterpolation(posSeconds, duration || 0);
         }
-      } else if (isPlaying !== prev?.isPlaying) {
+      } else if (isPaused) {
+        // F-GMCMD-01: frozen progress — show the paused position statically,
+        // and STOP the rAF loop so the bar doesn't keep advancing.
+        this._progressContainer.style.display = 'block';
+        this._stopInterpolation();
+        this._setProgressDisplay(posSeconds, duration || 0);
+      } else if (statusChanged) {
         // Transition to not-playing: stop interpolation, hide progress
         this._stopInterpolation();
         this._progressContainer.style.display = 'none';
@@ -122,16 +133,28 @@ export class VideoRenderer {
     this._duration = duration;
 
     // Set initial position synchronously (works in test environments without rAF)
-    const progress = duration > 0 ? Math.min(1, positionSeconds / duration) : 0;
-    this._progressBar.style.width = `${progress * 100}%`;
-    if (this._progressTime) {
-      this._progressTime.textContent = `${this._formatTime(positionSeconds)} / ${this._formatTime(duration)}`;
-    }
+    const progress = this._setProgressDisplay(positionSeconds, duration);
 
     // Start rAF loop for smooth updates (browser only)
     if (duration > 0 && progress < 1 && typeof requestAnimationFrame !== 'undefined') {
       this._animFrame = requestAnimationFrame(() => this._tick());
     }
+  }
+
+  /**
+   * Set the progress bar + time display to a static position (no rAF).
+   * Used for the synchronous part of interpolation AND the frozen paused
+   * position (F-GMCMD-01).
+   * @returns {number} progress fraction 0..1
+   * @private
+   */
+  _setProgressDisplay(positionSeconds, duration) {
+    const progress = duration > 0 ? Math.min(1, positionSeconds / duration) : 0;
+    this._progressBar.style.width = `${progress * 100}%`;
+    if (this._progressTime) {
+      this._progressTime.textContent = `${this._formatTime(positionSeconds)} / ${this._formatTime(duration)}`;
+    }
+    return progress;
   }
 
   _tick() {

@@ -101,9 +101,12 @@ export class MonitoringDisplay {
     });
 
     // Video — transform backend state shape to renderer API
+    // F-GMCMD-01: 'paused' is a first-class status (frozen position from the
+    // backend) — surface it so the panel can stop saying "Playing".
     const mapVideoState = (s) => s ? {
       nowPlaying: s.currentVideo?.filename || null,
       isPlaying: s.status === 'playing',
+      isPaused: s.status === 'paused',
       progress: s.currentVideo?.position || 0,
       duration: s.currentVideo?.duration || 0,
       queue: s.queue,

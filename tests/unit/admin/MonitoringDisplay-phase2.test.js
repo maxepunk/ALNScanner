@@ -116,6 +116,27 @@ describe('MonitoringDisplay - Phase 2', () => {
 
       expect(renderSpy).toHaveBeenCalled();
     });
+
+    it('maps backend status "paused" to isPaused with the frozen position (F-GMCMD-01)', () => {
+      const renderSpy = jest.spyOn(display.videoRenderer, 'render');
+
+      store.update('video', {
+        status: 'paused',
+        currentVideo: { tokenId: 't1', filename: 'jaw001.mp4', position: 0.42, duration: 120 },
+        queue: []
+      });
+
+      expect(renderSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          nowPlaying: 'jaw001.mp4',
+          isPlaying: false,
+          isPaused: true,
+          progress: 0.42,
+          duration: 120
+        }),
+        null // first render — no previous state
+      );
+    });
   });
 
   describe('Phase 4: HealthRenderer wiring via store', () => {

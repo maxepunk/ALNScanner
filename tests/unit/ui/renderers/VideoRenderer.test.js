@@ -123,6 +123,52 @@ describe('VideoRenderer', () => {
       expect(() => renderer.render(null)).not.toThrow();
     });
 
+    test('should render PAUSED state: badge, frozen progress, no rAF (F-GMCMD-01)', () => {
+      const playing = { nowPlaying: 'Test.mp4', isPlaying: true, isPaused: false, progress: 0.5, duration: 100 };
+      renderer.render(playing);
+      expect(statusBadge.textContent).toBe('Playing');
+
+      // Backend Batch 1: video domain now emits status 'paused' with FROZEN position
+      const paused = { nowPlaying: 'Test.mp4', isPlaying: false, isPaused: true, progress: 0.5, duration: 100 };
+      renderer.render(paused, playing);
+
+      // Badge says Paused (not Playing, not Idle)
+      expect(statusBadge.textContent).toBe('Paused');
+      expect(statusBadge.classList.contains('badge-success')).toBe(false);
+      // Progress stays visible at the frozen position
+      expect(progressContainer.style.display).toBe('block');
+      expect(progressBar.style.width).toBe('50%');
+      // rAF interpolation stopped — the bar must NOT keep advancing
+      expect(renderer._animFrame).toBeNull();
+      // Icon shows paused
+      expect(nowPlayingIcon.textContent).toBe('⏸️');
+    });
+
+    test('paused → resumed restarts interpolation from the resumed position', () => {
+      const paused = { nowPlaying: 'Test.mp4', isPlaying: false, isPaused: true, progress: 0.5, duration: 100 };
+      renderer.render(paused);
+      expect(renderer._animFrame).toBeNull();
+
+      const resumed = { nowPlaying: 'Test.mp4', isPlaying: true, isPaused: false, progress: 0.5, duration: 100 };
+      renderer.render(resumed, paused);
+
+      expect(statusBadge.textContent).toBe('Playing');
+      expect(progressBar.style.width).toBe('50%');
+      expect(renderer._animFrame).not.toBeNull();
+    });
+
+    test('paused → stopped hides progress and shows Idle', () => {
+      const paused = { nowPlaying: 'Test.mp4', isPlaying: false, isPaused: true, progress: 0.5, duration: 100 };
+      renderer.render(paused);
+      expect(progressContainer.style.display).toBe('block');
+
+      const stopped = { nowPlaying: null, isPlaying: false, isPaused: false, progress: 0, duration: 0 };
+      renderer.render(stopped, paused);
+
+      expect(progressContainer.style.display).toBe('none');
+      expect(statusBadge.textContent).toBe('Idle');
+    });
+
     test('should handle missing DOM elements gracefully', () => {
       const noElRenderer = new VideoRenderer({ nowPlayingEl: null });
       expect(() => noElRenderer.render({ nowPlaying: 'Video.mp4', isPlaying: true })).not.toThrow();
