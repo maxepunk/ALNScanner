@@ -87,7 +87,10 @@ export class NetworkedQueueManager extends EventTarget {
         if (status === 'accepted' || status === 'duplicate' ||
             status === 'rejected' || status === 'error') {
           this._removeByClientTxId(tx.clientTxId);
-          if (status === 'rejected' || status === 'error') {
+          if (status === 'rejected' || status === 'error' || status === 'duplicate') {
+            // duplicate included (A7/F-SCAN-07): the claimed-by message must
+            // reach the operator — the optimistic success screen is a lie.
+            // The app-level consumer keeps the token marked (genuinely claimed).
             this.dispatchEvent(new CustomEvent('transaction:failed', {
               detail: { transaction: tx, status, message: result?.message }
             }));
@@ -179,6 +182,13 @@ export class NetworkedQueueManager extends EventTarget {
           const result = await this.replayTransaction(transaction);
           const status = result?.status;
           if (status === 'accepted' || status === 'duplicate') {
+            if (status === 'duplicate') {
+              // A7/F-SCAN-07: a replayed scan that another device already
+              // claimed must surface the claimed-by message, not vanish.
+              this.dispatchEvent(new CustomEvent('transaction:failed', {
+                detail: { transaction, status, message: result?.message }
+              }));
+            }
             results.push({ success: true, transaction, result });
             // durable result — removed (not pushed to survivors)
           } else if (status === 'rejected' || status === 'error') {

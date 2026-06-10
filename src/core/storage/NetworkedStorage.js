@@ -365,6 +365,16 @@ export class NetworkedStorage extends IStorageStrategy {
     if (!exists) {
       this.transactions.push(tx);
     }
+
+    // A7/F-GMS-05: a transaction:new broadcast means the token is claimed
+    // session-wide (GM dedup is global). Mark it locally so a re-scan on THIS
+    // device is blocked up-front instead of showing an optimistic success the
+    // backend will reject as duplicate. Mutates the Set in place (shared
+    // reference with UnifiedDataManager via _syncScannedTokens).
+    if (tx.tokenId) {
+      this.scannedTokens.add(tx.tokenId);
+      this.persistScannedTokens();
+    }
   }
 
   /**

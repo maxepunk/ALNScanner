@@ -396,6 +396,23 @@ describe('NetworkedStorage Strategy', () => {
       expect(storage.transactions).toHaveLength(2);
     });
 
+    it('should mark broadcast tokenIds in scannedTokens (A7/F-GMS-05: blocks cross-device duplicates up-front)', () => {
+      // GM-A claims a token; GM-B receives transaction:new. GM-B's local dedup
+      // must now block a re-scan attempt BEFORE the optimistic success screen.
+      storage.addTransactionFromBroadcast({ id: 'tx-other', tokenId: 'claimed01' });
+
+      expect(storage.scannedTokens.has('claimed01')).toBe(true);
+    });
+
+    it('should mark broadcast tokenIds even when the transaction is already cached', () => {
+      storage.transactions = [{ id: 'tx-1', tokenId: 'tok1' }];
+
+      storage.addTransactionFromBroadcast({ id: 'tx-1', tokenId: 'tok1' });
+
+      expect(storage.transactions).toHaveLength(1);
+      expect(storage.scannedTokens.has('tok1')).toBe(true);
+    });
+
     it('should remove transaction from broadcast WITHOUT re-emitting the delete command (F-GMS-03)', () => {
       storage.transactions = [{ id: 'tx-1' }, { id: 'tx-2' }];
 

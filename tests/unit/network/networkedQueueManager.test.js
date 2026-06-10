@@ -182,6 +182,31 @@ describe('NetworkedQueueManager', () => {
       expect(failedSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('removes the entry and surfaces transaction:failed on a duplicate result (A7/F-SCAN-07)', async () => {
+      // Cross-device duplicate: GM-B scans a token GM-A already claimed. The
+      // backend answers status 'duplicate' with the claimed-by message. The
+      // queue previously swallowed it (removed silently) — the operator kept
+      // looking at a false "Transaction Complete!" screen.
+      mockClient.isConnected = true;
+      jest.spyOn(queueManager, 'replayTransaction').mockResolvedValue({
+        status: 'duplicate',
+        message: 'Token already claimed by Team Alpha',
+        claimedBy: 'Team Alpha'
+      });
+
+      const failedSpy = jest.fn();
+      queueManager.addEventListener('transaction:failed', failedSpy);
+
+      const id = queueManager.queueTransaction({ tokenId: 'tDup', teamId: '002' });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(queueManager.tempQueue.some(t => t.clientTxId === id)).toBe(false);  // definitive: removed
+      expect(failedSpy).toHaveBeenCalledTimes(1);
+      expect(failedSpy.mock.calls[0][0].detail).toEqual(
+        expect.objectContaining({ status: 'duplicate', message: 'Token already claimed by Team Alpha' })
+      );
+    });
+
     it('in-flight paused: connected scan + REAL error result → removed + transaction:failed (no mock)', async () => {
       // Edge case: a scan submitted while active, but the session paused before the
       // backend processed it → transaction:result status 'error'. Now DEFINITIVE
@@ -456,6 +481,24 @@ describe('NetworkedQueueManager', () => {
       expect(failedSpy).toHaveBeenCalledTimes(1);
       expect(failedSpy.mock.calls[0][0].detail).toEqual(
         expect.objectContaining({ status: 'rejected', message: 'No active session' })
+      );
+    });
+
+    it('surfaces a transaction:failed event on a duplicate replay result (A7/F-SCAN-07)', async () => {
+      const tx = { tokenId: 'tF', teamId: '006', clientTxId: 'f' };
+      queueManager.tempQueue = [tx];
+      jest.spyOn(queueManager, 'replayTransaction')
+        .mockResolvedValueOnce({ status: 'duplicate', clientTxId: 'f', message: 'Token already claimed by Team Beta' });
+
+      const failedSpy = jest.fn();
+      queueManager.addEventListener('transaction:failed', failedSpy);
+
+      await queueManager.syncQueue();
+
+      expect(queueManager.tempQueue).toHaveLength(0); // still removed (claimed)
+      expect(failedSpy).toHaveBeenCalledTimes(1);
+      expect(failedSpy.mock.calls[0][0].detail).toEqual(
+        expect.objectContaining({ status: 'duplicate', message: 'Token already claimed by Team Beta' })
       );
     });
 

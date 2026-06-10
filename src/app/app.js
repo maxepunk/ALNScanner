@@ -181,11 +181,24 @@ class App {
     // P3.4: a PERMANENT transaction rejection (backend status 'rejected', e.g.
     // invalid token) surfaces to the operator AND unmarks the token so the GM can
     // re-scan after correcting the cause (fixes the token-locked + no-feedback
-    // lost-scan-equivalent). Duplicates are NOT unmarked (genuinely claimed).
+    // lost-scan-equivalent). Duplicates are NOT unmarked (genuinely claimed) but
+    // ARE surfaced (A7/F-GMS-05/F-SCAN-07): the backend's claimed-by verdict must
+    // correct the optimistic "Transaction Complete!" screen, not vanish.
     this.networkedSession.addEventListener('transaction:failed', (event) => {
       const { transaction, status, message } = event.detail || {};
       const tokenId = transaction?.tokenId;
-      if (status === 'duplicate') return;
+      if (status === 'duplicate') {
+        const claimMessage = message || 'Token already claimed';
+        this.uiManager.showError(`${claimMessage}${tokenId ? ` (${tokenId})` : ''} — no points awarded`);
+        // If the optimistic result screen is still up for this scan, repaint it
+        // as a duplicate. If the GM has moved on (e.g. scanning the next token),
+        // the toast alone informs — don't yank them back.
+        const resultScreen = document.getElementById('resultScreen');
+        if (resultScreen?.classList.contains('active')) {
+          this.showDuplicateError(tokenId || '', claimMessage);
+        }
+        return;
+      }
       this.uiManager.showError(`Scan rejected${tokenId ? ` (${tokenId})` : ''}: ${message || status || 'failed'}`);
       if (tokenId) {
         this.dataManager.unmarkTokenAsScanned(tokenId);
@@ -805,14 +818,20 @@ class App {
     }
   }
 
-  showDuplicateError(tokenId) {
+  /**
+   * Paint the result screen as a duplicate.
+   * @param {string} tokenId - Scanned token id
+   * @param {string} [message] - Optional detail line (e.g. the backend's
+   *   "Token already claimed by Team X" for cross-device duplicates, A7)
+   */
+  showDuplicateError(tokenId, message = 'This token has been used') {
     const statusEl = document.getElementById('resultStatus');
     if (statusEl) {
       statusEl.className = 'status-message error';
-      // F-GMS-04: tokenId is arbitrary NDEF text from any NFC tag — escape it
+      // F-GMS-04: tokenId/message may carry NFC/user-controlled text — escape
       statusEl.innerHTML = `
         <h2>Token Already Scanned</h2>
-        <p style="font-size: 14px;">This token has been used</p>
+        <p style="font-size: 14px;">${escapeHtml(message)}</p>
         <p style="font-size: 12px; color: #666;">ID: ${escapeHtml(tokenId)}</p>
       `;
     }
