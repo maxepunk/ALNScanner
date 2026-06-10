@@ -125,7 +125,8 @@ class App {
       this.sessionModeManager,
       this.uiManager,
       this.showConnectionWizard,
-      this._initializeNetworkedMode.bind(this)
+      this._initializeNetworkedMode.bind(this),
+      this._initializeStandaloneMode.bind(this)
     );
   }
 
@@ -448,42 +449,9 @@ class App {
         this.debug.log(`Game mode locked: ${mode}`);
         await this._initializeNetworkedMode();
       } else if (mode === 'standalone') {
-        // Standalone mode: lock immediately and proceed
-        this.sessionModeManager.setMode(mode);
-        this.debug.log(`Game mode locked: ${mode}`);
-
-        // Add body class for CSS-based feature hiding
-        document.body.classList.add('standalone-mode');
-        document.body.classList.remove('networked-mode');
-
-        // Clear phantom data from previous sessions
-        localStorage.removeItem('standaloneSession');
-
-        // Initialize UnifiedDataManager for standalone mode
-        // This creates LocalStorage strategy and loads from localStorage if available
-        this.dataManager.sessionModeManager = this.sessionModeManager;
-        await this.dataManager.initializeStandaloneMode();
-
-        this.debug.log('UnifiedDataManager initialized for standalone mode');
-
-        // Initialize view controller (shows admin tabs in standalone mode too)
-        this.viewController.init();
-
-        // Initialize admin session display in standalone mode
-        const sessionContainer = document.getElementById('session-status-container');
-        if (sessionContainer) {
-          this.uiManager.renderSessionStatus(sessionContainer);
-        }
-
-        // Wire TeamRegistry for unified API (standalone)
-        if (this.teamRegistry) {
-          this.teamRegistry.sessionModeManager = this.sessionModeManager;
-        }
-
-        // Initialize team entry UI
-        this.initTeamEntryUI();
-
-        this.uiManager.showScreen('teamEntry');
+        // Standalone mode: lock immediately and proceed (fresh selection —
+        // phantom data from previous sessions is cleared)
+        await this._initializeStandaloneMode({ preserveSession: false });
       }
     } catch (error) {
       console.error('Failed to set game mode:', error);
@@ -492,6 +460,64 @@ class App {
       // Re-throw so caller (ConnectionWizard) can display error in modal
       throw error;
     }
+  }
+
+  /**
+   * Initialize standalone mode — shared by fresh selection (selectGameMode)
+   * AND restore-after-reload (applyInitialScreenDecision 'initStandalone').
+   *
+   * F-GMS-01 / C7: a mid-show reload of a standalone station must do
+   * EVERYTHING fresh selection does (storage strategy, registry wiring,
+   * body class), otherwise scanning is bricked: addTransaction throws
+   * 'No active strategy', teamRegistry falls into the networked branch,
+   * and networked-only admin sections are un-hidden.
+   *
+   * @param {Object} [options]
+   * @param {boolean} [options.preserveSession=false] - true on restore
+   *   (keep the persisted standalone session); false on fresh selection
+   *   (clear phantom data from previous sessions)
+   * @private
+   */
+  async _initializeStandaloneMode({ preserveSession = false } = {}) {
+    // Lock mode
+    this.sessionModeManager.setMode('standalone');
+    this.debug.log(`Game mode locked: standalone${preserveSession ? ' (restored)' : ''}`);
+
+    // Add body class for CSS-based feature hiding
+    document.body.classList.add('standalone-mode');
+    document.body.classList.remove('networked-mode');
+
+    // Clear phantom data from previous sessions (fresh selection only —
+    // a reload restore must keep the persisted session)
+    if (!preserveSession) {
+      localStorage.removeItem('standaloneSession');
+    }
+
+    // Initialize UnifiedDataManager for standalone mode
+    // This creates LocalStorage strategy and loads from localStorage if available
+    this.dataManager.sessionModeManager = this.sessionModeManager;
+    await this.dataManager.initializeStandaloneMode();
+
+    this.debug.log('UnifiedDataManager initialized for standalone mode');
+
+    // Initialize view controller (shows admin tabs in standalone mode too)
+    this.viewController.init();
+
+    // Initialize admin session display in standalone mode
+    const sessionContainer = document.getElementById('session-status-container');
+    if (sessionContainer) {
+      this.uiManager.renderSessionStatus(sessionContainer);
+    }
+
+    // Wire TeamRegistry for unified API (standalone)
+    if (this.teamRegistry) {
+      this.teamRegistry.sessionModeManager = this.sessionModeManager;
+    }
+
+    // Initialize team entry UI
+    this.initTeamEntryUI();
+
+    this.uiManager.showScreen('teamEntry');
   }
 
   /**

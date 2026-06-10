@@ -454,7 +454,27 @@ describe('InitializationSteps - ES6 Module', () => {
       expect(mockShowWizard).toHaveBeenCalledTimes(1);
     });
 
-    it('should initialize standalone mode when action is initStandalone', async () => {
+    it('should run the FULL standalone initializer when action is initStandalone (F-GMS-01)', async () => {
+      // A standalone restore after page reload must do everything fresh
+      // selection does (strategy init, registry wiring, body class) — not just
+      // setMode + showScreen. The full initializer is injected by App.init().
+      const decision = { screen: 'teamEntry', action: 'initStandalone', savedMode: 'standalone' };
+      const mockInitStandaloneMode = jest.fn().mockResolvedValue(undefined);
+
+      await applyInitialScreenDecision(
+        decision, mockSessionModeManager, mockUIManager, mockShowWizard,
+        null, mockInitStandaloneMode
+      );
+
+      // Full initializer invoked, preserving the persisted session
+      expect(mockInitStandaloneMode).toHaveBeenCalledTimes(1);
+      expect(mockInitStandaloneMode).toHaveBeenCalledWith({ preserveSession: true });
+      // The initializer owns setMode + showScreen — no duplicate calls here
+      expect(mockSessionModeManager.setMode).not.toHaveBeenCalled();
+      expect(mockShowWizard).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to setMode + showScreen when no standalone initializer is provided', async () => {
       const decision = { screen: 'teamEntry', action: 'initStandalone', savedMode: 'standalone' };
 
       await applyInitialScreenDecision(decision, mockSessionModeManager, mockUIManager, mockShowWizard);
