@@ -12,6 +12,7 @@
 
 import Debug from '../utils/debug.js';
 import { isTokenValid } from '../utils/jwtUtils.js';
+import { escapeHtml } from '../utils/escapeHtml.js';
 import UIManager from '../ui/uiManager.js';
 import Settings from '../ui/settings.js';
 import TokenManager from '../core/tokenManager.js';
@@ -808,10 +809,11 @@ class App {
     const statusEl = document.getElementById('resultStatus');
     if (statusEl) {
       statusEl.className = 'status-message error';
+      // F-GMS-04: tokenId is arbitrary NDEF text from any NFC tag — escape it
       statusEl.innerHTML = `
         <h2>Token Already Scanned</h2>
         <p style="font-size: 14px;">This token has been used</p>
-        <p style="font-size: 12px; color: #666;">ID: ${tokenId}</p>
+        <p style="font-size: 12px; color: #666;">ID: ${escapeHtml(tokenId)}</p>
       `;
     }
 

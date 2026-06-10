@@ -336,11 +336,14 @@ class UIManager {
       const rankClass = rank <= 3 ? `rank-${rank}` : '';
       const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
 
+      // F-GMS-04: teamId is unvalidated free text — escape in BOTH the text
+      // node and the data-arg attribute (escapeHtml escapes quotes too)
+      const safeTeamId = escapeHtml(team.teamId);
       return `
-        <div class="scoreboard-entry ${rankClass}" data-action="app.showTeamDetails" data-arg="${team.teamId}" style="cursor: pointer;">
+        <div class="scoreboard-entry ${rankClass}" data-action="app.showTeamDetails" data-arg="${safeTeamId}" style="cursor: pointer;">
           <div class="scoreboard-rank">${medal}</div>
           <div class="scoreboard-team">
-            Team ${team.teamId}
+            Team ${safeTeamId}
             <span class="scoreboard-tokens">(${team.tokenCount} tokens)</span>
           </div>
           <div class="scoreboard-score">${formatCurrency(team.score)}</div>
@@ -486,7 +489,7 @@ class UIManager {
             <div class="group-header completed">
               <div class="group-title">
                 <span class="completion-badge">🏆</span>
-                <span class="group-name">${group.displayName}</span>
+                <span class="group-name">${escapeHtml(group.displayName)}</span>
                 <span class="completion-text">COMPLETE</span>
               </div>
               <div class="bonus-amount">
@@ -514,7 +517,7 @@ class UIManager {
             <div class="group-header in-progress">
               <div class="group-title">
                 <span class="progress-badge">⏳</span>
-                <span class="group-name">${group.displayName}</span>
+                <span class="group-name">${escapeHtml(group.displayName)}</span>
                 <span class="progress-text">${group.progress}</span>
               </div>
               <div class="progress-bar">
@@ -660,6 +663,10 @@ class UIManager {
     let cardClass = isUnknown ? 'unknown' : (hasBonus ? 'bonus-applied' : '');
     if (isDuplicate) cardClass += ' duplicate';
 
+    // F-GMS-04: group/rfid/memoryType are NFC-controlled (unknown tokens carry
+    // raw NDEF text) — escape every interpolation site
+    const safeMemoryType = escapeHtml(token.memoryType);
+
     let calculationText = '';
     if (!isUnknown && !token.isUnknown) {
       const baseValue = dataSource.SCORING_CONFIG.BASE_VALUES[token.valueRating] || 0;
@@ -670,13 +677,13 @@ class UIManager {
         const finalValue = tokenValue * groupInfo.multiplier;
         calculationText = `
           <strong>${baseValue.toLocaleString()}</strong> ×
-          <strong>${multiplier}x</strong> ${token.memoryType} ×
+          <strong>${multiplier}x</strong> ${safeMemoryType} ×
           <strong>${groupInfo.multiplier}x</strong> group =
           <strong>${formatCurrency(finalValue)}</strong>`;
       } else {
         calculationText = `
           <strong>${baseValue.toLocaleString()}</strong> ×
-          <strong>${multiplier}x</strong> ${token.memoryType} =
+          <strong>${multiplier}x</strong> ${safeMemoryType} =
           <strong>${formatCurrency(tokenValue)}</strong>`;
       }
     } else {
@@ -697,7 +704,7 @@ class UIManager {
     return `
       <div class="token-detail-card ${cardClass}">
         <div class="token-detail-header">
-          <span>${token.group}</span>
+          <span>${escapeHtml(token.group)}</span>
           <span class="token-detail-value" style="display: flex; align-items: center;">
             <span style="margin-right: 8px;">${formatCurrency(displayValue)}</span>
             ${deleteButton}
@@ -706,11 +713,11 @@ class UIManager {
         <div class="token-detail-grid">
           <div class="token-detail-item">
             <span class="token-detail-label">RFID</span>
-            <span class="token-detail-info">${token.rfid}</span>
+            <span class="token-detail-info">${escapeHtml(token.rfid)}</span>
           </div>
           <div class="token-detail-item">
             <span class="token-detail-label">Memory Type</span>
-            <span class="token-detail-info">${token.memoryType}</span>
+            <span class="token-detail-info">${safeMemoryType}</span>
           </div>
           <div class="token-detail-item">
             <span class="token-detail-label">Base Rating</span>
