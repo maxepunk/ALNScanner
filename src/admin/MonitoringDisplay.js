@@ -1,5 +1,6 @@
 import Debug from '../utils/debug.js';
 import { escapeHtml } from '../utils/escapeHtml.js';
+import { showToast as sharedShowToast } from '../utils/showToast.js';
 import { CueRenderer } from '../ui/renderers/CueRenderer.js';
 import { EnvironmentRenderer } from '../ui/renderers/EnvironmentRenderer.js';
 import { SessionRenderer } from '../ui/renderers/SessionRenderer.js';
@@ -397,22 +398,8 @@ export class MonitoringDisplay {
   }
 
   showToast(message, type = 'info', duration = 3000) {
-    const colors = {
-      error: 'var(--color-accent-danger, #dc3545)',
-      success: 'var(--color-accent-success, #28a745)',
-      warning: 'var(--color-accent-warning, #ffc107)',
-      info: 'var(--color-accent-info, #007bff)'
-    };
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    toast.style.cssText = `
-        position: fixed; top: 20px; right: 20px; padding: 12px 20px;
-        background: ${colors[type] || colors.info}; color: white;
-        border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10000;
-      `;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), duration);
+    // Delegate to shared utility (F-GMS-14 consolidation).
+    sharedShowToast(message, type, duration);
   }
 
   destroy() {

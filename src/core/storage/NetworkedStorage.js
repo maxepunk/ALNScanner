@@ -339,7 +339,7 @@ export class NetworkedStorage extends IStorageStrategy {
 
     this.debug?.log('[NetworkedStorage] Resetting all scores');
 
-    this._emitCommand('scores:reset', {});
+    this._emitCommand('score:reset', {});
 
     return { success: true, pending: true };
   }

@@ -14,6 +14,7 @@
 import { escapeHtml } from '../utils/escapeHtml.js';
 import { formatCurrency } from '../utils/formatCurrency.js';
 import { formatDuration } from '../utils/formatDuration.js';
+import { showToast as sharedShowToast } from '../utils/showToast.js';
 import { GameOpsRenderer } from './renderers/GameOpsRenderer.js';
 import { GameAdminRenderer } from './renderers/GameAdminRenderer.js';
 
@@ -132,21 +133,12 @@ class UIManager {
    * @param {number} duration - Duration in milliseconds (default 3000)
    */
   showToast(message, type = 'info', duration = 3000) {
+    // Delegate to shared utility (F-GMS-14 consolidation).
+    // Keeps the #error-container in sync with initErrorDisplay().
     if (!this.errorContainer) {
       this.initErrorDisplay();
     }
-
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-
-    this.errorContainer.appendChild(toast);
-
-    // Auto-dismiss after duration
-    setTimeout(() => {
-      toast.style.animation = 'slideOut 0.3s ease-out forwards';
-      setTimeout(() => toast.remove(), 300);
-    }, duration);
+    sharedShowToast(message, type, duration);
   }
 
   /**
