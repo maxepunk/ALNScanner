@@ -313,7 +313,10 @@ export class NetworkedSession extends EventTarget {
 
         case 'transaction:deleted':
           if (payload.transactionId) {
-            this.dataManager.removeTransaction(payload.transactionId);
+            // Cache-only prune (F-GMS-03): removeTransaction would re-emit
+            // gm:command transaction:delete from EVERY GM receiving the
+            // broadcast (N-station echo) and never touch the local cache.
+            this.dataManager.removeTransactionFromBroadcast(payload.transactionId);
           }
           // Update score after deletion (score changed by removing transaction)
           if (payload.updatedTeamScore) {

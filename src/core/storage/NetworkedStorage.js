@@ -368,6 +368,27 @@ export class NetworkedStorage extends IStorageStrategy {
   }
 
   /**
+   * Remove transaction from local cache on a transaction:deleted broadcast.
+   * Mirror of addTransactionFromBroadcast: cache-only — must NOT re-issue
+   * the transaction:delete gm:command (F-GMS-03: every connected GM would
+   * echo the delete back to the backend, and the cache would stay stale
+   * until the next sync:full).
+   * Emits transaction:deleted so UI consumers (badge, history, Game
+   * Activity, scoreboards) refresh.
+   * @param {string} transactionId
+   */
+  removeTransactionFromBroadcast(transactionId) {
+    const index = this.transactions.findIndex(t => t.id === transactionId);
+    if (index === -1) return;
+
+    const [removed] = this.transactions.splice(index, 1);
+
+    this.dispatchEvent(new CustomEvent('transaction:deleted', {
+      detail: { transactionId, transaction: removed }
+    }));
+  }
+
+  /**
    * Set backend scores for a team
    * @param {string} teamId
    * @param {Object} scoreData
