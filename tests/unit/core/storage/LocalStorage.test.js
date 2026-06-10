@@ -231,6 +231,26 @@ describe('LocalStorage Strategy', () => {
       expect(storage.getTeamScores()[0].score).toBe(10000);
       expect(storage.getTeamScores()[0].bonusScore).toBe(0);
     });
+
+    it('should NOT award a bonus for a 1-token group (A1/F-SCAN-09: groups need 2+ tokens)', async () => {
+      // Backend rule (transactionService.isGroupComplete): groups with <= 1
+      // token never complete. Standalone previously paid a x2 single-token
+      // group, diverging from networked scoring AND docs/SCORING_LOGIC.md.
+      mockTokenManager.getAllTokens.mockReturnValue([
+        { SF_RFID: 'solo1', SF_Group: 'SoloGroup (x2)' }
+      ]);
+
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'solo1', teamId: '001',
+        mode: 'blackmarket', points: 10000, group: 'SoloGroup (x2)',
+        timestamp: new Date().toISOString()
+      });
+
+      const scores = storage.getTeamScores();
+      expect(scores[0].score).toBe(10000); // base only — no bonus
+      expect(scores[0].bonusScore).toBe(0);
+      expect(storage.sessionData.teams['001'].completedGroups).toEqual([]);
+    });
   });
 
   describe('removeTransaction', () => {

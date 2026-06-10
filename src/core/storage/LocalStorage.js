@@ -391,7 +391,10 @@ export class LocalStorage extends IStorageStrategy {
     const allGroupIds = groupTokens.map(t => t.SF_RFID);
     const allScanned = allGroupIds.every(id => scannedIds.includes(id));
 
-    if (allScanned && groupTokens.length > 0) {
+    // A1/F-SCAN-09: groups need 2+ tokens to pay a completion bonus —
+    // parity with the backend (transactionService.isGroupComplete rejects
+    // groups with <= 1 token) and docs/SCORING_LOGIC.md.
+    if (allScanned && groupTokens.length > 1) {
       const groupBaseScore = groupTxs.reduce((sum, tx) => sum + (tx.points || 0), 0);
       const bonus = (groupInfo.multiplier - 1) * groupBaseScore;
 
