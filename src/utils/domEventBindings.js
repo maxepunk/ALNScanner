@@ -244,6 +244,12 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
     // Skip checkboxes and radios — handled by 'change' listener (avoids
     // double-firing because click on these toggles state then fires change).
     if (actionElement.type === 'checkbox' || actionElement.type === 'radio') return;
+    // Skip <select> elements — handled by 'change' listener (F-GMCMD-04).
+    // Chrome fires 'click' on a select on mouseup: opening a closed picker
+    // dispatched its command with the CURRENTLY selected value (e.g. the
+    // playlist picker restarted the playlist), and choosing an option then
+    // fired the command twice (click + change).
+    if (actionElement.tagName === 'SELECT') return;
 
     // Prevent default action for links (e.g., <a href="#" data-action="...">)
     if (actionElement.tagName === 'A') {

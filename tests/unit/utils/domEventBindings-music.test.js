@@ -126,6 +126,28 @@ describe('domEventBindings - music actions', () => {
     expect(mockMusicController.setLoop).toHaveBeenCalledWith(false);
   });
 
+  it('clicking a <select> does NOT dispatch its command (F-GMCMD-04: change handles selects)', () => {
+    // A plain click on the closed picker (to open it) previously ran the
+    // action with the CURRENTLY selected value — opening the playlist picker
+    // restarted the playlist, and choosing an option fired the command twice
+    // (click + change).
+    const sel = document.createElement('select');
+    sel.dataset.action = 'admin.musicLoadPlaylist';
+    const opt = document.createElement('option');
+    opt.value = 'all-tracks';
+    sel.appendChild(opt);
+    sel.value = 'all-tracks';
+    document.body.appendChild(sel);
+
+    clickAction(sel);
+
+    expect(mockMusicController.loadPlaylist).not.toHaveBeenCalled();
+
+    // The change event remains the single dispatch path (no double fire)
+    changeAction(sel);
+    expect(mockMusicController.loadPlaylist).toHaveBeenCalledTimes(1);
+  });
+
   it('musicLoadPlaylist dispatches on select change with playlistId', () => {
     const sel = document.createElement('select');
     sel.dataset.action = 'admin.musicLoadPlaylist';
