@@ -157,6 +157,17 @@ class App {
       }
     });
 
+    // F-GMS-10 / AsyncAPI Decision #10: backend error events MUST be displayed.
+    // networkedSession dispatches backend:error UNCONDITIONALLY for every backend
+    // 'error' broadcast (auth codes additionally trigger auth:required) — surface
+    // generic service errors (QUEUE_FULL, VALIDATION_ERROR, session/video/offline
+    // failures) that previously vanished.
+    this.networkedSession.addEventListener('backend:error', (event) => {
+      const { code, message } = event.detail || {};
+      const label = code ? `${code}: ` : '';
+      this.uiManager.showError(`Server error — ${label}${message || 'unknown error'}`);
+    });
+
     this.networkedSession.addEventListener('group:completed', (event) => {
       const { teamId, bonusPoints } = event.detail || {};
       const formattedBonus = bonusPoints ? ` +$${bonusPoints.toLocaleString()}` : '';
