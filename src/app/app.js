@@ -2,17 +2,19 @@
  * App - Main Application Controller
  * ES6 Module
  *
- * Main application coordinator that handles:
- * - NFC processing pipeline
- * - Mode-specific initialization (networked vs standalone)
- * - Admin panel integration
- * - Event wiring between all modules
- * - Team management and transaction processing
+ * Slim coordination shell — delegates domain logic to per-domain modules:
+ *   Game Ops    → src/app/domains/gameOps.js    (scanning, team, scores, interventions)
+ *   Show Control→ src/app/domains/showControl.js (video, display mode)
+ *   Game Admin  → src/app/domains/gameAdmin.js   (session lifecycle, report, system reset)
+ *   Environment → src/app/domains/environment.js (bluetooth, audio, lighting — controllers in admin/)
+ *
+ * Phase-2 structural split (capability-matrix §8 / decision C1).
+ * Public API surface is UNCHANGED — all method names on App are preserved as
+ * thin delegators so existing tests and domEventBindings continue to work.
  */
 
 import Debug from '../utils/debug.js';
 import { isTokenValid } from '../utils/jwtUtils.js';
-import { escapeHtml } from '../utils/escapeHtml.js';
 import UIManager from '../ui/uiManager.js';
 import Settings from '../ui/settings.js';
 import TokenManager from '../core/tokenManager.js';
@@ -21,6 +23,12 @@ import CONFIG from '../utils/config.js';
 import InitializationSteps from './initializationSteps.js';
 import { SessionModeManager } from './sessionModeManager.js'; // Import class, not singleton
 import NetworkedSession from '../network/networkedSession.js';
+
+// Domain modules
+import { GameOpsDomain } from './domains/gameOps.js';
+import { ShowControlDomain } from './domains/showControl.js';
+import { GameAdminDomain } from './domains/gameAdmin.js';
+import { EnvironmentDomain } from './domains/environment.js';
 
 /**
  * Main Application Class
@@ -64,6 +72,13 @@ class App {
     this._scanningActive = false; // true while NFC scanning is armed (on scan screen)
     this.currentInterventionTeamId = null; // For GM intervention features
     this.viewController = this._createViewController();
+
+    // Domain objects (Phase-2 structural split, decision C1)
+    // These receive `this` so they share all collaborators via the App handle.
+    this._gameOps = new GameOpsDomain(this);
+    this._showControl = new ShowControlDomain(this);
+    this._gameAdmin = new GameAdminDomain(this);
+    this._environment = new EnvironmentDomain(this);
   }
 
   /**
@@ -326,123 +341,20 @@ class App {
     };
   }
 
-  // ========== Settings Management ==========
+  // ========== Settings Management (Game Ops) ==========
 
-  toggleMode() {
-    this.settings.mode = this.settings.mode === 'detective' ? 'blackmarket' : 'detective';
+  toggleMode() { return this._gameOps.toggleMode(); }
 
-    // Persist immediately (F-GMS-06): without save() a reload reverts the
-    // station to the last-saved mode, silently changing scoring mid-show.
-    // No need to sync to services (they read from Settings).
-    this.settings.save();
+  // ========== Team Entry (Game Ops) ==========
 
-    this.uiManager.updateModeDisplay(this.settings.mode);
+  /** Initialize team entry UI. Delegated to GameOpsDomain. */
+  initTeamEntryUI() { return this._gameOps.initTeamEntryUI(); }
 
-    const scanScreen = document.getElementById('scanScreen');
-    if (scanScreen && scanScreen.classList.contains('active')) {
-      this.uiManager.updateSessionStats();
-    }
+  /** @private — called by GameOpsDomain and click handlers */
+  _renderTeamList(container) { return this._gameOps._renderTeamList(container); }
 
-    // Visual feedback
-    const indicator = document.getElementById('modeIndicator');
-    if (indicator) {
-      indicator.style.transform = `scale(${this.config.MODE_TOGGLE_SCALE})`;
-      setTimeout(() => {
-        indicator.style.transform = 'scale(1)';
-      }, this.config.ANIMATION_DURATION);
-    }
-  }
-
-  // ========== Team Entry ==========
-
-  /**
-   * Initialize team entry UI
-   * UNIFIED: No mode branching - TeamRegistry handles mode differences
-   */
-  initTeamEntryUI() {
-    const teamInput = document.getElementById('teamNameInput');
-    const teamList = document.getElementById('teamList');
-    const listLabel = document.getElementById('teamListLabel');
-
-    // Label adapts to mode (TeamRegistry encapsulates this)
-    if (listLabel && this.teamRegistry) {
-      listLabel.textContent = this.teamRegistry.getTeamListLabel();
-    }
-
-    // Render team list with click handler
-    if (this.teamRegistry && teamList) {
-      this._renderTeamList(teamList);
-    }
-
-    // Focus input
-    if (teamInput) {
-      teamInput.value = '';
-      teamInput.focus();
-    }
-
-    // Wire teams:updated listener (once)
-    if (this.teamRegistry && !this._teamsListenerAdded) {
-      this._teamsListenerAdded = true;
-      this.teamRegistry.addEventListener('teams:updated', () => {
-        const list = document.getElementById('teamList');
-        if (list) this._renderTeamList(list);
-      });
-    }
-  }
-
-  /**
-   * Render clickable team list from TeamRegistry
-   * @param {HTMLElement} container - Team list container element
-   * @private
-   */
-  _renderTeamList(container) {
-    container.innerHTML = '';
-    const teams = this.teamRegistry.getTeamsForDisplay();
-
-    teams.forEach(teamName => {
-      const item = document.createElement('div');
-      item.className = 'team-list-item';
-      item.textContent = teamName;
-      item.setAttribute('role', 'option');
-      item.addEventListener('click', () => {
-        document.getElementById('teamNameInput').value = teamName;
-        this.confirmTeamId(); // Auto-proceed when clicking existing team
-      });
-      container.appendChild(item);
-    });
-  }
-
-  /**
-   * Confirm team selection and proceed to scan screen
-   * UNIFIED: Reads from single input, TeamRegistry handles mode-specific logic
-   */
-  async confirmTeamId() {
-    const teamInput = document.getElementById('teamNameInput');
-    const teamName = teamInput?.value?.trim();
-
-    if (!teamName) {
-      this.uiManager.showError('Please enter a team name');
-      return;
-    }
-
-    // TeamRegistry handles mode-specific behavior (localStorage vs backend)
-    const result = await this.teamRegistry.selectTeam(teamName);
-    if (!result.success) {
-      this.uiManager.showError(result.error || 'Failed to select team');
-      return;
-    }
-
-    this.currentTeamId = teamName;
-
-    const currentTeamEl = document.getElementById('currentTeam');
-    if (currentTeamEl) currentTeamEl.textContent = teamName;
-
-    this.uiManager.updateSessionStats();
-    this.uiManager.showScreen('scan');
-
-    // Auto-start NFC scanning after team confirmation
-    await this._startNFCScanning();
-  }
+  /** Confirm team selection and proceed to scan screen. */
+  async confirmTeamId() { return this._gameOps.confirmTeamId(); }
 
   // ========== Game Mode Selection ==========
 
@@ -671,1040 +583,98 @@ class App {
     this.viewController.switchView(viewName);
   }
 
-  // ========== Scanning ==========
+  // ========== Scanning (Game Ops) ==========
 
-  /**
-   * @deprecated Use _startNFCScanning() instead. Kept for console debugging.
-   */
+  /** @deprecated Use _startNFCScanning() instead. */
   async startScan() {
     console.warn('startScan() is deprecated - NFC now auto-starts on team confirmation');
     await this._startNFCScanning();
   }
 
-  /**
-   * Record a consecutive NFC read failure and return the message to display.
-   * After 3 consecutive failures — hardware (readingerror) OR logical (a tag
-   * with no usable text record / no usable id) — escalates to the Manual Entry
-   * hint so a bad tag/reader can't dead-end the show (NFC-6). The counter is
-   * reset to 0 on any usable read (see processNFCRead).
-   * @param {string} transientMessage - message shown for the 1st/2nd failure
-   * @returns {string} the message to surface (transient or escalation)
-   * @private
-   */
-  _recordNfcReadFailure(transientMessage) {
-    this.nfcReadErrorCount++;
-    return this.nfcReadErrorCount >= 3
-      ? 'Reader trouble — use the Manual Entry button below.'
-      : transientMessage;
-  }
+  /** @private — delegates to GameOpsDomain */
+  _recordNfcReadFailure(transientMessage) { return this._gameOps._recordNfcReadFailure(transientMessage); }
 
-  /**
-   * Start NFC scanning without button state management
-   * Called automatically on team confirmation
-   * @private
-   */
-  async _startNFCScanning() {
-    if (!this.nfcSupported) {
-      this.debug.log('NFC not supported - scan simulation available via Manual Entry');
-      return;
-    }
-
-    const status = document.getElementById('scanStatus');
-
-    try {
-      if (status) {
-        status.textContent = 'Scanning... Tap a token';
-      }
-
-      await this.nfcHandler.startScan(
-        (result) => this.processNFCRead(result),
-        (err) => {
-          // NFC-6: hardware read error. Shares the consecutive-failure counter
-          // with the logical-failure paths in processNFCRead so 3 consecutive
-          // bad taps of EITHER kind surface the Manual Entry hint.
-          const msg = this._recordNfcReadFailure('Read error. Tap token again.');
-          this.debug.log(`NFC read error #${this.nfcReadErrorCount} (type: ${err?.type || err?.message || 'unknown'})`, true);
-          if (status) {
-            status.textContent = msg;
-          }
-        }
-      );
-
-      this._scanningActive = true;
-      this.debug.log('NFC scanning started automatically');
-    } catch (error) {
-      this.debug.log(`NFC start error: ${error.message}`, true);
-      if (status) {
-        status.textContent = 'NFC unavailable. Use Manual Entry.';
-      }
-    }
-  }
+  /** @private — delegates to GameOpsDomain */
+  async _startNFCScanning() { return this._gameOps._startNFCScanning(); }
 
   /** Abort the live NFC scan when the page is backgrounded (NFC-3). */
-  pauseNFCForBackground() {
-    if (this.nfcSupported && this._scanningActive) {
-      this.nfcHandler.stopScan(); // NFC-1: aborts the AbortController + nulls the reader
-    }
-  }
+  pauseNFCForBackground() { return this._gameOps.pauseNFCForBackground(); }
 
   /** Re-arm NFC when the page returns to the foreground, iff it was active (NFC-3). */
-  async resumeNFCForForeground() {
-    if (this.nfcSupported && this._scanningActive) {
-      await this._startNFCScanning(); // NFC-1: idempotent — aborts any prior scan first
-    }
-  }
+  async resumeNFCForForeground() { return this._gameOps.resumeNFCForForeground(); }
 
-  simulateScan() {
-    const status = document.getElementById('scanStatus');
-    if (status) {
-      status.textContent = 'Demo Mode: Simulating scan...';
-    }
+  simulateScan() { return this._gameOps.simulateScan(); }
 
-    setTimeout(() => {
-      const result = this.nfcHandler.simulateScan();
-      this.processNFCRead(result);
-    }, this.config.SCAN_SIMULATION_DELAY);
-  }
-
-  async processNFCRead(result) {
-    // Handle NFC read errors (no serial fallback - errors returned from NFCHandler)
-    if (result.source === 'error') {
-      // Logical read failure (no usable text record, no NDEF records, etc.).
-      // Shares the consecutive-failure counter with hardware readingerror so a
-      // misprovisioned/foreign tag tapped repeatedly also escalates (NFC-6).
-      this.debug.log(`NFC read failed: ${result.error}`, true);
-      this.uiManager.showError(this._recordNfcReadFailure('Could not read token - please re-tap'));
-      return;
-    }
-
-    // Defensive: any non-error source must still carry a usable string id.
-    // manualEntry/simulateScan/future record types could deliver id: null,
-    // which would throw a TypeError in this async (un-awaited) handler.
-    if (typeof result.id !== 'string' || result.id.trim() === '') {
-      this.debug.log(`NFC read returned no usable id (source=${result.source})`, true);
-      this.uiManager.showError(this._recordNfcReadFailure('Could not read token - please re-tap'));
-      return;
-    }
-
-    // A usable read means the reader is working — clear any consecutive
-    // read-error escalation (NFC-6).
-    this.nfcReadErrorCount = 0;
-
-    this.debug.log(`Processing token: "${result.id}" (from ${result.source})`);
-    this.debug.log(`Token ID length: ${result.id.length} characters`);
-
-    // VALIDATION: Ensure team is selected before processing
-    if (!this.currentTeamId || this.currentTeamId.trim() === '') {
-      this.debug.log('ERROR: No team selected - cannot process token', true);
-      this.uiManager.showError('Please select a team before scanning tokens');
-      return;
-    }
-
-    // GATE: in networked mode the backend is the authority and rejects transactions
-    // unless the session is active (FR 1.2: rejected when paused/in setup). Block the
-    // scan at the source so the GM gets immediate feedback and no token is marked,
-    // queued, or submitted for a paused/not-started/ended session. (A scan already
-    // in-flight when a pause lands is rejected via the transaction:result 'error'
-    // path — removed + unmarked + toast — so the operator re-scans after resume.)
-    if (this.sessionModeManager && this.sessionModeManager.isNetworked()) {
-      const sessionStatus = this.dataManager.sessionState?.status;
-      if (sessionStatus !== 'active') {
-        const label = (sessionStatus && sessionStatus !== 'disconnected') ? sessionStatus : 'not active';
-        this.debug.log(`Scan blocked: session is ${label}`, true);
-        this.uiManager.showError(`Cannot scan: session is ${label}`);
-        return;
-      }
-    }
-
-    // Trim any whitespace
-    const cleanId = result.id.trim();
-    this.debug.log(`Cleaned ID: "${cleanId}" (length: ${cleanId.length})`);
-
-    // Look up token first to get normalized ID (findToken handles case variations)
-    const tokenData = this.tokenManager.findToken(cleanId);
-
-    // Use matched ID for duplicate check (handles case variations)
-    const tokenId = tokenData ? tokenData.matchedId : cleanId;
-
-    // Check for duplicate using normalized ID
-    // UnifiedDataManager handles this for both modes
-    if (this.dataManager.isTokenScanned(tokenId)) {
-      this.debug.log(`Duplicate token detected: ${tokenId}`, true);
-      this.showDuplicateError(tokenId);
-      return;
-    }
-
-    if (!tokenData) {
-      await this.recordTransaction(null, cleanId, true);
-    } else {
-      await this.recordTransaction(tokenData.token, tokenData.matchedId, false);
-    }
-  }
+  async processNFCRead(result) { return this._gameOps.processNFCRead(result); }
 
   /**
    * Paint the result screen as a duplicate.
-   * @param {string} tokenId - Scanned token id
-   * @param {string} [message] - Optional detail line (e.g. the backend's
-   *   "Token already claimed by Team X" for cross-device duplicates, A7)
+   * @param {string} tokenId
+   * @param {string} [message]
    */
   showDuplicateError(tokenId, message = 'This token has been used') {
-    const statusEl = document.getElementById('resultStatus');
-    if (statusEl) {
-      statusEl.className = 'status-message error';
-      // F-GMS-04: tokenId/message may carry NFC/user-controlled text — escape
-      statusEl.innerHTML = `
-        <h2>Token Already Scanned</h2>
-        <p style="font-size: 14px;">${escapeHtml(message)}</p>
-        <p style="font-size: 12px; color: #666;">ID: ${escapeHtml(tokenId)}</p>
-      `;
-    }
-
-    const rfidEl = document.getElementById('resultRfid');
-    if (rfidEl) {
-      rfidEl.textContent = tokenId;
-    }
-
-    const typeEl = document.getElementById('resultType');
-    if (typeEl) {
-      typeEl.textContent = 'DUPLICATE';
-      typeEl.style.color = '#FF5722';
-    }
-
-    const groupEl = document.getElementById('resultGroup');
-    if (groupEl) {
-      groupEl.textContent = 'Previously scanned';
-    }
-
-    const valueEl = document.getElementById('resultValue');
-    if (valueEl) {
-      valueEl.textContent = 'No points awarded';
-    }
-
-    this.uiManager.showScreen('result');
+    return this._gameOps.showDuplicateError(tokenId, message);
   }
 
   async recordTransaction(token, tokenId, isUnknown) {
-    const transaction = {
-      timestamp: new Date().toISOString(),
-      deviceId: this.settings.deviceId,
-      mode: this.settings.mode,
-      teamId: this.currentTeamId,
-      rfid: tokenId,
-      tokenId: tokenId,  // Add tokenId for consistency with backend
-      memoryType: isUnknown ? 'UNKNOWN' : (token?.SF_MemoryType || 'UNKNOWN'),
-      group: isUnknown ? `Unknown: ${tokenId}` : (token?.SF_Group || ''),
-      tokenGroup: isUnknown ? '' : (token?.SF_Group || ''),  // For group completion detection
-      valueRating: isUnknown ? 0 : (token?.SF_ValueRating || 0),
-      isUnknown: isUnknown
-    };
-
-    // Calculate points for blackmarket mode
-    if (this.settings.mode === 'blackmarket' && !isUnknown) {
-      transaction.points = this.dataManager.calculateTokenValue(transaction);
-    } else {
-      transaction.points = 0;
-    }
-
-    // Submit transaction based on session mode
-    if (this.sessionModeManager && this.sessionModeManager.isNetworked()) {
-      // Networked mode - DON'T add to DataManager yet (will be added when backend confirms)
-      this.dataManager.markTokenAsScanned(tokenId);  // Still mark as scanned to prevent duplicates
-
-      // Get queue manager from NetworkedSession
-      if (!this.networkedSession) {
-        throw new Error('Cannot scan: NetworkedSession not initialized. Please reconnect.');
-      }
-
-      const queueManager = this.networkedSession.getService('queueManager');
-
-      // Use queue manager for reliable delivery
-      const txId = queueManager.queueTransaction({
-        tokenId: tokenId,
-        teamId: this.currentTeamId,
-        deviceId: this.settings.deviceId,
-        deviceType: 'gm',  // BUG #1 FIX: Required by backend validators
-        mode: this.settings.mode,  // AsyncAPI contract field (was 'mode')
-        summary: token?.summary || null,  // Include summary for persistence (backend AsyncAPI contract)
-        timestamp: transaction.timestamp  // Use same timestamp
-      });
-      this.debug.log(`Transaction queued for orchestrator: ${txId}`);
-    } else {
-      // Standalone mode - use UnifiedDataManager (LocalStorage strategy)
-      if (this.sessionModeManager && this.sessionModeManager.isStandalone()) {
-        // Add transaction via UnifiedDataManager (delegates to LocalStorage strategy)
-        // LocalStorage handles scoring, group bonuses, and persists to localStorage
-        await this.dataManager.addTransaction(transaction);
-        this.dataManager.markTokenAsScanned(tokenId);
-        this.debug.log('Transaction stored via UnifiedDataManager (standalone mode)');
-      } else {
-        // No session mode selected yet - should not happen, but handle gracefully
-        this.debug.log('Warning: No session mode selected - cannot process transaction', true);
-        this.uiManager.showError('Please select a game mode first');
-        return;
-      }
-    }
-
-    if (this.settings.mode === 'blackmarket' && !isUnknown) {
-      this.debug.log(`Token scored: $${transaction.points.toLocaleString()}`);
-    }
-
-    this.uiManager.updateSessionStats();
-    this.uiManager.showTokenResult(token, tokenId, isUnknown);
+    return this._gameOps.recordTransaction(token, tokenId, isUnknown);
   }
 
-  manualEntry() {
-    const rfid = prompt('Enter RFID manually:');
-    if (rfid && rfid.trim()) {
-      this.processNFCRead({
-        id: rfid.trim(),
-        source: 'manual',
-        raw: rfid.trim()
-      });
-    }
-  }
-
-  cancelScan() {
-    this.nfcHandler.stopScan();
-    this._scanningActive = false;
-    this.currentTeamId = '';
-    this.uiManager.updateTeamDisplay('');
-    this.uiManager.showScreen('teamEntry');
-  }
-
-  continueScan() {
-    this.uiManager.updateSessionStats();
-    this.uiManager.showScreen('scan');
-  }
-
-  finishTeam() {
-    this.currentTeamId = '';
-    // Leaving the scan flow: stop NFC so it isn't armed with no team selected (an
-    // armed tap would be silently rejected by the !currentTeamId guard — a
-    // lost-scan risk) and so the lifecycle re-arm flag (_scanningActive) stays
-    // honest. NFC re-arms when the next team is confirmed (_startNFCScanning).
-    this.nfcHandler.stopScan();
-    this._scanningActive = false;
-    // Note: Do NOT clear DataManager session here - scannedTokens must persist
-    // across team switches for cross-team duplicate detection
-    this.uiManager.updateTeamDisplay('');
-    this.uiManager.showScreen('teamEntry');
-  }
-
-  // ========== History ==========
-
-  showHistory() {
-    this.uiManager.updateHistoryStats();
-    // Use unified Game Activity renderer (same as admin panel)
-    const historyContainer = document.getElementById('historyContainer');
-    if (historyContainer) {
-      this.uiManager.renderGameActivity(historyContainer, { showSummary: true, showFilters: true });
-    }
-    this.uiManager.showScreen('history');
-  }
-
-  closeHistory() {
-    // Default to teamEntry if no valid previous screen
-    const targetScreen = this.uiManager.previousScreen || 'teamEntry';
-    this.uiManager.showScreen(targetScreen);
-  }
-
-  // ========== Scoreboard ==========
-
-  showScoreboard() {
-    if (this.settings.mode !== 'blackmarket') {
-      this.debug.log('Scoreboard only available in Black Market mode');
-      return;
-    }
-    this.uiManager.renderScoreboard();
-    this.uiManager.showScreen('scoreboard');
-  }
-
-  closeScoreboard() {
-    // Default to teamEntry if no valid previous screen
-    const targetScreen = this.uiManager.previousScreen || 'teamEntry';
-    this.uiManager.showScreen(targetScreen);
-  }
-
-  // ========== Team Details ==========
-
-  showTeamDetails(teamId) {
-    // CRITICAL: teamDetailsScreen is inside scanner-view, so switch to scanner view first
-    // if currently in admin view (common when clicking team from admin panel score board)
-    if (this.viewController && this.viewController.currentView === 'admin') {
-      this.viewController.switchView('scanner');
-    }
-
-    // CRITICAL: Track current team for intervention actions (deletion, score adjustment)
-    this.currentInterventionTeamId = teamId;
-
-    const transactions = this.dataManager.getTeamTransactions(teamId);
-    this.uiManager.renderTeamDetails(teamId, transactions);
-    this.uiManager.showScreen('teamDetails');
-  }
-
-  closeTeamDetails() {
-    this.uiManager.showScreen('scoreboard');
-  }
-
-  // ========== Admin Actions ==========
-  // These methods wrap calls to AdminModule functionality
-
-  async adminCreateSession() {
-    const name = prompt('Enter session name:');
-    if (!name) return;
-
-    const isStandalone = this.sessionModeManager?.isStandalone();
-
-    // Standalone mode: Use UnifiedDataManager (LocalStorage strategy)
-    if (isStandalone) {
-      try {
-        await this.dataManager.createSession(name.trim(), []);
-        this.debug.log(`Session created (standalone): ${name}`);
-        this.uiManager.showToast('Session created', 'success');
-
-        // Refresh session display
-        this._refreshAdminSessionDisplay();
-      } catch (error) {
-        console.error('Failed to create session (standalone):', error);
-        this.uiManager.showError(`Failed to create session: ${error.message}`);
-      }
-      return;
-    }
-
-    // Networked mode: Use SessionManager (existing code)
-    if (!this.viewController.adminInstances?.sessionManager) {
-      alert('Admin functions not available. Please ensure you are connected.');
-      return;
-    }
-
-    try {
-      await this.viewController.adminInstances.sessionManager.createSession(name);
-      this.debug.log(`Session created: ${name}`);
-    } catch (error) {
-      console.error('Failed to create session:', error);
-      this.uiManager.showError('Failed to create session. Check connection.');
-    }
-  }
-
-  async adminPauseSession() {
-    const isStandalone = this.sessionModeManager?.isStandalone();
-
-    // Standalone mode: Use UnifiedDataManager
-    if (isStandalone) {
-      try {
-        const result = await this.dataManager.pauseSession();
-        if (result.success) {
-          this.debug.log('Session paused (standalone)');
-          this.uiManager.showToast('Session paused', 'info');
-          this._refreshAdminSessionDisplay();
-        } else {
-          this.uiManager.showError(result.error || 'Failed to pause session');
-        }
-      } catch (error) {
-        console.error('Failed to pause session (standalone):', error);
-        this.uiManager.showError(`Failed to pause session: ${error.message}`);
-      }
-      return;
-    }
-
-    // Networked mode (existing code)
-    if (!this.viewController.adminInstances?.sessionManager) {
-      alert('Admin functions not available.');
-      return;
-    }
-    try {
-      await this.viewController.adminInstances.sessionManager.pauseSession();
-      this.debug.log('Session paused');
-    } catch (error) {
-      console.error('Failed to pause session:', error);
-      this.uiManager.showError('Failed to pause session.');
-    }
-  }
-
-  async adminResumeSession() {
-    const isStandalone = this.sessionModeManager?.isStandalone();
-
-    // Standalone mode: Use UnifiedDataManager
-    if (isStandalone) {
-      try {
-        const result = await this.dataManager.resumeSession();
-        if (result.success) {
-          this.debug.log('Session resumed (standalone)');
-          this.uiManager.showToast('Session resumed', 'success');
-          this._refreshAdminSessionDisplay();
-        } else {
-          this.uiManager.showError(result.error || 'Failed to resume session');
-        }
-      } catch (error) {
-        console.error('Failed to resume session (standalone):', error);
-        this.uiManager.showError(`Failed to resume session: ${error.message}`);
-      }
-      return;
-    }
-
-    // Networked mode (existing code)
-    if (!this.viewController.adminInstances?.sessionManager) {
-      alert('Admin functions not available.');
-      return;
-    }
-    try {
-      await this.viewController.adminInstances.sessionManager.resumeSession();
-      this.debug.log('Session resumed');
-    } catch (error) {
-      console.error('Failed to resume session:', error);
-      this.uiManager.showError('Failed to resume session.');
-    }
-  }
-
-  async adminEndSession() {
-    if (!confirm('Are you sure you want to end the session?')) return;
-
-    const isStandalone = this.sessionModeManager?.isStandalone();
-
-    // Standalone mode: Use UnifiedDataManager
-    if (isStandalone) {
-      try {
-        await this.dataManager.endSession();
-        this.debug.log('Session ended (standalone)');
-        this.uiManager.showToast('Session ended', 'info');
-        this._refreshAdminSessionDisplay();
-      } catch (error) {
-        console.error('Failed to end session (standalone):', error);
-        this.uiManager.showError(`Failed to end session: ${error.message}`);
-      }
-      return;
-    }
-
-    // Networked mode (existing code)
-    if (!this.viewController.adminInstances?.sessionManager) {
-      alert('Admin functions not available.');
-      return;
-    }
-    try {
-      await this.viewController.adminInstances.sessionManager.endSession();
-      this.debug.log('Session ended');
-    } catch (error) {
-      console.error('Failed to end session:', error);
-      this.uiManager.showError('Failed to end session.');
-    }
-  }
-
-  /**
-   * Download session report as markdown file.
-   * Gathers data from current sync:full state and token database.
-   */
-  async downloadSessionReport() {
-    try {
-      const { SessionReportGenerator } = await import('../core/sessionReportGenerator.js');
-
-      const sessionData = this.dataManager.getSessionData();
-      const scores = this.dataManager.getTeamScores();
-      const transactions = this.dataManager.getTransactions();
-      const playerScans = this.dataManager.getPlayerScans();
-      const tokenDatabase = this.tokenManager?.database || {};
-
-      if (!sessionData) {
-        this.uiManager.showError('No session data available for report.');
-        return;
-      }
-
-      const generator = new SessionReportGenerator(tokenDatabase);
-      const markdown = generator.generate({
-        session: sessionData,
-        scores,
-        transactions,
-        playerScans
-      });
-
-      // Generate filename
-      const date = sessionData.startTime
-        ? new Date(sessionData.startTime).toISOString().split('T')[0]
-        : 'unknown';
-      const safeName = (sessionData.name || 'session')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
-      const filename = `session-report-${safeName}-${date}.md`;
-
-      // Trigger browser download
-      const blob = new Blob([markdown], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      this.uiManager.showToast('Report downloaded', 'info');
-    } catch (error) {
-      console.error('Failed to generate session report:', error);
-      this.uiManager.showError('Failed to generate report.');
-    }
-  }
-
-  async adminResetAndCreateNew() {
-    // Step 0: Confirm with user
-    const confirmReset = confirm(
-      'Reset system and start new session?\n\n' +
-      'This will:\n' +
-      '• Archive the current completed session\n' +
-      '• Clear all current data\n' +
-      '• Prepare system for a new game\n\n' +
-      'Continue?'
-    );
-
-    if (!confirmReset) return;
-
-    // Step 1: Get new session name
-    const name = prompt('Enter new session name:');
-    if (!name || name.trim() === '') {
-      alert('Session name is required');
-      return;
-    }
-
-    // Step 2: Verify admin instances available
-    if (!this.viewController.adminInstances?.sessionManager) {
-      alert('Admin functions not available. Please ensure you are connected to the orchestrator.');
-      return;
-    }
-
-    try {
-      // Step 3: Send system:reset command
-      this.debug.log('Sending system:reset command...');
-
-      await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          // Remove the currently-armed one-shot listener on timeout, else a late
-          // ack would re-invoke ackHandler and re-arm forever (leak). socket/
-          // ackHandler are initialized by the time this fires (+5s).
-          socket.off('gm:command:ack', ackHandler);
-          reject(new Error('System reset timeout (5s)'));
-        }, 5000);
-
-        const socket = this.viewController.adminInstances.sessionManager.connection.socket;
-
-        // AC-3: filter the ack by action. socket.once self-removes after each
-        // fire, so a racing ack for a DIFFERENT command would consume the one-shot
-        // and let the genuine system:reset ack be dropped (false "reset timeout").
-        // Re-arm until response.data.action === 'system:reset' (CommandSender
-        // pattern). Arrow + self-referencing const preserves lexical `this` and
-        // the resolve/reject/timeout closures across re-arms.
-        const ackHandler = (response) => {
-          if (response.data?.action !== 'system:reset') {
-            socket.once('gm:command:ack', ackHandler);
-            return;
-          }
-
-          clearTimeout(timeout);
-
-          if (response.data && response.data.success) {
-            this.debug.log('System reset successful');
-            resolve();
-          } else {
-            const errorMsg = response.data?.message || 'Reset failed';
-            reject(new Error(errorMsg));
-          }
-        };
-
-        socket.once('gm:command:ack', ackHandler);
-
-        socket.emit('gm:command', {
-          event: 'gm:command',
-          data: {
-            action: 'system:reset',
-            payload: {}
-          },
-          timestamp: new Date().toISOString()
-        });
-      });
-
-      this.debug.log('System reset complete, creating new session...');
-
-      // Step 4: Create new session
-      await this.viewController.adminInstances.sessionManager.createSession(name.trim());
-
-      this.debug.log(`New session created: ${name}`);
-
-      // Step 5: Show success feedback
-      if (this.uiManager.showToast) {
-        this.uiManager.showToast(`Session "${name}" started successfully`, 'success', 5000);
-      } else {
-        alert(`Session "${name}" created successfully!`);
-      }
-
-    } catch (error) {
-      console.error('Failed to reset and create session:', error);
-
-      const errorMsg = `Failed to reset and create session: ${error.message}`;
-
-      if (this.uiManager.showError) {
-        this.uiManager.showError(errorMsg);
-      } else {
-        alert(errorMsg);
-      }
-    }
-  }
-
-  async adminViewSessionDetails() {
-    const session = this.dataManager.getSessionData();
-
-    if (!session) {
-      alert('No session data available');
-      return;
-    }
-
-    // Format session details
-    const startTime = session.startTime ? new Date(session.startTime).toLocaleString() : 'Unknown';
-    const endTime = session.endTime ? new Date(session.endTime).toLocaleString() : 'Ongoing';
-    const duration = session.getDuration ? this.formatSessionDuration(session.getDuration()) : 'Unknown';
-
-    const details = `
-═══════════════════════════════════
-SESSION DETAILS
-═══════════════════════════════════
-
-Name: ${session.name || 'Unnamed Session'}
-ID: ${session.id}
-Status: ${session.status.toUpperCase()}
-
-TIMING
-──────────────────────────────────
-Started: ${startTime}
-${session.endTime ? 'Ended: ' + endTime : 'Status: In Progress'}
-Duration: ${duration}
-
-STATISTICS
-──────────────────────────────────
-Total Scans: ${session.metadata?.totalScans || 0}
-Unique Tokens: ${session.metadata?.uniqueTokensScanned?.length || 0}
-Teams: ${session.scores?.length || 0}
-GM Stations: ${session.connectedDevices?.filter(d => d.type === 'gm').length || 0}
-
-═══════════════════════════════════
-    `.trim();
-
-    alert(details);
-  }
-
-  /**
-   * Helper: Format duration for session details
-   */
-  formatSessionDuration(ms) {
-    if (ms == null || ms < 0) return 'Unknown';
-
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    const parts = [];
-    if (days > 0) parts.push(`${days}d`);
-    if (hours % 24 > 0) parts.push(`${hours % 24}h`);
-    if (minutes % 60 > 0 && parts.length < 2) parts.push(`${minutes % 60}m`);
-    if (seconds % 60 > 0 && parts.length < 2) parts.push(`${seconds % 60}s`);
-
-    return parts.length > 0 ? parts.join(' ') : '0s';
-  }
-
-  async _adminVideoAction(action) {
-    if (!this.viewController.adminInstances?.videoController) {
-      alert('Video controls not available.');
-      return;
-    }
-    try {
-      await this.viewController.adminInstances.videoController[action]();
-    } catch (error) {
-      const label = action.replace('Video', ' video');
-      console.error(`Failed to ${label}:`, error);
-      this.uiManager.showError(`Failed to ${label}.`);
-    }
-  }
-
-  async adminPlayVideo() { return this._adminVideoAction('playVideo'); }
-  async adminPauseVideo() { return this._adminVideoAction('pauseVideo'); }
-  async adminStopVideo() { return this._adminVideoAction('stopVideo'); }
-  async adminSkipVideo() { return this._adminVideoAction('skipVideo'); }
-
-  // ============================================
-  async adminAddVideoToQueue() {
-    if (!this.viewController.adminInstances?.videoController) {
-      alert('Video controls not available.');
-      return;
-    }
-    const input = document.getElementById('manual-video-input');
-    const filename = input?.value;
-    if (!filename) {
-      alert('Enter a video filename (e.g., jaw001.mp4)');
-      return;
-    }
-    try {
-      await this.viewController.adminInstances.videoController.addToQueue(filename);
-      this.uiManager.showToast(`Added ${filename} to queue`, 'success');
-      if (input) {
-        input.value = '';
-      }
-    } catch (error) {
-      console.error('Failed to add video to queue:', error);
-      this.uiManager.showError(`Failed to add video: ${error.message}`);
-    }
-  }
-
-  async adminClearQueue() {
-    if (!this.viewController.adminInstances?.videoController) {
-      alert('Video controls not available.');
-      return;
-    }
-    if (!confirm('Clear entire video queue?')) {
-      return;
-    }
-    try {
-      await this.viewController.adminInstances.videoController.clearQueue();
-      this.uiManager.showToast('Queue cleared', 'success');
-    } catch (error) {
-      console.error('Failed to clear queue:', error);
-      this.uiManager.showError(`Failed to clear queue: ${error.message}`);
-    }
-  }
-
-  // ========== Admin Panel Display Updates ==========
-
-  updateAdminPanel() {
-    // In networked mode, delegate to MonitoringDisplay for session/device/video status
-    if (this.viewController?.adminInstances?.monitoring) {
-      this.viewController.adminInstances.monitoring.refreshAllDisplays();
-    }
-
-    // Render Game Activity (unified display for both modes)
-    // This replaces the old transaction log with the new token lifecycle view
-    const gameActivityContainer = document.getElementById('admin-game-activity');
-    if (gameActivityContainer) {
-      this.uiManager.renderGameActivity(gameActivityContainer, { showSummary: true, showFilters: true });
-    }
-
-    // Render admin scoreboard from current data.
-    // DataManager event listeners only fire on events — if the admin panel
-    // wasn't visible when score events fired, the scoreboard is empty.
-    // Always render current scores when switching to admin view.
-    // F-GMS-13: renderScoreboard works in BOTH modes (LocalStorage
-    // getTeamScores includes group bonuses + main.js already renders it
-    // here on team-score:updated). The old standalone fallback recomputed
-    // scores inline, ignoring bonuses AND admin adjustments — admin-view
-    // totals disagreed with the scoreboard screen.
-    const scoreBoard = document.getElementById('admin-score-board');
-    if (scoreBoard) {
-      this.uiManager.renderScoreboard(scoreBoard);
-    }
-  }
-
-  async adminResetScores() {
-    if (!confirm('Reset all team scores to zero? Transactions will be preserved.')) return;
-
-    const isStandalone = this.sessionModeManager?.isStandalone();
-
-    // Standalone mode: Use UnifiedDataManager
-    if (isStandalone) {
-      try {
-        const result = await this.dataManager.resetScores();
-        if (result.success) {
-          this.debug.log('Scores reset (standalone)');
-          this.uiManager.showToast('All scores reset to zero', 'success');
-        } else {
-          this.uiManager.showError(result.error || 'Failed to reset scores');
-        }
-      } catch (error) {
-        console.error('Failed to reset scores (standalone):', error);
-        this.uiManager.showError(`Failed to reset scores: ${error.message}`);
-      }
-      return;
-    }
-
-    // Networked mode: Use AdminOps
-    if (!this.viewController.adminInstances?.adminOps) {
-      alert('Admin functions not available.');
-      return;
-    }
-
-    try {
-      await this.viewController.adminInstances.adminOps.resetScores();
-      this.debug.log('Scores reset');
-      this.uiManager.showToast('All scores reset', 'success');
-    } catch (error) {
-      console.error('Failed to reset scores:', error);
-      this.uiManager.showError('Failed to reset scores.');
-    }
-  }
-
-  /**
-   * Navigate to full scoreboard view from admin panel
-   */
-  viewFullScoreboard() {
-    this.switchView('scanner');
-    this.showScoreboard();
-  }
-
-  /**
-   * Navigate to full transaction history from admin panel
-   */
-  viewFullHistory() {
-    this.switchView('scanner');
-    this.showHistory();
-  }
-
-  /**
-   * Refresh admin session display (standalone mode)
-   * @private
-   */
-  _refreshAdminSessionDisplay() {
-    const container = document.getElementById('session-status-container');
-    if (container && this.uiManager) {
-      this.uiManager.renderSessionStatus(container);
-    }
-  }
-
-  // ========== GM Intervention (Both Modes) ==========
-
-  async adjustTeamScore() {
-    const teamId = this.currentInterventionTeamId;
-    if (!teamId) {
-      alert('No team selected. Please open team details first.');
-      return;
-    }
-
-    const deltaInput = document.getElementById('scoreAdjustmentInput');
-    const reasonInput = document.getElementById('scoreAdjustmentReason');
-
-    const delta = parseInt(deltaInput?.value || '0');
-    if (isNaN(delta) || delta === 0) {
-      alert('Please enter a valid positive or negative number.');
-      return;
-    }
-
-    const reason = reasonInput?.value.trim() || 'Manual GM adjustment';
-
-    const isStandalone = this.sessionModeManager?.isStandalone();
-
-    // Standalone mode: Use UnifiedDataManager (LocalStorage strategy)
-    if (isStandalone) {
-      try {
-        await this.dataManager.adjustTeamScore(teamId, delta, reason);
-        this.debug.log(`Score adjusted (standalone): Team ${teamId} ${delta > 0 ? '+' : ''}${delta} (${reason})`);
-
-        // Clear inputs
-        if (deltaInput) deltaInput.value = '';
-        if (reasonInput) reasonInput.value = '';
-
-        // Refresh team details immediately with updated local data
-        const transactions = this.dataManager.getTeamTransactions(teamId);
-        this.uiManager.renderTeamDetails(teamId, transactions);
-
-        this.uiManager.showToast(`Score adjusted: ${delta > 0 ? '+' : ''}${delta} points`, 'success');
-      } catch (error) {
-        console.error('Failed to adjust score (standalone):', error);
-        this.uiManager.showError(`Failed to adjust score: ${error.message}`);
-      }
-      return;
-    }
-
-    // Networked mode: Use AdminOps (backend authoritative)
-    if (!this.viewController?.adminInstances?.adminOps) {
-      alert('Admin functions not available. Ensure you are in networked mode.');
-      return;
-    }
-
-    try {
-      await this.viewController.adminInstances.adminOps.adjustScore(teamId, delta, reason);
-      this.debug.log(`Score adjusted (networked): Team ${teamId} ${delta > 0 ? '+' : ''}${delta} (${reason})`);
-
-      // Clear inputs
-      if (deltaInput) deltaInput.value = '';
-      if (reasonInput) reasonInput.value = '';
-
-      // Team details screen will auto-refresh via updateTeamScoreFromBackend()
-      // when score:adjusted event is received (centralized in dataManager.js)
-
-      this.uiManager.showToast(`Score adjusted: ${delta > 0 ? '+' : ''}${delta} points`, 'success');
-    } catch (error) {
-      console.error('Failed to adjust score (networked):', error);
-      this.uiManager.showError(`Failed to adjust score: ${error.message}`);
-    }
-  }
-
-  async deleteTeamTransaction(transactionId) {
-    if (!confirm('Delete this transaction? This cannot be undone.')) return;
-
-    const isStandalone = this.sessionModeManager?.isStandalone();
-
-    // Standalone mode: Use UnifiedDataManager (LocalStorage strategy)
-    if (isStandalone) {
-      try {
-        const result = await this.dataManager.removeTransaction(transactionId);
-        if (result.success) {
-          this.debug.log(`Transaction deleted (standalone): ${transactionId}`);
-
-          // Refresh team details immediately with updated local data
-          const teamId = this.currentInterventionTeamId;
-          if (teamId) {
-            const transactions = this.dataManager.getTeamTransactions(teamId);
-            this.uiManager.renderTeamDetails(teamId, transactions);
-          }
-
-          this.uiManager.showToast('Transaction deleted', 'success');
-        } else {
-          this.uiManager.showError('Transaction not found');
-        }
-      } catch (error) {
-        console.error('Failed to delete transaction (standalone):', error);
-        this.uiManager.showError(`Failed to delete transaction: ${error.message}`);
-      }
-      return;
-    }
-
-    // Networked mode: Use AdminOps (backend authoritative)
-    if (!this.viewController?.adminInstances?.adminOps) {
-      alert('Admin functions not available. Ensure you are in networked mode.');
-      return;
-    }
-
-    try {
-      await this.viewController.adminInstances.adminOps.deleteTransaction(transactionId);
-      this.debug.log(`Transaction deleted (networked): ${transactionId}`);
-
-      this.uiManager.showToast('Transaction deleted', 'success');
-    } catch (error) {
-      console.error('Failed to delete transaction (networked):', error);
-      this.uiManager.showError(`Failed to delete transaction: ${error.message}`);
-    }
-  }
-
-  // ========== Admin Display Control ==========
-
-  async _adminDisplayAction(action, label) {
-    if (!this.sessionModeManager?.isNetworked()) {
-      this.debug.log('Display control only available in networked mode');
-      return;
-    }
-
-    const displayController = this.viewController?.adminInstances?.displayController;
-    if (!displayController) {
-      this.debug.log('DisplayController not available - admin modules not initialized');
-      this.uiManager.showError('Admin functions not available. Please ensure connection is established.');
-      return;
-    }
-
-    try {
-      const result = await displayController[action]();
-      this.debug.log(`Display mode set to ${label}: ${JSON.stringify(result)}`);
-    } catch (error) {
-      console.error('Failed to set display mode:', error);
-      this.uiManager.showError(`Failed to set display mode: ${error.message}`);
-    }
-  }
-
-  async adminSetIdleLoop() { return this._adminDisplayAction('setIdleLoop', 'Idle Loop'); }
-  async adminSetScoreboard() { return this._adminDisplayAction('setScoreboard', 'Scoreboard'); }
-  async adminReturnToVideo() { return this._adminDisplayAction('returnToVideo', 'Return to Video'); }
+  manualEntry() { return this._gameOps.manualEntry(); }
+  cancelScan() { return this._gameOps.cancelScan(); }
+  continueScan() { return this._gameOps.continueScan(); }
+  finishTeam() { return this._gameOps.finishTeam(); }
+
+  // ========== History / Scoreboard / Team Details (Game Ops) ==========
+
+  showHistory() { return this._gameOps.showHistory(); }
+  closeHistory() { return this._gameOps.closeHistory(); }
+  showScoreboard() { return this._gameOps.showScoreboard(); }
+  closeScoreboard() { return this._gameOps.closeScoreboard(); }
+  showTeamDetails(teamId) { return this._gameOps.showTeamDetails(teamId); }
+  closeTeamDetails() { return this._gameOps.closeTeamDetails(); }
+
+  // ========== Admin Actions (Game Admin) ==========
+
+  async adminCreateSession() { return this._gameAdmin.adminCreateSession(); }
+  async adminPauseSession() { return this._gameAdmin.adminPauseSession(); }
+  async adminResumeSession() { return this._gameAdmin.adminResumeSession(); }
+  async adminEndSession() { return this._gameAdmin.adminEndSession(); }
+  async downloadSessionReport() { return this._gameAdmin.downloadSessionReport(); }
+  async adminResetAndCreateNew() { return this._gameAdmin.adminResetAndCreateNew(); }
+  async adminViewSessionDetails() { return this._gameAdmin.adminViewSessionDetails(); }
+
+  /** Format duration in ms — delegates to GameAdminDomain. */
+  formatSessionDuration(ms) { return this._gameAdmin.formatSessionDuration(ms); }
+
+  /** @private */
+  _refreshAdminSessionDisplay() { return this._gameAdmin._refreshAdminSessionDisplay(); }
+
+  // ========== Show Control (video + display mode) ==========
+
+  async _adminVideoAction(action) { return this._showControl._adminVideoAction(action); }
+  async adminPlayVideo() { return this._showControl.adminPlayVideo(); }
+  async adminPauseVideo() { return this._showControl.adminPauseVideo(); }
+  async adminStopVideo() { return this._showControl.adminStopVideo(); }
+  async adminSkipVideo() { return this._showControl.adminSkipVideo(); }
+  async adminAddVideoToQueue() { return this._showControl.adminAddVideoToQueue(); }
+  async adminClearQueue() { return this._showControl.adminClearQueue(); }
+  async _adminDisplayAction(action, label) { return this._showControl._adminDisplayAction(action, label); }
+  async adminSetIdleLoop() { return this._showControl.adminSetIdleLoop(); }
+  async adminSetScoreboard() { return this._showControl.adminSetScoreboard(); }
+  async adminReturnToVideo() { return this._showControl.adminReturnToVideo(); }
+
+  // ========== Admin Panel Display / Score Interventions (Game Ops) ==========
+
+  updateAdminPanel() { return this._gameOps.updateAdminPanel(); }
+  async adminResetScores() { return this._gameOps.adminResetScores(); }
+  viewFullScoreboard() { return this._gameOps.viewFullScoreboard(); }
+  viewFullHistory() { return this._gameOps.viewFullHistory(); }
+
+  // ========== GM Intervention (Game Ops) ==========
+
+  async adjustTeamScore() { return this._gameOps.adjustTeamScore(); }
+  async deleteTeamTransaction(transactionId) { return this._gameOps.deleteTeamTransaction(transactionId); }
 }
 
 // Create singleton instance
