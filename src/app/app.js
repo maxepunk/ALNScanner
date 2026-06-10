@@ -52,6 +52,11 @@ class App {
     // Global reference for HTML onclick handlers (temporary until domEventBindings migration)
     this.showConnectionWizard = dependencies.showConnectionWizard || (typeof window !== 'undefined' ? window.showConnectionWizard : null);
 
+    // Offline-queue indicator manager (injected by main.js). F-GMS-11: its
+    // queue:changed listener must (re)attach whenever networked mode
+    // initializes, not only on the startup auto-connect restore path.
+    this.queueStatusManager = dependencies.queueStatusManager || null;
+
     // Instance state
     this.currentTeamId = '';
     this.nfcSupported = false;
@@ -605,6 +610,11 @@ class App {
             this.teamRegistry.orchestratorClient = client;
           }
         }
+
+        // Attach the offline-queue indicator to this session's queueManager
+        // (F-GMS-11: fresh-launch flow — queueStatusManager.init() at startup
+        // ran before any networkedSession existed)
+        this.queueStatusManager?.attach();
 
         // Close connection wizard modal (if open) and show team entry screen
         // Per Architecture Refactoring 2025-11: App manages UI transitions after NetworkedSession ready

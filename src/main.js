@@ -219,6 +219,14 @@ const queueStatusManager = new QueueStatusManager(app);
 app.showConnectionWizard = connectionWizard.showConnectionWizard.bind(connectionWizard);
 
 /**
+ * Inject queueStatusManager into app (F-GMS-11)
+ * App._initializeNetworkedMode() calls attach() so the offline-queue
+ * indicator wires up when networked mode initializes post-startup (the
+ * fresh-launch flow), not only on the startup auto-connect restore path.
+ */
+app.queueStatusManager = queueStatusManager;
+
+/**
  * Bind DOM event handlers using event delegation
  * Replaces window globals and onclick handlers with data-action attributes
  */
