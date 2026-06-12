@@ -183,7 +183,9 @@ export function sharedInfraRouter(type, payload, dataManager, session, store, se
  * Game Admin router — session lifecycle updates.
  * sync:full session section is handled by sharedInfraRouter (which calls
  * dataManager.updateSessionState). This router handles the incremental
- * session:update and session:overtime messages.
+ * session:update message only. (session:overtime arrives on the wire —
+ * see orchestratorClient messageTypes — but no router consumes it yet;
+ * overtime visibility is the game-clock display's job.)
  * @param {string} type
  * @param {Object} payload
  * @param {Object} dataManager

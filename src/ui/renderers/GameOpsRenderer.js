@@ -100,7 +100,7 @@ export class GameOpsRenderer {
         <span style="font-size: 24px;">🏆</span>
         <div>
           <div style="font-weight: bold; margin-bottom: 5px;">Group Completed!</div>
-          <div style="font-size: 14px;">Team ${data.teamId} - ${data.groupId}</div>
+          <div style="font-size: 14px;">Team ${escapeHtml(data.teamId)} - ${escapeHtml(data.groupId)}</div>
           <div style="font-size: 14px;">Bonus: +${formatCurrency(data.bonus)} (${data.multiplier}x)</div>
         </div>
       </div>
@@ -252,8 +252,8 @@ export class GameOpsRenderer {
             <span style="color: ${adj.delta >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">
               ${adj.delta >= 0 ? '+' : ''}${formatCurrency(Math.abs(adj.delta))}
             </span>
-            - ${adj.reason || 'No reason provided'}
-            <br><span style="font-size: 10px; color: #999;">${date} by ${adj.gmStation}</span>
+            - ${escapeHtml(adj.reason || 'No reason provided')}
+            <br><span style="font-size: 10px; color: #999;">${date} by ${escapeHtml(adj.gmStation || '')}</span>
           </div>
         `;
       });
@@ -473,7 +473,7 @@ export class GameOpsRenderer {
     }
 
     return `
-      <div class="token-card ${status}" data-token-id="${tokenId}">
+      <div class="token-card ${status}" data-token-id="${escapeHtml(tokenId)}">
         <div class="token-card__header">
           <span class="token-id">${escapeHtml(tokenId)}</span>
           <span class="token-type type-${memoryType.toLowerCase()}">${memoryType}</span>
