@@ -56,10 +56,12 @@ describe('app transaction:failed consumer (P3.4)', () => {
   it('corrects the optimistic result screen when it is still showing (A7)', () => {
     // The optimistic "Transaction Complete!" screen is active when the
     // backend's duplicate verdict lands — repaint it as a duplicate.
+    // The resultRfid element reflects which token the screen is currently
+    // displaying; it must match the incoming tokenId for the repaint to occur.
     document.body.innerHTML = `
       <div id="resultScreen" class="screen active"></div>
       <div id="resultStatus"></div>
-      <span id="resultRfid"></span>
+      <span id="resultRfid">dup</span>
       <span id="resultType"></span>
       <span id="resultGroup"></span>
       <span id="resultValue"></span>
@@ -72,6 +74,57 @@ describe('app transaction:failed consumer (P3.4)', () => {
     const statusEl = document.getElementById('resultStatus');
     expect(statusEl.textContent).toContain('Token Already Scanned');
     expect(statusEl.textContent).toContain('Token already claimed by Team X');
+    expect(document.getElementById('resultValue').textContent).toContain('No points awarded');
+  });
+
+  it('does NOT overwrite the result screen when the displayed token differs (offline-queue replay guard)', () => {
+    // Scenario: operator scanned token A (offline), then while offline queued
+    // they scanned token B and are now viewing B's result screen. When the
+    // connection restores, the backend returns a duplicate verdict for A.
+    // The stale verdict must NOT repaint token B's result screen.
+    document.body.innerHTML = `
+      <div id="resultScreen" class="screen active"></div>
+      <div id="resultStatus"><h2>Transaction Complete!</h2></div>
+      <span id="resultRfid">token-b</span>
+      <span id="resultType">Technical</span>
+      <span id="resultGroup"></span>
+      <span id="resultValue">$750,000</span>
+    `;
+
+    // Stale duplicate verdict arrives for token-a while token-b is displayed.
+    app.networkedSession.dispatchEvent(new CustomEvent('transaction:failed', {
+      detail: { transaction: { tokenId: 'token-a' }, status: 'duplicate', message: 'Token already claimed by Team X' }
+    }));
+
+    // Toast/error is still shown (operator needs to know about the duplicate)
+    expect(uiManager.showError).toHaveBeenCalledWith(expect.stringContaining('token-a'));
+
+    // But the result screen must NOT have been repainted — token-b's content is intact.
+    const statusEl = document.getElementById('resultStatus');
+    expect(statusEl.textContent).toContain('Transaction Complete!');
+    expect(statusEl.textContent).not.toContain('Token Already Scanned');
+    expect(document.getElementById('resultRfid').textContent).toBe('token-b');
+    expect(document.getElementById('resultValue').textContent).toBe('$750,000');
+  });
+
+  it('repaints when the verdict tokenId exactly matches the displayed RFID', () => {
+    // Mirror of the offline-queue replay scenario but where the displayed token
+    // IS the one that received the duplicate verdict — repaint must proceed.
+    document.body.innerHTML = `
+      <div id="resultScreen" class="screen active"></div>
+      <div id="resultStatus"><h2>Transaction Complete!</h2></div>
+      <span id="resultRfid">token-a</span>
+      <span id="resultType">Personal</span>
+      <span id="resultGroup"></span>
+      <span id="resultValue">$10,000</span>
+    `;
+
+    app.networkedSession.dispatchEvent(new CustomEvent('transaction:failed', {
+      detail: { transaction: { tokenId: 'token-a' }, status: 'duplicate', message: 'Token already claimed by Team X' }
+    }));
+
+    const statusEl = document.getElementById('resultStatus');
+    expect(statusEl.textContent).toContain('Token Already Scanned');
     expect(document.getElementById('resultValue').textContent).toContain('No points awarded');
   });
 

@@ -224,9 +224,18 @@ class App {
         // If the optimistic result screen is still up for this scan, repaint it
         // as a duplicate. If the GM has moved on (e.g. scanning the next token),
         // the toast alone informs — don't yank them back.
+        //
+        // Guard: during offline-queue replay the backend may return duplicate
+        // verdicts for previously queued transactions while the operator is
+        // already looking at a DIFFERENT (freshly scanned) token's result.
+        // Only repaint when the screen is still showing the same tokenId that
+        // received the verdict — compare the displayed RFID first.
         const resultScreen = document.getElementById('resultScreen');
         if (resultScreen?.classList.contains('active')) {
-          this.showDuplicateError(tokenId || '', claimMessage);
+          const displayedRfid = document.getElementById('resultRfid')?.textContent ?? '';
+          if (displayedRfid === (tokenId || '')) {
+            this.showDuplicateError(tokenId || '', claimMessage);
+          }
         }
         return;
       }
