@@ -320,7 +320,7 @@ export class GameOpsRenderer {
     }
 
     const deleteButton = showDelete && token.id ? `
-      <button class="btn" data-action="app.deleteTeamTransaction" data-arg="${token.id}"
+      <button class="btn" data-action="app.deleteTeamTransaction" data-arg="${escapeHtml(token.id)}"
               style="background: #dc3545; color: white; padding: 4px 8px; font-size: 12px; margin-left: 8px; cursor: pointer;">
         🗑️ Delete
       </button>
@@ -476,7 +476,7 @@ export class GameOpsRenderer {
       <div class="token-card ${status}" data-token-id="${escapeHtml(tokenId)}">
         <div class="token-card__header">
           <span class="token-id">${escapeHtml(tokenId)}</span>
-          <span class="token-type type-${memoryType.toLowerCase()}">${memoryType}</span>
+          <span class="token-type type-${escapeHtml(memoryType.toLowerCase())}">${escapeHtml(memoryType)}</span>
         </div>
         <div class="token-card__rating">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</div>
 

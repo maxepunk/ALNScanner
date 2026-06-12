@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { UIManager } from '../../../src/ui/uiManager.js';
 import { App } from '../../../src/app/app.js';
+import { GameOpsRenderer } from '../../../src/ui/renderers/GameOpsRenderer.js';
 
 const XSS_PAYLOAD = '<img src=x onerror="window.__pwned=true">';
 const QUOTE_PAYLOAD = `O'Brien & "Co." <b>bold</b>`;
@@ -204,6 +205,83 @@ describe('XSS escaping (F-GMS-04)', () => {
       expect(statusEl.querySelector('img')).toBeNull();
       // tokenId still legible to the operator
       expect(statusEl.textContent).toContain('ID: <img src=x onerror="window.__pwned=true">');
+    });
+  });
+
+  describe('GameOpsRenderer.renderGameActivity token cards', () => {
+    const ATTR_BREAKOUT_PAYLOAD = '" onmouseover="x';
+
+    const activityToken = (tokenId) => ({
+      tokenId,
+      tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 3 },
+      events: [],
+      status: 'available',
+      discoveredByPlayers: false,
+      potentialValue: 250000
+    });
+
+    it('contains hostile tokenId inside the data-token-id attribute (no breakout)', () => {
+      document.body.innerHTML = '<div id="activitySink"></div>';
+      const container = document.getElementById('activitySink');
+
+      const renderer = new GameOpsRenderer({
+        dataManager: {
+          getGameActivity: jest.fn(() => ({
+            tokens: [activityToken(ATTR_BREAKOUT_PAYLOAD), activityToken(XSS_PAYLOAD)],
+            stats: { totalTokens: 2, available: 2, claimed: 0, claimedWithoutDiscovery: 0 }
+          }))
+        },
+        sessionModeManager: { isNetworked: () => true, isStandalone: () => false },
+        app: {}
+      });
+
+      renderer.renderGameActivity(container, { showSummary: false, showFilters: false });
+
+      // Rendered HTML carries the ESCAPED form — the quote never closes the attribute
+      expect(container.innerHTML).toContain('&quot; onmouseover=&quot;x');
+
+      const cards = container.querySelectorAll('.token-card');
+      expect(cards).toHaveLength(2);
+
+      // getAttribute returns the decoded value — round-trip intact means the
+      // quote/markup stayed INSIDE the attribute instead of breaking out
+      expect(cards[0].getAttribute('data-token-id')).toBe(ATTR_BREAKOUT_PAYLOAD);
+      expect(cards[1].getAttribute('data-token-id')).toBe(XSS_PAYLOAD);
+
+      // No injected elements or stray event-handler attributes
+      expect(container.querySelector('img')).toBeNull();
+      cards.forEach(card => expect(card.hasAttribute('onmouseover')).toBe(false));
+    });
+  });
+
+  describe('GameOpsRenderer.showGroupCompletionNotification', () => {
+    it('escapes hostile teamId and groupId in the group-completion toast', () => {
+      jest.useFakeTimers();
+      document.body.innerHTML = '';
+
+      const renderer = new GameOpsRenderer({
+        dataManager: {},
+        sessionModeManager: { isNetworked: () => true, isStandalone: () => false },
+        app: {}
+      });
+
+      renderer.showGroupCompletionNotification({
+        teamId: XSS_PAYLOAD,
+        groupId: QUOTE_PAYLOAD,
+        bonus: 60000,
+        multiplier: 5
+      });
+
+      expect(document.body.querySelector('img')).toBeNull();
+      expect(document.body.querySelector('b')).toBeNull();
+      // Both values still legible to the operator
+      expect(document.body.textContent).toContain('<img src=x onerror="window.__pwned=true">');
+      expect(document.body.textContent).toContain('O\'Brien & "Co." <b>bold</b>');
+
+      // Drain auto-dismiss timers so the toast removes itself cleanly
+      jest.runAllTimers();
+      expect(document.body.children).toHaveLength(0);
+      jest.useRealTimers();
     });
   });
 });
