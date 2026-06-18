@@ -468,7 +468,9 @@ export class ConnectionWizard {
 export class QueueStatusManager {
   constructor(app) {
     this.app = app;
+    this._wiredQueueManager = null; // the queueManager the listener is attached to
     this.updateQueueIndicator = this.updateQueueIndicator.bind(this);
+    this._onQueueChanged = this._onQueueChanged.bind(this);
   }
 
   /**
@@ -476,15 +478,38 @@ export class QueueStatusManager {
    */
   init() {
     this.updateQueueIndicator(); // Initial update
+    this.attach();
+  }
 
-    // Register event listener for queue changes (no polling)
+  /**
+   * Attach the queue:changed listener to the CURRENT queue manager.
+   * Idempotent + re-attachable (F-GMS-11): init() alone only covered the
+   * startup auto-connect restore path — in the common fresh-launch flow
+   * (user picks Networked Mode AFTER init) no queueManager existed yet and
+   * the offline-queue indicator never updated for the whole session.
+   * App._initializeNetworkedMode() calls attach() once the session's
+   * queueManager exists.
+   */
+  attach() {
     const queueManager = this.app.networkedSession?.services?.queueManager;
-    if (queueManager) {
-      queueManager.addEventListener('queue:changed', (event) => {
-        console.log('Queue changed:', event.detail);
-        this.updateQueueIndicator();
-      });
+    if (!queueManager || queueManager === this._wiredQueueManager) {
+      return;
     }
+
+    // Re-attach: a recreated session brings a new queueManager instance
+    if (this._wiredQueueManager) {
+      this._wiredQueueManager.removeEventListener('queue:changed', this._onQueueChanged);
+    }
+
+    queueManager.addEventListener('queue:changed', this._onQueueChanged);
+    this._wiredQueueManager = queueManager;
+    this.updateQueueIndicator();
+  }
+
+  /** @private queue:changed handler (stable reference for add/removeEventListener) */
+  _onQueueChanged(event) {
+    console.log('Queue changed:', event.detail);
+    this.updateQueueIndicator();
   }
 
   /**

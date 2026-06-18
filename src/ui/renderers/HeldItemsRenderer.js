@@ -52,7 +52,7 @@ export class HeldItemsRenderer {
             <span class="held-item__description">${escapeHtml(description)}</span>
             <span class="held-item__reason">${escapeHtml(item.reason || '')}</span>
           </div>
-          <span class="held-item__duration" data-held-at="${item.heldAt || ''}">${duration}</span>
+          <span class="held-item__duration" data-held-at="${escapeHtml(item.heldAt || '')}">${duration}</span>
           <div class="held-item__actions">
             <button class="btn btn-sm btn-warning" data-action="admin.releaseHeld" data-held-id="${escapeHtml(item.id)}">Release</button>
             <button class="btn btn-sm btn-secondary" data-action="admin.discardHeld" data-held-id="${escapeHtml(item.id)}">Discard</button>

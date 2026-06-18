@@ -231,6 +231,26 @@ describe('LocalStorage Strategy', () => {
       expect(storage.getTeamScores()[0].score).toBe(10000);
       expect(storage.getTeamScores()[0].bonusScore).toBe(0);
     });
+
+    it('should NOT award a bonus for a 1-token group (A1/F-SCAN-09: groups need 2+ tokens)', async () => {
+      // Backend rule (transactionService.isGroupComplete): groups with <= 1
+      // token never complete. Standalone previously paid a x2 single-token
+      // group, diverging from networked scoring AND docs/SCORING_LOGIC.md.
+      mockTokenManager.getAllTokens.mockReturnValue([
+        { SF_RFID: 'solo1', SF_Group: 'SoloGroup (x2)' }
+      ]);
+
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'solo1', teamId: '001',
+        mode: 'blackmarket', points: 10000, group: 'SoloGroup (x2)',
+        timestamp: new Date().toISOString()
+      });
+
+      const scores = storage.getTeamScores();
+      expect(scores[0].score).toBe(10000); // base only — no bonus
+      expect(scores[0].bonusScore).toBe(0);
+      expect(storage.sessionData.teams['001'].completedGroups).toEqual([]);
+    });
   });
 
   describe('removeTransaction', () => {
@@ -273,6 +293,49 @@ describe('LocalStorage Strategy', () => {
 
       expect(storage.scannedTokens.has('token1')).toBe(false);
     });
+
+    it('should emit transaction:deleted on removal (strategy-event contract, F-GMS-08)', async () => {
+      // Without this event the history badge, history screen, admin Game
+      // Activity, and scoreboards all stay stale after a standalone delete.
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+
+      const seen = [];
+      storage.addEventListener('transaction:deleted', (e) => seen.push(e.detail));
+
+      await storage.removeTransaction('tx-1');
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0].transactionId).toBe('tx-1');
+      expect(seen[0].transaction.id).toBe('tx-1');
+    });
+
+    it('should emit team-score:updated on removal (scoreboards must reflect the recalculated score)', async () => {
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+
+      const seen = [];
+      storage.addEventListener('team-score:updated', (e) => seen.push(e.detail));
+
+      await storage.removeTransaction('tx-1');
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0].teamId).toBe('001');
+      expect(seen[0].scoreData.score).toBe(0);
+    });
+
+    it('should NOT emit events for a non-existent transaction', async () => {
+      const seen = [];
+      storage.addEventListener('transaction:deleted', (e) => seen.push(e.detail));
+
+      await storage.removeTransaction('non-existent');
+
+      expect(seen).toHaveLength(0);
+    });
   });
 
   describe('adjustTeamScore', () => {
@@ -306,6 +369,34 @@ describe('LocalStorage Strategy', () => {
     it('should fail for non-existent team', async () => {
       const result = await storage.adjustTeamScore('non-existent', 100, 'test');
       expect(result.success).toBe(false);
+    });
+
+    it('should emit team-score:updated on adjustment (strategy-event contract, F-GMS-08)', async () => {
+      // Without this event a standalone admin score adjustment never
+      // refreshes the scoreboards.
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+
+      const seen = [];
+      storage.addEventListener('team-score:updated', (e) => seen.push(e.detail));
+
+      await storage.adjustTeamScore('001', 5000, 'Bonus award');
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0].teamId).toBe('001');
+      expect(seen[0].scoreData.score).toBe(15000);
+      expect(Array.isArray(seen[0].transactions)).toBe(true);
+    });
+
+    it('should NOT emit team-score:updated for a non-existent team', async () => {
+      const seen = [];
+      storage.addEventListener('team-score:updated', (e) => seen.push(e.detail));
+
+      await storage.adjustTeamScore('non-existent', 100, 'test');
+
+      expect(seen).toHaveLength(0);
     });
   });
 
@@ -377,6 +468,31 @@ describe('LocalStorage Strategy', () => {
 
       const saved = JSON.parse(localStorage.getItem('standaloneSession'));
       expect(saved.transactions).toHaveLength(1);
+    });
+
+    it('should mark the session ended with an endTime and persist it (F-GMS-07)', async () => {
+      await storage.createSession('Test Game', []);
+
+      await storage.endSession();
+
+      // In-memory state reflects the end
+      expect(storage.getCurrentSession().status).toBe('ended');
+      // Persisted state too (post-game report / reload must see it)
+      const saved = JSON.parse(localStorage.getItem('standaloneSession'));
+      expect(saved.status).toBe('ended');
+      expect(saved.endTime).toEqual(expect.any(String));
+    });
+
+    it('should emit session:updated when the session ends (F-GMS-07)', async () => {
+      await storage.createSession('Test Game', []);
+
+      const seen = [];
+      storage.addEventListener('session:updated', (e) => seen.push(e.detail));
+
+      await storage.endSession();
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0].session.status).toBe('ended');
     });
 
     it('should not load session from previous day', async () => {

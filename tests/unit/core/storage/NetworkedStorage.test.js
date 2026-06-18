@@ -396,6 +396,56 @@ describe('NetworkedStorage Strategy', () => {
       expect(storage.transactions).toHaveLength(2);
     });
 
+    it('should mark broadcast tokenIds in scannedTokens (A7/F-GMS-05: blocks cross-device duplicates up-front)', () => {
+      // GM-A claims a token; GM-B receives transaction:new. GM-B's local dedup
+      // must now block a re-scan attempt BEFORE the optimistic success screen.
+      storage.addTransactionFromBroadcast({ id: 'tx-other', tokenId: 'claimed01' });
+
+      expect(storage.scannedTokens.has('claimed01')).toBe(true);
+    });
+
+    it('should mark broadcast tokenIds even when the transaction is already cached', () => {
+      storage.transactions = [{ id: 'tx-1', tokenId: 'tok1' }];
+
+      storage.addTransactionFromBroadcast({ id: 'tx-1', tokenId: 'tok1' });
+
+      expect(storage.transactions).toHaveLength(1);
+      expect(storage.scannedTokens.has('tok1')).toBe(true);
+    });
+
+    it('should remove transaction from broadcast WITHOUT re-emitting the delete command (F-GMS-03)', () => {
+      storage.transactions = [{ id: 'tx-1' }, { id: 'tx-2' }];
+
+      storage.removeTransactionFromBroadcast('tx-1');
+
+      // Local cache pruned
+      expect(storage.transactions).toEqual([{ id: 'tx-2' }]);
+      // CRITICAL: cache-only — must NOT echo gm:command transaction:delete
+      expect(mockSocket.emit).not.toHaveBeenCalled();
+    });
+
+    it('should emit transaction:deleted when a broadcast removal prunes the cache (F-GMS-03)', () => {
+      storage.transactions = [{ id: 'tx-1', tokenId: 'abc' }];
+      const seen = [];
+      storage.addEventListener('transaction:deleted', (e) => seen.push(e.detail));
+
+      storage.removeTransactionFromBroadcast('tx-1');
+
+      expect(seen).toEqual([{ transactionId: 'tx-1', transaction: { id: 'tx-1', tokenId: 'abc' } }]);
+    });
+
+    it('should be a no-op for an unknown transactionId (no event, no emit)', () => {
+      storage.transactions = [{ id: 'tx-1' }];
+      const seen = [];
+      storage.addEventListener('transaction:deleted', (e) => seen.push(e.detail));
+
+      storage.removeTransactionFromBroadcast('tx-unknown');
+
+      expect(storage.transactions).toHaveLength(1);
+      expect(seen).toEqual([]);
+      expect(mockSocket.emit).not.toHaveBeenCalled();
+    });
+
     it('should set backend scores', () => {
       storage.setBackendScores('001', { currentScore: 50000 });
       expect(storage.backendScores.get('001')).toEqual({ currentScore: 50000 });

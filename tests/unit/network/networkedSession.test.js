@@ -63,6 +63,7 @@ describe('NetworkedSession', () => {
       addTransactionFromBroadcast: jest.fn(),
       setTransactions: jest.fn(),
       removeTransaction: jest.fn(),
+      removeTransactionFromBroadcast: jest.fn(),
       clearBackendScores: jest.fn(),
       updateTeamScoreFromBackend: jest.fn(),
       updateSessionState: jest.fn(),
@@ -686,12 +687,15 @@ describe('NetworkedSession', () => {
       expect(mockDataManager.updateTeamScoreFromBackend).toHaveBeenCalledWith(teamScore);
     });
 
-    it('should remove transaction on transaction:deleted event', () => {
+    it('should prune local cache on transaction:deleted WITHOUT re-issuing the delete command (F-GMS-03)', () => {
       const transactionId = 'tx-to-delete';
 
       messageHandler({ detail: { type: 'transaction:deleted', payload: { transactionId } } });
 
-      expect(mockDataManager.removeTransaction).toHaveBeenCalledWith(transactionId);
+      // Cache-only removal — removeTransaction would re-emit gm:command
+      // transaction:delete from EVERY connected GM (N-station echo)
+      expect(mockDataManager.removeTransactionFromBroadcast).toHaveBeenCalledWith(transactionId);
+      expect(mockDataManager.removeTransaction).not.toHaveBeenCalled();
     });
 
     it('should clear scores on scores:reset event', () => {

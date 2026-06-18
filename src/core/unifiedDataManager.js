@@ -253,6 +253,20 @@ export class UnifiedDataManager extends EventTarget {
   }
 
   /**
+   * Remove transaction from local cache on a transaction:deleted broadcast
+   * (networked mode only). Cache-only — does NOT re-issue the delete command
+   * (F-GMS-03). The strategy emits transaction:deleted, which is forwarded
+   * via _wireStrategyEvents.
+   * @param {string} transactionId - Transaction ID from broadcast
+   */
+  removeTransactionFromBroadcast(transactionId) {
+    // Only NetworkedStorage has this method
+    if (typeof this._activeStrategy?.removeTransactionFromBroadcast === 'function') {
+      this._activeStrategy.removeTransactionFromBroadcast(transactionId);
+    }
+  }
+
+  /**
    * Get all transactions
    * @returns {Array} Transactions
    */

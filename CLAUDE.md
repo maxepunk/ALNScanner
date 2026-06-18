@@ -27,7 +27,7 @@ ALNScanner is the **Game Master (GM) Scanner** for "About Last Night" - a PWA fo
 - Dual operation modes: Networked (WebSocket) OR Standalone (offline)
 - Two game modes: Detective (star ratings) OR Black Market (currency)
 - Android Chrome/Edge 107+ (Vite 7 default build target `baseline-widely-available` = chrome107; Web NFC needs 89+, `structuredClone` 98+ — 107 is the binding floor). No explicit `build.target` set in vite.config.js.
-- Automated testing: Jest (926 unit tests) + Playwright (E2E)
+- Automated testing: Jest (1364 unit tests, 69 suites) + Playwright (E2E)
 - Automated deployment to GitHub Pages
 
 ## Development Commands
@@ -163,12 +163,12 @@ store.off('music', callback);
 The scanner uses a 3-tier testing strategy:
 
 **L1: Smoke Tests (Unit-level Verification)**
-- **Location**: `tests/unit/` (754 tests)
+- **Location**: `tests/unit/` + `tests/contract/`
 - **Scope**: Module-level testing with mocks
 - **Purpose**: Verify individual components work correctly in isolation
 - **Run**: `npm test`
 - **Duration**: ~15-30s
-- **Coverage**: 1116 tests across 57 suites (admin, app, core, network, ui, utils)
+- **Coverage**: 1364 tests across 69 suites (admin, app, core, network, ui, utils, contract) — run `npm test` for the live count
 
 **L2: Scanner E2E Tests (No Orchestrator)**
 - **Location**: `tests/e2e/specs/`
@@ -278,7 +278,7 @@ localStorage.setItem('aln_auth_token', createValidToken());
 
 **Local Verification** (`./verify-merge-ready.sh`):
 - 8-phase pre-merge checklist
-- Runs all L1 tests (926/926 passing)
+- Runs all L1 tests
 - Verifies production build succeeds
 - Checks bundle size (<10MB)
 - Validates critical files present
@@ -315,7 +315,7 @@ Example: 5-star Technical token = $150,000 × 5 = $750,000
   - Bonus = (5 - 1) × $15,000 = $60,000
   - Total = $15,000 + $60,000 = $75,000
 
-**Group Completion Rules (LocalStorage.js:345-386):**
+**Group Completion Rules (LocalStorage.js `_checkGroupCompletion`):**
 - Groups must have 2+ tokens
 - Group multiplier must be > 1x
 - Team must collect ALL tokens in group
@@ -323,11 +323,15 @@ Example: 5-star Technical token = $150,000 × 5 = $750,000
 
 ### Duplicate Detection
 
-**Global Scope (Cross-Team):**
-- Each token can only be scanned ONCE across ALL teams
-- Tracked in `DataManager.scannedTokens` Set
-- Persists in localStorage
-- Prevents token sharing between teams
+**Scope (per mode):**
+- The RULE is first-come-first-served across ALL teams, but the CLIENT only
+  knows what it has seen: `DataManager.scannedTokens` tracks THIS device's
+  scans (persisted in localStorage)
+- Standalone mode: this device IS the authority, so the local Set enforces
+  the full cross-team rule
+- Networked mode: the BACKEND is authoritative (per-device + FCFS in
+  `backend/src/gameRules/duplicatePolicy.js`); a token claimed on another
+  GM station is rejected server-side with "claimed by Team X" (decision A7)
 
 **Implementation (app.js `processNFCRead`):**
 ```javascript
@@ -431,10 +435,10 @@ ALNScanner/
 - `scanScreen` - NFC interface + stats
 - `resultScreen` - Transaction outcome
 - `historyScreen` - Transaction log
-- `scoreboardScreen` - Black Market rankings (networked only)
+- `scoreboardScreen` - Black Market rankings (both modes; blackmarket-gated)
 - `teamDetailsScreen` - Group progress breakdown
 
-**View System (Networked Mode Only):**
+**View System (both modes since standalone-admin):**
 - `scanner-view` - Default scanning interface
 - `admin-view` - Session/Video/System control
 - `debug-view` - Real-time debug console
@@ -475,7 +479,7 @@ ALNScanner/
 **UI Layer ([src/ui/](src/ui/)):**
 - [uiManager.js](src/ui/uiManager.js) - Screen navigation, stats rendering, error display
   - `renderScoreboard(container?)` - Parameterized: defaults to `#scoreboardContainer`, accepts any container
-- [settings.js](src/ui/settings.js) - Pure state holder + localStorage persistence (no DOM manipulation)
+- [settings.js](src/ui/settings.js) - State holder + localStorage persistence (also writes `#deviceIdDisplay` on save)
 - [connectionWizard.js](src/ui/connectionWizard.js) - Network auth flow UI
 
 **Services Layer ([src/services/](src/services/)):**
@@ -750,21 +754,11 @@ Standalone mode: Not supported (no player scan data available).
 
 ### Console Access
 
-All modules exposed on `window` for debugging:
-```javascript
-window.App              // Main application
-window.DataManager      // Transaction and scoring
-window.TokenManager     // Token database
-window.UIManager        // UI rendering
-window.Settings         // Configuration
-window.Debug            // Debug logging
-
-// Networked mode only:
-window.sessionModeManager  // Mode management
-window.connectionManager   // Backend connection
-window.orchestratorClient  // WebSocket client
-window.queueManager        // Transaction queue
-```
+Modules are NOT exposed on `window` (the window-globals debug surface was
+removed with the ES6/DI migration — see `utils/domEventBindings.js`).
+For runtime inspection use the in-app debug view (`debug-view`) or
+breakpoints in DevTools; for state questions prefer the E2E page objects'
+DOM-observable patterns.
 
 ### Common Debug Tasks
 
@@ -976,7 +970,7 @@ localStorage.getItem('transactions') returns null after reload
 Expected bonus: $120,000, Received: $0
 ```
 - **Cause**: Field name inconsistency (tx.tokenGroup vs tx.group)
-- **Fix**: Already fixed in LocalStorage.js:345 (uses `tx.group` consistently)
+- **Fix**: Already fixed in LocalStorage.js `_checkGroupCompletion` (uses `tx.group` consistently)
 - **Verification**: Check transaction object structure in localStorage:
 ```javascript
 JSON.parse(localStorage.getItem('transactions'))[0]
@@ -1006,7 +1000,7 @@ JSON.parse(localStorage.getItem('transactions'))[0]
 
 ### Group Bonuses Not Applied
 - **Cause**: Missing tokens in group OR group has only 1 token
-- **Debug**: Check `DataManager.getTeamCompletedGroups('teamId')`
+- **Debug**: Inspect team details screen (NOTE: `getTeamCompletedGroups()` returns `[]` pending F-GMS-02)
 - **Rule**: Groups need 2+ tokens AND multiplier > 1x
 
 ## Playwright E2E Testing

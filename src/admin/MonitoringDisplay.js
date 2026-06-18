@@ -1,5 +1,6 @@
 import Debug from '../utils/debug.js';
 import { escapeHtml } from '../utils/escapeHtml.js';
+import { showToast as sharedShowToast } from '../utils/showToast.js';
 import { CueRenderer } from '../ui/renderers/CueRenderer.js';
 import { EnvironmentRenderer } from '../ui/renderers/EnvironmentRenderer.js';
 import { SessionRenderer } from '../ui/renderers/SessionRenderer.js';
@@ -46,6 +47,7 @@ export class MonitoringDisplay {
   /**
    * Subscribe renderers to StateStore domains.
    * Store is populated by networkedSession from service:state and sync:full events.
+   * Delegates to per-domain wiring methods (Phase-2 structural split, decision C1).
    * @private
    */
   _wireStoreSubscriptions() {
@@ -57,6 +59,31 @@ export class MonitoringDisplay {
       this._storeCallbacks.push({ domain, handler });
     };
 
+    this._wireGameOpsSubscriptions(on);
+    this._wireShowControlSubscriptions(on);
+    this._wireEnvironmentSubscriptions(on);
+    this._wireGameAdminSubscriptions(on);
+  }
+
+  /**
+   * Game Ops domain store subscriptions.
+   * (No direct store subscriptions — game ops state arrives via DataManager events,
+   * not StateStore. This method is a placeholder for future game-ops store domains.)
+   * @param {Function} on - subscription helper
+   * @private
+   */
+  _wireGameOpsSubscriptions(_on) {
+    // Transactions, scores, and player scans are not StateStore domains —
+    // they flow through UnifiedDataManager events (transaction:added, team-score:updated, etc.)
+    // wired in main.js. Nothing to subscribe here.
+  }
+
+  /**
+   * Show Control domain store subscriptions: video queue/transport, cues, held items, sound.
+   * @param {Function} on - subscription helper
+   * @private
+   */
+  _wireShowControlSubscriptions(on) {
     // Cue Engine — transform arrays to Maps/Sets for CueRenderer
     on('cueengine', (state) => {
       const cues = new Map();
@@ -72,38 +99,13 @@ export class MonitoringDisplay {
       this.heldItemsRenderer.renderSnapshot(state?.items || []);
     });
 
-    // Service Health
-    on('health', (state, prev) => {
-      this.healthRenderer.render(state, prev);
-    });
-
-    // Environment: Lighting
-    on('lighting', (state, prev) => {
-      this.envRenderer.renderLighting(state, prev);
-    });
-
-    // Environment: Audio + ducking forwarding to MusicRenderer
-    on('audio', (state, prev) => {
-      this.envRenderer.renderAudio(state, prev);
-      // Backend shape is { music: [...] } where the value is the list of
-      // active source streams (video/sound) ducking the music target.
-      const musicSources = state?.ducking?.music;
-      this.musicRenderer.renderDucking(
-        musicSources && musicSources.length > 0
-          ? { ducked: true, activeSources: musicSources }
-          : { ducked: false, activeSources: [] }
-      );
-    });
-
-    // Environment: Bluetooth
-    on('bluetooth', (state, prev) => {
-      this.envRenderer.renderBluetooth(state, prev);
-    });
-
     // Video — transform backend state shape to renderer API
+    // F-GMCMD-01: 'paused' is a first-class status (frozen position from the
+    // backend) — surface it so the panel can stop saying "Playing".
     const mapVideoState = (s) => s ? {
       nowPlaying: s.currentVideo?.filename || null,
       isPlaying: s.status === 'playing',
+      isPaused: s.status === 'paused',
       progress: s.currentVideo?.position || 0,
       duration: s.currentVideo?.duration || 0,
       queue: s.queue,
@@ -111,19 +113,6 @@ export class MonitoringDisplay {
     on('video', (state, prev) => {
       this.videoRenderer.render(mapVideoState(state), mapVideoState(prev));
       this._updateReturnToVideoVisibility(state);
-    });
-
-    // Music (MPD)
-    on('music', (state, prev) => {
-      this.musicRenderer.render(state, prev);
-    });
-
-    // Game Clock — map 'status' field to 'state' for SessionRenderer
-    on('gameclock', (state, prev) => {
-      this.sessionRenderer.renderGameClock(
-        { state: state.status || state.state, elapsed: state.elapsed },
-        prev ? { state: prev.status || prev.state, elapsed: prev.elapsed } : null
-      );
     });
 
     // Sound playback status
@@ -139,6 +128,61 @@ export class MonitoringDisplay {
       container.style.display = '';
       const files = playing.map(p => `<span class="sound-playing__file">${escapeHtml(p.file)}</span>`).join(', ');
       container.innerHTML = `<div class="sound-playing">Playing: ${files}</div>`;
+    });
+  }
+
+  /**
+   * Environment domain store subscriptions: lighting, audio (incl. ducking), bluetooth, music.
+   * @param {Function} on - subscription helper
+   * @private
+   */
+  _wireEnvironmentSubscriptions(on) {
+    // Lighting
+    on('lighting', (state, prev) => {
+      this.envRenderer.renderLighting(state, prev);
+    });
+
+    // Audio + ducking forwarding to MusicRenderer
+    on('audio', (state, prev) => {
+      this.envRenderer.renderAudio(state, prev);
+      // Backend shape is { music: [...] } where the value is the list of
+      // active source streams (video/sound) ducking the music target.
+      const musicSources = state?.ducking?.music;
+      this.musicRenderer.renderDucking(
+        musicSources && musicSources.length > 0
+          ? { ducked: true, activeSources: musicSources }
+          : { ducked: false, activeSources: [] }
+      );
+    });
+
+    // Bluetooth
+    on('bluetooth', (state, prev) => {
+      this.envRenderer.renderBluetooth(state, prev);
+    });
+
+    // Music (MPD)
+    on('music', (state, prev) => {
+      this.musicRenderer.render(state, prev);
+    });
+  }
+
+  /**
+   * Game Admin domain store subscriptions: service health, game clock.
+   * @param {Function} on - subscription helper
+   * @private
+   */
+  _wireGameAdminSubscriptions(on) {
+    // Service Health
+    on('health', (state, prev) => {
+      this.healthRenderer.render(state, prev);
+    });
+
+    // Game Clock — map 'status' field to 'state' for SessionRenderer
+    on('gameclock', (state, prev) => {
+      this.sessionRenderer.renderGameClock(
+        { state: state.status || state.state, elapsed: state.elapsed },
+        prev ? { state: prev.status || prev.state, elapsed: prev.elapsed } : null
+      );
     });
   }
 
@@ -227,19 +271,13 @@ export class MonitoringDisplay {
   }
 
   _handleDisplayMode(payload) {
-    const nowShowingVal = document.getElementById('now-showing-value');
-    const nowShowingIcon = document.getElementById('now-showing-icon');
     const btnIdle = document.getElementById('btn-idle-loop');
     const btnScore = document.getElementById('btn-scoreboard');
 
-    if (payload.mode === 'SCOREBOARD') {
-      if (nowShowingVal) nowShowingVal.textContent = 'Scoreboard';
-      if (nowShowingIcon) nowShowingIcon.textContent = '\uD83C\uDFC6';
-    } else if (payload.mode === 'IDLE_LOOP') {
-      if (nowShowingVal) nowShowingVal.textContent = 'Idle Loop';
-      if (nowShowingIcon) nowShowingIcon.textContent = '\uD83D\uDD04';
-    }
-    // VIDEO mode: nowPlaying text handled by VideoRenderer via service:state
+    // F-GMCMD-06: VideoRenderer is the SINGLE writer of Now Showing \u2014 it
+    // reconciles the display mode with the video domain state, so a video
+    // push behind the scoreboard can no longer overwrite "Scoreboard".
+    this.videoRenderer.setDisplayMode(payload.mode);
 
     if (btnIdle) btnIdle.classList.toggle('active', payload.mode === 'IDLE_LOOP');
     if (btnScore) btnScore.classList.toggle('active', payload.mode === 'SCOREBOARD');
@@ -360,22 +398,8 @@ export class MonitoringDisplay {
   }
 
   showToast(message, type = 'info', duration = 3000) {
-    const colors = {
-      error: 'var(--color-accent-danger, #dc3545)',
-      success: 'var(--color-accent-success, #28a745)',
-      warning: 'var(--color-accent-warning, #ffc107)',
-      info: 'var(--color-accent-info, #007bff)'
-    };
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    toast.style.cssText = `
-        position: fixed; top: 20px; right: 20px; padding: 12px 20px;
-        background: ${colors[type] || colors.info}; color: white;
-        border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10000;
-      `;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), duration);
+    // Delegate to shared utility (F-GMS-14 consolidation).
+    sharedShowToast(message, type, duration);
   }
 
   destroy() {

@@ -274,8 +274,9 @@ export async function validateAndDetermineInitialScreen(sessionModeManager) {
  * @param {Object} uiManager - UIManager instance
  * @param {Function} showWizardFn - showConnectionWizard function
  * @param {Function} initNetworkedModeFn - Async function to initialize networked mode (from app._initializeNetworkedMode)
+ * @param {Function} initStandaloneModeFn - Async function to fully initialize standalone mode (from app._initializeStandaloneMode)
  */
-export async function applyInitialScreenDecision(decision, sessionModeManager, uiManager, showWizardFn, initNetworkedModeFn = null) {
+export async function applyInitialScreenDecision(decision, sessionModeManager, uiManager, showWizardFn, initNetworkedModeFn = null, initStandaloneModeFn = null) {
   Debug.log(`Applying screen decision: screen=${decision.screen}, action=${decision.action}`);
 
   if (decision.action === 'clearModeAndShowWizard') {
@@ -286,10 +287,19 @@ export async function applyInitialScreenDecision(decision, sessionModeManager, u
     showWizardFn();
 
   } else if (decision.action === 'initStandalone') {
-    // Standalone mode - lock mode and show team entry
+    // Standalone mode restore — must run the FULL standalone initializer
+    // (storage strategy, registry wiring, body class, team entry), not just
+    // setMode + showScreen. F-GMS-01 / C7: anything less bricks scanning
+    // after a mid-show reload.
     Debug.log('Restoring standalone mode');
-    sessionModeManager.setMode('standalone');
-    uiManager.showScreen(decision.screen);
+    if (initStandaloneModeFn) {
+      // preserveSession: keep the persisted standalone session across reload
+      await initStandaloneModeFn({ preserveSession: true });
+    } else {
+      // Legacy fallback (no initializer injected)
+      sessionModeManager.setMode('standalone');
+      uiManager.showScreen(decision.screen);
+    }
 
   } else if (decision.action === 'autoConnect') {
     // Networked mode with valid token - attempt auto-connect

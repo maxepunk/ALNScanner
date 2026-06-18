@@ -151,6 +151,12 @@ export class EnvironmentRenderer {
     // before the sink-change rebuild so new dropdowns pick up fresh values.
     this._applyVolumes(volumes);
 
+    // F-GMCMD-02: derive the HDMI-fallback warning from the audio snapshot —
+    // a route requesting bluetooth with no bluetooth sink available means the
+    // backend fell back to HDMI (routing:fallback pushes this domain). The
+    // old code unconditionally hid #bt-warning on every render.
+    this._updateBtWarning(routes, availableSinks);
+
     // Build dropdowns if sinks available and changed
     if (availableSinks && availableSinks.length > 0 && this.audioRoutingContainer) {
       const sinkKey = availableSinks.map(s => s.name).join(',');
@@ -170,8 +176,6 @@ export class EnvironmentRenderer {
             }
           });
         }
-        // Hide fallback warning
-        if (this.btWarning) this.btWarning.style.display = 'none';
         return; // Routes already applied above — skip duplicate application below
       }
     }
@@ -190,8 +194,29 @@ export class EnvironmentRenderer {
       });
     }
 
-    // Hide fallback warning
-    if (this.btWarning) this.btWarning.style.display = 'none';
+  }
+
+  /**
+   * Show/hide the "No Bluetooth speaker — audio will use HDMI" warning.
+   * Visible iff some stream's configured route requests bluetooth (the
+   * 'bluetooth' sink type or a bluez_output.* sink name) but no bluetooth
+   * sink is currently available — i.e. audio actually plays over HDMI.
+   * @param {Object<string,string>} routes - stream → sink type/name
+   * @param {Array<{name: string, type?: string}>} availableSinks
+   * @private
+   */
+  _updateBtWarning(routes, availableSinks) {
+    if (!this.btWarning) return;
+
+    const isBtRoute = (route) => typeof route === 'string' &&
+      (route === 'bluetooth' || route.startsWith('bluez_output'));
+    const wantsBluetooth = !!routes && Object.values(routes).some(isBtRoute);
+
+    const btSinkAvailable = (availableSinks || []).some(s =>
+      s.type === 'bluetooth' ||
+      (typeof s.name === 'string' && s.name.startsWith('bluez_output')));
+
+    this.btWarning.style.display = (wantsBluetooth && !btSinkAvailable) ? '' : 'none';
   }
 
   _renderAudioDropdowns(sinks) {

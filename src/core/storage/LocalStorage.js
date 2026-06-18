@@ -147,6 +147,7 @@ export class LocalStorage extends IStorageStrategy {
       sessionId: this.sessionData.sessionId,
       name: this.sessionData.name,
       startTime: this.sessionData.startTime,
+      endTime: this.sessionData.endTime || null,
       status: this.sessionData.status || 'active'
     };
   }
@@ -175,10 +176,21 @@ export class LocalStorage extends IStorageStrategy {
 
   /**
    * End the current session
+   * Marks the session ended (status + endTime), persists, and emits
+   * session:updated so the admin panel re-renders (F-GMS-07). Without the
+   * status change, getCurrentSession() kept reporting 'active' and the
+   * admin panel continued to offer Pause/End on an ended session.
    * @returns {Promise<void>}
    */
   async endSession() {
+    this.sessionData.status = 'ended';
+    this.sessionData.endTime = new Date().toISOString();
     this._saveSession();
+
+    // Emit event for UI updates
+    this.dispatchEvent(new CustomEvent('session:updated', {
+      detail: { session: this.getCurrentSession() }
+    }));
   }
 
   /**
@@ -379,7 +391,10 @@ export class LocalStorage extends IStorageStrategy {
     const allGroupIds = groupTokens.map(t => t.SF_RFID);
     const allScanned = allGroupIds.every(id => scannedIds.includes(id));
 
-    if (allScanned && groupTokens.length > 0) {
+    // A1/F-SCAN-09: groups need 2+ tokens to pay a completion bonus —
+    // parity with the backend (transactionService.isGroupComplete rejects
+    // groups with <= 1 token) and docs/SCORING_LOGIC.md.
+    if (allScanned && groupTokens.length > 1) {
       const groupBaseScore = groupTxs.reduce((sum, tx) => sum + (tx.points || 0), 0);
       const bonus = (groupInfo.multiplier - 1) * groupBaseScore;
 
@@ -424,6 +439,24 @@ export class LocalStorage extends IStorageStrategy {
     }
 
     this._saveSession();
+
+    // Emit events for UI updates (strategy-event contract, F-GMS-08):
+    // transaction:deleted refreshes badge/history/Game Activity;
+    // team-score:updated refreshes the scoreboards with the recalculated score.
+    this.dispatchEvent(new CustomEvent('transaction:deleted', {
+      detail: { transactionId, transaction: removedTx }
+    }));
+
+    const team = teamId ? this.sessionData.teams[teamId] : null;
+    if (team) {
+      this.dispatchEvent(new CustomEvent('team-score:updated', {
+        detail: {
+          teamId,
+          scoreData: { ...team },
+          transactions: this.sessionData.transactions.filter(tx => tx.teamId === teamId)
+        }
+      }));
+    }
 
     return {
       success: true,
@@ -482,6 +515,16 @@ export class LocalStorage extends IStorageStrategy {
     team.score += adjustment.delta;
 
     this._saveSession();
+
+    // Emit event for UI updates (strategy-event contract, F-GMS-08):
+    // without it a standalone score adjustment never refreshes scoreboards.
+    this.dispatchEvent(new CustomEvent('team-score:updated', {
+      detail: {
+        teamId,
+        scoreData: { ...team },
+        transactions: this.sessionData.transactions.filter(tx => tx.teamId === teamId)
+      }
+    }));
 
     return {
       success: true,

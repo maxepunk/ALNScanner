@@ -25,36 +25,82 @@ export class VideoRenderer {
     this._positionTimestamp = 0;
     this._duration = 0;
     this._animFrame = null;
+
+    // Now Showing single-writer state (F-GMCMD-06): this renderer is the
+    // ONLY writer of #now-showing-value/#now-showing-icon. It reconciles the
+    // display mode (from display:mode events, via setDisplayMode) with the
+    // video domain state — while the TV shows the scoreboard, video pushes
+    // must not repaint "Scoreboard" away.
+    this._displayMode = null;       // 'SCOREBOARD' | 'IDLE_LOOP' | 'VIDEO' | null
+    this._lastVideoState = null;    // { nowPlaying, isPlaying, isPaused }
+  }
+
+  /**
+   * Set the current HDMI display mode (called from MonitoringDisplay on
+   * display:mode events) and repaint Now Showing accordingly.
+   * @param {string} mode - 'SCOREBOARD' | 'IDLE_LOOP' | 'VIDEO'
+   */
+  setDisplayMode(mode) {
+    this._displayMode = mode;
+    this._renderNowShowing();
+  }
+
+  /**
+   * Single writer for Now Showing (F-GMCMD-06).
+   * SCOREBOARD mode wins; otherwise reflect the video domain state.
+   * Elements are looked up lazily — MonitoringDisplay constructs this
+   * renderer before the admin panel markup may exist.
+   * @private
+   */
+  _renderNowShowing() {
+    if (!this._nowPlayingEl && typeof document !== 'undefined') {
+      this._nowPlayingEl = document.getElementById('now-showing-value');
+    }
+    if (!this._nowPlayingIcon && typeof document !== 'undefined') {
+      this._nowPlayingIcon = document.getElementById('now-showing-icon');
+    }
+    if (!this._nowPlayingEl) return;
+
+    if (this._displayMode === 'SCOREBOARD') {
+      this._nowPlayingEl.textContent = 'Scoreboard';
+      if (this._nowPlayingIcon) this._nowPlayingIcon.textContent = '🏆';
+      return;
+    }
+
+    const { nowPlaying, isPlaying } = this._lastVideoState || {};
+    this._nowPlayingEl.textContent = nowPlaying || 'Idle Loop';
+    if (this._nowPlayingIcon) {
+      this._nowPlayingIcon.textContent = nowPlaying ? (isPlaying ? '▶️' : '⏸️') : '🔄';
+    }
   }
 
   /**
    * Render the current video state (differential)
-   * @param {Object} state - { nowPlaying, isPlaying, progress, duration, queue? }
+   * @param {Object} state - { nowPlaying, isPlaying, isPaused, progress, duration, queue? }
    * @param {Object|null} prev - Previous state (null on first render)
    */
   render(state, prev = null) {
-    if (!this._nowPlayingEl) return;
+    const { nowPlaying, isPlaying, isPaused, progress, duration } = state || {};
+    const statusChanged = isPlaying !== prev?.isPlaying || isPaused !== prev?.isPaused;
 
-    const { nowPlaying, isPlaying, progress, duration } = state || {};
-
-    // Now Playing text
-    if (nowPlaying !== prev?.nowPlaying) {
-      this._nowPlayingEl.textContent = nowPlaying || 'Idle Loop';
+    // Now Showing text + icon — via the single display-mode-aware writer
+    // (F-GMCMD-06): a video push while the scoreboard is up must not
+    // repaint "Scoreboard" away.
+    this._lastVideoState = { nowPlaying: nowPlaying || null, isPlaying: !!isPlaying, isPaused: !!isPaused };
+    if (nowPlaying !== prev?.nowPlaying || statusChanged || !prev) {
+      this._renderNowShowing();
     }
 
-    // Icon
-    if (nowPlaying !== prev?.nowPlaying || isPlaying !== prev?.isPlaying) {
-      if (this._nowPlayingIcon) {
-        this._nowPlayingIcon.textContent = nowPlaying ? (isPlaying ? '▶️' : '⏸️') : '🔄';
-      }
-    }
-
-    // Status badge
-    if (isPlaying !== prev?.isPlaying) {
+    // Status badge (F-GMCMD-01: paused is a first-class state — the backend
+    // video domain emits status 'paused' with a frozen position)
+    if (statusChanged) {
       if (this._statusBadge) {
         if (isPlaying) {
           this._statusBadge.textContent = 'Playing';
           this._statusBadge.className = 'badge badge-success';
+        } else if (isPaused) {
+          this._statusBadge.textContent = 'Paused';
+          this._statusBadge.className = 'badge badge-warning';
         } else {
           this._statusBadge.textContent = 'Idle';
           this._statusBadge.className = 'badge';
@@ -64,14 +110,20 @@ export class VideoRenderer {
 
     // Progress bar & interpolation
     if (this._progressContainer && this._progressBar) {
+      const posSeconds = (progress || 0) * (duration || 0);
       if (isPlaying) {
         this._progressContainer.style.display = 'block';
         // Only restart interpolation if position/duration actually changed
-        if (progress !== prev?.progress || duration !== prev?.duration || !prev?.isPlaying) {
-          const posSeconds = (progress || 0) * (duration || 0);
+        if (progress !== prev?.progress || duration !== prev?.duration || statusChanged || !prev) {
           this._startInterpolation(posSeconds, duration || 0);
         }
-      } else if (isPlaying !== prev?.isPlaying) {
+      } else if (isPaused) {
+        // F-GMCMD-01: frozen progress — show the paused position statically,
+        // and STOP the rAF loop so the bar doesn't keep advancing.
+        this._progressContainer.style.display = 'block';
+        this._stopInterpolation();
+        this._setProgressDisplay(posSeconds, duration || 0);
+      } else if (statusChanged) {
         // Transition to not-playing: stop interpolation, hide progress
         this._stopInterpolation();
         this._progressContainer.style.display = 'none';
@@ -122,16 +174,28 @@ export class VideoRenderer {
     this._duration = duration;
 
     // Set initial position synchronously (works in test environments without rAF)
-    const progress = duration > 0 ? Math.min(1, positionSeconds / duration) : 0;
-    this._progressBar.style.width = `${progress * 100}%`;
-    if (this._progressTime) {
-      this._progressTime.textContent = `${this._formatTime(positionSeconds)} / ${this._formatTime(duration)}`;
-    }
+    const progress = this._setProgressDisplay(positionSeconds, duration);
 
     // Start rAF loop for smooth updates (browser only)
     if (duration > 0 && progress < 1 && typeof requestAnimationFrame !== 'undefined') {
       this._animFrame = requestAnimationFrame(() => this._tick());
     }
+  }
+
+  /**
+   * Set the progress bar + time display to a static position (no rAF).
+   * Used for the synchronous part of interpolation AND the frozen paused
+   * position (F-GMCMD-01).
+   * @returns {number} progress fraction 0..1
+   * @private
+   */
+  _setProgressDisplay(positionSeconds, duration) {
+    const progress = duration > 0 ? Math.min(1, positionSeconds / duration) : 0;
+    this._progressBar.style.width = `${progress * 100}%`;
+    if (this._progressTime) {
+      this._progressTime.textContent = `${this._formatTime(positionSeconds)} / ${this._formatTime(duration)}`;
+    }
+    return progress;
   }
 
   _tick() {

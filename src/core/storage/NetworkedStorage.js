@@ -339,7 +339,7 @@ export class NetworkedStorage extends IStorageStrategy {
 
     this.debug?.log('[NetworkedStorage] Resetting all scores');
 
-    this._emitCommand('scores:reset', {});
+    this._emitCommand('score:reset', {});
 
     return { success: true, pending: true };
   }
@@ -365,6 +365,37 @@ export class NetworkedStorage extends IStorageStrategy {
     if (!exists) {
       this.transactions.push(tx);
     }
+
+    // A7/F-GMS-05: a transaction:new broadcast means the token is claimed
+    // session-wide (GM dedup is global). Mark it locally so a re-scan on THIS
+    // device is blocked up-front instead of showing an optimistic success the
+    // backend will reject as duplicate. Mutates the Set in place (shared
+    // reference with UnifiedDataManager via _syncScannedTokens).
+    if (tx.tokenId) {
+      this.scannedTokens.add(tx.tokenId);
+      this.persistScannedTokens();
+    }
+  }
+
+  /**
+   * Remove transaction from local cache on a transaction:deleted broadcast.
+   * Mirror of addTransactionFromBroadcast: cache-only — must NOT re-issue
+   * the transaction:delete gm:command (F-GMS-03: every connected GM would
+   * echo the delete back to the backend, and the cache would stay stale
+   * until the next sync:full).
+   * Emits transaction:deleted so UI consumers (badge, history, Game
+   * Activity, scoreboards) refresh.
+   * @param {string} transactionId
+   */
+  removeTransactionFromBroadcast(transactionId) {
+    const index = this.transactions.findIndex(t => t.id === transactionId);
+    if (index === -1) return;
+
+    const [removed] = this.transactions.splice(index, 1);
+
+    this.dispatchEvent(new CustomEvent('transaction:deleted', {
+      detail: { transactionId, transaction: removed }
+    }));
   }
 
   /**

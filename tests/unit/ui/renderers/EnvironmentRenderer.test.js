@@ -227,12 +227,76 @@ describe('EnvironmentRenderer', () => {
       expect(document.querySelector('select[data-stream="music"]').value).toBe('hdmi');
     });
 
-    it('should hide bt-warning when rendering audio', () => {
+    it('should hide bt-warning when no route requests bluetooth', () => {
       const warning = document.getElementById('bt-warning');
       warning.style.display = 'block';
 
-      renderer.renderAudio({ availableSinks: sinks, routes: {} });
+      renderer.renderAudio({ availableSinks: sinks, routes: { video: 'hdmi' } });
 
+      expect(warning.style.display).toBe('none');
+    });
+  });
+
+  describe('Audio Routing - HDMI fallback warning (F-GMCMD-02)', () => {
+    const hdmiSink = { name: 'alsa_output.hdmi-stereo', type: 'hdmi', label: 'HDMI' };
+    const btSink = { name: 'bluez_output.AA_BB_CC_DD_EE_FF.1', type: 'bluetooth', label: 'BT Speaker (EE:FF)' };
+
+    it('SHOWS the warning when a route requests bluetooth but no bluetooth sink exists (fell back to HDMI)', () => {
+      const warning = document.getElementById('bt-warning');
+
+      renderer.renderAudio({
+        availableSinks: [hdmiSink],
+        routes: { video: 'bluetooth', music: 'hdmi', sound: 'hdmi' }
+      });
+
+      expect(warning.style.display).not.toBe('none');
+    });
+
+    it('SHOWS the warning when a bluez sink name is routed but that sink vanished', () => {
+      const warning = document.getElementById('bt-warning');
+
+      renderer.renderAudio({
+        availableSinks: [hdmiSink],
+        routes: { video: 'bluez_output.AA_BB_CC_DD_EE_FF.1' }
+      });
+
+      expect(warning.style.display).not.toBe('none');
+    });
+
+    it('hides the warning when the requested bluetooth sink is available', () => {
+      const warning = document.getElementById('bt-warning');
+      warning.style.display = 'block';
+
+      renderer.renderAudio({
+        availableSinks: [hdmiSink, btSink],
+        routes: { video: 'bluetooth' }
+      });
+
+      expect(warning.style.display).toBe('none');
+    });
+
+    it('shows the warning on the differential path too (BT sink vanished mid-show)', () => {
+      const warning = document.getElementById('bt-warning');
+
+      // First render: BT available, video routed to BT — no warning
+      renderer.renderAudio({
+        availableSinks: [hdmiSink, btSink],
+        routes: { video: 'bluetooth' }
+      });
+      expect(warning.style.display).toBe('none');
+
+      // BT speaker vanishes (routing:fallback pushes a new audio snapshot)
+      renderer.renderAudio({
+        availableSinks: [hdmiSink],
+        routes: { video: 'bluetooth' }
+      });
+      expect(warning.style.display).not.toBe('none');
+
+      // Speaker returns — warning clears
+      renderer.renderAudio({
+        availableSinks: [hdmiSink, btSink],
+        routes: { video: 'bluetooth' }
+      });
       expect(warning.style.display).toBe('none');
     });
   });

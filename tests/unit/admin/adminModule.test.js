@@ -458,6 +458,34 @@ describe('AdminModule - ES6 Exports', () => {
         expect(document.getElementById('btn-idle-loop').classList.contains('active')).toBe(true);
       });
 
+      it('video domain pushes must NOT overwrite "Scoreboard" while display mode is SCOREBOARD (F-GMCMD-06)', () => {
+        // Display mode → SCOREBOARD
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'display:mode', payload: { mode: 'SCOREBOARD', changedBy: 'gm1' } }
+        }));
+        expect(document.getElementById('now-showing-value').textContent).toBe('Scoreboard');
+
+        // A queued video completes BEHIND the scoreboard: video domain pushes
+        // null → file → null. The old second writer (VideoRenderer) repainted
+        // "Idle Loop"/the filename over "Scoreboard" with no event to fix it.
+        store.update('video', {
+          status: 'playing',
+          currentVideo: { tokenId: 't1', filename: 'behind.mp4', position: 0.1, duration: 60 },
+          queue: []
+        });
+        expect(document.getElementById('now-showing-value').textContent).toBe('Scoreboard');
+        expect(document.getElementById('now-showing-icon').textContent).toBe('🏆');
+
+        store.update('video', { status: 'idle', currentVideo: null, queue: [] });
+        expect(document.getElementById('now-showing-value').textContent).toBe('Scoreboard');
+
+        // Leaving scoreboard mode repaints from the live video state
+        mockConnection.dispatchEvent(new CustomEvent('message:received', {
+          detail: { type: 'display:mode', payload: { mode: 'IDLE_LOOP', changedBy: 'gm1' } }
+        }));
+        expect(document.getElementById('now-showing-value').textContent).toBe('Idle Loop');
+      });
+
       // video:status tests removed — now handled by VideoRenderer via DM pipeline
       // (see tests/unit/ui/renderers/VideoRenderer.test.js)
     });
