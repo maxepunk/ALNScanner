@@ -27,7 +27,7 @@ ALNScanner is the **Game Master (GM) Scanner** for "About Last Night" - a PWA fo
 - Dual operation modes: Networked (WebSocket) OR Standalone (offline)
 - Two game modes: Detective (star ratings) OR Black Market (currency)
 - Android Chrome/Edge 107+ (Vite 7 default build target `baseline-widely-available` = chrome107; Web NFC needs 89+, `structuredClone` 98+ — 107 is the binding floor). No explicit `build.target` set in vite.config.js.
-- Automated testing: Jest (1364 unit tests, 69 suites) + Playwright (E2E)
+- Automated testing: Jest (~1,370 unit tests — run `npm test` for the live count) + Playwright (E2E)
 - Automated deployment to GitHub Pages
 
 ## Development Commands
@@ -168,7 +168,7 @@ The scanner uses a 3-tier testing strategy:
 - **Purpose**: Verify individual components work correctly in isolation
 - **Run**: `npm test`
 - **Duration**: ~15-30s
-- **Coverage**: 1364 tests across 69 suites (admin, app, core, network, ui, utils, contract) — run `npm test` for the live count
+- **Coverage**: ~1,370 unit tests across the suite tree (admin, app, core, network, ui, utils, contract) — run `npm test` for the live count
 
 **L2: Scanner E2E Tests (No Orchestrator)**
 - **Location**: `tests/e2e/specs/`
@@ -352,10 +352,15 @@ ALNScanner/
 ├── src/                    # ES6 modules (source code)
 │   ├── main.js            # Entry point - orchestrates initialization
 │   ├── app/               # Application layer
-│   │   ├── app.js         # Main application controller
+│   │   ├── app.js         # Main application controller + single DI/instantiation point
 │   │   ├── adminController.js
 │   │   ├── sessionModeManager.js
-│   │   └── initializationSteps.js
+│   │   ├── initializationSteps.js
+│   │   └── domains/                # Four-domain structural split (decision C1)
+│   │       ├── gameOps.js          # GameOpsDomain (NFC/scan pipeline, team entry, transactions, nav, score interventions)
+│   │       ├── showControl.js      # ShowControlDomain (video transport + queue, display mode)
+│   │       ├── gameAdmin.js        # GameAdminDomain (session lifecycle, report download, system reset)
+│   │       └── environment.js      # EnvironmentDomain (bluetooth/audio/lighting/music boundary)
 │   ├── admin/             # Admin panel modules (Phase 2/3 + Phase 0 Environment + Phase 1 Show Control)
 │   │   ├── AdminOperations.js
 │   │   ├── AudioController.js      # Audio routing (HDMI/BT)
@@ -389,11 +394,15 @@ ALNScanner/
 │   ├── ui/                # UI management
 │   │   ├── uiManager.js
 │   │   ├── settings.js
-│   │   ├── renderers/              # Admin panel UI renderers
+│   │   ├── renderers/              # Admin panel + game-ops UI renderers
 │   │   │   ├── CueRenderer.js      # Active cues + Quick Fire grid
 │   │   │   ├── EnvironmentRenderer.js  # BT/Audio/Lighting status
-│   │   │   ├── HealthRenderer.js      # Service health dashboard (Phase 4)
-│   │   │   ├── HeldItemsRenderer.js   # Held cues/videos queue (Phase 4)
+│   │   │   ├── EvidencePickerRenderer.js  # Scoreboard-evidence "Jump to Character" picker
+│   │   │   ├── GameAdminRenderer.js   # Session status (standalone admin panel); UIManager delegation extraction (C1)
+│   │   │   ├── GameOpsRenderer.js     # Scoreboard, team details, token cards, game activity; UIManager delegation extraction (C1)
+│   │   │   ├── HealthRenderer.js      # Service health dashboard
+│   │   │   ├── HeldItemsRenderer.js   # Held cues/videos queue
+│   │   │   ├── MusicRenderer.js       # MPD playback + playlist picker + ducking display
 │   │   │   ├── SessionRenderer.js  # Session/team UI components
 │   │   │   └── VideoRenderer.js    # Video queue/now-playing display
 │   │   └── connectionWizard.js
@@ -452,10 +461,16 @@ ALNScanner/
 ### Module Responsibilities
 
 **App Layer ([src/app/](src/app/)):**
-- [app.js](src/app/app.js) - Main coordinator, NFC processing, admin actions (ES6 class)
+- [app.js](src/app/app.js) - Main coordinator and **single DI/instantiation point**; constructs the four domain objects (`new GameOpsDomain(this)`, etc.) and delegates to them. All domain I/O goes through App's collaborators (uiManager, dataManager, settings, tokenManager) so App remains the sole injection point.
 - [sessionModeManager.js](src/app/sessionModeManager.js) - Mode locking (networked/standalone)
 - [initializationSteps.js](src/app/initializationSteps.js) - 11-phase startup sequence (1A-1J)
 - [adminController.js](src/app/adminController.js) - Admin module lifecycle management
+
+**App Domains ([src/app/domains/](src/app/domains/)) — four-domain structural split (decision C1):**
+- [gameOps.js](src/app/domains/gameOps.js) - **GameOpsDomain**: NFC scanning pipeline, team entry, transaction recording, game mode toggle, scoreboard/history/team-details navigation, score/transaction GM interventions, admin score display refresh.
+- [showControl.js](src/app/domains/showControl.js) - **ShowControlDomain**: video transport (play/pause/stop/skip), video queue management, display mode control. (Cue/Sound controllers themselves live in `src/admin/`.)
+- [gameAdmin.js](src/app/domains/gameAdmin.js) - **GameAdminDomain**: session lifecycle (create/pause/resume/end), postgame report download, system reset + new session, session details view, duration formatting.
+- [environment.js](src/app/domains/environment.js) - **EnvironmentDomain**: explicit boundary for bluetooth/audio/lighting/music. No direct app-level coordination methods today — the environment controllers live in `src/admin/` and are wired via AdminController/MonitoringDisplay.
 
 **Core Layer ([src/core/](src/core/)):**
 - [scoring.js](src/core/scoring.js) - Centralized scoring config (SCORING_CONFIG) and utilities
@@ -471,9 +486,10 @@ ALNScanner/
 
 **Network Layer ([src/network/](src/network/)):**
 - [orchestratorClient.js](src/network/orchestratorClient.js) - WebSocket client (Socket.io) - **Fixed: no `global` fallback**
-- **GOTCHA**: `orchestratorClient.js` `_setupMessageHandlers()` has an explicit `messageTypes` array — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list: `sync:full`, `transaction:*`, `score:adjusted`, `scores:reset`, `session:update`, `session:overtime`, `device:connected/disconnected`, `group:completed`, `display:mode`, `gm:command:ack`, `offline:queue:processed`, `batch:ack`, `error`, `player:scan`, `cue:fired`, `cue:completed`, `cue:error`, `service:state` (sole push mechanism for all service domain state)
+- **GOTCHA**: `orchestratorClient.js` exports a module-level const `MESSAGE_TYPES` (the list `_setupMessageHandlers()` iterates) — new backend events MUST be added to this list or they silently won't arrive at the GM Scanner. Current list: `sync:full`, `transaction:result`, `transaction:new`, `transaction:deleted`, `score:adjusted`, `scores:reset`, `session:update`, `session:overtime`, `device:connected`, `device:disconnected`, `group:completed`, `display:mode`, `gm:command:ack`, `offline:queue:processed`, `batch:ack`, `error`, `player:scan`, `scoreboard:page`, `cue:fired`, `cue:completed`, `cue:error`, `service:state` (sole push mechanism for all service domain state). The const is also exported so contract tests can cross-check it against the AsyncAPI subscribe set.
 - [connectionManager.js](src/network/connectionManager.js) - Auth, connection state, retry logic
 - [networkedSession.js](src/network/networkedSession.js) - Service factory and lifecycle orchestrator
+- [messageRouters.js](src/network/messageRouters.js) - Per-event dispatch routers (`gameOpsRouter`, `gameAdminRouter`, `showControlRouter`, `sharedInfraRouter`) iterated in priority order by `NetworkedSession._messageHandler`; extracted from NetworkedSession's former monolithic switch. `gameOpsRouter` handles transaction/score/playerScan data plus `group:completed` and `scoreboard:page`; `gameAdminRouter` handles session lifecycle; `showControlRouter` covers `display:mode` (echo); `sharedInfraRouter` handles `sync:full` bulk restore, `error`, and `service:state` → StateStore.
 - [networkedQueueManager.js](src/network/networkedQueueManager.js) - Offline transaction queue
 
 **UI Layer ([src/ui/](src/ui/)):**
@@ -494,7 +510,8 @@ ALNScanner/
 - [AudioController.js](src/admin/AudioController.js) - Audio routing control (HDMI/Bluetooth via PipeWire)
 - [BluetoothController.js](src/admin/BluetoothController.js) - BT speaker scan/pair/connect/disconnect
 - [LightingController.js](src/admin/LightingController.js) - Home Assistant scene activation/refresh
-- [MusicController.js](src/admin/MusicController.js) - Local music (MPD) playback control: transports, volume, shuffle/loop, playlist load
+- [MusicController.js](src/admin/MusicController.js) - Local music (MPD) playback control: transports, `music:setVolume`, `music:setShuffle`, `music:setLoop`, `music:loadPlaylist`
+- [ScoreboardController.js](src/admin/ScoreboardController.js) - GM-driven scoreboard-evidence page navigation: sends `scoreboard:page:next`, `scoreboard:page:prev`, `scoreboard:page:owner` via `gm:command` (wired in `adminController.js`)
 
 **Utils Layer ([src/utils/](src/utils/)):**
 - [jwtUtils.js](src/utils/jwtUtils.js) - Shared JWT token validation (expiry check with 60s buffer)
@@ -707,9 +724,9 @@ socket.emit('gm:command', {
 
 ### Environment Controllers (Phase 0)
 
-Three controllers manage venue environment via `gm:command` WebSocket commands. All use `CommandSender.sendCommand()` (one-time ack listeners, no persistent state).
+Three controllers manage venue environment via `gm:command` WebSocket commands. All use the shared `sendCommand()` helper from `src/admin/utils/CommandSender.js` (one-time `gm:command:ack` listeners, no persistent state).
 
-**BluetoothController:** Scan for speakers, pair/unpair, connect/disconnect. Events: `bluetooth:device`, `bluetooth:scan`.
+**BluetoothController:** Scan for speakers, pair/unpair, connect/disconnect. State is delivered via `service:state` domain `bluetooth`; the controller emits commands only: `bluetooth:scan:start`/`bluetooth:scan:stop`, `bluetooth:pair`, `bluetooth:unpair`, `bluetooth:connect`, `bluetooth:disconnect`.
 
 **AudioController:** Route audio streams and set per-stream volume (HDMI and Bluetooth sinks). Routing dropdowns + volume sliders (video/music/sound independently controllable). Volume sliders use `_volumeValues` cache in EnvironmentRenderer to survive dropdown rebuilds (BT speaker reconnect). State delivered via `service:state` domain `audio`.
 
@@ -717,7 +734,7 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 ### Show Control (Phase 1)
 
-**CueController (`src/admin/CueController.js`):** Fire cues manually, enable/disable standing cues. Sends `cue:fire`, `cue:enable`, `cue:disable` via `gm:command`.
+**CueController (`src/admin/CueController.js`):** Fire cues manually, enable/disable standing cues, pause/resume/stop running cues, and manage held items. Sends `cue:fire`, `cue:enable`, `cue:disable`, `cue:pause`, `cue:resume`, `cue:stop`, `held:release`, `held:discard`, `held:release-all`, `held:discard-all` via `gm:command`.
 
 **SoundController (`src/admin/SoundController.js`):** Play/stop sounds. Sends `sound:play`, `sound:stop` via `gm:command`.
 
@@ -762,61 +779,26 @@ DOM-observable patterns.
 
 ### Common Debug Tasks
 
-```javascript
-// Check current mode
-console.log(Settings.mode);  // 'detective' or 'blackmarket'
+> **OBSOLETE — do not use.** The pre-migration console snippets that referenced
+> bare globals (`Settings`, `DataManager`, `TokenManager`, `UIManager`) and
+> `window.*` handles (`window.connectionManager`, `window.queueManager`,
+> `window.sessionModeManager`) **no longer work** — those symbols are ES6
+> module-scoped and are NOT exposed on `window` (see the Console Access note
+> above). Evaluating them at the DevTools console returns `undefined` /
+> `ReferenceError`.
+>
+> Instead, for runtime inspection use:
+> - the in-app debug view (`debug-view`),
+> - DevTools breakpoints inside the relevant module, or
+> - the E2E page objects' DOM-observable patterns (e.g. `document.querySelector('.screen.active')?.id`).
 
-// View all transactions
-console.table(DataManager.transactions);
+The only console snippets that still work are DOM- and `localStorage`-based
+(they touch the browser environment, not module internals):
 
-// Check token database
-console.log(TokenManager.database);
-console.log(Object.keys(TokenManager.database).length);
-
-// Test token lookup
-TokenManager.findToken('a1b2c3d4');
-
-// View scanned tokens registry
-console.log([...DataManager.scannedTokens]);
-
-// Force UI update
-UIManager.updateSessionStats();
-
-// Check connection status (networked mode)
-console.log(window.connectionManager?.isConnected);
-console.log(window.connectionManager?.client?.socket?.connected);
-
-// View pending queue
-console.log(window.queueManager?.getStatus());
-
-// Calculate team score
-DataManager.calculateTeamScoreWithBonuses('001');
-```
-
-### Frontend-Specific Debugging
-
-**UI Not Updating:**
+**Active-screen / DOM inspection (always available):**
 ```javascript
 // Check active screen
 document.querySelector('.screen.active')?.id
-
-// Force screen transition
-UIManager.showScreen('teamEntry')
-
-// Verify DataManager initialized
-console.log(DataManager?.transactions?.length)
-
-// Check mode lock
-window.sessionModeManager?.locked
-window.sessionModeManager?.mode
-```
-
-**WebSocket Issues:**
-```javascript
-// Monitor all WebSocket events
-window.connectionManager?.client?.socket.onAny((event, data) => {
-  console.log('WS Event:', event, data);
-});
 ```
 
 **LocalStorage Debugging:**

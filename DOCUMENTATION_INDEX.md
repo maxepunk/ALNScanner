@@ -62,7 +62,7 @@ src/
 ### Tests
 ```
 tests/
-├── unit/              # Jest unit tests (759 tests)
+├── unit/              # Jest unit tests (~1,370 unit tests — run `npm test` for the live count)
 └── e2e/               # Playwright E2E tests
 ```
 

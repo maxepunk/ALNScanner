@@ -53,7 +53,7 @@ Teams work as investigators collecting memory tokens and tracking star ratings. 
 High-stakes competitive mode where memories have monetary value. Teams compete for the highest score through strategic token collection and group completion bonuses.
 
 - **Scoring**: Currency-based with multipliers
-- **Base Values**: $100 - $10,000 per token
+- **Base Values**: $10,000-$150,000 per token (per star rating)
 - **Type Multipliers**: 1x - 5x based on memory type
 - **Group Bonuses**: 2x - 20x for complete sets
 - **Features**: Exclusive scoreboard and detailed profit analytics
@@ -61,8 +61,8 @@ High-stakes competitive mode where memories have monetary value. Teams compete f
 ## 🛠 Technology Stack
 
 - **Frontend**: Vanilla JavaScript (ES6+ Modules)
-- **Build System**: Vite 5.x with hot module reload
-- **Testing**: Jest (598 unit tests) + Playwright (E2E)
+- **Build System**: Vite 7.x with hot module reload
+- **Testing**: Jest unit tests + Playwright (E2E) — ~1,370 unit tests (run npm test for the live count)
 - **Styling**: Custom CSS with responsive design
 - **NFC**: Web NFC API
 - **Storage**: localStorage for persistence
@@ -215,7 +215,9 @@ Groups with multiple tokens offer completion bonuses:
 ### Memory Type Multipliers
 Default multipliers for Black Market mode:
 - **Personal**: 1x
+- **Mention**: 3x
 - **Business**: 3x
+- **Party**: 5x
 - **Technical**: 5x
 - **Unknown**: 0x (no value)
 
@@ -283,13 +285,13 @@ The scanner uses a 3-tier testing strategy:
 
 **L1: Unit Tests (Jest)**
 ```bash
-npm test                    # Run all 598 unit tests (~15-30s)
+npm test                    # Run all unit tests (~15-30s)
 npm test -- --coverage      # With coverage report
 npm test -- dataManager     # Run specific test suite
 ```
 
 - **Location**: `tests/unit/`
-- **Coverage**: 598 tests across all modules
+- **Coverage**: ~1,370 unit tests (run npm test for the live count) across all modules
 - **Scope**: Individual component testing with mocks
 
 **L2: Scanner E2E Tests (Playwright)**
@@ -324,7 +326,7 @@ This script performs 8 validation checks:
 1. Dependencies installed
 2. Critical files present
 3. Vite HTTPS plugin configured
-4. All 598 unit tests passing
+4. All unit tests passing
 5. Production build succeeds
 6. Build artifacts verified
 7. Bundle size check (<10MB)
@@ -410,7 +412,7 @@ We welcome contributions! Please follow these guidelines:
 - Maintain modular structure in `src/` directory
 
 ### Testing Requirements
-- All unit tests must pass (598/598)
+- All unit tests must pass
 - Add tests for new features
 - Run E2E tests for UI changes: `npm run test:e2e`
 - Verify both game modes (Detective + Black Market)
@@ -486,7 +488,7 @@ python3 sync.py --deploy
 3. **GitHub Pages deployment** - Optional `--deploy` flag publishes to live site
 
 ### Token Management Details
-See [MAINTENANCE.md](MAINTENANCE.md) for detailed synchronization instructions and [SUBMODULE_INFO.md](SUBMODULE_INFO.md) for token database structure.
+See [MAINTENANCE.md](MAINTENANCE.md) for detailed synchronization instructions and token database structure.
 
 ## 📄 License
 
