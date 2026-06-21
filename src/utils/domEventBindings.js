@@ -131,9 +131,25 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
         safeAdminAction(adminController.getModule('adminOperations').checkService(serviceId), 'serviceCheck');
         break;
       }
-      case 'musicPlay':
-        safeAdminAction(adminController.getModule('musicController').play(), 'musicPlay');
+      case 'musicPlay': {
+        // Smart Play: the playlist picker only loads on a <select> 'change'
+        // event, which a single-playlist config can never fire (the lone
+        // <option> is auto-selected, so there is nothing to change to). ▶ must
+        // therefore be able to start the selected playlist from a cold queue.
+        // Resume when a playlist is already loaded; otherwise load+play whatever
+        // the picker currently has selected.
+        const musicController = adminController.getModule('musicController');
+        const musicState = app.stateStore?.get('music') || null;
+        const playlistLoaded = !!(musicState && musicState.playlist && musicState.playlist.id);
+        const picker = document.querySelector('.music__playlist-picker');
+        const selectedPlaylistId = picker ? picker.value : '';
+        if (!playlistLoaded && selectedPlaylistId) {
+          safeAdminAction(musicController.loadPlaylist(selectedPlaylistId), 'musicPlay');
+        } else {
+          safeAdminAction(musicController.play(), 'musicPlay');
+        }
         break;
+      }
       case 'musicPause':
         safeAdminAction(adminController.getModule('musicController').pause(), 'musicPause');
         break;

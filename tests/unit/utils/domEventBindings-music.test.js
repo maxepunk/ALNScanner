@@ -29,10 +29,16 @@ describe('domEventBindings - music actions', () => {
     getModule: jest.fn((name) => (name === 'musicController' ? mockMusicController : {})),
   };
 
+  // Smart Play reads the current music domain state from the StateStore to
+  // decide whether to resume (a playlist is already loaded) or load+play the
+  // selected playlist (cold/empty queue).
+  const mockStateStore = { get: jest.fn(() => null) };
+
   const mockApp = {
     networkedSession: {
       getService: jest.fn(() => mockAdminController),
     },
+    stateStore: mockStateStore,
   };
 
   const mockDebug = { log: jest.fn() };
@@ -46,6 +52,8 @@ describe('domEventBindings - music actions', () => {
     jest.clearAllMocks();
     mockAdminController.initialized = true;
     mockApp.networkedSession = { getService: jest.fn(() => mockAdminController) };
+    mockApp.stateStore = mockStateStore;
+    mockStateStore.get.mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -167,6 +175,54 @@ describe('domEventBindings - music actions', () => {
     sel.value = '';
     document.body.appendChild(sel);
     changeAction(sel);
+    expect(mockMusicController.loadPlaylist).not.toHaveBeenCalled();
+  });
+
+  // ── Smart Play ──────────────────────────────────────────────────────────
+  // The playlist picker is a <select> whose load fires only on a 'change'
+  // event. With a single playlist the lone <option> is auto-selected, so a
+  // 'change' can never fire and the playlist is unreachable. ▶ Play must
+  // therefore start the selected playlist from a cold queue, and resume when
+  // a playlist is already loaded.
+  function addPlaylistPicker(value) {
+    const sel = document.createElement('select');
+    sel.className = 'music__playlist-picker';
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = value;
+    sel.appendChild(opt);
+    sel.value = value;
+    document.body.appendChild(sel);
+    return sel;
+  }
+
+  function addPlayButton() {
+    const btn = document.createElement('button');
+    btn.dataset.action = 'admin.musicPlay';
+    document.body.appendChild(btn);
+    return btn;
+  }
+
+  it('musicPlay loads the selected playlist when nothing is loaded yet', () => {
+    mockStateStore.get.mockReturnValue({ playlist: null, playlists: [{ id: 'all-tracks', name: 'All Tracks' }] });
+    addPlaylistPicker('all-tracks');
+    clickAction(addPlayButton());
+    expect(mockMusicController.loadPlaylist).toHaveBeenCalledWith('all-tracks');
+    expect(mockMusicController.play).not.toHaveBeenCalled();
+  });
+
+  it('musicPlay resumes (does not reload) when a playlist is already loaded', () => {
+    mockStateStore.get.mockReturnValue({ playlist: { id: 'all-tracks' }, playlists: [{ id: 'all-tracks' }] });
+    addPlaylistPicker('all-tracks');
+    clickAction(addPlayButton());
+    expect(mockMusicController.play).toHaveBeenCalled();
+    expect(mockMusicController.loadPlaylist).not.toHaveBeenCalled();
+  });
+
+  it('musicPlay falls back to play() when there is no playlist available to load', () => {
+    mockStateStore.get.mockReturnValue({ playlist: null, playlists: [] });
+    clickAction(addPlayButton());
+    expect(mockMusicController.play).toHaveBeenCalled();
     expect(mockMusicController.loadPlaylist).not.toHaveBeenCalled();
   });
 });
