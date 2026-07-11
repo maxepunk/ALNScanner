@@ -110,6 +110,7 @@ jest.mock('../../src/app/initializationSteps.js', () => ({
     detectNFCSupport: jest.fn(() => Promise.resolve(false)),
     loadTokenDatabase: jest.fn(),
     applyURLModeOverride: jest.fn(),
+    syncModeDisplay: jest.fn(),
     registerServiceWorker: jest.fn(),
     determineInitialScreen: jest.fn(() => ({ target: 'teamEntry', reason: 'new' })),
     validateAndDetermineInitialScreen: jest.fn(() => Promise.resolve({
@@ -304,6 +305,7 @@ describe('App', () => {
       expect(InitializationSteps.detectNFCSupport).toHaveBeenCalled();
       expect(InitializationSteps.loadTokenDatabase).toHaveBeenCalled();
       expect(InitializationSteps.applyURLModeOverride).toHaveBeenCalled();
+      expect(InitializationSteps.syncModeDisplay).toHaveBeenCalled();
       expect(InitializationSteps.registerServiceWorker).toHaveBeenCalled();
       // Phase 4.1: Now uses validateAndDetermineInitialScreen for full state validation
       expect(InitializationSteps.validateAndDetermineInitialScreen).toHaveBeenCalled();
@@ -344,6 +346,21 @@ describe('App', () => {
       await app.init();
 
       expect(app.nfcSupported).toBe(true);
+    });
+
+    it('should repaint the mode display after the URL mode override (stale-pill regression)', async () => {
+      // The pill is hardcoded to Detective in index.html and the manual
+      // toggle used to be the ONLY repaint path — init must sync the display
+      // to the effective mode, and must do so AFTER the URL override has had
+      // its chance to change it.
+      const InitializationSteps = require('../../src/app/initializationSteps.js').default;
+
+      await app.init();
+
+      expect(InitializationSteps.syncModeDisplay).toHaveBeenCalledWith(app.settings, app.uiManager);
+      const overrideOrder = InitializationSteps.applyURLModeOverride.mock.invocationCallOrder[0];
+      const syncOrder = InitializationSteps.syncModeDisplay.mock.invocationCallOrder[0];
+      expect(syncOrder).toBeGreaterThan(overrideOrder);
     });
   });
 

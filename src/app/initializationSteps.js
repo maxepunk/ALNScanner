@@ -173,6 +173,23 @@ export function applyURLModeOverride(locationSearch, settings) {
 }
 
 /**
+ * Sync the mode display to the effective settings (Phase 1B follow-up)
+ *
+ * index.html hardcodes the Detective pill and hides the scoreboard button;
+ * the only other caller of updateModeDisplay is the manual toggle. Without
+ * this step, any load where the persisted (or URL-overridden) mode is
+ * blackmarket scores correctly while DISPLAYING "Detective Mode" until the
+ * GM happens to click the toggle.
+ *
+ * @param {Object} settings - Settings object (effective mode source of truth)
+ * @param {Object} uiManager - UIManager instance
+ */
+export function syncModeDisplay(settings, uiManager) {
+  uiManager.updateModeDisplay(settings.mode);
+  Debug.log(`Mode display synced to effective mode: ${settings.mode}`);
+}
+
+/**
  * Determine initial screen based on connection restoration logic
  * Pure function - no side effects, only decision logic
  *
@@ -357,6 +374,7 @@ export default {
   registerServiceWorker,
   loadTokenDatabase,
   applyURLModeOverride,
+  syncModeDisplay,
   determineInitialScreen,
   validateAndDetermineInitialScreen,
   applyInitialScreenDecision,

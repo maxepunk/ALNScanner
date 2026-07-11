@@ -121,6 +121,12 @@ class App {
     // Apply URL parameter mode override (Phase 1B)
     this.initializationSteps.applyURLModeOverride(window.location.search, this.settings);
 
+    // Repaint the mode indicator from the restored/overridden settings
+    // (Phase 1B follow-up). The pill defaults to Detective in index.html and
+    // is otherwise only repainted by the manual toggle — skipping this leaves
+    // a persisted blackmarket station displaying "Detective Mode".
+    this.initializationSteps.syncModeDisplay(this.settings, this.uiManager);
+
     // Register service worker for PWA functionality (Phase 1J)
     await this.initializationSteps.registerServiceWorker(navigator, this.uiManager);
 
