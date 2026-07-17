@@ -39,9 +39,14 @@ const CACHE_PREFIX = 'aln-pack-';
 const FETCH_TIMEOUT_MS = 8000;
 
 function fetchTimeoutSignal() {
-    return (typeof AbortSignal !== 'undefined' && AbortSignal.timeout)
-        ? AbortSignal.timeout(FETCH_TIMEOUT_MS)
-        : undefined;
+    if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+        return AbortSignal.timeout(FETCH_TIMEOUT_MS);
+    }
+    // Chrome 107 floor ships AbortSignal.timeout (since 103) — this path
+    // should be unreachable. If it fires, the no-hang startup guarantee is
+    // OFF, and that must never be silent.
+    Debug.log('packLoader: AbortSignal.timeout unavailable — fetch timeouts DISABLED (hung server can stall startup)', true);
+    return undefined;
 }
 // v1 scope: the rules-bearing files the GM scanner consumes at runtime.
 // Assets stay on their existing channels.
@@ -235,6 +240,13 @@ export class PackLoader {
         } catch (err) {
             Debug.log(`packLoader: staged refresh aborted — ${err.message}`, true);
             try {
+                // ACCEPTED RACE: Promise.all rejects on the FIRST failure;
+                // sibling fetches still in flight may staging.put() after
+                // this delete, re-creating the cache. Harmless — the pointer
+                // never references it — and the next successful refresh GCs
+                // it by prefix (_deleteOtherPackCaches). Cancelling siblings
+                // would need AbortSignal.any (Chrome 116+, above our 107
+                // floor), so the lingering-cache window is the cheaper trade.
                 await this._caches.delete(stagingName);
             } catch { /* best-effort discard */ }
             return null;
