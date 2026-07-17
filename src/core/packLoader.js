@@ -29,6 +29,7 @@
  */
 
 import Debug from '../utils/debug.js';
+import { isOrchestratorServed } from '../utils/config.js';
 
 const POINTER_KEY = 'aln_pack_active';
 const CACHE_PREFIX = 'aln-pack-';
@@ -91,7 +92,7 @@ export class PackLoader {
      * (GitHub Pages, Vite dev) serves the pack as same-origin static files.
      */
     channel() {
-        if (this._pathname === '/gm-scanner' || this._pathname.startsWith('/gm-scanner/')) {
+        if (isOrchestratorServed(this._pathname)) {
             return {
                 manifestUrl: '/api/pack/manifest',
                 fileUrl: (p) => `/api/pack/files/${p}`,
@@ -188,7 +189,12 @@ export class PackLoader {
         try {
             const staging = await this._caches.open(stagingName);
             const content = {};
-            for (const file of this._rulesFiles(manifest)) {
+            // Files are independent: fetch + verify + stage concurrently so
+            // per-fetch timeouts don't STACK on the fail-hard startup path
+            // (the rules set grows in the A3 strings/cues slices). The ONE
+            // pointer flip below still waits for every file — Promise.all
+            // rejects into the shared catch on any failure, atomicity intact.
+            await Promise.all(this._rulesFiles(manifest).map(async (file) => {
                 const res = await this._fetch(ch.fileUrl(file.path), { cache: 'no-store', signal: fetchTimeoutSignal() });
                 if (!res.ok) throw new Error(`${file.path}: HTTP ${res.status}`);
                 const buf = await res.arrayBuffer();
@@ -202,7 +208,7 @@ export class PackLoader {
                 await staging.put(`/${file.path}`, new Response(text, {
                     headers: { 'content-type': 'application/json' },
                 }));
-            }
+            }));
             // A manifest that declares no canonical tokens.json (malformed,
             // mid-publish, or a role/path drift) must NEVER activate: the
             // pointer flip below GCs the last-known-good pack cache, so a
