@@ -630,7 +630,7 @@ describe('renderPackInfo (Phase 3 A2 staleness visibility)', () => {
       version: '1.2.0',
       contentHash: `sha256:${'a'.repeat(64)}`,
       source: 'network',
-    }));
+    }), 'pack');
 
     expect(document.getElementById('packInfoDisplay').textContent)
       .toBe('1.2.0 (aaaaaaaa) · network');
@@ -642,11 +642,27 @@ describe('renderPackInfo (Phase 3 A2 staleness visibility)', () => {
     document.body.innerHTML = PACK_DOM;
     renderPackInfo(stubLoader({
       packId: null, version: null, contentHash: null, source: 'bundled',
-    }));
+    }), 'baked');
 
     expect(document.getElementById('packInfoDisplay').textContent)
-      .toBe('unknown (no-hash) · bundled');
+      .toBe('unknown (no-hash) · bundled · scoring: baked');
     expect(document.getElementById('packBundledBadge').style.display).toBe('');
+  });
+
+  it('flags baked scoring even when the pack itself came from the network (PR #12 review)', () => {
+    // A network-sourced pack that ships no game.json still runs the L2
+    // scoring shim — the operator must see that on the pack line, not
+    // only in the console warn.
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader({
+      packId: 'about-last-night',
+      version: '1.2.0',
+      contentHash: `sha256:${'b'.repeat(64)}`,
+      source: 'network',
+    }), 'baked');
+
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('1.2.0 (bbbbbbbb) · network · scoring: baked');
   });
 
   it('is a no-op before any pack load (null info)', () => {

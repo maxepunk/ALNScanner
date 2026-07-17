@@ -22,6 +22,7 @@ import Debug from '../utils/debug.js';
 import { isTokenValid } from '../utils/jwtUtils.js';
 import stateValidationService from '../services/StateValidationService.js';
 import packLoader from '../core/packLoader.js';
+import { SCORING_SOURCE } from '../core/scoring.js';
 
 /**
  * Initialize UIManager
@@ -158,7 +159,7 @@ export async function loadTokenDatabase(tokenManager, uiManager) {
  * when running from the build-time bundle (never refreshed). Null-guarded
  * on both pack state and DOM (headless harnesses have neither).
  */
-export function renderPackInfo(loader = packLoader) {
+export function renderPackInfo(loader = packLoader, scoringSource = undefined) {
   const info = loader.getActivePack();
   if (!info || typeof document === 'undefined') return;
   const line = document.getElementById('packInfoLine');
@@ -168,7 +169,12 @@ export function renderPackInfo(loader = packLoader) {
   const hashPrefix = info.contentHash
     ? info.contentHash.replace('sha256:', '').slice(0, 8)
     : 'no-hash';
-  if (display) display.textContent = `${info.version || 'unknown'} (${hashPrefix}) · ${info.source}`;
+  // Scoring provenance rides the same line: a network-sourced pack can
+  // still be scoring on the baked shim (pack ships no game.json) — the
+  // operator should see that here, not only in the console warn.
+  const source = scoringSource !== undefined ? scoringSource : SCORING_SOURCE;
+  const scoringNote = source === 'baked' ? ' · scoring: baked' : '';
+  if (display) display.textContent = `${info.version || 'unknown'} (${hashPrefix}) · ${info.source}${scoringNote}`;
   if (badge) badge.style.display = info.source === 'bundled' ? '' : 'none';
   line.style.display = '';
 }

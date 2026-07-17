@@ -59,4 +59,36 @@ describe('Shared Scoring Config (Frontend)', () => {
     expect(result).toBe(SCORING_CONFIG.BASE_VALUES[3] * SCORING_CONFIG.TYPE_MULTIPLIERS['Technical']);
     expect(result).toBe(250000);
   });
+
+  describe('applyPackScoring guard (PR #12 review — empty tables must not wipe baked values)', () => {
+    it('rejects an EMPTY-but-present baseValues object and keeps baked values intact', async () => {
+      const { applyPackScoring, SCORING_CONFIG } = await import('../../../src/core/scoring.js');
+      const bakedBase = { ...SCORING_CONFIG.BASE_VALUES };
+      const bakedMult = { ...SCORING_CONFIG.TYPE_MULTIPLIERS };
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // {} is truthy — a falsy-only guard would pass it, delete every
+      // baked value, repopulate nothing, and every token scores $0
+      // silently for the rest of the session.
+      const applied = applyPackScoring({ baseValues: {}, typeMultipliers: { Personal: 1 } });
+
+      expect(applied).toBe(false);
+      expect(SCORING_CONFIG.BASE_VALUES).toEqual(bakedBase);
+      expect(SCORING_CONFIG.TYPE_MULTIPLIERS).toEqual(bakedMult);
+      expect(warnSpy.mock.calls.some(([m]) => String(m).includes('LEGACY SHIM ACTIVE'))).toBe(true);
+      warnSpy.mockRestore();
+    });
+
+    it('rejects an empty typeMultipliers object the same way', async () => {
+      const { applyPackScoring, SCORING_CONFIG } = await import('../../../src/core/scoring.js');
+      const bakedBase = { ...SCORING_CONFIG.BASE_VALUES };
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const applied = applyPackScoring({ baseValues: { 1: 10000 }, typeMultipliers: {} });
+
+      expect(applied).toBe(false);
+      expect(SCORING_CONFIG.BASE_VALUES).toEqual(bakedBase);
+      warnSpy.mockRestore();
+    });
+  });
 });

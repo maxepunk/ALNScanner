@@ -48,11 +48,17 @@ export let SCORING_SOURCE = 'baked';
  * @returns {boolean} true when pack scoring was applied
  */
 export function applyPackScoring(scoring) {
-    if (!scoring?.baseValues || !scoring?.typeMultipliers) {
+    // Non-empty required on BOTH tables: an empty-but-present object would
+    // pass a falsy-only guard, wipe the baked values below, and repopulate
+    // nothing — every token silently scoring $0 for the session (same bug
+    // class as packLoader's empty-token-map check, one layer up).
+    if (!scoring?.baseValues || !scoring?.typeMultipliers
+        || Object.keys(scoring.baseValues).length === 0
+        || Object.keys(scoring.typeMultipliers).length === 0) {
         // LEGACY SHIM ACTIVE — loud by design (ledger L2 tripwire): scoring
         // is running on values frozen at BUILD time; a pack publish with new
         // values will NOT reach this device until the pack ships game.json.
-        console.warn('[scoring] LEGACY SHIM ACTIVE: pack has no game.json scoring block — using build-time baked values (F-TOOL-05 exposure)');
+        console.warn('[scoring] LEGACY SHIM ACTIVE: pack has no usable game.json scoring block — using build-time baked values (F-TOOL-05 exposure)');
         SCORING_SOURCE = 'baked';
         return false;
     }
