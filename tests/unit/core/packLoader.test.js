@@ -247,6 +247,66 @@ describe('PackLoader', () => {
       expect(JSON.parse(storage.getItem('aln_pack_active')).contentHash).toBe(HASH_A); // pointer untouched
       expect(await caches.keys()).toEqual([`aln-pack-${HASH_A}`]); // staging discarded
     });
+
+    it('a sha1-valid but EMPTY tokens.json never activates — shape checked before the pointer flip (PR #12 review)', async () => {
+      // "{}" verifies fine against its manifest sha1 but is not a usable
+      // token map. Without the shape check in staging, the pointer flipped
+      // and _activate then threw OUT of loadPack, skipping every fallback.
+      const caches = makeCaches();
+      const storage = makeStorage({
+        aln_pack_active: JSON.stringify({ packId: 'about-last-night', version: '1.0.0', contentHash: HASH_A }),
+      });
+      const cache = await caches.open(`aln-pack-${HASH_A}`);
+      await cache.put('/tokens.json', new Response(JSON.stringify(TOKENS)));
+
+      const EMPTY = {};
+      const emptyTokenFiles = [
+        { path: 'game.json', role: 'game', sha1: sha1Of(GAME), size: 1 },
+        { path: 'tokens.json', role: 'tokens', sha1: sha1Of(EMPTY), size: 1 },
+      ];
+      const { loader } = makeLoader({
+        caches,
+        storage,
+        routes: {
+          'pack-manifest.json': jsonResponse(manifestFor(HASH_B, emptyTokenFiles)),
+          'game.json': jsonResponse(GAME),
+          'tokens.json': jsonResponse(EMPTY),
+        },
+      });
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.contentHash).toBe(HASH_A); // still the OLD pack
+      expect(pack.info.source).toBe('cache');
+      expect(JSON.parse(storage.getItem('aln_pack_active')).contentHash).toBe(HASH_A);
+      expect(await caches.keys()).toEqual([`aln-pack-${HASH_A}`]);
+    });
+
+    it('a corrupted cached pack falls through to bundled instead of crashing the ladder (PR #12 review)', async () => {
+      // Tier 2 holding a non-map (partial/corrupted Cache Storage write)
+      // must read as "no cached pack", not throw past the bundled tier.
+      const caches = makeCaches();
+      const storage = makeStorage({
+        aln_pack_active: JSON.stringify({ packId: 'about-last-night', version: '1.0.0', contentHash: HASH_A }),
+      });
+      const cache = await caches.open(`aln-pack-${HASH_A}`);
+      await cache.put('/tokens.json', new Response(JSON.stringify([])));
+
+      const { loader } = makeLoader({
+        caches,
+        storage,
+        routes: {
+          // manifest 404s (offline API) — bundled dist-root files present
+          'tokens.json': jsonResponse(TOKENS),
+          'game.json': jsonResponse(GAME),
+        },
+      });
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('bundled');
+      expect(pack.tokens).toEqual(TOKENS);
+    });
   });
 
   describe('cache tier (§2.2)', () => {

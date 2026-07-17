@@ -56,6 +56,23 @@ describe('TokenManager - ES6 Module', () => {
       expect(TokenManager.groupInventory).toBeDefined();
     });
 
+    const pristineScoring = (() => {
+      const { SCORING_CONFIG } = require('../../../src/core/scoring.js');
+      return {
+        BASE_VALUES: { ...SCORING_CONFIG.BASE_VALUES },
+        TYPE_MULTIPLIERS: { ...SCORING_CONFIG.TYPE_MULTIPLIERS },
+      };
+    })();
+    afterEach(() => {
+      // applyPackScoring mutates the exported singleton in place — undo it
+      // so tests can't leak pack values into each other.
+      const { SCORING_CONFIG } = require('../../../src/core/scoring.js');
+      for (const key of Object.keys(SCORING_CONFIG.BASE_VALUES)) delete SCORING_CONFIG.BASE_VALUES[key];
+      Object.assign(SCORING_CONFIG.BASE_VALUES, pristineScoring.BASE_VALUES);
+      for (const key of Object.keys(SCORING_CONFIG.TYPE_MULTIPLIERS)) delete SCORING_CONFIG.TYPE_MULTIPLIERS[key];
+      Object.assign(SCORING_CONFIG.TYPE_MULTIPLIERS, pristineScoring.TYPE_MULTIPLIERS);
+    });
+
     it('applies runtime pack scoring from game.json (the F-TOOL-05 kill)', async () => {
       const { SCORING_CONFIG } = require('../../../src/core/scoring.js');
       mockPack({
@@ -85,6 +102,9 @@ describe('TokenManager - ES6 Module', () => {
       await TokenManager.loadDatabase();
 
       expect(warnSpy.mock.calls.some(([m]) => String(m).includes('LEGACY SHIM ACTIVE'))).toBe(true);
+      const { SCORING_CONFIG } = require('../../../src/core/scoring.js');
+      expect(SCORING_CONFIG.BASE_VALUES).toEqual(pristineScoring.BASE_VALUES);
+      expect(SCORING_CONFIG.TYPE_MULTIPLIERS).toEqual(pristineScoring.TYPE_MULTIPLIERS);
       warnSpy.mockRestore();
     });
 

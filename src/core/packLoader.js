@@ -158,6 +158,11 @@ export class PackLoader {
 
     // ── internals ───────────────────────────────────────────────────────
 
+    _isUsableTokenMap(tokens) {
+        return !!tokens && typeof tokens === 'object'
+            && !Array.isArray(tokens) && Object.keys(tokens).length > 0;
+    }
+
     _readPointer() {
         try {
             const raw = this._storage?.getItem(POINTER_KEY);
@@ -203,8 +208,8 @@ export class PackLoader {
             // pointer flip below GCs the last-known-good pack cache, so a
             // "successful" empty staging would strand the device on the
             // stale bundled tier. Treat it exactly like an HTTP/sha1 failure.
-            if (!content['tokens.json']) {
-                throw new Error('manifest declares no tokens.json rules file');
+            if (!this._isUsableTokenMap(content['tokens.json'])) {
+                throw new Error('canonical tokens.json is missing, empty, or not a token map');
             }
 
             // Also persist the manifest itself for cache-tier identity.
@@ -249,6 +254,9 @@ export class PackLoader {
             const tokensRes = await cache.match('/tokens.json');
             if (!tokensRes) return null;
             const content = { 'tokens.json': await tokensRes.json() };
+            // Corrupted/invalid cached pack = no cached pack: fall through
+            // the ladder rather than letting _activate throw mid-tier.
+            if (!this._isUsableTokenMap(content['tokens.json'])) return null;
             const gameRes = await cache.match('/game.json');
             if (gameRes) content['game.json'] = await gameRes.json();
             return content;
@@ -298,7 +306,10 @@ export class PackLoader {
         const tokens = content['tokens.json'];
         // A 200 returning {} or a non-object would otherwise set an
         // empty/invalid database silently (pre-pack HTTP hardening kept).
-        if (!tokens || typeof tokens !== 'object' || Array.isArray(tokens) || Object.keys(tokens).length === 0) {
+        // Tier 1/2 inputs are pre-validated (staging + cache-read share
+        // this predicate), so in practice this throw fires only at the
+        // bundled tier — where there is nothing left to fall back to.
+        if (!this._isUsableTokenMap(tokens)) {
             throw new Error('Pack token database is empty or not a token map');
         }
         this._active = {
