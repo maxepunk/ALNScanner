@@ -196,6 +196,26 @@ describe('PackLoader', () => {
       expect(await caches.keys()).toEqual([`aln-pack-${HASH_A}`]); // staging discarded
     });
 
+    it('every network fetch carries a timeout signal — a hung server cannot stall fail-hard startup (PR #12 review)', async () => {
+      const caches = makeCaches();
+      const { loader, fetchFn } = makeLoader({
+        caches,
+        storage: makeStorage(),
+        routes: {
+          'pack-manifest.json': jsonResponse(manifestFor(HASH_B, RULES_FILES)),
+          'game.json': jsonResponse(GAME),
+          'tokens.json': jsonResponse(TOKENS),
+        },
+      });
+
+      await loader.loadPack();
+
+      expect(fetchFn.mock.calls.length).toBeGreaterThan(0);
+      for (const [, opts] of fetchFn.mock.calls) {
+        expect(opts?.signal).toBeInstanceOf(AbortSignal);
+      }
+    });
+
     it('a manifest with no tokens.json rules file never activates — last-known-good pack survives (PR #12 review)', async () => {
       // Without the pre-pointer-write assert, an incomplete manifest would
       // "activate" an empty staging cache, GC the good pack, and strand the

@@ -76,6 +76,30 @@ describe('OrchestratorClient - Dumb Pipe', () => {
       );
     });
 
+    it('handshake carries the loaded pack contentHash (A2 mismatch detection end-to-end)', async () => {
+      const { packLoader } = await import('../../../src/core/packLoader.js');
+      const spy = jest.spyOn(packLoader, 'getActivePack').mockReturnValue({
+        packId: 'about-last-night',
+        version: '1.2.0',
+        contentHash: 'sha256:feedface',
+        source: 'network',
+      });
+      try {
+        const connectPromise = client.connect('fake.jwt.token', { deviceId: 'TEST_GM', deviceType: 'gm' });
+        mockSocket._simulateConnect();
+        await connectPromise;
+
+        expect(global.io).toHaveBeenCalledWith(
+          'https://localhost:3000',
+          expect.objectContaining({
+            auth: expect.objectContaining({ packHash: 'sha256:feedface' }),
+          })
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     it('should emit socket:connected event when connection succeeds', async () => {
       const connectHandler = jest.fn();
       client.addEventListener('socket:connected', connectHandler);

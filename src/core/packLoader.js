@@ -32,6 +32,16 @@ import Debug from '../utils/debug.js';
 
 const POINTER_KEY = 'aln_pack_active';
 const CACHE_PREFIX = 'aln-pack-';
+// loadPack() runs on the fail-hard startup path (Phase 1A). A server that
+// accepts the connection but never responds must not hang the loading
+// screen — every fetch times out and falls through the tier ladder.
+const FETCH_TIMEOUT_MS = 8000;
+
+function fetchTimeoutSignal() {
+    return (typeof AbortSignal !== 'undefined' && AbortSignal.timeout)
+        ? AbortSignal.timeout(FETCH_TIMEOUT_MS)
+        : undefined;
+}
 // v1 scope: the rules-bearing files the GM scanner consumes at runtime.
 // Assets stay on their existing channels.
 const RULES_ROLES = new Set(['game', 'tokens']);
@@ -107,7 +117,7 @@ export class PackLoader {
         // ── Tier 1: NETWORK ─────────────────────────────────────────────
         let manifest = null;
         try {
-            const res = await this._fetch(ch.manifestUrl, { cache: 'no-store' });
+            const res = await this._fetch(ch.manifestUrl, { cache: 'no-store', signal: fetchTimeoutSignal() });
             if (res.ok && (res.headers?.get?.('content-type') || '').includes('application/json')) {
                 manifest = await res.json();
             }
@@ -174,7 +184,7 @@ export class PackLoader {
             const staging = await this._caches.open(stagingName);
             const content = {};
             for (const file of this._rulesFiles(manifest)) {
-                const res = await this._fetch(ch.fileUrl(file.path), { cache: 'no-store' });
+                const res = await this._fetch(ch.fileUrl(file.path), { cache: 'no-store', signal: fetchTimeoutSignal() });
                 if (!res.ok) throw new Error(`${file.path}: HTTP ${res.status}`);
                 const buf = await res.arrayBuffer();
                 const sha1 = await this._sha1(buf);
@@ -258,6 +268,9 @@ export class PackLoader {
             throw new Error('Failed to load tokens.json from root or data/');
         }
         const game = await this._fetchBundledJson('game.json', 'data/game.json');
+        // Deliberate: when Tier 1 had no manifest this re-fetch 404s again
+        // (≤2 extra requests on a pre-pack deployment). Accepted — bundled
+        // identity display is worth it, and any published manifest ends it.
         const manifest = await this._fetchBundledJson('pack-manifest.json', 'data/pack-manifest.json');
         return {
             pack: { 'tokens.json': tokens, ...(game ? { 'game.json': game } : {}) },
@@ -270,7 +283,7 @@ export class PackLoader {
     async _fetchBundledJson(primary, fallback) {
         for (const url of [primary, fallback]) {
             try {
-                const res = await this._fetch(url);
+                const res = await this._fetch(url, { signal: fetchTimeoutSignal() });
                 if (!res.ok) continue;
                 // HTTP-4: a 200 can still be the SPA HTML shell.
                 const contentType = res.headers?.get?.('content-type') || '';
