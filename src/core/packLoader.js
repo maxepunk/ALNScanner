@@ -81,7 +81,7 @@ export class PackLoader {
      * (GitHub Pages, Vite dev) serves the pack as same-origin static files.
      */
     channel() {
-        if (this._pathname.startsWith('/gm-scanner')) {
+        if (this._pathname === '/gm-scanner' || this._pathname.startsWith('/gm-scanner/')) {
             return {
                 manifestUrl: '/api/pack/manifest',
                 fileUrl: (p) => `/api/pack/files/${p}`,
@@ -188,6 +188,15 @@ export class PackLoader {
                     headers: { 'content-type': 'application/json' },
                 }));
             }
+            // A manifest that declares no canonical tokens.json (malformed,
+            // mid-publish, or a role/path drift) must NEVER activate: the
+            // pointer flip below GCs the last-known-good pack cache, so a
+            // "successful" empty staging would strand the device on the
+            // stale bundled tier. Treat it exactly like an HTTP/sha1 failure.
+            if (!content['tokens.json']) {
+                throw new Error('manifest declares no tokens.json rules file');
+            }
+
             // Also persist the manifest itself for cache-tier identity.
             await staging.put('/pack-manifest.json', new Response(JSON.stringify(manifest), {
                 headers: { 'content-type': 'application/json' },

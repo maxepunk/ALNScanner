@@ -195,6 +195,38 @@ describe('PackLoader', () => {
       expect(JSON.parse(storage.getItem('aln_pack_active')).contentHash).toBe(HASH_A); // pointer untouched
       expect(await caches.keys()).toEqual([`aln-pack-${HASH_A}`]); // staging discarded
     });
+
+    it('a manifest with no tokens.json rules file never activates — last-known-good pack survives (PR #12 review)', async () => {
+      // Without the pre-pointer-write assert, an incomplete manifest would
+      // "activate" an empty staging cache, GC the good pack, and strand the
+      // device on the stale bundled tier at the next offline load.
+      const caches = makeCaches();
+      const storage = makeStorage({
+        aln_pack_active: JSON.stringify({ packId: 'about-last-night', version: '1.0.0', contentHash: HASH_A }),
+      });
+      const cache = await caches.open(`aln-pack-${HASH_A}`);
+      await cache.put('/tokens.json', new Response(JSON.stringify(TOKENS)));
+
+      const tokenlessFiles = [
+        { path: 'game.json', role: 'game', sha1: sha1Of(GAME), size: 1 },
+        // no role:'tokens' entry — malformed / mid-publish / role drift
+      ];
+      const { loader } = makeLoader({
+        caches,
+        storage,
+        routes: {
+          'pack-manifest.json': jsonResponse(manifestFor(HASH_B, tokenlessFiles)),
+          'game.json': jsonResponse(GAME),
+        },
+      });
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.contentHash).toBe(HASH_A); // still the OLD pack
+      expect(pack.info.source).toBe('cache');
+      expect(JSON.parse(storage.getItem('aln_pack_active')).contentHash).toBe(HASH_A); // pointer untouched
+      expect(await caches.keys()).toEqual([`aln-pack-${HASH_A}`]); // staging discarded
+    });
   });
 
   describe('cache tier (§2.2)', () => {
