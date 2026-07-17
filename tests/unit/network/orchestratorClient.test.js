@@ -67,7 +67,10 @@ describe('OrchestratorClient - Dumb Pipe', () => {
             token: 'fake.jwt.token',
             deviceId: 'TEST_GM',
             deviceType: 'gm',
-            version: '1.0.0'
+            version: '1.0.0',
+            // A2: null before any pack load (the default packLoader
+            // instance is untouched in this suite)
+            packHash: null
           }
         })
       );

@@ -8,21 +8,63 @@
  * @module core/scoring
  */
 
-// Import shared config from data submodule (Vite resolves at build time)
-import sharedConfig from '../../data/scoring-config.json';
+// BAKED FALLBACK (transitional-debt ledger L2): the build-time snapshot of
+// scoring-config.json. Since A2, the AUTHORITATIVE values arrive at runtime
+// from the loaded pack's game.json via applyPackScoring() — this import is
+// only the last-resort shim for packs published before game.json existed,
+// and it warns LOUDLY when left active (the F-TOOL-05 stale-bake class).
+// Retirement: delete this import one release cycle after A2 packs are
+// everywhere (scoring-config.json leaves ALN-TokenData in A3 slice 2).
+import bakedConfig from '../../data/scoring-config.json';
 
 /**
  * Scoring configuration for Black Market mode
  * Maps value ratings and memory types to point values
  *
- * NOTE: Values loaded from ALN-TokenData/scoring-config.json
+ * Initialized from the baked snapshot; OVERWRITTEN IN PLACE by
+ * applyPackScoring() when the runtime-loaded pack carries a scoring block.
+ * Consumers read properties at use time, so the in-place mutation reaches
+ * every importer.
  */
 export const SCORING_CONFIG = {
     BASE_VALUES: Object.fromEntries(
-        Object.entries(sharedConfig.baseValues).map(([k, v]) => [parseInt(k), v])
+        Object.entries(bakedConfig.baseValues).map(([k, v]) => [parseInt(k), v])
     ),
-    TYPE_MULTIPLIERS: { ...sharedConfig.typeMultipliers }
+    TYPE_MULTIPLIERS: { ...bakedConfig.typeMultipliers }
 };
+
+/**
+ * Where the active scoring values came from: 'pack' (runtime game.json)
+ * or 'baked' (build-time shim — F-TOOL-05 exposure).
+ */
+export let SCORING_SOURCE = 'baked';
+
+/**
+ * Apply the runtime pack's scoring block (game.json `scoring`), replacing
+ * the baked build-time values (Phase 3 A2 — the F-TOOL-05 kill).
+ *
+ * @param {Object|null|undefined} scoring - game.json scoring block
+ *        ({baseValues, typeMultipliers, ...})
+ * @returns {boolean} true when pack scoring was applied
+ */
+export function applyPackScoring(scoring) {
+    if (!scoring?.baseValues || !scoring?.typeMultipliers) {
+        // LEGACY SHIM ACTIVE — loud by design (ledger L2 tripwire): scoring
+        // is running on values frozen at BUILD time; a pack publish with new
+        // values will NOT reach this device until the pack ships game.json.
+        console.warn('[scoring] LEGACY SHIM ACTIVE: pack has no game.json scoring block — using build-time baked values (F-TOOL-05 exposure)');
+        SCORING_SOURCE = 'baked';
+        return false;
+    }
+    Object.keys(SCORING_CONFIG.BASE_VALUES).forEach((k) => delete SCORING_CONFIG.BASE_VALUES[k]);
+    Object.keys(SCORING_CONFIG.TYPE_MULTIPLIERS).forEach((k) => delete SCORING_CONFIG.TYPE_MULTIPLIERS[k]);
+    Object.entries(scoring.baseValues).forEach(([k, v]) => {
+        SCORING_CONFIG.BASE_VALUES[parseInt(k)] = v;
+    });
+    Object.assign(SCORING_CONFIG.TYPE_MULTIPLIERS, scoring.typeMultipliers);
+    SCORING_SOURCE = 'pack';
+    return true;
+}
 
 /**
  * Parse group info from group name string
