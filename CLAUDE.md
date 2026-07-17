@@ -287,19 +287,11 @@ localStorage.setItem('aln_auth_token', createValidToken());
 
 ### Scoring System (Black Market Mode Only)
 
-**Scoring Configuration (scoring.js:20-25):**
+**Scoring Configuration (Phase 3 A2 — runtime pack loading):**
 
-Values are dynamically loaded from the shared `data/scoring-config.json` submodule (not hardcoded):
-```javascript
-import sharedConfig from '../../data/scoring-config.json';
+Authoritative values arrive at RUNTIME from the loaded game pack's `game.json` `scoring` block, applied by `applyPackScoring()` in `src/core/scoring.js` (called from `tokenManager.loadDatabase()` after `packLoader.loadPack()`). A pack publish changes standalone scoring with NO rebuild. The old static `scoring-config.json` Vite import survives only as the baked last-resort shim — it logs `[scoring] LEGACY SHIM ACTIVE` when a pack has no game.json (transitional-debt ledger L2 in the parent repo's `docs/plans/PHASE3-STATUS.md`).
 
-export const SCORING_CONFIG = {
-    BASE_VALUES: Object.fromEntries(
-        Object.entries(sharedConfig.baseValues).map(([k, v]) => [parseInt(k), v])
-    ),
-    TYPE_MULTIPLIERS: { ...sharedConfig.typeMultipliers }
-};
-```
+**Pack loading (`src/core/packLoader.js`):** load order network → SW-cache → bundled with staged atomic refresh (staging cache `aln-pack-<hash>`, per-file sha1 verify, single pointer flip, discard-on-failure). Channel by SERVING ORIGIN: orchestrator-served (`/gm-scanner`) → `/api/pack/*`; anywhere else → same-origin static files. Every load records `{packId, version, contentHash, source}` — shown in the settings header (`pack <version> (<hash-prefix>) · <source>`, warning badge when `bundled`) and reported as `packHash` in the WS handshake auth. GOTCHA: `sw.js`'s cache GC deliberately EXEMPTS `aln-pack-*` caches — re-tightening that filter wipes the activated pack on every SW update.
 
 **Token Score Formula:**
 ```
