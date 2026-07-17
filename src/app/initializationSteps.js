@@ -21,6 +21,8 @@
 import Debug from '../utils/debug.js';
 import { isTokenValid } from '../utils/jwtUtils.js';
 import stateValidationService from '../services/StateValidationService.js';
+import packLoader from '../core/packLoader.js';
+import { SCORING_SOURCE } from '../core/scoring.js';
 
 /**
  * Initialize UIManager
@@ -147,7 +149,34 @@ export async function loadTokenDatabase(tokenManager, uiManager) {
   }
 
   Debug.log('Token database loaded successfully');
+  renderPackInfo();
   return true;
+}
+
+/**
+ * A2 staleness visibility: surface the loaded pack in the settings header
+ * as `pack <version> (<hash-prefix>) · <source>`, with a warning badge
+ * when running from the build-time bundle (never refreshed). Null-guarded
+ * on both pack state and DOM (headless harnesses have neither).
+ */
+export function renderPackInfo(loader = packLoader, scoringSource = undefined) {
+  const info = loader.getActivePack();
+  if (!info || typeof document === 'undefined') return;
+  const line = document.getElementById('packInfoLine');
+  if (!line) return;
+  const display = document.getElementById('packInfoDisplay');
+  const badge = document.getElementById('packBundledBadge');
+  const hashPrefix = info.contentHash
+    ? info.contentHash.replace('sha256:', '').slice(0, 8)
+    : 'no-hash';
+  // Scoring provenance rides the same line: a network-sourced pack can
+  // still be scoring on the baked shim (pack ships no game.json) — the
+  // operator should see that here, not only in the console warn.
+  const source = scoringSource !== undefined ? scoringSource : SCORING_SOURCE;
+  const scoringNote = source === 'baked' ? ' · scoring: baked' : '';
+  if (display) display.textContent = `${info.version || 'unknown'} (${hashPrefix}) · ${info.source}${scoringNote}`;
+  if (badge) badge.style.display = info.source === 'bundled' ? '' : 'none';
+  line.style.display = '';
 }
 
 /**
@@ -373,6 +402,7 @@ export default {
   detectNFCSupport,
   registerServiceWorker,
   loadTokenDatabase,
+  renderPackInfo,
   applyURLModeOverride,
   syncModeDisplay,
   determineInitialScreen,

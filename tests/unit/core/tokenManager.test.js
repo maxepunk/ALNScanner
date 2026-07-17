@@ -23,85 +23,115 @@ describe('TokenManager - ES6 Module', () => {
     expect(TokenManager).toBeInstanceOf(TokenManagerClass);
   });
 
-  describe('loadDatabase', () => {
-    it('should fetch tokens.json (dist root) FIRST, before data/tokens.json (HTTP-3)', async () => {
-      const mockTokens = {
-        "token1": { SF_RFID: "token1", SF_ValueRating: 3, SF_MemoryType: "Technical" }
-      };
+  describe('loadDatabase (via packLoader — Phase 3 A2)', () => {
+    // The direct-fetch chain (HTTP-3 root-first order, HTTP-4 SPA-shell and
+    // empty-map guards) moved INTO the pack loader's bundled tier — see
+    // tests/unit/core/packLoader.test.js for that coverage. These tests pin
+    // TokenManager's own behavior: database/state wiring, runtime scoring
+    // application, and fail-hard semantics.
+    const PACK_INFO = {
+      packId: 'about-last-night',
+      version: '1.0.0',
+      contentHash: `sha256:${'a'.repeat(64)}`,
+      source: 'network',
+    };
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        url: 'tokens.json',
-        headers: { get: () => 'application/json' },
-        json: () => Promise.resolve(mockTokens)
-      });
+    function mockPack({ tokens, gameConfig = null }) {
+      TokenManager._packLoader = {
+        loadPack: jest.fn().mockResolvedValue({ tokens, gameConfig, info: { ...PACK_INFO } }),
+        getActivePack: jest.fn(() => ({ ...PACK_INFO })),
+      };
+    }
+
+    it('loads the token database and group inventory from the pack', async () => {
+      const mockTokens = {
+        token1: { SF_RFID: 'token1', SF_ValueRating: 3, SF_MemoryType: 'Technical' },
+      };
+      mockPack({ tokens: mockTokens });
 
       const result = await TokenManager.loadDatabase();
 
       expect(result).toBe(true);
-      expect(global.fetch).toHaveBeenCalledTimes(1); // root hit on first try, no data/ round-trip
-      expect(global.fetch).toHaveBeenNthCalledWith(1, 'tokens.json');
       expect(TokenManager.database).toEqual(mockTokens);
       expect(TokenManager.groupInventory).toBeDefined();
     });
 
-    it('should fall back to data/tokens.json when root is missing (HTTP-3)', async () => {
-      const mockTokens = {
-        "token2": { SF_RFID: "token2", SF_ValueRating: 5, SF_MemoryType: "Business" }
+    const pristineScoring = (() => {
+      const { SCORING_CONFIG } = require('../../../src/core/scoring.js');
+      return {
+        BASE_VALUES: { ...SCORING_CONFIG.BASE_VALUES },
+        TYPE_MULTIPLIERS: { ...SCORING_CONFIG.TYPE_MULTIPLIERS },
       };
+    })();
+    afterEach(() => {
+      // applyPackScoring mutates the exported singleton in place — undo it
+      // so tests can't leak pack values into each other.
+      const { SCORING_CONFIG } = require('../../../src/core/scoring.js');
+      for (const key of Object.keys(SCORING_CONFIG.BASE_VALUES)) delete SCORING_CONFIG.BASE_VALUES[key];
+      Object.assign(SCORING_CONFIG.BASE_VALUES, pristineScoring.BASE_VALUES);
+      for (const key of Object.keys(SCORING_CONFIG.TYPE_MULTIPLIERS)) delete SCORING_CONFIG.TYPE_MULTIPLIERS[key];
+      Object.assign(SCORING_CONFIG.TYPE_MULTIPLIERS, pristineScoring.TYPE_MULTIPLIERS);
+    });
 
-      global.fetch
-        .mockResolvedValueOnce({ ok: false }) // tokens.json (root) missing
-        .mockResolvedValueOnce({ // data/tokens.json succeeds (dev/back-compat)
-          ok: true,
-          url: 'data/tokens.json',
-          headers: { get: () => 'application/json' },
-          json: () => Promise.resolve(mockTokens)
-        });
+    it('applies runtime pack scoring from game.json (the F-TOOL-05 kill)', async () => {
+      const { SCORING_CONFIG } = require('../../../src/core/scoring.js');
+      mockPack({
+        tokens: { t1: { SF_RFID: 't1', SF_ValueRating: 1, SF_MemoryType: 'Personal' } },
+        gameConfig: {
+          scoring: {
+            baseValues: { 1: 111, 2: 222, 3: 333, 4: 444, 5: 555 },
+            typeMultipliers: { Personal: 9, UNKNOWN: 0 },
+          },
+        },
+      });
+
+      await TokenManager.loadDatabase();
+
+      expect(SCORING_CONFIG.BASE_VALUES[1]).toBe(111);
+      expect(SCORING_CONFIG.BASE_VALUES[5]).toBe(555);
+      expect(SCORING_CONFIG.TYPE_MULTIPLIERS.Personal).toBe(9);
+    });
+
+    it('warns and keeps baked scoring when the pack has no game.json (ledger L2 shim)', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      mockPack({
+        tokens: { t1: { SF_RFID: 't1', SF_ValueRating: 1, SF_MemoryType: 'Personal' } },
+        gameConfig: null,
+      });
+
+      await TokenManager.loadDatabase();
+
+      expect(warnSpy.mock.calls.some(([m]) => String(m).includes('LEGACY SHIM ACTIVE'))).toBe(true);
+      const { SCORING_CONFIG } = require('../../../src/core/scoring.js');
+      expect(SCORING_CONFIG.BASE_VALUES).toEqual(pristineScoring.BASE_VALUES);
+      expect(SCORING_CONFIG.TYPE_MULTIPLIERS).toEqual(pristineScoring.TYPE_MULTIPLIERS);
+      warnSpy.mockRestore();
+    });
+
+    it('tolerates null pack identity (bundled tier without a readable manifest)', async () => {
+      TokenManager._packLoader = {
+        loadPack: jest.fn().mockResolvedValue({
+          tokens: { t1: { SF_RFID: 't1', SF_ValueRating: 2, SF_MemoryType: 'Business' } },
+          gameConfig: { /* no scoring block */ },
+          info: { packId: null, version: null, contentHash: null, source: 'bundled' },
+        }),
+        getActivePack: jest.fn(() => null),
+      };
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
       const result = await TokenManager.loadDatabase();
 
       expect(result).toBe(true);
-      expect(global.fetch).toHaveBeenNthCalledWith(1, 'tokens.json');
-      expect(global.fetch).toHaveBeenNthCalledWith(2, 'data/tokens.json');
-      expect(TokenManager.database).toEqual(mockTokens);
+      expect(Object.keys(TokenManager.database)).toEqual(['t1']);
+      warnSpy.mockRestore();
     });
 
-    it('should return false and leave database empty when both paths fail', async () => {
-      // Current design: "CRITICAL: Fail hard if database cannot be loaded. Do NOT load demo data."
-      global.fetch.mockResolvedValue({ ok: false });
-
-      const result = await TokenManager.loadDatabase();
-
-      // Database loading failed - returns false, database stays empty
-      expect(result).toBe(false);
-      expect(Object.keys(TokenManager.database).length).toBe(0);
-    });
-
-    it('should return false (not crash) when a 200 returns the HTML SPA shell (HTTP-4)', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        url: 'tokens.json',
-        headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'text/html' : null) },
-        // json() RESOLVES to a non-empty object so ONLY the content-type guard can
-        // produce the false/empty-DB outcome — deleting the guard would let this
-        // parse through to a "loaded" DB and make the test fail (no phantom pass).
-        json: () => Promise.resolve({ looksLikeAToken: { SF_RFID: 'x', SF_ValueRating: 1, SF_MemoryType: 'Personal' } })
-      });
-
-      const result = await TokenManager.loadDatabase();
-
-      expect(result).toBe(false);
-      expect(Object.keys(TokenManager.database).length).toBe(0);
-    });
-
-    it('should reject a 200 that returns an empty/invalid token map (HTTP-4)', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        url: 'tokens.json',
-        headers: { get: () => 'application/json' },
-        json: () => Promise.resolve({})
-      });
+    it('returns false and leaves the database empty when the pack load fails', async () => {
+      // "CRITICAL: Fail hard if database cannot be loaded. Do NOT load demo data."
+      TokenManager._packLoader = {
+        loadPack: jest.fn().mockRejectedValue(new Error('all tiers failed')),
+        getActivePack: jest.fn(() => null),
+      };
 
       const result = await TokenManager.loadDatabase();
 

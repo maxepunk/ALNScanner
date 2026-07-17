@@ -10,6 +10,8 @@
  */
 
 import Debug from '../utils/debug.js';
+import defaultPackLoader from './packLoader.js';
+import { applyPackScoring } from './scoring.js';
 
 /**
  * TokenManager Class
@@ -20,6 +22,7 @@ class TokenManagerClass {
     this.database = {};
     this.groupInventory = null;
     this._dataManagerHelpers = null; // Injected dependency
+    this._packLoader = defaultPackLoader; // Injectable for tests
   }
 
   /**
@@ -31,43 +34,27 @@ class TokenManagerClass {
   }
 
   /**
-   * Load token database from external JSON file
+   * Load the token database via the game-pack loader (Phase 3 A2).
+   *
+   * The packLoader owns the load order (network → cache → bundled), the
+   * staged atomic refresh, and the HTTP-3/HTTP-4 hardening the old direct
+   * fetch chain carried. Runtime scoring is applied here from the pack's
+   * game.json — replacing the build-time bake (F-TOOL-05).
    * @returns {Promise<boolean>} Success status
    */
   async loadDatabase() {
     try {
-      // HTTP-3: the dist ROOT is the real location — vite publicDir:'data' copies
-      // the CONTENTS of data/ into the dist root, so data/tokens.json does not
-      // exist in production (it 404'd ~29x per session, logging an error on the
-      // critical path each load). Try the root first; keep data/ as a dev/
-      // back-compat fallback. A first-try miss is debug-level, not error-level.
-      let response = await fetch('tokens.json');
-      if (!response.ok) {
-        Debug.log('tokens.json not at root, trying data/ fallback'); // debug-level
-        response = await fetch('data/tokens.json');
-        if (!response.ok) {
-          throw new Error('Failed to load tokens.json from root or data/');
-        }
-      }
+      const pack = await this._packLoader.loadPack();
 
-      // HTTP-4: a 200 can still be the SPA HTML shell for an unknown static path.
-      // Check the content-type before parsing so we fail with a clear cause
-      // instead of an opaque "Unexpected token <" SyntaxError.
-      const contentType = response.headers?.get?.('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error('Token database response was not JSON (got SPA shell?)');
-      }
-
-      const parsed = await response.json();
-      // A 200 returning {} or a non-object would otherwise set an empty/invalid
-      // database silently. Require a non-empty plain-object token map.
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.keys(parsed).length === 0) {
-        throw new Error('Token database is empty or not a token map');
-      }
-
-      this.database = parsed;
-      Debug.log(`✅ Loaded ${Object.keys(this.database).length} tokens from ${response.url}`);
+      this.database = pack.tokens;
+      const info = pack.info;
+      Debug.log(`✅ Loaded ${Object.keys(this.database).length} tokens — pack ${info.packId || 'unknown'} v${info.version || '?'} (${info.source})`);
       Debug.log(`Sample keys: ${Object.keys(this.database).slice(0, 3).join(', ')}`);
+
+      // Runtime scoring from the pack's rules artifact (game.json). When
+      // absent (older published pack), the baked legacy shim stays active
+      // and warns loudly (transitional-debt ledger L2).
+      applyPackScoring(pack.gameConfig?.scoring);
 
       // Build group inventory for bonus calculations
       this.groupInventory = this.buildGroupInventory();

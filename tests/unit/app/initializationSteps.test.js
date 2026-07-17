@@ -12,6 +12,7 @@ import {
   detectNFCSupport,
   registerServiceWorker,
   loadTokenDatabase,
+  renderPackInfo,
   applyURLModeOverride,
   determineInitialScreen,
   applyInitialScreenDecision,
@@ -604,5 +605,76 @@ describe('InitializationSteps - ES6 Module', () => {
       await expect(loadTokenDatabase(mockTokenManager, mockUIManager)).rejects.toThrow();
       expect(mockUIManager.showError).toHaveBeenCalled();
     });
+  });
+});
+
+describe('renderPackInfo (Phase 3 A2 staleness visibility)', () => {
+  const PACK_DOM = `
+    <div class="device-id" id="packInfoLine" style="display: none;">Pack:
+      <span id="packInfoDisplay"></span>
+      <span id="packBundledBadge" style="display: none;">⚠ bundled</span>
+    </div>`;
+
+  function stubLoader(info) {
+    return { getActivePack: jest.fn(() => info) };
+  }
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('renders `<version> (<hash-prefix>) · <source>` and reveals the line', () => {
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader({
+      packId: 'about-last-night',
+      version: '1.2.0',
+      contentHash: `sha256:${'a'.repeat(64)}`,
+      source: 'network',
+    }), 'pack');
+
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('1.2.0 (aaaaaaaa) · network');
+    expect(document.getElementById('packInfoLine').style.display).toBe('');
+    expect(document.getElementById('packBundledBadge').style.display).toBe('none');
+  });
+
+  it('shows the warning badge for the bundled source, with null-identity fallbacks', () => {
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader({
+      packId: null, version: null, contentHash: null, source: 'bundled',
+    }), 'baked');
+
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('unknown (no-hash) · bundled · scoring: baked');
+    expect(document.getElementById('packBundledBadge').style.display).toBe('');
+  });
+
+  it('flags baked scoring even when the pack itself came from the network (PR #12 review)', () => {
+    // A network-sourced pack that ships no game.json still runs the L2
+    // scoring shim — the operator must see that on the pack line, not
+    // only in the console warn.
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader({
+      packId: 'about-last-night',
+      version: '1.2.0',
+      contentHash: `sha256:${'b'.repeat(64)}`,
+      source: 'network',
+    }), 'baked');
+
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('1.2.0 (bbbbbbbb) · network · scoring: baked');
+  });
+
+  it('is a no-op before any pack load (null info)', () => {
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader(null));
+    expect(document.getElementById('packInfoLine').style.display).toBe('none');
+  });
+
+  it('is a no-op when the settings DOM is absent (headless harnesses)', () => {
+    document.body.innerHTML = '';
+    expect(() => renderPackInfo(stubLoader({
+      packId: 'x', version: '1', contentHash: null, source: 'cache',
+    }))).not.toThrow();
   });
 });
