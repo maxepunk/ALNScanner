@@ -106,6 +106,7 @@ export function resolveMode(modeId) {
         entityRole: mode.entityRole,
         defaultEntity: mode.defaultEntity || null,
         countsTowardGroups: mode.countsTowardGroups === true,
+        claims: mode.claims === undefined ? 'consuming' : mode.claims,
         displayBehavior: {
             surface: db.surface || 'none',
             fields: Array.isArray(db.fields) ? [...db.fields] : [],
@@ -139,6 +140,16 @@ export function countsTowardGroups(modeId) {
 /** Does this mode publish to the evidence surface? */
 export function isEvidenceMode(modeId) {
     return resolveMode(modeId)?.displayBehavior.surface === 'scoreboard-evidence';
+}
+
+/**
+ * Does a transaction in this mode register a consuming claim? (D3s2)
+ * Unresolvable modes are CONSUMING — legacy history keeps blocking, the
+ * same safe reading as the backend's duplicatePolicy.isConsumingClaim.
+ */
+export function isConsumingMode(modeId) {
+    const record = resolveMode(modeId);
+    return record === null || record.claims !== 'non-consuming';
 }
 
 /** Does this mode's display surface match? (absent displayBehavior = 'none') */

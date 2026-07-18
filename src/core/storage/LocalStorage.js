@@ -12,7 +12,7 @@ import {
   calculateTokenValue
 } from '../scoring.js';
 import { buildGameActivity } from '../gameActivityBuilder.js';
-import { isScoringMode, countsTowardGroups } from '../modeSemantics.js';
+import { isScoringMode, countsTowardGroups, isConsumingMode } from '../modeSemantics.js';
 
 export class LocalStorage extends IStorageStrategy {
   /**
@@ -99,7 +99,9 @@ export class LocalStorage extends IStorageStrategy {
     this.scannedTokens.clear();
     this.sessionData.transactions.forEach(tx => {
       const tokenId = tx.tokenId || tx.rfid;
-      if (tokenId) {
+      // Only CONSUMING claims rebuild the dedup Set (D3s2): a persisted
+      // non-consuming transaction must not lock its token after reload.
+      if (tokenId && isConsumingMode(tx.mode)) {
         this.scannedTokens.add(tokenId);
       }
     });
@@ -297,9 +299,11 @@ export class LocalStorage extends IStorageStrategy {
     // Add to transactions array
     this.sessionData.transactions.push(transaction);
 
-    // Mark token as scanned
+    // Mark token as scanned — CONSUMING claims only (D3s2): standalone
+    // mode is the FCFS authority, and a non-consuming action registers
+    // nothing (backend duplicatePolicy parity).
     const tokenId = transaction.tokenId || transaction.rfid;
-    if (tokenId) {
+    if (tokenId && isConsumingMode(transaction.mode)) {
       this.scannedTokens.add(tokenId);
     }
 
@@ -434,9 +438,10 @@ export class LocalStorage extends IStorageStrategy {
     const tokenId = removedTx.tokenId || removedTx.rfid;
     const teamId = removedTx.teamId;
 
-    // Allow re-scanning if no other transactions have this token
+    // Allow re-scanning if no other CONSUMING transaction has this token
+    // (a remaining non-consuming tx never held a claim — D3s2)
     const tokenStillExists = this.sessionData.transactions.some(
-      tx => (tx.tokenId || tx.rfid) === tokenId
+      tx => (tx.tokenId || tx.rfid) === tokenId && isConsumingMode(tx.mode)
     );
     if (!tokenStillExists && tokenId) {
       this.scannedTokens.delete(tokenId);

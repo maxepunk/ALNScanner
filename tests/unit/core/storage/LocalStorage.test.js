@@ -253,6 +253,72 @@ describe('LocalStorage Strategy', () => {
     });
   });
 
+  describe('per-mode claims flag (D3s2 — standalone is the FCFS authority)', () => {
+    const CLAIMS_MODES = {
+      modes: [
+        { id: 'sell', label: 'Sell', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-rankings' } },
+        { id: 'inspect', label: 'Inspect', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: false, claims: 'non-consuming', displayBehavior: { surface: 'none' } },
+      ],
+    };
+
+    async function withClaimsModes(fn) {
+      const { applyPackModes, _resetForTesting } = await import('../../../../src/core/modeSemantics.js');
+      applyPackModes(CLAIMS_MODES);
+      try {
+        await fn();
+      } finally {
+        _resetForTesting();
+      }
+    }
+
+    it('a non-consuming transaction never marks the token (repeatable action)', async () => {
+      await withClaimsModes(async () => {
+        await storage.addTransaction({
+          id: 'tx-1', tokenId: 'tok1', teamId: '001',
+          mode: 'inspect', points: 0, timestamp: new Date().toISOString()
+        });
+        expect(storage.scannedTokens.has('tok1')).toBe(false);
+
+        // …and the token's real CONSUMING claim still works afterwards
+        await storage.addTransaction({
+          id: 'tx-2', tokenId: 'tok1', teamId: '002',
+          mode: 'sell', points: 5000, timestamp: new Date().toISOString()
+        });
+        expect(storage.scannedTokens.has('tok1')).toBe(true);
+      });
+    });
+
+    it('reload repopulation skips non-consuming transactions', async () => {
+      await withClaimsModes(async () => {
+        storage.sessionData.transactions = [
+          { id: 'tx-1', tokenId: 'tok1', teamId: '001', mode: 'inspect', points: 0 },
+          { id: 'tx-2', tokenId: 'tok2', teamId: '001', mode: 'sell', points: 5000 },
+        ];
+        storage._repopulateScannedTokens();
+        expect(storage.scannedTokens.has('tok1')).toBe(false);
+        expect(storage.scannedTokens.has('tok2')).toBe(true);
+      });
+    });
+
+    it('deleting the consuming claim frees the token even when a non-consuming tx remains', async () => {
+      await withClaimsModes(async () => {
+        await storage.addTransaction({
+          id: 'tx-nc', tokenId: 'tok1', teamId: '001',
+          mode: 'inspect', points: 0, timestamp: new Date().toISOString()
+        });
+        await storage.addTransaction({
+          id: 'tx-c', tokenId: 'tok1', teamId: '002',
+          mode: 'sell', points: 5000, timestamp: new Date().toISOString()
+        });
+
+        await storage.removeTransaction('tx-c');
+
+        // The surviving non-consuming tx never held a claim — token is free
+        expect(storage.scannedTokens.has('tok1')).toBe(false);
+      });
+    });
+  });
+
   describe('group completion — §2f parity pin (A3 slice 2)', () => {
     // Backend §2f semantics: completion counts ANY counting-mode claim;
     // the bonus base sums only SCORED contributions. This scanner has

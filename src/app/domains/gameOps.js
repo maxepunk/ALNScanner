@@ -14,7 +14,7 @@
  */
 
 import { escapeHtml } from '../../utils/escapeHtml.js';
-import { wireModeIds, isScoringMode, modeHasSurface } from '../../core/modeSemantics.js';
+import { wireModeIds, isScoringMode, isConsumingMode, modeHasSurface } from '../../core/modeSemantics.js';
 
 export class GameOpsDomain {
   /**
@@ -240,7 +240,11 @@ export class GameOpsDomain {
     const tokenData = tokenManager.findToken(cleanId);
     const tokenId = tokenData ? tokenData.matchedId : cleanId;
 
-    if (dataManager.isTokenScanned(tokenId)) {
+    // D3s2: a NON-CONSUMING mode is a repeatable action — never blocked
+    // by the duplicate rules (backend duplicatePolicy parity). The local
+    // Set only ever holds consuming claims, so the check both ways is:
+    // consuming scans consult it, non-consuming scans skip it.
+    if (isConsumingMode(settings.mode) && dataManager.isTokenScanned(tokenId)) {
       debug.log(`Duplicate token detected: ${tokenId}`, true);
       this.showDuplicateError(tokenId);
       return;
@@ -306,7 +310,12 @@ export class GameOpsDomain {
     }
 
     if (sessionModeManager && sessionModeManager.isNetworked()) {
-      dataManager.markTokenAsScanned(tokenId);
+      // Optimistic mark for CONSUMING claims only (D3s2): a non-consuming
+      // action never registers, so marking it would wrongly block the
+      // token's real consuming claim later on this device.
+      if (isConsumingMode(settings.mode)) {
+        dataManager.markTokenAsScanned(tokenId);
+      }
 
       if (!networkedSession) {
         throw new Error('Cannot scan: NetworkedSession not initialized. Please reconnect.');
@@ -326,7 +335,9 @@ export class GameOpsDomain {
     } else {
       if (sessionModeManager && sessionModeManager.isStandalone()) {
         await dataManager.addTransaction(transaction);
-        dataManager.markTokenAsScanned(tokenId);
+        if (isConsumingMode(settings.mode)) {
+          dataManager.markTokenAsScanned(tokenId);
+        }
         debug.log('Transaction stored via UnifiedDataManager (standalone mode)');
       } else {
         debug.log('Warning: No session mode selected - cannot process transaction', true);

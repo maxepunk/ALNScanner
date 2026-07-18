@@ -20,6 +20,7 @@ import {
   isScoringMode,
   countsTowardGroups,
   isEvidenceMode,
+  isConsumingMode,
   modeHasSurface,
   modeLabel,
   LEGACY_ALN_MODES,
@@ -82,10 +83,25 @@ describe('resolveMode — pack-declared flags (open vocabulary)', () => {
     expect(resolveMode('fence')).toEqual({
       id: 'fence', label: 'Fence', verb: null,
       scoringPolicy: 'standard', entityRole: 'ledger', defaultEntity: null,
-      countsTowardGroups: true,
+      countsTowardGroups: true, claims: 'consuming',
       displayBehavior: { surface: 'scoreboard-rankings', fields: [], when: 'immediate' },
     });
     expect(resolveMode('tipoff').defaultEntity).toBe('The Dispatcher');
+  });
+
+  it('normalizes absent claims to consuming; isConsumingMode mirrors the backend rule (D3s2)', () => {
+    applyPackModes({
+      modes: [
+        { id: 'sell', label: 'Sell', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true },
+        { id: 'inspect', label: 'Inspect', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: false, claims: 'non-consuming' },
+      ],
+    });
+    expect(resolveMode('sell').claims).toBe('consuming');
+    expect(resolveMode('inspect').claims).toBe('non-consuming');
+    expect(isConsumingMode('sell')).toBe(true);
+    expect(isConsumingMode('inspect')).toBe(false);
+    // Unresolvable modes are consuming — legacy history keeps blocking
+    expect(isConsumingMode('unknown-mode')).toBe(true);
   });
 
   it('returns null for undeclared ids (client disables the affordance)', () => {
