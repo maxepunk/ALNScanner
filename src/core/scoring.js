@@ -99,6 +99,18 @@ export function applyPackScoring(scoring) {
  * parseGroupInfo("Marcus Sucks (x2)")  // { name: "Marcus Sucks", multiplier: 2 }
  * parseGroupInfo("Ungrouped Token")    // { name: "Ungrouped Token", multiplier: 1 }
  */
+// D1b (A3 slice 2b): the pack's `groups` block is AUTHORITATIVE for
+// multipliers when declared (backend tokenService parity). Applied from
+// the packLoader's game.json alongside applyPackScoring; null when the
+// active pack pre-dates the block (suffix parse remains the fallback
+// until the tokens-v2 cutover deletes it — D3b).
+let PACK_GROUPS = null;
+
+export function applyPackGroups(groups) {
+    PACK_GROUPS = (groups && typeof groups === 'object') ? groups : null;
+    return PACK_GROUPS !== null;
+}
+
 export function parseGroupInfo(groupName) {
     if (!groupName) {
         return { name: 'Unknown', multiplier: 1 };
@@ -109,9 +121,15 @@ export function parseGroupInfo(groupName) {
 
     // Match pattern: "Group Name (xN)"
     const match = trimmed.match(/^(.+?)\s*\(x(\d+)\)$/i);
+    const name = match ? match[1].trim() : trimmed;
+
+    // Pack block wins over the suffix (and covers v2 pure names, where
+    // the suffix match fails and `name` is the whole trimmed string)
+    if (PACK_GROUPS && PACK_GROUPS[name]) {
+        return { name, multiplier: PACK_GROUPS[name].multiplier };
+    }
 
     if (match) {
-        const name = match[1].trim();
         const multiplier = parseInt(match[2]) || 1;
 
         if (multiplier < 1) {

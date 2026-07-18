@@ -132,3 +132,20 @@ describe('Vendored Scoring Shim (ledger L2 — baked last resort)', () => {
     });
   });
 });
+
+describe('pack groups block (D1b — pack authoritative over the "(xN)" suffix)', () => {
+  it('parseGroupInfo prefers the declared multiplier, covers v2 pure names, and resets cleanly', async () => {
+    const { applyPackGroups, parseGroupInfo } = await import('../../../src/core/scoring.js');
+
+    applyPackGroups({ 'Server Logs': { multiplier: 7 } });
+    // v1 suffix shape: pack (7) beats suffix (2)
+    expect(parseGroupInfo('Server Logs (x2)')).toEqual({ name: 'Server Logs', multiplier: 7 });
+    // v2 pure name resolves through the block
+    expect(parseGroupInfo('Server Logs')).toEqual({ name: 'Server Logs', multiplier: 7 });
+    // Undeclared group: suffix fallback survives until the v2 cutover
+    expect(parseGroupInfo('Rogue Set (x3)')).toEqual({ name: 'Rogue Set', multiplier: 3 });
+
+    applyPackGroups(null); // pre-groups pack: pure suffix behavior
+    expect(parseGroupInfo('Server Logs (x2)')).toEqual({ name: 'Server Logs', multiplier: 2 });
+  });
+});
