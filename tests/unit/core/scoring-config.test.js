@@ -3,36 +3,34 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import scoringConfig from '../../../data/scoring-config.json';
+// A3 slice 2 (ledger L1 retirement): scoring-config.json is GONE from
+// ALN-TokenData — the pack's game.json `scoring` block is the sole shared
+// source, and the baked shim in scoring.js is a VENDORED table. This suite
+// pins (a) the vendored shim equal to the real pack file (drift tripwire,
+// same doctrine as the modeSemantics tables) and (b) the shim's guard
+// behavior.
+import gameConfig from '../../../data/game.json';
 
-describe('Shared Scoring Config (Frontend)', () => {
-  it('should import scoring config from data submodule', () => {
-    expect(scoringConfig.version).toBe('1.0');
-    expect(scoringConfig.baseValues).toBeDefined();
-    expect(scoringConfig.typeMultipliers).toBeDefined();
-  });
-
-  it('should have identical values to SCORING_CONFIG in scoring.js', async () => {
+describe('Vendored Scoring Shim (ledger L2 — baked last resort)', () => {
+  it('DRIFT TRIPWIRE: the vendored baked tables mirror data/game.json scoring exactly', async () => {
     const { SCORING_CONFIG } = await import('../../../src/core/scoring.js');
 
-    // Verify base values match
-    Object.entries(scoringConfig.baseValues).forEach(([rating, value]) => {
+    Object.entries(gameConfig.scoring.baseValues).forEach(([rating, value]) => {
       expect(SCORING_CONFIG.BASE_VALUES[parseInt(rating)]).toBe(value);
     });
-
-    // Verify type multipliers match
-    Object.entries(scoringConfig.typeMultipliers).forEach(([type, multiplier]) => {
-      expect(SCORING_CONFIG.TYPE_MULTIPLIERS[type]).toBe(multiplier);
-    });
+    expect(Object.keys(SCORING_CONFIG.BASE_VALUES)).toHaveLength(
+      Object.keys(gameConfig.scoring.baseValues).length
+    );
+    expect(SCORING_CONFIG.TYPE_MULTIPLIERS).toEqual(gameConfig.scoring.typeMultipliers);
   });
 
-  it('should have UNKNOWN type multiplier as 0', () => {
-    expect(scoringConfig.typeMultipliers['UNKNOWN']).toBe(0);
+  it('pack game.json declares UNKNOWN as 0x (the null-memory-type contract)', () => {
+    expect(gameConfig.scoring.typeMultipliers['UNKNOWN']).toBe(0);
   });
 
-  it('should have Mention and Party type multipliers', () => {
-    expect(scoringConfig.typeMultipliers['Mention']).toBe(3);
-    expect(scoringConfig.typeMultipliers['Party']).toBe(5);
+  it('pack game.json declares the Mention and Party multipliers', () => {
+    expect(gameConfig.scoring.typeMultipliers['Mention']).toBe(3);
+    expect(gameConfig.scoring.typeMultipliers['Party']).toBe(5);
   });
 
   it('should return 0 for unknown memory types in calculateTokenValue', async () => {

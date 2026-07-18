@@ -8,14 +8,20 @@
  * @module core/scoring
  */
 
-// BAKED FALLBACK (transitional-debt ledger L2): the build-time snapshot of
-// scoring-config.json. Since A2, the AUTHORITATIVE values arrive at runtime
-// from the loaded pack's game.json via applyPackScoring() — this import is
-// only the last-resort shim for packs published before game.json existed,
-// and it warns LOUDLY when left active (the F-TOOL-05 stale-bake class).
-// Retirement: delete this import one release cycle after A2 packs are
-// everywhere (scoring-config.json leaves ALN-TokenData in A3 slice 2).
-import bakedConfig from '../../data/scoring-config.json';
+// BAKED FALLBACK (transitional-debt ledger L2): VENDORED legacy ALN
+// tables. Until A3 slice 2 this was a build-time import of the submodule's
+// scoring-config.json; that file retired with ledger L1 (the pack's
+// game.json is the sole shared source), so the last-resort shim is now
+// self-contained — same doctrine as the modeSemantics LEGACY_ALN_MODES
+// table, and the unit drift tripwire pins it equal to data/game.json's
+// scoring block. Since A2 the AUTHORITATIVE values arrive at runtime via
+// applyPackScoring(); this table only serves packs published before
+// game.json existed, and warns LOUDLY when active (F-TOOL-05 class).
+// Retirement (L2): delete one release cycle after the final cutover.
+const bakedConfig = Object.freeze({
+    baseValues: Object.freeze({ 1: 10000, 2: 25000, 3: 50000, 4: 75000, 5: 150000 }),
+    typeMultipliers: Object.freeze({ Personal: 1, Mention: 3, Business: 3, Party: 5, Technical: 5, UNKNOWN: 0 }),
+});
 
 /**
  * Scoring configuration for Black Market mode
