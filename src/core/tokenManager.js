@@ -11,7 +11,7 @@
 
 import Debug from '../utils/debug.js';
 import defaultPackLoader from './packLoader.js';
-import { applyPackScoring, applyPackGroups } from './scoring.js';
+import { applyPackScoring, applyPackGroups, parseGroupInfo } from './scoring.js';
 import { applyPackModes } from './modeSemantics.js';
 
 /**
@@ -137,23 +137,16 @@ class TokenManagerClass {
   }
 
   /**
-   * Fallback group info parser (until DataManager is converted)
-   * Format: "Group Name (xN)" where N is multiplier
+   * Fallback group info parser (when no DataManager helpers injected).
+   * v2 cutover: delegates to the canonical scoring.parseGroupInfo — the
+   * second inline "(xN)" regex died with the suffix format (D3b); pure
+   * names + the pack groups block are the only multiplier source.
    */
   _parseGroupInfoFallback(groupString) {
     if (!groupString) {
       return { name: '', multiplier: 1 };
     }
-
-    const match = groupString.match(/^(.+?)\s*\(x(\d+)\)$/i);
-    if (match) {
-      return {
-        name: match[1].trim(),
-        multiplier: parseInt(match[2], 10)
-      };
-    }
-
-    return { name: groupString.trim(), multiplier: 1 };
+    return parseGroupInfo(groupString);
   }
 
   /**

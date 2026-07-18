@@ -351,11 +351,13 @@ describe('UnifiedDataManager', () => {
       await manager.initializeStandaloneMode();
     });
 
-    it('should parse group info from group string', () => {
-      const result = manager.parseGroupInfo('Server Logs (x5)');
+    it('should parse group info from a v2 pure-name group string', () => {
+      // v2 cutover: SF_Group is the pure name; the multiplier resolves
+      // from the pack groups block (none applied here → 1)
+      const result = manager.parseGroupInfo('Server Logs');
 
       expect(result.name).toBe('Server Logs');
-      expect(result.multiplier).toBe(5);
+      expect(result.multiplier).toBe(1);
     });
 
     it('should normalize group names', () => {

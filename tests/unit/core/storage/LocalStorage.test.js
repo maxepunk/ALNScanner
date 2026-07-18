@@ -188,33 +188,48 @@ describe('LocalStorage Strategy', () => {
   });
 
   describe('group completion', () => {
+    // v2 cutover: SF_Group/tx.group carry the PURE name; multipliers
+    // resolve from the pack groups block (scoring.applyPackGroups) —
+    // the "(xN)" suffix parsers are gone.
+    async function withPackGroups(groups, fn) {
+      const { applyPackGroups } = await import('../../../../src/core/scoring.js');
+      applyPackGroups(groups);
+      try {
+        await fn();
+      } finally {
+        applyPackGroups(null);
+      }
+    }
+
     it('should award bonus when all group tokens collected', async () => {
-      // Mock tokenManager to return group tokens
-      mockTokenManager.getAllTokens.mockReturnValue([
-        { SF_RFID: 'g1t1', SF_Group: 'GroupA (x2)' },
-        { SF_RFID: 'g1t2', SF_Group: 'GroupA (x2)' }
-      ]);
+      await withPackGroups({ GroupA: { multiplier: 2 } }, async () => {
+        // Mock tokenManager to return group tokens
+        mockTokenManager.getAllTokens.mockReturnValue([
+          { SF_RFID: 'g1t1', SF_Group: 'GroupA' },
+          { SF_RFID: 'g1t2', SF_Group: 'GroupA' }
+        ]);
 
-      // Add first token - no bonus yet
-      await storage.addTransaction({
-        id: 'tx-1', tokenId: 'g1t1', teamId: '001',
-        mode: 'blackmarket', points: 10000, group: 'GroupA (x2)',
-        timestamp: new Date().toISOString()
+        // Add first token - no bonus yet
+        await storage.addTransaction({
+          id: 'tx-1', tokenId: 'g1t1', teamId: '001',
+          mode: 'blackmarket', points: 10000, group: 'GroupA',
+          timestamp: new Date().toISOString()
+        });
+
+        expect(storage.getTeamScores()[0].score).toBe(10000);
+
+        // Add second token - group complete, bonus awarded
+        await storage.addTransaction({
+          id: 'tx-2', tokenId: 'g1t2', teamId: '001',
+          mode: 'blackmarket', points: 10000, group: 'GroupA',
+          timestamp: new Date().toISOString()
+        });
+
+        const scores = storage.getTeamScores();
+        // x2 multiplier means bonus = (2-1) * base = 1 * 20000 = 20000
+        expect(scores[0].score).toBe(40000); // 20000 base + 20000 bonus
+        expect(scores[0].bonusScore).toBe(20000);
       });
-
-      expect(storage.getTeamScores()[0].score).toBe(10000);
-
-      // Add second token - group complete, bonus awarded
-      await storage.addTransaction({
-        id: 'tx-2', tokenId: 'g1t2', teamId: '001',
-        mode: 'blackmarket', points: 10000, group: 'GroupA (x2)',
-        timestamp: new Date().toISOString()
-      });
-
-      const scores = storage.getTeamScores();
-      // x2 multiplier means bonus = (2-1) * base = 1 * 20000 = 20000
-      expect(scores[0].score).toBe(40000); // 20000 base + 20000 bonus
-      expect(scores[0].bonusScore).toBe(20000);
     });
 
     it('should not award bonus for groups with multiplier <= 1', async () => {
@@ -236,20 +251,22 @@ describe('LocalStorage Strategy', () => {
       // Backend rule (transactionService.isGroupComplete): groups with <= 1
       // token never complete. Standalone previously paid a x2 single-token
       // group, diverging from networked scoring AND docs/SCORING_LOGIC.md.
-      mockTokenManager.getAllTokens.mockReturnValue([
-        { SF_RFID: 'solo1', SF_Group: 'SoloGroup (x2)' }
-      ]);
+      await withPackGroups({ SoloGroup: { multiplier: 2 } }, async () => {
+        mockTokenManager.getAllTokens.mockReturnValue([
+          { SF_RFID: 'solo1', SF_Group: 'SoloGroup' }
+        ]);
 
-      await storage.addTransaction({
-        id: 'tx-1', tokenId: 'solo1', teamId: '001',
-        mode: 'blackmarket', points: 10000, group: 'SoloGroup (x2)',
-        timestamp: new Date().toISOString()
+        await storage.addTransaction({
+          id: 'tx-1', tokenId: 'solo1', teamId: '001',
+          mode: 'blackmarket', points: 10000, group: 'SoloGroup',
+          timestamp: new Date().toISOString()
+        });
+
+        const scores = storage.getTeamScores();
+        expect(scores[0].score).toBe(10000); // base only — no bonus
+        expect(scores[0].bonusScore).toBe(0);
+        expect(storage.sessionData.teams['001'].completedGroups).toEqual([]);
       });
-
-      const scores = storage.getTeamScores();
-      expect(scores[0].score).toBe(10000); // base only — no bonus
-      expect(scores[0].bonusScore).toBe(0);
-      expect(storage.sessionData.teams['001'].completedGroups).toEqual([]);
     });
   });
 
@@ -328,27 +345,29 @@ describe('LocalStorage Strategy', () => {
     // future refactor cannot silently regress either half.
     it('an unscored counting-mode claim completes the group; bonus sums recorded points only', async () => {
       const { applyPackModes, _resetForTesting } = await import('../../../../src/core/modeSemantics.js');
+      const { applyPackGroups } = await import('../../../../src/core/scoring.js');
       applyPackModes({
         modes: [
           { id: 'fence', label: 'Fence', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-rankings' } },
           { id: 'stash', label: 'Stash', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: true, displayBehavior: { surface: 'none' } },
         ],
       });
+      applyPackGroups({ EventSet: { multiplier: 2 } }); // v2: multiplier is pack-declared
       try {
         mockTokenManager.getAllTokens.mockReturnValue([
-          { SF_RFID: 'e1', SF_Group: 'EventSet (x2)' },
-          { SF_RFID: 'e2', SF_Group: 'EventSet (x2)' }
+          { SF_RFID: 'e1', SF_Group: 'EventSet' },
+          { SF_RFID: 'e2', SF_Group: 'EventSet' }
         ]);
 
         await storage.addTransaction({
           id: 'tx-1', tokenId: 'e1', teamId: '001',
-          mode: 'fence', points: 10000, group: 'EventSet (x2)',
+          mode: 'fence', points: 10000, group: 'EventSet',
           timestamp: new Date().toISOString()
         });
         // Unscored counting claim: records 0 points but completes the set
         await storage.addTransaction({
           id: 'tx-2', tokenId: 'e2', teamId: '001',
-          mode: 'stash', points: 0, group: 'EventSet (x2)',
+          mode: 'stash', points: 0, group: 'EventSet',
           timestamp: new Date().toISOString()
         });
 
@@ -362,6 +381,7 @@ describe('LocalStorage Strategy', () => {
         expect(storage.sessionData.teams['001'].tokensScanned).toBe(1);
       } finally {
         _resetForTesting();
+        applyPackGroups(null);
       }
     });
   });

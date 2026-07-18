@@ -28,7 +28,7 @@ import {
 } from '../../../src/core/modeSemantics.js';
 
 const ALN_CONFIG = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   modes: [
     {
       id: 'blackmarket', label: 'Black Market', verb: 'Sell',
@@ -45,7 +45,7 @@ const ALN_CONFIG = {
 };
 
 const TOY_CONFIG = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   modes: [
     { id: 'fence', label: 'Fence', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-rankings' } },
     { id: 'tipoff', label: 'Tip-Off', scoringPolicy: 'none', entityRole: 'attribution', defaultEntity: 'The Dispatcher', countsTowardGroups: false, displayBehavior: { surface: 'scoreboard-evidence', fields: ['summary'] } },

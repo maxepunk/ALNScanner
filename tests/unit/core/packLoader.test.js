@@ -32,7 +32,7 @@ const GAME = { id: 'about-last-night', modes: [], scoring: { baseValues: { 1: 1 
 function manifestFor(hash, files) {
   return {
     kind: 'pack-manifest',
-    schemaVersion: 1,
+    schemaVersion: 2,
     packId: 'about-last-night',
     version: '1.2.0',
     contentHash: hash,

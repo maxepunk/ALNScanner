@@ -114,7 +114,7 @@ describe('XSS escaping (F-GMS-04)', () => {
         id: 't2',
         rfid: 'ok001',
         memoryType: XSS_PAYLOAD,
-        group: 'Group (x2)',
+        group: 'Group',
         valueRating: 3,
         isUnknown: false
       };

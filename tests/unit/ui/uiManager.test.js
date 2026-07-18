@@ -26,7 +26,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
     // Mock DataManager
     mockDataManager = {
       transactions: [
-        { id: '1', tokenId: 'token1', teamId: '001', timestamp: '2025-11-11T10:00:00Z', mode: 'blackmarket', valueRating: 3, memoryType: 'Technical', rfid: 'token1', group: 'Server Logs (x5)', isUnknown: false, points: 5000 }
+        { id: '1', tokenId: 'token1', teamId: '001', timestamp: '2025-11-11T10:00:00Z', mode: 'blackmarket', valueRating: 3, memoryType: 'Technical', rfid: 'token1', group: 'Server Logs', isUnknown: false, points: 5000 }
       ],
       backendScores: new Map(),
       SCORING_CONFIG: {
@@ -42,7 +42,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
         hasIncompleteGroups: false,
         hasUngroupedTokens: true,
         hasUnknownTokens: false,
-        ungroupedTokens: [{ rfid: 'token1', memoryType: 'Technical', valueRating: 3, group: 'Server Logs (x5)', isUnknown: false, id: 't1' }]
+        ungroupedTokens: [{ rfid: 'token1', memoryType: 'Technical', valueRating: 3, group: 'Server Logs', isUnknown: false, id: 't1' }]
       })),
       calculateTeamScoreWithBonuses: jest.fn(() => ({ baseScore: 5000, bonusScore: 0, totalScore: 5000 })),
       calculateTokenValue: jest.fn(() => 5000),
@@ -61,7 +61,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       getSessionStats: jest.fn(() => ({ count: 1, totalScore: 5000, totalValue: '⭐⭐⭐' })),
       getGlobalStats: jest.fn(() => ({ total: 1, teams: 1, totalValue: '5000', avgValue: '5000' })),
       getAllTeamScores: jest.fn(() => [{ teamId: '001', score: 5000, tokenCount: 1 }]),
-      getTeamTransactions: jest.fn(() => [{ rfid: 'token1', memoryType: 'Technical', valueRating: 3, group: 'Server Logs (x5)', isUnknown: false, id: 't1' }]),
+      getTeamTransactions: jest.fn(() => [{ rfid: 'token1', memoryType: 'Technical', valueRating: 3, group: 'Server Logs', isUnknown: false, id: 't1' }]),
       calculateTeamScoreWithBonuses: jest.fn(() => ({ baseScore: 5000, bonusScore: 0, totalScore: 5000 }))
     };
 
@@ -500,7 +500,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
         SF_RFID: 'token1',
         SF_MemoryType: 'Technical',
         SF_ValueRating: 3,
-        SF_Group: 'Server Logs (x5)',
+        SF_Group: 'Server Logs',
         summary: 'Test summary'
       };
 

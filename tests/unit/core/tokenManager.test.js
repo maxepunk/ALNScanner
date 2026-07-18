@@ -145,12 +145,25 @@ describe('TokenManager - ES6 Module', () => {
   // This ensures proper token data is always available for game sessions.
 
   describe('buildGroupInventory', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
+      // v2: pure names + pack-declared multipliers (both case spellings
+      // declared — PACK_GROUPS matches verbatim; the inventory's
+      // case-insensitive merge is the scanner's own defensive layer)
+      const { applyPackGroups } = await import('../../../src/core/scoring.js');
+      applyPackGroups({
+        'Test Group': { multiplier: 5 },
+        'test group': { multiplier: 5 },
+      });
       TokenManager.database = {
-        "token1": { SF_RFID: "token1", SF_ValueRating: 3, SF_MemoryType: "Technical", SF_Group: "Test Group (x5)" },
-        "token2": { SF_RFID: "token2", SF_ValueRating: 2, SF_MemoryType: "Technical", SF_Group: "Test Group (x5)" },
-        "token3": { SF_RFID: "token3", SF_ValueRating: 5, SF_MemoryType: "Business", SF_Group: "test group (x5)" } // lowercase
+        "token1": { SF_RFID: "token1", SF_ValueRating: 3, SF_MemoryType: "Technical", SF_Group: "Test Group" },
+        "token2": { SF_RFID: "token2", SF_ValueRating: 2, SF_MemoryType: "Technical", SF_Group: "Test Group" },
+        "token3": { SF_RFID: "token3", SF_ValueRating: 5, SF_MemoryType: "Business", SF_Group: "test group" } // lowercase
       };
+    });
+
+    afterEach(async () => {
+      const { applyPackGroups } = await import('../../../src/core/scoring.js');
+      applyPackGroups(null);
     });
 
     it('should normalize group names case-insensitively', () => {
@@ -276,7 +289,7 @@ describe('TokenManager - ES6 Module', () => {
     it('should build inventory if not cached', () => {
       TokenManager.groupInventory = null;
       TokenManager.database = {
-        "t1": { SF_RFID: "t1", SF_ValueRating: 3, SF_MemoryType: "Personal", SF_Group: "Group A (x2)" }
+        "t1": { SF_RFID: "t1", SF_ValueRating: 3, SF_MemoryType: "Personal", SF_Group: "Group A" }
       };
 
       const result = TokenManager.getGroupInventory();

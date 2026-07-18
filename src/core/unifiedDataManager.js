@@ -516,8 +516,9 @@ export class UnifiedDataManager extends EventTarget {
   // ============================================================================
 
   /**
-   * Parse group info from group string
-   * @param {string} groupString - e.g., "Server Logs (x5)"
+   * Parse group info from a v2 SF_Group value (pure name — multiplier
+   * resolves from the pack groups block via scoring.parseGroupInfo)
+   * @param {string} groupString - e.g., "Server Logs"
    * @returns {Object} { name, multiplier }
    */
   parseGroupInfo(groupString) {

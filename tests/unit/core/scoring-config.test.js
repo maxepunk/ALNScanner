@@ -133,19 +133,21 @@ describe('Vendored Scoring Shim (ledger L2 — baked last resort)', () => {
   });
 });
 
-describe('pack groups block (D1b — pack authoritative over the "(xN)" suffix)', () => {
-  it('parseGroupInfo prefers the declared multiplier, covers v2 pure names, and resets cleanly', async () => {
+describe('pack groups block (D1b/v2 — the SOLE multiplier source)', () => {
+  it('parseGroupInfo resolves declared names through the block; everything else reads 1 (no suffix parse exists)', async () => {
     const { applyPackGroups, parseGroupInfo } = await import('../../../src/core/scoring.js');
 
     applyPackGroups({ 'Server Logs': { multiplier: 7 } });
-    // v1 suffix shape: pack (7) beats suffix (2)
-    expect(parseGroupInfo('Server Logs (x2)')).toEqual({ name: 'Server Logs', multiplier: 7 });
     // v2 pure name resolves through the block
     expect(parseGroupInfo('Server Logs')).toEqual({ name: 'Server Logs', multiplier: 7 });
-    // Undeclared group: suffix fallback survives until the v2 cutover
-    expect(parseGroupInfo('Rogue Set (x3)')).toEqual({ name: 'Rogue Set', multiplier: 3 });
+    // A lingering "(xN)" suffix is part of the NAME now — it does not
+    // resolve to the declared group and never yields a multiplier (the
+    // suffix parsers died at the tokens-v2 cutover, D3b)
+    expect(parseGroupInfo('Server Logs (x2)')).toEqual({ name: 'Server Logs (x2)', multiplier: 1 });
+    // Undeclared name: 1 ("group with no completion bonus")
+    expect(parseGroupInfo('Rogue Set')).toEqual({ name: 'Rogue Set', multiplier: 1 });
 
-    applyPackGroups(null); // pre-groups pack: pure suffix behavior
-    expect(parseGroupInfo('Server Logs (x2)')).toEqual({ name: 'Server Logs', multiplier: 2 });
+    applyPackGroups(null); // no block (legacy game.json-less pack): all 1
+    expect(parseGroupInfo('Server Logs')).toEqual({ name: 'Server Logs', multiplier: 1 });
   });
 });

@@ -89,21 +89,23 @@ export function applyPackScoring(scoring) {
 }
 
 /**
- * Parse group info from group name string
- * Extracts group name and multiplier from format: "Group Name (xN)"
+ * Parse group info from a v2 SF_Group value (the PURE group name — the
+ * "(xN)" suffix parser DIED at the tokens-v2 cutover, A3 slice 2b/D3b:
+ * the Notion sync is the sole parser of the authoring shorthand).
  *
- * @param {string} groupName - Group name with optional multiplier suffix
- * @returns {Object} Parsed group info with name and multiplier
+ * The multiplier comes ONLY from the active pack's `groups` block
+ * (applied via applyPackGroups from the packLoader's game.json —
+ * backend tokenService parity). An undeclared name reads 1 ("group with
+ * no completion bonus") — unreachable for gated packs, since the
+ * backend's activation gate refuses tokens naming undeclared groups.
+ *
+ * @param {string} groupName - v2 SF_Group: pure group name
+ * @returns {Object} { name, multiplier }
  *
  * @example
- * parseGroupInfo("Marcus Sucks (x2)")  // { name: "Marcus Sucks", multiplier: 2 }
- * parseGroupInfo("Ungrouped Token")    // { name: "Ungrouped Token", multiplier: 1 }
+ * parseGroupInfo("Marcus Sucks")     // { name: "Marcus Sucks", multiplier: <pack> }
+ * parseGroupInfo("Ungrouped Token")  // { name: "Ungrouped Token", multiplier: 1 }
  */
-// D1b (A3 slice 2b): the pack's `groups` block is AUTHORITATIVE for
-// multipliers when declared (backend tokenService parity). Applied from
-// the packLoader's game.json alongside applyPackScoring; null when the
-// active pack pre-dates the block (suffix parse remains the fallback
-// until the tokens-v2 cutover deletes it — D3b).
 let PACK_GROUPS = null;
 
 export function applyPackGroups(groups) {
@@ -116,31 +118,13 @@ export function parseGroupInfo(groupName) {
         return { name: 'Unknown', multiplier: 1 };
     }
 
-    // Trim input first to handle leading/trailing whitespace
-    const trimmed = groupName.trim();
+    const name = groupName.trim();
 
-    // Match pattern: "Group Name (xN)"
-    const match = trimmed.match(/^(.+?)\s*\(x(\d+)\)$/i);
-    const name = match ? match[1].trim() : trimmed;
-
-    // Pack block wins over the suffix (and covers v2 pure names, where
-    // the suffix match fails and `name` is the whole trimmed string)
     if (PACK_GROUPS && PACK_GROUPS[name]) {
         return { name, multiplier: PACK_GROUPS[name].multiplier };
     }
 
-    if (match) {
-        const multiplier = parseInt(match[2]) || 1;
-
-        if (multiplier < 1) {
-            console.warn(`[scoring] Invalid multiplier ${multiplier} for "${name}", using 1`);
-            return { name, multiplier: 1 };
-        }
-
-        return { name, multiplier };
-    }
-
-    return { name: trimmed, multiplier: 1 };
+    return { name, multiplier: 1 };
 }
 
 /**
