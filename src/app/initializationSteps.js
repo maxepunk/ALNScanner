@@ -435,6 +435,7 @@ export default {
   registerServiceWorker,
   loadTokenDatabase,
   renderPackInfo,
+  validateSettingsMode,
   applyURLModeOverride,
   syncModeDisplay,
   determineInitialScreen,

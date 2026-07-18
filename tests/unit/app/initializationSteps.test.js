@@ -275,6 +275,21 @@ describe('InitializationSteps - ES6 Module', () => {
     });
   });
 
+  describe('default-export completeness (structural — the L2 boot-failure class)', () => {
+    it('every named function export is present on the default export object', async () => {
+      // app.js consumes the DEFAULT export object; a named export missing
+      // from it is invisible to jsdom unit tests (they mock the module)
+      // and boots-fails the real app ("...is not a function" at init —
+      // caught by L2 when validateSettingsMode was first left off).
+      const mod = await import('../../../src/app/initializationSteps.js');
+      const named = Object.keys(mod).filter(
+        (k) => k !== 'default' && typeof mod[k] === 'function'
+      );
+      const missing = named.filter((k) => typeof mod.default[k] !== 'function');
+      expect(missing).toEqual([]);
+    });
+  });
+
   describe('validateSettingsMode() (slice 1 — stale saved mode resets to the pack default)', () => {
     let mockSettings;
 
