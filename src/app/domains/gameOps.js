@@ -514,7 +514,14 @@ export class GameOpsDomain {
 
     if (sessionModeManager?.isStandalone()) {
       try {
-        await dataManager.adjustTeamScore(teamId, delta, reason);
+        const result = await dataManager.adjustTeamScore(teamId, delta, reason);
+        // The strategy reports refusals as {success:false, error} without
+        // throwing (e.g. the D2s2 pack-conditional score floor) — a
+        // success toast on a refused adjustment lies to the GM.
+        if (result && result.success === false) {
+          uiManager.showError(`Failed to adjust score: ${result.error}`);
+          return;
+        }
         debug.log(`Score adjusted (standalone): Team ${teamId} ${delta > 0 ? '+' : ''}${delta} (${reason})`);
         if (deltaInput) deltaInput.value = '';
         if (reasonInput) reasonInput.value = '';

@@ -22,6 +22,8 @@ describe('Vendored Scoring Shim (ledger L2 — baked last resort)', () => {
       Object.keys(gameConfig.scoring.baseValues).length
     );
     expect(SCORING_CONFIG.TYPE_MULTIPLIERS).toEqual(gameConfig.scoring.typeMultipliers);
+    // D2s2: the baked semantics mirror ALN too (allowNegative)
+    expect(SCORING_CONFIG.ALLOW_NEGATIVE).toBe(gameConfig.scoring.semantics.allowNegative);
   });
 
   it('pack game.json declares UNKNOWN as 0x (the null-memory-type contract)', () => {
@@ -86,6 +88,46 @@ describe('Vendored Scoring Shim (ledger L2 — baked last resort)', () => {
 
       expect(applied).toBe(false);
       expect(SCORING_CONFIG.BASE_VALUES).toEqual(bakedBase);
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('scoring.semantics.allowNegative ingestion (D2s2 — backend _normalizeScoring parity)', () => {
+    it('applies the pack flag: false (toy shape) and true (ALN shape)', async () => {
+      const { applyPackScoring, SCORING_CONFIG } = await import('../../../src/core/scoring.js');
+
+      applyPackScoring({
+        baseValues: { 1: 100 }, typeMultipliers: { Personal: 2 },
+        semantics: { allowNegative: false },
+      });
+      expect(SCORING_CONFIG.ALLOW_NEGATIVE).toBe(false);
+
+      applyPackScoring({
+        baseValues: { 1: 100 }, typeMultipliers: { Personal: 2 },
+        semantics: { allowNegative: true },
+      });
+      expect(SCORING_CONFIG.ALLOW_NEGATIVE).toBe(true);
+    });
+
+    it('declared scoring WITHOUT semantics gets the conservative floor (strict === true, backend rule)', async () => {
+      const { applyPackScoring, SCORING_CONFIG } = await import('../../../src/core/scoring.js');
+
+      applyPackScoring({ baseValues: { 1: 100 }, typeMultipliers: { Personal: 2 } });
+      expect(SCORING_CONFIG.ALLOW_NEGATIVE).toBe(false);
+    });
+
+    it('the shim path restores the baked default (true, ALN mirror)', async () => {
+      const { applyPackScoring, SCORING_CONFIG } = await import('../../../src/core/scoring.js');
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      applyPackScoring({
+        baseValues: { 1: 100 }, typeMultipliers: { Personal: 2 },
+        semantics: { allowNegative: false },
+      });
+      expect(SCORING_CONFIG.ALLOW_NEGATIVE).toBe(false);
+
+      applyPackScoring(null); // unusable → baked shim
+      expect(SCORING_CONFIG.ALLOW_NEGATIVE).toBe(true);
       warnSpy.mockRestore();
     });
   });

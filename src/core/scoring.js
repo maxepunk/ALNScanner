@@ -21,6 +21,7 @@
 const bakedConfig = Object.freeze({
     baseValues: Object.freeze({ 1: 10000, 2: 25000, 3: 50000, 4: 75000, 5: 150000 }),
     typeMultipliers: Object.freeze({ Personal: 1, Mention: 3, Business: 3, Party: 5, Technical: 5, UNKNOWN: 0 }),
+    semantics: Object.freeze({ allowNegative: true }),
 });
 
 /**
@@ -36,7 +37,12 @@ export const SCORING_CONFIG = {
     BASE_VALUES: Object.fromEntries(
         Object.entries(bakedConfig.baseValues).map(([k, v]) => [parseInt(k), v])
     ),
-    TYPE_MULTIPLIERS: { ...bakedConfig.typeMultipliers }
+    TYPE_MULTIPLIERS: { ...bakedConfig.typeMultipliers },
+    // D2s2: pack-conditional score floor (scoring.semantics.allowNegative).
+    // Baked default mirrors ALN (true), like every other shim value; the
+    // backend's normalization rule is identical (strict === true), so
+    // standalone and networked refuse the same adjustments.
+    ALLOW_NEGATIVE: bakedConfig.semantics.allowNegative,
 };
 
 /**
@@ -66,6 +72,7 @@ export function applyPackScoring(scoring) {
         // values will NOT reach this device until the pack ships game.json.
         console.warn('[scoring] LEGACY SHIM ACTIVE: pack has no usable game.json scoring block — using build-time baked values (F-TOOL-05 exposure)');
         SCORING_SOURCE = 'baked';
+        SCORING_CONFIG.ALLOW_NEGATIVE = bakedConfig.semantics.allowNegative;
         return false;
     }
     Object.keys(SCORING_CONFIG.BASE_VALUES).forEach((k) => delete SCORING_CONFIG.BASE_VALUES[k]);
@@ -74,6 +81,9 @@ export function applyPackScoring(scoring) {
         SCORING_CONFIG.BASE_VALUES[parseInt(k)] = v;
     });
     Object.assign(SCORING_CONFIG.TYPE_MULTIPLIERS, scoring.typeMultipliers);
+    // Strict === true, matching the backend's _normalizeScoring: a pack
+    // that declares scoring but omits semantics gets the conservative floor.
+    SCORING_CONFIG.ALLOW_NEGATIVE = !!(scoring.semantics && scoring.semantics.allowNegative === true);
     SCORING_SOURCE = 'pack';
     return true;
 }

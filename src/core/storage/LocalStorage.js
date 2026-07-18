@@ -480,7 +480,7 @@ export class LocalStorage extends IStorageStrategy {
   _recalculateTeamScores(teamId) {
     const team = this.sessionData.teams[teamId];
 
-    // Reset
+    // Reset (adminAdjustments audit trail survives, backend parity)
     team.baseScore = 0;
     team.bonusPoints = 0;
     team.score = 0;
@@ -491,6 +491,24 @@ export class LocalStorage extends IStorageStrategy {
     this.sessionData.transactions
       .filter(tx => tx.teamId === teamId)
       .forEach(tx => this._updateTeamScore(tx));
+
+    // Replay admin adjustments (backend parity: the networked rebuild
+    // replays deltas in transactionService.rebuildScoresFromTransactions
+    // — dropping them here silently erased GM adjustments on any
+    // standalone deletion; pre-existing divergence, D2s2 census).
+    const adjustments = team.adminAdjustments || [];
+    const totalDelta = adjustments.reduce((sum, adj) => sum + (adj.delta || 0), 0);
+    team.baseScore += totalDelta;
+    team.score = team.baseScore + team.bonusPoints;
+
+    // Pack-conditional floor on the recompute path (D2s2): a deletion can
+    // shrink the base an accepted adjustment leaned on — floor loudly,
+    // keeping score = baseScore + bonusPoints (backend rebuild parity).
+    if (team.score < 0 && SCORING_CONFIG.ALLOW_NEGATIVE !== true) {
+      console.warn(`[LocalStorage] Score floored at 0 during rebuild for ${teamId} (pack disallows negative scores; unfloored: ${team.score})`);
+      team.score = 0;
+      team.baseScore = -team.bonusPoints;
+    }
   }
 
   /**
@@ -520,8 +538,27 @@ export class LocalStorage extends IStorageStrategy {
       timestamp: new Date().toISOString()
     };
 
+    // Pack-conditional score floor (D2s2, backend parity with
+    // transactionService.adjustTeamScore): reject — never clamp — an
+    // adjustment that would cross zero when the pack does not allow
+    // negative scores. Checked BEFORE the audit push so a refused
+    // adjustment leaves no trace.
+    const projected = team.score + adjustment.delta;
+    if (projected < 0 && SCORING_CONFIG.ALLOW_NEGATIVE !== true) {
+      return {
+        success: false,
+        error: `Score adjustment refused: ${adjustment.delta} would take ${teamId} to ${projected}, ` +
+          'and the active pack does not allow negative scores (scoring.semantics.allowNegative)'
+      };
+    }
+
     team.adminAdjustments.push(adjustment);
+    // BOTH fields, backend parity (TeamScore.adjustScore): bumping only
+    // `score` broke the score = baseScore + bonusPoints invariant, so the
+    // next scoring scan's recompute silently WIPED the adjustment
+    // (pre-existing standalone bug, caught by the D2s2 census).
     team.score += adjustment.delta;
+    team.baseScore += adjustment.delta;
 
     this._saveSession();
 

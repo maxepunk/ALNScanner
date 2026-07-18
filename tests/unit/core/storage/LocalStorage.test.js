@@ -445,6 +445,137 @@ describe('LocalStorage Strategy', () => {
 
       expect(seen).toHaveLength(0);
     });
+
+    it('adjusts baseScore WITH score, so the next scoring scan cannot wipe the adjustment (invariant fix)', async () => {
+      // Pre-existing standalone bug (D2s2 census): only `score` was
+      // bumped, so the next scan's `score = baseScore + bonusPoints`
+      // recompute silently erased the adjustment.
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+      await storage.adjustTeamScore('001', 5000, 'Bonus award');
+
+      await storage.addTransaction({
+        id: 'tx-2', tokenId: 'token2', teamId: '001',
+        mode: 'blackmarket', points: 1000, timestamp: new Date().toISOString()
+      });
+
+      expect(storage.getTeamScores()[0].score).toBe(16000);
+    });
+  });
+
+  describe('pack-conditional score floor (D2s2 — backend parity)', () => {
+    afterEach(async () => {
+      // Restore the baked semantics (ALLOW_NEGATIVE true) for other suites
+      const { applyPackScoring } = await import('../../../../src/core/scoring.js');
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      applyPackScoring(null);
+      warnSpy.mockRestore();
+    });
+
+    async function setAllowNegative(allowNegative) {
+      const { applyPackScoring } = await import('../../../../src/core/scoring.js');
+      applyPackScoring({
+        baseValues: { 1: 10000, 2: 25000, 3: 50000, 4: 75000, 5: 150000 },
+        typeMultipliers: { Personal: 1, Mention: 3, Business: 3, Party: 5, Technical: 5, UNKNOWN: 0 },
+        semantics: { allowNegative },
+      });
+    }
+
+    it('allowNegative TRUE: an adjustment may take a team below zero', async () => {
+      await setAllowNegative(true);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+
+      const result = await storage.adjustTeamScore('001', -15000, 'Big penalty');
+
+      expect(result.success).toBe(true);
+      expect(storage.getTeamScores()[0].score).toBe(-5000);
+    });
+
+    it('allowNegative FALSE: rejects a zero-crossing adjustment; no mutation, no audit entry, no event', async () => {
+      await setAllowNegative(false);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+      const seen = [];
+      storage.addEventListener('team-score:updated', (e) => seen.push(e.detail));
+
+      const result = await storage.adjustTeamScore('001', -15000, 'Big penalty');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/would take 001 to -5000.*does not allow negative scores/);
+      expect(storage.getTeamScores()[0].score).toBe(10000);
+      expect(storage.sessionData.teams['001'].adminAdjustments).toHaveLength(0);
+      expect(seen).toHaveLength(0);
+    });
+
+    it('allowNegative FALSE: accepts a negative delta that lands exactly at zero', async () => {
+      await setAllowNegative(false);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+
+      const result = await storage.adjustTeamScore('001', -10000, 'Exact drain');
+
+      expect(result.success).toBe(true);
+      expect(storage.getTeamScores()[0].score).toBe(0);
+    });
+
+    it('deletion rebuild REPLAYS admin adjustments (backend parity — they were silently dropped)', async () => {
+      await setAllowNegative(true);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+      await storage.addTransaction({
+        id: 'tx-2', tokenId: 'token2', teamId: '001',
+        mode: 'blackmarket', points: 1000, timestamp: new Date().toISOString()
+      });
+      await storage.adjustTeamScore('001', 5000, 'Bonus award');
+
+      await storage.removeTransaction('tx-2');
+
+      // 10000 (remaining tx) + 5000 (replayed adjustment)
+      expect(storage.getTeamScores()[0].score).toBe(15000);
+      expect(storage.sessionData.teams['001'].adminAdjustments).toHaveLength(1);
+    });
+
+    it('deletion rebuild floors at 0 under allowNegative FALSE (the one reachable negative), loudly', async () => {
+      await setAllowNegative(false);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+      // Accepted while the base supported it…
+      await storage.adjustTeamScore('001', -8000, 'Penalty');
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // …then the base is deleted out from under it.
+      await storage.removeTransaction('tx-1');
+
+      expect(storage.getTeamScores()[0].score).toBe(0);
+      expect(warnSpy.mock.calls.some(([m]) => String(m).includes('Score floored at 0 during rebuild'))).toBe(true);
+      warnSpy.mockRestore();
+    });
+
+    it('deletion rebuild keeps the negative under allowNegative TRUE', async () => {
+      await setAllowNegative(true);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+      await storage.adjustTeamScore('001', -8000, 'Penalty');
+
+      await storage.removeTransaction('tx-1');
+
+      expect(storage.getTeamScores()[0].score).toBe(-8000);
+    });
   });
 
   describe('getGameActivity', () => {
