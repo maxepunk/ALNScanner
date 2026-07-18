@@ -599,3 +599,43 @@ input:focus-visible + .slider {
   color: var(--color-text-secondary);
   margin-top: 2px;
 }
+
+/* ============================================
+   MODE SELECTOR (slice 1 — segmented control rendered from the pack's
+   declared modes; per-mode theming beyond active/inactive is Track D/3c)
+   ============================================ */
+.mode-selector {
+  display: inline-flex;
+  gap: 0;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.mode-selector:empty {
+  display: none;
+}
+
+.mode-segment {
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.mode-segment + .mode-segment {
+  border-left: 1px solid var(--color-border);
+}
+
+.mode-segment.active {
+  background: var(--color-accent-primary);
+  color: var(--color-bg-primary);
+}

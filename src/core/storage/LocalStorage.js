@@ -12,6 +12,7 @@ import {
   calculateTokenValue
 } from '../scoring.js';
 import { buildGameActivity } from '../gameActivityBuilder.js';
+import { isScoringMode, countsTowardGroups } from '../modeSemantics.js';
 
 export class LocalStorage extends IStorageStrategy {
   /**
@@ -341,8 +342,9 @@ export class LocalStorage extends IStorageStrategy {
 
     const team = this.sessionData.teams[teamId];
 
-    // Only score blackmarket mode
-    if (transaction.mode === 'blackmarket' && transaction.points) {
+    // Only standard-scoring modes pay (slice 1: scoringPolicy flag,
+    // never mode-id equality — parity with backend gameRules/scoring)
+    if (isScoringMode(transaction.mode) && transaction.points) {
       team.baseScore += transaction.points;
       team.score = team.baseScore + team.bonusPoints;
     }
@@ -350,8 +352,9 @@ export class LocalStorage extends IStorageStrategy {
     team.tokensScanned++;
     team.lastScanTime = transaction.timestamp;
 
-    // Check group completion
-    if (transaction.mode === 'blackmarket' && transaction.group) {
+    // Check group completion (slice 1: only counting modes build
+    // group progress — the countsTowardGroups flag, decision A1 generalized)
+    if (countsTowardGroups(transaction.mode) && transaction.group) {
       this._checkGroupCompletion(teamId, transaction.group);
     }
   }
@@ -369,7 +372,7 @@ export class LocalStorage extends IStorageStrategy {
 
     // Get all team transactions for this group
     const teamTxs = this.sessionData.transactions.filter(tx =>
-      tx.teamId === teamId && tx.mode === 'blackmarket'
+      tx.teamId === teamId && countsTowardGroups(tx.mode)
     );
 
     const groupTxs = teamTxs.filter(tx => {

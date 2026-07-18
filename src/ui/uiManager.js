@@ -13,6 +13,7 @@
 
 import { escapeHtml } from '../utils/escapeHtml.js';
 import { formatCurrency } from '../utils/formatCurrency.js';
+import { wireModeIds, isScoringMode, modeHasSurface, modeLabel } from '../core/modeSemantics.js';
 import { formatDuration } from '../utils/formatDuration.js';
 import { showToast as sharedShowToast } from '../utils/showToast.js';
 import { GameOpsRenderer } from './renderers/GameOpsRenderer.js';
@@ -210,39 +211,58 @@ class UIManager {
   }
 
   /**
-   * Update mode display elements
-   * @param {string} mode - 'detective' or 'blackmarket'
+   * Update mode display elements (slice 1: N pack-declared modes).
+   * The pill shows `<label> Mode` (byte-identical to the pre-slice text
+   * for ALN's two modes — the E2E page objects read it) with a
+   * `mode-<id>` class (ALN's two ids keep their existing styles; the CSS
+   * taxonomy for arbitrary ids is slice 3c). The old binary #modeToggle
+   * checkbox is retired — the segmented selector is the N-mode control.
+   * @param {string} mode - A mode id declared by the active pack
    */
   updateModeDisplay(mode) {
     const indicator = document.getElementById('modeIndicator');
     const modeText = document.getElementById('modeText');
-    const toggle = document.getElementById('modeToggle');
 
     if (!indicator) return;
 
-    if (mode === 'blackmarket') {
-      indicator.className = 'mode-indicator mode-blackmarket';
-      indicator.textContent = 'Black Market Mode';
-      if (modeText) modeText.textContent = 'Black Market Mode';
-      if (toggle) toggle.checked = true;
-    } else {
-      indicator.className = 'mode-indicator mode-detective';
-      indicator.textContent = 'Detective Mode';
-      if (modeText) modeText.textContent = 'Detective Mode';
-      if (toggle) toggle.checked = false;
-    }
+    const labelText = `${modeLabel(mode)} Mode`;
+    indicator.className = `mode-indicator mode-${mode}`;
+    indicator.textContent = labelText;
+    if (modeText) modeText.textContent = labelText;
 
+    this.renderModeSelector(mode);
     this.updateNavigationButtons();
   }
 
   /**
-   * Update navigation button visibility
+   * Render the segmented mode selector from the pack's declared modes
+   * (slice 1, design §6 — the data-driven replacement for the binary
+   * toggle). Idempotent full render; hidden entirely when the container
+   * is absent (older markup) — the cycling pill still works.
+   * @param {string} activeMode - The currently selected mode id
+   */
+  renderModeSelector(activeMode) {
+    const container = document.getElementById('modeSelector');
+    if (!container) return;
+
+    container.innerHTML = wireModeIds().map((id) => `
+      <button type="button"
+              class="mode-segment${id === activeMode ? ' active' : ''}"
+              data-action="app.selectMode" data-arg="${escapeHtml(id)}"
+              aria-pressed="${id === activeMode}">${escapeHtml(modeLabel(id))}</button>
+    `).join('');
+  }
+
+  /**
+   * Update navigation button visibility (slice 1: the scoreboard button
+   * follows the current mode's declared display surface, not a mode-id
+   * literal — the scoreboard screen is the rankings surface)
    */
   updateNavigationButtons() {
     const scoreboardButton = document.getElementById('scoreboardButton');
     if (scoreboardButton && this.settings) {
       scoreboardButton.style.display =
-        this.settings.mode === 'blackmarket' ? 'block' : 'none';
+        modeHasSurface(this.settings.mode, 'scoreboard-rankings') ? 'block' : 'none';
     }
   }
 
@@ -274,7 +294,7 @@ class UIManager {
     }
 
     if (valueElement) {
-      if (this.settings.mode === 'blackmarket') {
+      if (isScoringMode(this.settings.mode)) {
         valueElement.textContent = formatCurrency(stats.totalScore);
         if (labelElement) labelElement.textContent = 'Score';
       } else {
@@ -418,7 +438,7 @@ class UIManager {
       typeEl.style.color = '#FF5722';
       groupEl.textContent = `Raw ID: ${tokenId}`;
 
-      if (this.settings.mode === 'blackmarket') {
+      if (isScoringMode(this.settings.mode)) {
         valueEl.textContent = '$0';
       } else {
         valueEl.textContent = 'No Value';
@@ -436,7 +456,7 @@ class UIManager {
       typeEl.style.color = '#333';
       groupEl.textContent = token.SF_Group;
 
-      if (this.settings.mode === 'blackmarket') {
+      if (isScoringMode(this.settings.mode)) {
         const tokenScore = dataSource.calculateTokenValue({
           valueRating: token.SF_ValueRating,
           memoryType: token.SF_MemoryType,

@@ -12,7 +12,7 @@ import { escapeHtml } from '../../utils/escapeHtml.js';
  *
  * Data source: `DataManager.getExposedOwners()` — derived from
  * detective-mode transactions, mirroring the filter applied on
- * scoreboard.html (`transaction.mode === 'detective'`).
+ * scoreboard.html (slice 1: evidence-surface modes via core/modeSemantics).
  */
 export class EvidencePickerRenderer {
   constructor(elements = {}) {

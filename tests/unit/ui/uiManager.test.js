@@ -85,7 +85,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
 
       <div id="modeIndicator"></div>
       <span id="modeText"></span>
-      <input id="modeToggle" type="checkbox" />
+      <div id="modeSelector"></div>
       <button id="scoreboardButton"></button>
       <span id="teamDisplay"></span>
       <span id="teamTokenCount"></span>
@@ -232,7 +232,11 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       const indicator = document.getElementById('modeIndicator');
       expect(indicator.className).toBe('mode-indicator mode-blackmarket');
       expect(indicator.textContent).toBe('Black Market Mode');
-      expect(document.getElementById('modeToggle').checked).toBe(true);
+      // Slice 1: the binary checkbox is retired — the segmented selector is
+      // the N-mode control; blackmarket renders as the active segment.
+      const activeSegment = document.querySelector('#modeSelector .mode-segment.active');
+      expect(activeSegment.dataset.arg).toBe('blackmarket');
+      expect(activeSegment.textContent).toBe('Black Market');
     });
 
     it('should update mode display for detective', () => {
@@ -241,7 +245,8 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       const indicator = document.getElementById('modeIndicator');
       expect(indicator.className).toBe('mode-indicator mode-detective');
       expect(indicator.textContent).toBe('Detective Mode');
-      expect(document.getElementById('modeToggle').checked).toBe(false);
+      const activeSegment = document.querySelector('#modeSelector .mode-segment.active');
+      expect(activeSegment.dataset.arg).toBe('detective');
     });
 
     it('should show scoreboard button in blackmarket mode', () => {

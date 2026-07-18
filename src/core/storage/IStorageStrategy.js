@@ -10,7 +10,7 @@
  * @property {string} id - Unique transaction ID
  * @property {string} tokenId - Token identifier (from NFC/manual entry)
  * @property {string} teamId - Team identifier
- * @property {string} mode - Transaction mode ('blackmarket' | 'detective')
+ * @property {string} mode - Transaction mode (a pack-declared mode id; semantics via core/modeSemantics)
  * @property {number} [points] - Score value (blackmarket mode only)
  * @property {number} [valueRating] - Token star rating (1-5)
  * @property {string} [memoryType] - Token type ('Personal' | 'Business' | 'Technical')

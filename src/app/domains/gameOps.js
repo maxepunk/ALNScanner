@@ -14,6 +14,7 @@
  */
 
 import { escapeHtml } from '../../utils/escapeHtml.js';
+import { wireModeIds, isScoringMode, modeHasSurface } from '../../core/modeSemantics.js';
 
 export class GameOpsDomain {
   /**
@@ -25,16 +26,16 @@ export class GameOpsDomain {
 
   // ========== Settings Management ==========
 
+  /**
+   * Cycle to the next declared mode (slice 1: the pack declares N modes;
+   * the pill cycles them in declaration order — the two-mode ALN case
+   * behaves exactly like the old binary flip).
+   */
   toggleMode() {
-    const { settings, uiManager, config } = this.app;
-    settings.mode = settings.mode === 'detective' ? 'blackmarket' : 'detective';
-    settings.save();
-    uiManager.updateModeDisplay(settings.mode);
-
-    const scanScreen = document.getElementById('scanScreen');
-    if (scanScreen && scanScreen.classList.contains('active')) {
-      uiManager.updateSessionStats();
-    }
+    const { settings, config } = this.app;
+    const ids = wireModeIds();
+    const next = ids[(ids.indexOf(settings.mode) + 1) % ids.length];
+    this.selectMode(next);
 
     const indicator = document.getElementById('modeIndicator');
     if (indicator) {
@@ -42,6 +43,28 @@ export class GameOpsDomain {
       setTimeout(() => {
         indicator.style.transform = 'scale(1)';
       }, config.ANIMATION_DURATION);
+    }
+  }
+
+  /**
+   * Select a specific declared mode (segmented selector, slice 1). An id
+   * the active pack does not declare is REFUSED loudly — the affordance
+   * is disabled, never applied blind (design §3 client rule).
+   * @param {string} modeId
+   */
+  selectMode(modeId) {
+    const { settings, uiManager, debug } = this.app;
+    if (!wireModeIds().includes(modeId)) {
+      debug.log(`Mode selection refused: '${modeId}' is not declared by the active pack`, true);
+      return;
+    }
+    settings.mode = modeId;
+    settings.save();
+    uiManager.updateModeDisplay(settings.mode);
+
+    const scanScreen = document.getElementById('scanScreen');
+    if (scanScreen && scanScreen.classList.contains('active')) {
+      uiManager.updateSessionStats();
     }
   }
 
@@ -276,7 +299,7 @@ export class GameOpsDomain {
       isUnknown,
     };
 
-    if (settings.mode === 'blackmarket' && !isUnknown) {
+    if (isScoringMode(settings.mode) && !isUnknown) {
       transaction.points = dataManager.calculateTokenValue(transaction);
     } else {
       transaction.points = 0;
@@ -312,7 +335,7 @@ export class GameOpsDomain {
       }
     }
 
-    if (settings.mode === 'blackmarket' && !isUnknown) {
+    if (isScoringMode(settings.mode) && !isUnknown) {
       debug.log(`Token scored: $${transaction.points.toLocaleString()}`);
     }
 
@@ -373,8 +396,10 @@ export class GameOpsDomain {
 
   showScoreboard() {
     const { settings, uiManager, debug } = this.app;
-    if (settings.mode !== 'blackmarket') {
-      debug.log('Scoreboard only available in Black Market mode');
+    // The scoreboard screen is the RANKINGS surface — gated on the current
+    // mode's declared display surface, not a mode-id literal (slice 1).
+    if (!modeHasSurface(settings.mode, 'scoreboard-rankings')) {
+      debug.log('Scoreboard only available in a rankings-surface mode');
       return;
     }
     uiManager.renderScoreboard();

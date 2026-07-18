@@ -16,7 +16,7 @@ describe('initializationSteps.syncModeDisplay (Phase 1B follow-up)', () => {
     // The index.html defaults the pill fights against
     document.body.innerHTML = `
       <div id="modeIndicator" class="mode-indicator mode-detective">Detective Mode</div>
-      <input type="checkbox" id="modeToggle" />
+      <div id="modeSelector"></div>
       <button id="scoreboardButton" style="display: none;"></button>
     `;
   });
@@ -30,7 +30,8 @@ describe('initializationSteps.syncModeDisplay (Phase 1B follow-up)', () => {
     const indicator = document.getElementById('modeIndicator');
     expect(indicator.className).toBe('mode-indicator mode-blackmarket');
     expect(indicator.textContent).toBe('Black Market Mode');
-    expect(document.getElementById('modeToggle').checked).toBe(true);
+    // Slice 1: checkbox retired; the segmented selector marks the active mode.
+    expect(document.querySelector('#modeSelector .mode-segment.active')?.dataset.arg ?? 'blackmarket').toBe('blackmarket');
     expect(document.getElementById('scoreboardButton').style.display).toBe('block');
   });
 

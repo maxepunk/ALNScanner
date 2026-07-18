@@ -118,6 +118,11 @@ class App {
     // Load token database (Phase 1A)
     await this.initializationSteps.loadTokenDatabase(this.tokenManager, this.uiManager);
 
+    // Validate the persisted mode against the ACTIVE pack's declared modes
+    // (slice 1 — the pack's mode table went live in Phase 1A; a stale saved
+    // id resets to the pack's first declared mode with a loud log)
+    this.initializationSteps.validateSettingsMode(this.settings);
+
     // Apply URL parameter mode override (Phase 1B)
     this.initializationSteps.applyURLModeOverride(window.location.search, this.settings);
 
@@ -359,6 +364,7 @@ class App {
   // ========== Settings Management (Game Ops) ==========
 
   toggleMode() { return this._gameOps.toggleMode(); }
+  selectMode(modeId) { return this._gameOps.selectMode(modeId); }
 
   // ========== Team Entry (Game Ops) ==========
 

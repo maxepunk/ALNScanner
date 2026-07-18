@@ -16,7 +16,8 @@ import {
   applyURLModeOverride,
   determineInitialScreen,
   applyInitialScreenDecision,
-  showLoadingScreen
+  showLoadingScreen,
+  validateSettingsMode,
 } from '../../../src/app/initializationSteps.js';
 import Debug from '../../../src/utils/debug.js';
 
@@ -274,6 +275,35 @@ describe('InitializationSteps - ES6 Module', () => {
     });
   });
 
+  describe('validateSettingsMode() (slice 1 — stale saved mode resets to the pack default)', () => {
+    let mockSettings;
+
+    beforeEach(() => {
+      mockSettings = { mode: 'detective', save: jest.fn() };
+    });
+
+    it('keeps a persisted mode the active pack declares (no reset, no save)', () => {
+      const reset = validateSettingsMode(mockSettings);
+
+      expect(reset).toBe(false);
+      expect(mockSettings.mode).toBe('detective');
+      expect(mockSettings.save).not.toHaveBeenCalled();
+    });
+
+    it('RESETS a stale persisted id to the pack FIRST declared mode with a loud log', () => {
+      mockSettings.mode = 'constellation'; // pack switched under a saved setting
+      const initialCount = Debug.messages.length;
+
+      const reset = validateSettingsMode(mockSettings);
+
+      expect(reset).toBe(true);
+      expect(mockSettings.mode).toBe('blackmarket'); // ALN table modes[0]
+      expect(mockSettings.save).toHaveBeenCalled();
+      expect(Debug.messages.length).toBeGreaterThan(initialCount);
+      expect(Debug.messages.some((m) => String(m).includes('STALE MODE RESET'))).toBe(true);
+    });
+  });
+
   describe('applyURLModeOverride()', () => {
     it('should set blackmarket mode when ?mode=blackmarket is present', () => {
       const result = applyURLModeOverride('?mode=blackmarket', mockSettings);
@@ -298,8 +328,16 @@ describe('InitializationSteps - ES6 Module', () => {
       expect(mockSettings.save).not.toHaveBeenCalled();
     });
 
-    it('should return false when mode parameter is different', () => {
+    it('applies ?mode=detective too (slice 1: any pack-declared id is a valid override)', () => {
       const result = applyURLModeOverride('?mode=detective', mockSettings);
+
+      expect(result).toBe(true);
+      expect(mockSettings.mode).toBe('detective');
+      expect(mockSettings.save).toHaveBeenCalled();
+    });
+
+    it('REFUSES an id the active pack does not declare (loud, never applied blind)', () => {
+      const result = applyURLModeOverride('?mode=constellation', mockSettings);
 
       expect(result).toBe(false);
       expect(mockSettings.save).not.toHaveBeenCalled();

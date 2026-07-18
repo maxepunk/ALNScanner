@@ -12,6 +12,7 @@
 import Debug from '../utils/debug.js';
 import defaultPackLoader from './packLoader.js';
 import { applyPackScoring } from './scoring.js';
+import { applyPackModes } from './modeSemantics.js';
 
 /**
  * TokenManager Class
@@ -55,6 +56,10 @@ class TokenManagerClass {
       // absent (older published pack), the baked legacy shim stays active
       // and warns loudly (transitional-debt ledger L2).
       applyPackScoring(pack.gameConfig?.scoring);
+
+      // Runtime mode table from the same artifact (slice 1). Same shim
+      // doctrine: no modes block → baked ALN table + loud warn (ledger L6).
+      applyPackModes(pack.gameConfig);
 
       // Build group inventory for bonus calculations
       this.groupInventory = this.buildGroupInventory();

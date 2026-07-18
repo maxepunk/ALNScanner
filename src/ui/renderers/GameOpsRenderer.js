@@ -13,6 +13,7 @@
 
 import { escapeHtml } from '../../utils/escapeHtml.js';
 import { formatCurrency } from '../../utils/formatCurrency.js';
+import { isScoringMode, modeLabel } from '../../core/modeSemantics.js';
 
 export class GameOpsRenderer {
   /**
@@ -461,10 +462,12 @@ export class GameOpsRenderer {
     const claimEvent = events.find(e => e.type === 'claim');
 
     let statusContent;
-    if (status === 'claimed' && claimEvent?.mode === 'blackmarket') {
+    // Slice 1: claimed-status presentation follows the mode's scoringPolicy
+    // (paid claims read as SOLD, unpaid as EXPOSED); wording is slice-3a scope.
+    if (status === 'claimed' && isScoringMode(claimEvent?.mode)) {
       statusContent = `<span class="status-icon">💰</span> SOLD to ${escapeHtml(claimEvent?.teamId || 'Unknown')}
         <span class="points">${formatCurrency(claimEvent?.points)}</span>`;
-    } else if (status === 'claimed' && claimEvent?.mode === 'detective') {
+    } else if (status === 'claimed' && claimEvent?.mode) {
       statusContent = `<span class="status-icon">🔍</span> EXPOSED by ${escapeHtml(claimEvent?.teamId || 'Unknown')}
         <span class="points potential">Worth: ${formatCurrency(potentialValue)}</span>`;
     } else {
@@ -555,8 +558,8 @@ export class GameOpsRenderer {
       case 'claim':
         return `
           <div class="event claim ${event.mode}">
-            <span class="icon">${event.mode === 'blackmarket' ? '💰' : '🔍'}</span>
-            <span class="label">${event.mode === 'blackmarket' ? 'Black Market' : 'Detective'}</span>
+            <span class="icon">${isScoringMode(event.mode) ? '💰' : '🔍'}</span>
+            <span class="label">${escapeHtml(modeLabel(event.mode))}</span>
             <span class="team">${escapeHtml(event.teamId)}</span>
             <span class="time">${time}</span>
             <span class="points">${formatCurrency(event.points)}</span>

@@ -23,6 +23,7 @@ import { isTokenValid } from '../utils/jwtUtils.js';
 import stateValidationService from '../services/StateValidationService.js';
 import packLoader from '../core/packLoader.js';
 import { SCORING_SOURCE } from '../core/scoring.js';
+import { wireModeIds, defaultModeId } from '../core/modeSemantics.js';
 
 /**
  * Initialize UIManager
@@ -180,8 +181,35 @@ export function renderPackInfo(loader = packLoader, scoringSource = undefined) {
 }
 
 /**
- * Apply URL parameter mode override
- * Checks for ?mode=blackmarket or ?mode=black-market and sets station mode
+ * Validate the persisted station mode against the ACTIVE pack's declared
+ * modes (slice 1, design §6). Runs after Phase 1A (the pack's mode table
+ * is applied there) and before the URL override. A stale saved id — the
+ * pack changed underneath a saved setting, or a pre-pack device meeting a
+ * non-ALN pack — resets to the pack's FIRST declared mode with a LOUD log.
+ * The settings.js 'detective' seed is only ever a legacy starting value;
+ * this step is what makes the effective mode pack-driven.
+ *
+ * @param {Object} settings - Settings object with mode and save()
+ * @returns {boolean} True when the persisted mode was stale and reset
+ */
+export function validateSettingsMode(settings) {
+  const valid = wireModeIds();
+  if (valid.includes(settings.mode)) return false;
+
+  const fallback = defaultModeId();
+  Debug.log(
+    `STALE MODE RESET: persisted mode '${settings.mode}' is not declared by the active pack ` +
+    `(valid: ${valid.join(', ')}) — resetting to '${fallback}'`, true);
+  settings.mode = fallback;
+  settings.save();
+  return true;
+}
+
+/**
+ * Apply URL parameter mode override (slice 1: any pack-declared mode id;
+ * the historical ?mode=black-market alias still maps to 'blackmarket').
+ * An id the active pack does not declare is REFUSED with a loud log —
+ * never applied blind.
  *
  * @param {string} locationSearch - window.location.search (query string)
  * @param {Object} settings - Settings object with mode and save()
@@ -189,16 +217,20 @@ export function renderPackInfo(loader = packLoader, scoringSource = undefined) {
  */
 export function applyURLModeOverride(locationSearch, settings) {
   const urlParams = new URLSearchParams(locationSearch);
-  const modeParam = urlParams.get('mode');
+  let modeParam = urlParams.get('mode');
+  if (!modeParam) return false;
 
-  if (modeParam === 'blackmarket' || modeParam === 'black-market') {
-    settings.mode = 'blackmarket';
-    settings.save();
-    Debug.log('Station mode set to blackmarket via URL parameter');
-    return true;
+  if (modeParam === 'black-market') modeParam = 'blackmarket';
+
+  if (!wireModeIds().includes(modeParam)) {
+    Debug.log(`URL mode override REFUSED: '${modeParam}' is not declared by the active pack (valid: ${wireModeIds().join(', ')})`, true);
+    return false;
   }
 
-  return false;
+  settings.mode = modeParam;
+  settings.save();
+  Debug.log(`Station mode set to ${modeParam} via URL parameter`);
+  return true;
 }
 
 /**

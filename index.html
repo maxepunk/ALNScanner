@@ -69,6 +69,10 @@
             <div class="header-content">
                 <h1>Transaction Station</h1>
                 <div id="modeIndicator" class="mode-indicator mode-detective" data-action="app.toggleMode" title="Click to switch mode">Detective Mode</div>
+                <!-- Slice 1: segmented selector rendered from the pack's declared
+                     modes (uiManager.renderModeSelector) — the N-mode control the
+                     binary toggle grew into; the pill above cycles + indicates. -->
+                <div id="modeSelector" class="mode-selector" role="group" aria-label="Game mode"></div>
                 <div class="device-id">Device ID: <span id="deviceIdDisplay">001</span></div>
                 <!-- A2 staleness visibility: pack <version> (<hash-prefix>) · <source>,
                      plus a warning badge when running from the build-time bundle -->
