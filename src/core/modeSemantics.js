@@ -53,6 +53,7 @@ export const LEGACY_ALN_MODES = Object.freeze([
 
 let activeModes = null; // null = shim (legacy ALN table)
 let warnedLegacy = false;
+let warnedUndrivableModes = new Set();
 
 /**
  * Apply the loaded pack's mode table (Phase 1A, after applyPackScoring).
@@ -86,6 +87,33 @@ function _modes() {
 }
 
 /**
+ * Client defense-in-depth (D3s2 review finding): non-consuming ∧
+ * countsTowardGroups is refused by the ORCHESTRATOR's activation gate,
+ * but a STANDALONE scanner (Pages deploy, bundled pack) never passes
+ * that gate — driving the combination here would count non-consumed
+ * group presence with undefined semantics. Per the slice-1 client
+ * doctrine (log loudly, disable the affordance), the undrivable half is
+ * normalized OFF: the mode still works, its claims still don't consume,
+ * it just builds no group progress. The backend needs no mirror — a pack
+ * declaring this never activates there.
+ */
+function _drivableCountsTowardGroups(mode) {
+    const counts = mode.countsTowardGroups === true;
+    if (counts && mode.claims === 'non-consuming') {
+        if (!warnedUndrivableModes.has(mode.id)) {
+            warnedUndrivableModes.add(mode.id);
+            console.warn(
+                `[modeSemantics] mode '${mode.id}': claims 'non-consuming' with countsTowardGroups ` +
+                'is not driveable by this engine yet — driving it with countsTowardGroups: false ' +
+                "(the orchestrator's activation gate refuses this pack; fix the declaration)"
+            );
+        }
+        return false;
+    }
+    return counts;
+}
+
+/**
  * Resolve a mode id to its normalized semantics record, or null when the
  * active table does not declare it. The record always carries every flag:
  * absent displayBehavior normalizes to {surface:'none'}, absent fields to
@@ -105,7 +133,7 @@ export function resolveMode(modeId) {
         scoringPolicy: mode.scoringPolicy,
         entityRole: mode.entityRole,
         defaultEntity: mode.defaultEntity || null,
-        countsTowardGroups: mode.countsTowardGroups === true,
+        countsTowardGroups: _drivableCountsTowardGroups(mode),
         claims: mode.claims === undefined ? 'consuming' : mode.claims,
         displayBehavior: {
             surface: db.surface || 'none',
@@ -170,4 +198,5 @@ export function modeLabel(modeId) {
 export function _resetForTesting() {
     activeModes = null;
     warnedLegacy = false;
+    warnedUndrivableModes = new Set();
 }

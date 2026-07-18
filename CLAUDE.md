@@ -325,12 +325,15 @@ Example: 5-star Technical token = $150,000 × 5 = $750,000
   `backend/src/gameRules/duplicatePolicy.js`); a token claimed on another
   GM station is rejected server-side with "claimed by Team X" (decision A7)
 
-**Implementation (app.js `processNFCRead`):**
+**Implementation (gameOps.js `processNFCRead` — claims-aware since A3
+slice 2 D3s2: a mode declaring `claims: 'non-consuming'` is a repeatable
+action, never blocked and never marked; the local Set only ever holds
+CONSUMING claims):**
 ```javascript
-if (this.dataManager.isTokenScanned(tokenId)) {
-    this.debug.log(`Duplicate token detected: ${tokenId}`, true);
-    this.showDuplicateError(tokenId);
-    return;
+if (isConsumingMode(settings.mode) && dataManager.isTokenScanned(tokenId)) {
+  debug.log(`Duplicate token detected: ${tokenId}`, true);
+  this.showDuplicateError(tokenId);
+  return;
 }
 ```
 

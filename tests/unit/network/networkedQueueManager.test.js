@@ -806,6 +806,28 @@ describe('NetworkedQueueManager', () => {
       expect(queueManager.tempQueue).toHaveLength(1);
       expect(localStorageMock.setItem).not.toHaveBeenCalled();
     });
+
+    it('keeps a queued NON-CONSUMING transaction even when its token is server-recorded (D3s2 review fix: the registry holds consuming claims; a repeatable action must still replay)', async () => {
+      const { applyPackModes, _resetForTesting } = await import('../../../src/core/modeSemantics.js');
+      applyPackModes({
+        modes: [
+          { id: 'sell', label: 'Sell', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true },
+          { id: 'inspect', label: 'Inspect', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: false, claims: 'non-consuming' },
+        ],
+      });
+      try {
+        queueManager.tempQueue = [
+          { tokenId: 'tDup', teamId: '001', clientTxId: 'a', mode: 'sell' },
+          { tokenId: 'tDup', teamId: '001', clientTxId: 'b', mode: 'inspect' },
+        ];
+
+        queueManager.reconcileWithServerState(['tDup']);
+
+        expect(queueManager.tempQueue.map(t => t.clientTxId)).toEqual(['b']);
+      } finally {
+        _resetForTesting();
+      }
+    });
   });
 
   describe('localStorage persistence', () => {

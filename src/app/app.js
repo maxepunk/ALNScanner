@@ -14,6 +14,7 @@
  */
 
 import Debug from '../utils/debug.js';
+import { isConsumingMode } from '../core/modeSemantics.js';
 import { isTokenValid } from '../utils/jwtUtils.js';
 import UIManager from '../ui/uiManager.js';
 import Settings from '../ui/settings.js';
@@ -251,7 +252,11 @@ class App {
         return;
       }
       this.uiManager.showError(`Scan rejected${tokenId ? ` (${tokenId})` : ''}: ${message || status || 'failed'}`);
-      if (tokenId) {
+      // Unmark ONLY when the failing transaction was a CONSUMING claim
+      // (D3s2 review finding): a non-consuming scan never placed a mark,
+      // so unmarking on its failure would erase the mark a DIFFERENT
+      // consuming claim placed for the same token on this device.
+      if (tokenId && isConsumingMode(transaction?.mode)) {
         this.dataManager.unmarkTokenAsScanned(tokenId);
       }
     });

@@ -43,6 +43,31 @@ describe('app transaction:failed consumer (P3.4)', () => {
     expect(dataManager.unmarkTokenAsScanned).not.toHaveBeenCalled();
   });
 
+  it('does NOT unmark on a NON-CONSUMING transaction failure (D3s2 review fix: it never placed a mark — unmarking would erase a consuming claim\'s)', async () => {
+    const { applyPackModes, _resetForTesting } = await import('../../../src/core/modeSemantics.js');
+    applyPackModes({
+      modes: [
+        { id: 'sell', label: 'Sell', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true },
+        { id: 'inspect', label: 'Inspect', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: false, claims: 'non-consuming' },
+      ],
+    });
+    try {
+      app.networkedSession.dispatchEvent(new CustomEvent('transaction:failed', {
+        detail: { transaction: { tokenId: 'abc', mode: 'inspect' }, status: 'error', message: 'Session is paused' }
+      }));
+      expect(dataManager.unmarkTokenAsScanned).not.toHaveBeenCalled();
+      expect(uiManager.showError).toHaveBeenCalled(); // still surfaced
+
+      // A CONSUMING failure still unmarks (unchanged behavior)
+      app.networkedSession.dispatchEvent(new CustomEvent('transaction:failed', {
+        detail: { transaction: { tokenId: 'abc', mode: 'sell' }, status: 'rejected', message: 'Invalid token' }
+      }));
+      expect(dataManager.unmarkTokenAsScanned).toHaveBeenCalledWith('abc');
+    } finally {
+      _resetForTesting();
+    }
+  });
+
   it('surfaces the claimed-by message on a duplicate (A7 — no more silent swallow)', () => {
     app.networkedSession.dispatchEvent(new CustomEvent('transaction:failed', {
       detail: { transaction: { tokenId: 'dup' }, status: 'duplicate', message: 'Token already claimed by Team X' }

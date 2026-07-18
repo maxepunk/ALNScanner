@@ -89,6 +89,24 @@ describe('resolveMode — pack-declared flags (open vocabulary)', () => {
     expect(resolveMode('tipoff').defaultEntity).toBe('The Dispatcher');
   });
 
+  it('CLIENT DEFENSE: non-consuming ∧ countsTowardGroups drives with counts OFF, warning once (review fix)', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    applyPackModes({
+      modes: [
+        { id: 'sample', label: 'Sample', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: true, claims: 'non-consuming' },
+      ],
+    });
+    // The orchestrator's gate refuses this pack; a standalone scanner
+    // never passes that gate, so the client normalizes the undrivable
+    // half off instead of inventing group semantics.
+    expect(resolveMode('sample').countsTowardGroups).toBe(false);
+    expect(resolveMode('sample').claims).toBe('non-consuming');
+    resolveMode('sample'); // second resolution: no second warn
+    const warns = warnSpy.mock.calls.filter(([m]) => String(m).includes('not driveable'));
+    expect(warns).toHaveLength(1);
+    warnSpy.mockRestore();
+  });
+
   it('normalizes absent claims to consuming; isConsumingMode mirrors the backend rule (D3s2)', () => {
     applyPackModes({
       modes: [
