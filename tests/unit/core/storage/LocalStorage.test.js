@@ -253,6 +253,50 @@ describe('LocalStorage Strategy', () => {
     });
   });
 
+  describe('group completion — §2f parity pin (A3 slice 2)', () => {
+    // Backend §2f semantics: completion counts ANY counting-mode claim;
+    // the bonus base sums only SCORED contributions. This scanner has
+    // ALWAYS implemented that naturally — the completion guard is
+    // countsTowardGroups(tx.mode) and the bonus sums RECORDED points
+    // (an unscored claim records 0). This test pins the parity so a
+    // future refactor cannot silently regress either half.
+    it('an unscored counting-mode claim completes the group; bonus sums recorded points only', async () => {
+      const { applyPackModes, _resetForTesting } = await import('../../../../src/core/modeSemantics.js');
+      applyPackModes({
+        modes: [
+          { id: 'fence', label: 'Fence', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-rankings' } },
+          { id: 'stash', label: 'Stash', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: true, displayBehavior: { surface: 'none' } },
+        ],
+      });
+      try {
+        mockTokenManager.getAllTokens.mockReturnValue([
+          { SF_RFID: 'e1', SF_Group: 'EventSet (x2)' },
+          { SF_RFID: 'e2', SF_Group: 'EventSet (x2)' }
+        ]);
+
+        await storage.addTransaction({
+          id: 'tx-1', tokenId: 'e1', teamId: '001',
+          mode: 'fence', points: 10000, group: 'EventSet (x2)',
+          timestamp: new Date().toISOString()
+        });
+        // Unscored counting claim: records 0 points but completes the set
+        await storage.addTransaction({
+          id: 'tx-2', tokenId: 'e2', teamId: '001',
+          mode: 'stash', points: 0, group: 'EventSet (x2)',
+          timestamp: new Date().toISOString()
+        });
+
+        const scores = storage.getTeamScores();
+        // bonus = (2-1) × recorded points (10000 + 0) = 10000 — scored only
+        expect(storage.sessionData.teams['001'].completedGroups).toContain('EventSet');
+        expect(scores[0].bonusScore).toBe(10000);
+        expect(scores[0].score).toBe(20000);
+      } finally {
+        _resetForTesting();
+      }
+    });
+  });
+
   describe('removeTransaction', () => {
     it('should remove transaction and recalculate scores', async () => {
       // Add two transactions
