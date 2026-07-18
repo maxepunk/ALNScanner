@@ -303,7 +303,7 @@ Example: 5-star Technical token = $150,000 × 5 = $750,000
 **Group Completion Bonuses:**
 - Collect ALL tokens in a group → unlock bonus multiplier
 - Bonus Formula: `(groupMultiplier - 1) × totalBaseScore`
-- Example: "Server Logs (x5)" with 3 tokens worth $15,000 base
+- Example: "Server Logs" declared x5 with 3 tokens worth $15,000 base
   - Bonus = (5 - 1) × $15,000 = $60,000
   - Total = $15,000 + $60,000 = $75,000
 
@@ -630,7 +630,7 @@ DataManager emits events (`transaction:added`, `transaction:deleted`, `team-scor
     "SF_RFID": "token_id",           // Required: Unique identifier
     "SF_ValueRating": 1-5,            // Required: Star rating (1-5)
     "SF_MemoryType": "Technical",     // Required: Personal|Business|Technical|Mention|Party
-    "SF_Group": "Group Name (xN)",    // Optional: Group with multiplier
+    "SF_Group": "Group Name",         // Optional: PURE name (v2) — multiplier lives in game.json `groups`
     "image": "assets/images/...",     // Player scanner only
     "audio": null,                    // Player scanner only
     "video": null                     // Player scanner only
