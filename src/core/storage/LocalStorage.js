@@ -349,7 +349,13 @@ export class LocalStorage extends IStorageStrategy {
       team.score = team.baseScore + team.bonusPoints;
     }
 
-    team.tokensScanned++;
+    // Parity with the backend (review finding): tokensScanned counts
+    // SCORED claims only — the backend increments it in updateTeamScore,
+    // which runs for standard-scoring modes; counting every claim here
+    // made standalone team stats diverge from networked for the same play.
+    if (isScoringMode(transaction.mode)) {
+      team.tokensScanned++;
+    }
     team.lastScanTime = transaction.timestamp;
 
     // Check group completion (slice 1: only counting modes build

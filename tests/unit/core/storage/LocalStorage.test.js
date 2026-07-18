@@ -291,6 +291,9 @@ describe('LocalStorage Strategy', () => {
         expect(storage.sessionData.teams['001'].completedGroups).toContain('EventSet');
         expect(scores[0].bonusScore).toBe(10000);
         expect(scores[0].score).toBe(20000);
+        // tokensScanned counts SCORED claims only (backend parity —
+        // review finding): fence yes, stash no
+        expect(storage.sessionData.teams['001'].tokensScanned).toBe(1);
       } finally {
         _resetForTesting();
       }
