@@ -347,6 +347,27 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       expect(document.getElementById('teamValueLabel').textContent).toBe('Total Value');
     });
 
+    it('stat labels come from the pack strings sidecar when one is applied (slice 3a)', () => {
+      const { applyPackStrings } = require('../../../src/core/strings.js');
+      applyPackStrings({
+        kind: 'strings',
+        schemaVersion: 2,
+        scanner: { statLabels: { score: 'Take', totalValue: 'Total Haul' } },
+      });
+
+      try {
+        mockSettings.mode = 'blackmarket';
+        uiManager.updateSessionStats();
+        expect(document.getElementById('teamValueLabel').textContent).toBe('Take');
+
+        mockSettings.mode = 'detective';
+        uiManager.updateSessionStats();
+        expect(document.getElementById('teamValueLabel').textContent).toBe('Total Haul');
+      } finally {
+        applyPackStrings(null);
+      }
+    });
+
     it('should update history badge with count', () => {
       mockDataManager.transactions = [{ id: '1' }, { id: '2' }, { id: '3' }];
       uiManager.updateHistoryBadge();

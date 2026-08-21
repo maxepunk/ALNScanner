@@ -85,9 +85,9 @@
     "lines": 40
   },
   "./src/app/domains/gameOps.js": {
-    "branches": 60,
-    "functions": 70,
-    "lines": 65
+    "branches": 65,
+    "functions": 75,
+    "lines": 70
   },
   "./src/app/domains/showControl.js": {
     "branches": 0,
@@ -117,12 +117,12 @@
   "./src/core/packLoader.js": {
     "branches": 85,
     "functions": 85,
-    "lines": 85
+    "lines": 90
   },
   "./src/core/scoring.js": {
-    "branches": 75,
+    "branches": 85,
     "functions": 100,
-    "lines": 85
+    "lines": 90
   },
   "./src/core/sessionReportGenerator.js": {
     "branches": 75,
@@ -140,7 +140,7 @@
     "lines": 80
   },
   "./src/core/storage/LocalStorage.js": {
-    "branches": 75,
+    "branches": 80,
     "functions": 100,
     "lines": 95
   },
@@ -149,15 +149,20 @@
     "functions": 90,
     "lines": 75
   },
+  "./src/core/strings.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
+  },
   "./src/core/teamRegistry.js": {
     "branches": 40,
     "functions": 50,
     "lines": 50
   },
   "./src/core/tokenManager.js": {
-    "branches": 75,
+    "branches": 85,
     "functions": 85,
-    "lines": 85
+    "lines": 90
   },
   "./src/core/unifiedDataManager.js": {
     "branches": 45,

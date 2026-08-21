@@ -14,6 +14,7 @@
 import { escapeHtml } from '../utils/escapeHtml.js';
 import { formatCurrency } from '../utils/formatCurrency.js';
 import { wireModeIds, isScoringMode, modeHasSurface, modeLabel } from '../core/modeSemantics.js';
+import { getString } from '../core/strings.js';
 import { formatDuration } from '../utils/formatDuration.js';
 import { showToast as sharedShowToast } from '../utils/showToast.js';
 import { GameOpsRenderer } from './renderers/GameOpsRenderer.js';
@@ -294,12 +295,14 @@ class UIManager {
     }
 
     if (valueElement) {
+      // Label wording is pack-declared (slice 3a); the mode-conditional
+      // TOGGLE stays engine logic — only the words come from the pack.
       if (isScoringMode(this.settings.mode)) {
         valueElement.textContent = formatCurrency(stats.totalScore);
-        if (labelElement) labelElement.textContent = 'Score';
+        if (labelElement) labelElement.textContent = getString('scanner.statLabels.score');
       } else {
         valueElement.textContent = stats.totalValue;
-        if (labelElement) labelElement.textContent = 'Total Value';
+        if (labelElement) labelElement.textContent = getString('scanner.statLabels.totalValue');
       }
     }
   }

@@ -24,6 +24,7 @@ import stateValidationService from '../services/StateValidationService.js';
 import packLoader from '../core/packLoader.js';
 import { SCORING_SOURCE } from '../core/scoring.js';
 import { wireModeIds, defaultModeId } from '../core/modeSemantics.js';
+import { getString } from '../core/strings.js';
 
 /**
  * Initialize UIManager
@@ -151,7 +152,29 @@ export async function loadTokenDatabase(tokenManager, uiManager) {
 
   Debug.log('Token database loaded successfully');
   renderPackInfo();
+  applyPackStringsToDom();
   return true;
+}
+
+/**
+ * Slice 3a: reword the static shell from the ACTIVE pack's strings
+ * sidecar (applied in tokenManager.loadDatabase just before this runs).
+ * The shell ships the baked ALN wording, so for ALN this is a no-op
+ * rewrite; a second game's pack rebrands with NO rebuild. Runtime
+ * re-renders (uiManager stats toggle, EvidencePickerRenderer) read the
+ * same getString() source, so the wording stays consistent after this
+ * first pass. Null-guarded per element (headless harnesses, partial DOM).
+ */
+export function applyPackStringsToDom(doc = typeof document !== 'undefined' ? document : null) {
+  if (!doc) return;
+  const title = getString('scanner.appTitle');
+  if (title) doc.title = title;
+  const prompt = doc.getElementById('scanPrompt');
+  if (prompt) prompt.textContent = getString('scanner.scanPrompt');
+  const valueLabel = doc.getElementById('teamValueLabel');
+  if (valueLabel) valueLabel.textContent = getString('scanner.statLabels.totalValue');
+  const evidenceHint = doc.getElementById('scoreboard-evidence-hint');
+  if (evidenceHint) evidenceHint.textContent = getString('scoreboard.emptyEvidence');
 }
 
 /**
@@ -435,6 +458,7 @@ export default {
   registerServiceWorker,
   loadTokenDatabase,
   renderPackInfo,
+  applyPackStringsToDom,
   validateSettingsMode,
   applyURLModeOverride,
   syncModeDisplay,

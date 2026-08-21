@@ -13,6 +13,7 @@ import {
   registerServiceWorker,
   loadTokenDatabase,
   renderPackInfo,
+  applyPackStringsToDom,
   applyURLModeOverride,
   determineInitialScreen,
   applyInitialScreenDecision,
@@ -272,6 +273,69 @@ describe('InitializationSteps - ES6 Module', () => {
 
       // Should have logged an error message
       expect(Debug.messages.length).toBeGreaterThan(initialCount);
+    });
+  });
+
+  describe('applyPackStringsToDom() (slice 3a — pack rewording of the static shell)', () => {
+    const { applyPackStrings } = require('../../../src/core/strings.js');
+
+    beforeEach(() => {
+      document.body.innerHTML = `
+        <h2 id="scanPrompt">Tap Memory Token</h2>
+        <div id="teamValueLabel">Total Value</div>
+        <p id="scoreboard-evidence-hint">Awaiting evidence...</p>
+      `;
+    });
+
+    afterEach(() => {
+      applyPackStrings(null);
+      document.body.innerHTML = '';
+    });
+
+    it('rewrites title, scan prompt, stat label, and evidence hint from the applied sidecar', () => {
+      applyPackStrings({
+        kind: 'strings',
+        schemaVersion: 2,
+        scanner: {
+          appTitle: 'Fence Terminal',
+          scanPrompt: 'Tap Loot Tag',
+          statLabels: { totalValue: 'Total Haul' },
+        },
+        scoreboard: { emptyEvidence: 'Awaiting tips...' },
+      });
+
+      applyPackStringsToDom();
+
+      expect(document.title).toBe('Fence Terminal');
+      expect(document.getElementById('scanPrompt').textContent).toBe('Tap Loot Tag');
+      expect(document.getElementById('teamValueLabel').textContent).toBe('Total Haul');
+      expect(document.getElementById('scoreboard-evidence-hint').textContent).toBe('Awaiting tips...');
+    });
+
+    it('with no sidecar applied, rewrites the shell with the baked wording (no-op for ALN)', () => {
+      applyPackStringsToDom();
+
+      expect(document.title).toBe('Memory Transaction Station');
+      expect(document.getElementById('scanPrompt').textContent).toBe('Tap Memory Token');
+      expect(document.getElementById('teamValueLabel').textContent).toBe('Total Value');
+      expect(document.getElementById('scoreboard-evidence-hint').textContent).toBe('Awaiting evidence...');
+    });
+
+    it('tolerates a partial DOM (elements absent) and a null document', () => {
+      document.body.innerHTML = '';
+      expect(() => applyPackStringsToDom()).not.toThrow();
+      expect(() => applyPackStringsToDom(null)).not.toThrow();
+    });
+
+    it('loadTokenDatabase applies the pack wording to the DOM after a successful load', async () => {
+      applyPackStrings({
+        kind: 'strings', schemaVersion: 2, scanner: { scanPrompt: 'Tap Loot Tag' },
+      });
+      mockTokenManager.loadDatabase.mockResolvedValue(true);
+
+      await loadTokenDatabase(mockTokenManager, mockUIManager);
+
+      expect(document.getElementById('scanPrompt').textContent).toBe('Tap Loot Tag');
     });
   });
 

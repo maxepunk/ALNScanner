@@ -1,4 +1,5 @@
 import { escapeHtml } from '../../utils/escapeHtml.js';
+import { getString } from '../../core/strings.js';
 
 /**
  * EvidencePickerRenderer - Scoreboard evidence navigation picker
@@ -35,7 +36,7 @@ export class EvidencePickerRenderer {
     if (this.hint) {
       this.hint.textContent = hasEvidence
         ? `${list.length} character${list.length === 1 ? '' : 's'} on board`
-        : 'Awaiting evidence...';
+        : getString('scoreboard.emptyEvidence');
     }
 
     if (this.prevBtn) this.prevBtn.disabled = !hasEvidence;

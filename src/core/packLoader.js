@@ -55,9 +55,12 @@ function fetchTimeoutSignal() {
     Debug.log('packLoader: AbortSignal.timeout unavailable — fetch timeouts DISABLED (hung server can stall startup)', true);
     return undefined;
 }
-// v1 scope: the rules-bearing files the GM scanner consumes at runtime.
-// Assets stay on their existing channels.
-const RULES_ROLES = new Set(['game', 'tokens']);
+// The rules-bearing files the GM scanner consumes at runtime (A3 slice
+// 3a grew the set: the strings sidecar rides the same staged refresh —
+// declared ⇒ must load, so a missing declared sidecar fails the refresh
+// exactly like a missing tokens.json). Assets stay on their existing
+// channels.
+const RULES_ROLES = new Set(['game', 'tokens', 'strings']);
 
 async function webCryptoSha1Hex(buf) {
     const digest = await crypto.subtle.digest('SHA-1', buf);
@@ -284,6 +287,14 @@ export class PackLoader {
             if (!this._isUsableTokenMap(content['tokens.json'])) return null;
             const gameRes = await cache.match('/game.json');
             if (gameRes) content['game.json'] = await gameRes.json();
+            // Strings sidecar rides the cache under its declared path
+            // (slice 3a). A pre-3a cached pack simply has neither pointer
+            // nor file — content stays without it and _activate reads null.
+            const stringsPath = this._stringsPath(content['game.json']);
+            if (stringsPath) {
+                const stringsRes = await cache.match(`/${stringsPath}`);
+                if (stringsRes) content[stringsPath] = await stringsRes.json();
+            }
             return content;
         } catch {
             return null;
@@ -301,12 +312,24 @@ export class PackLoader {
             throw new Error('Failed to load tokens.json from root or data/');
         }
         const game = await this._fetchBundledJson('game.json', 'data/game.json');
+        // Declared strings sidecar (slice 3a): best-effort at this tier —
+        // a pre-3a bundled snapshot degrades to baked wording, never to a
+        // load failure (benign-wording class; contrast the network tier's
+        // declared-must-load posture, which protects the pointer FLIP).
+        const stringsPath = this._stringsPath(game);
+        const strings = stringsPath
+            ? await this._fetchBundledJson(stringsPath, `data/${stringsPath}`)
+            : null;
         // Deliberate: when Tier 1 had no manifest this re-fetch 404s again
         // (≤2 extra requests on a pre-pack deployment). Accepted — bundled
         // identity display is worth it, and any published manifest ends it.
         const manifest = await this._fetchBundledJson('pack-manifest.json', 'data/pack-manifest.json');
         return {
-            pack: { 'tokens.json': tokens, ...(game ? { 'game.json': game } : {}) },
+            pack: {
+                'tokens.json': tokens,
+                ...(game ? { 'game.json': game } : {}),
+                ...(strings ? { [stringsPath]: strings } : {}),
+            },
             identity: manifest
                 ? { packId: manifest.packId, version: manifest.version, contentHash: manifest.contentHash }
                 : { packId: null, version: null, contentHash: null },
@@ -327,6 +350,12 @@ export class PackLoader {
         return null;
     }
 
+    /** game.json's declared strings-sidecar path, or null. */
+    _stringsPath(gameConfig) {
+        const p = gameConfig?.strings;
+        return typeof p === 'string' && p.length > 0 ? p : null;
+    }
+
     _activate(content, identity, source) {
         const tokens = content['tokens.json'];
         // A 200 returning {} or a non-object would otherwise set an
@@ -343,9 +372,18 @@ export class PackLoader {
             contentHash: identity.contentHash ?? null,
             source,
         };
+        const gameConfig = content['game.json'] || null;
+        const stringsPath = this._stringsPath(gameConfig);
+        // Object.hasOwn (not truthy-index): content is keyed by pack file
+        // paths — a hostile path like 'constructor' must never resolve
+        // through the prototype chain.
+        const strings = stringsPath && Object.hasOwn(content, stringsPath)
+            ? content[stringsPath]
+            : null;
         return {
             tokens,
-            gameConfig: content['game.json'] || null,
+            gameConfig,
+            strings,
             info: this.getActivePack(),
         };
     }

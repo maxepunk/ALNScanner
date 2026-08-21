@@ -180,6 +180,47 @@ describe('TokenManager - ES6 Module', () => {
       warnSpy.mockRestore();
     });
 
+    it('applies the pack strings sidecar at load (slice 3a wiring)', async () => {
+      // Deleting the applyPackStrings call in loadDatabase must fail this
+      // test — pins the wiring end-to-end through getString.
+      const { getString, applyPackStrings } = require('../../../src/core/strings.js');
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      TokenManager._packLoader = {
+        loadPack: jest.fn().mockResolvedValue({
+          tokens: { t1: { SF_RFID: 't1', SF_ValueRating: 1, SF_MemoryType: 'Personal' } },
+          gameConfig: { scoring: { baseValues: { 1: 100 }, typeMultipliers: { Personal: 1, UNKNOWN: 0 } } },
+          strings: { kind: 'strings', schemaVersion: 2, scanner: { appTitle: 'Fence Terminal' } },
+          info: { ...PACK_INFO },
+        }),
+        getActivePack: jest.fn(() => ({ ...PACK_INFO })),
+      };
+
+      try {
+        await TokenManager.loadDatabase();
+        expect(getString('scanner.appTitle')).toBe('Fence Terminal');
+      } finally {
+        applyPackStrings(null);
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('a pack without a sidecar RESETS wording to baked (no stale carry-over)', async () => {
+      const { getString, applyPackStrings } = require('../../../src/core/strings.js');
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      applyPackStrings({ kind: 'strings', schemaVersion: 2, scanner: { appTitle: 'Stale Wording' } });
+      mockPack({
+        tokens: { t1: { SF_RFID: 't1', SF_ValueRating: 1, SF_MemoryType: 'Personal' } },
+        gameConfig: { scoring: { baseValues: { 1: 100 }, typeMultipliers: { Personal: 1, UNKNOWN: 0 } } },
+      });
+
+      try {
+        await TokenManager.loadDatabase();
+        expect(getString('scanner.appTitle')).toBe('Memory Transaction Station');
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
     it('returns false and leaves the database empty when the pack load fails', async () => {
       // "CRITICAL: Fail hard if database cannot be loaded. Do NOT load demo data."
       TokenManager._packLoader = {

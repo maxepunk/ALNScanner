@@ -388,4 +388,124 @@ describe('PackLoader', () => {
       expect(info.contentHash).toBeNull(); // no bundled manifest readable
     });
   });
+
+  describe('strings sidecar (A3 slice 3a — the rules set grows)', () => {
+    const STRINGS = { kind: 'strings', schemaVersion: 2, scanner: { appTitle: 'Fence Terminal' } };
+    const GAME_WITH_STRINGS = { ...GAME, strings: 'strings.json' };
+    const STRINGS_RULES_FILES = [
+      { path: 'game.json', role: 'game', sha1: sha1Of(GAME_WITH_STRINGS), size: 1 },
+      { path: 'tokens.json', role: 'tokens', sha1: sha1Of(TOKENS), size: 1 },
+      { path: 'strings.json', role: 'strings', sha1: sha1Of(STRINGS), size: 1 },
+    ];
+
+    it('network tier: fetches + verifies the declared sidecar, returns it as pack.strings', async () => {
+      const caches = makeCaches();
+      const { loader } = makeLoader({
+        caches,
+        routes: {
+          'pack-manifest.json': jsonResponse(manifestFor(HASH_B, STRINGS_RULES_FILES)),
+          'game.json': jsonResponse(GAME_WITH_STRINGS),
+          'tokens.json': jsonResponse(TOKENS),
+          'strings.json': jsonResponse(STRINGS),
+        },
+      });
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('network');
+      expect(pack.strings).toEqual(STRINGS);
+      // Persisted for the cache tier
+      const cached = await (await caches.open(`aln-pack-${HASH_B}`)).match('/strings.json');
+      expect(await cached.json()).toEqual(STRINGS);
+    });
+
+    it('a pack that declares no sidecar returns strings null (baked-wording class)', async () => {
+      const { loader } = makeLoader({
+        routes: {
+          'pack-manifest.json': jsonResponse(manifestFor(HASH_B, RULES_FILES)),
+          'game.json': jsonResponse(GAME),
+          'tokens.json': jsonResponse(TOKENS),
+        },
+      });
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('network');
+      expect(pack.strings).toBeNull();
+    });
+
+    it('declared ⇒ must load: a 404ing declared sidecar fails the staged refresh (active pack untouched)', async () => {
+      const caches = makeCaches();
+      const storage = makeStorage({
+        aln_pack_active: JSON.stringify({ packId: 'about-last-night', version: '1.0.0', contentHash: HASH_A }),
+      });
+      const cache = await caches.open(`aln-pack-${HASH_A}`);
+      await cache.put('/tokens.json', new Response(JSON.stringify(TOKENS)));
+
+      const { loader } = makeLoader({
+        caches,
+        storage,
+        routes: {
+          'pack-manifest.json': jsonResponse(manifestFor(HASH_B, STRINGS_RULES_FILES)),
+          'game.json': jsonResponse(GAME_WITH_STRINGS),
+          'tokens.json': jsonResponse(TOKENS),
+          // strings.json 404s — mid-publish / missing sidecar
+        },
+      });
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('cache'); // refresh failed, prior pack survives
+      expect(JSON.parse(storage.getItem('aln_pack_active')).contentHash).toBe(HASH_A);
+    });
+
+    it('cache tier: resolves the sidecar via the cached game.json pointer', async () => {
+      const caches = makeCaches();
+      const storage = makeStorage({
+        aln_pack_active: JSON.stringify({ packId: 'about-last-night', version: '1.1.0', contentHash: HASH_A }),
+      });
+      const cache = await caches.open(`aln-pack-${HASH_A}`);
+      await cache.put('/tokens.json', new Response(JSON.stringify(TOKENS)));
+      await cache.put('/game.json', new Response(JSON.stringify(GAME_WITH_STRINGS)));
+      await cache.put('/strings.json', new Response(JSON.stringify(STRINGS)));
+
+      const { loader } = makeLoader({ caches, storage, routes: {} }); // offline
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('cache');
+      expect(pack.strings).toEqual(STRINGS);
+    });
+
+    it('bundled tier: fetches the sidecar via the pointer (root first, data/ fallback)', async () => {
+      const { loader } = makeLoader({
+        routes: {
+          'tokens.json': jsonResponse(TOKENS),
+          'game.json': jsonResponse(GAME_WITH_STRINGS),
+          'data/strings.json': jsonResponse(STRINGS), // root strings.json missing
+        },
+      });
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('bundled');
+      expect(pack.strings).toEqual(STRINGS);
+    });
+
+    it('bundled tier: a missing sidecar degrades to strings null, never a load failure', async () => {
+      const { loader } = makeLoader({
+        routes: {
+          'tokens.json': jsonResponse(TOKENS),
+          'game.json': jsonResponse(GAME_WITH_STRINGS),
+          // no strings.json anywhere — pre-3a bundled snapshot
+        },
+      });
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('bundled');
+      expect(pack.tokens).toEqual(TOKENS);
+      expect(pack.strings).toBeNull();
+    });
+  });
 });
