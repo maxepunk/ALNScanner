@@ -13,7 +13,8 @@
 
 import { escapeHtml } from '../../utils/escapeHtml.js';
 import { formatCurrency, formatNumber } from '../../utils/formatCurrency.js';
-import { isScoringMode, modeLabel } from '../../core/modeSemantics.js';
+import { isScoringMode, modeLabel, modeClassNames } from '../../core/modeSemantics.js';
+import { slugifyId } from '../../utils/slugify.js';
 import { formatStars } from '../../core/scoring.js';
 
 export class GameOpsRenderer {
@@ -480,11 +481,11 @@ export class GameOpsRenderer {
       <div class="token-card ${status}" data-token-id="${escapeHtml(tokenId)}">
         <div class="token-card__header">
           <span class="token-id">${escapeHtml(tokenId)}</span>
-          <span class="token-type type-${escapeHtml(memoryType.toLowerCase())}">${escapeHtml(memoryType)}</span>
+          <span class="token-type type-${slugifyId(memoryType)}">${escapeHtml(memoryType)}</span>
         </div>
         <div class="token-card__rating">${formatStars(rating, { filled: '★', empty: '☆' })}</div>
 
-        <div class="token-card__status status-${status} ${claimEvent?.mode || ''}">
+        <div class="token-card__status status-${status} ${modeClassNames(claimEvent?.mode).join(' ')}">
           ${statusContent}
         </div>
 
@@ -558,7 +559,7 @@ export class GameOpsRenderer {
 
       case 'claim':
         return `
-          <div class="event claim ${event.mode}">
+          <div class="event claim ${modeClassNames(event.mode).join(' ')}">
             <span class="icon">${isScoringMode(event.mode) ? '💰' : '🔍'}</span>
             <span class="label">${escapeHtml(modeLabel(event.mode))}</span>
             <span class="team">${escapeHtml(event.teamId)}</span>

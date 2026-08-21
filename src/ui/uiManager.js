@@ -13,7 +13,7 @@
 
 import { escapeHtml } from '../utils/escapeHtml.js';
 import { formatCurrency } from '../utils/formatCurrency.js';
-import { wireModeIds, isScoringMode, modeHasSurface, modeLabel } from '../core/modeSemantics.js';
+import { wireModeIds, isScoringMode, modeHasSurface, modeLabel, modeClassNames } from '../core/modeSemantics.js';
 import { getString } from '../core/strings.js';
 import { formatStars } from '../core/scoring.js';
 import { formatDuration } from '../utils/formatDuration.js';
@@ -228,7 +228,7 @@ class UIManager {
     if (!indicator) return;
 
     const labelText = `${modeLabel(mode)} Mode`;
-    indicator.className = `mode-indicator mode-${mode}`;
+    indicator.className = ['mode-indicator', ...modeClassNames(mode)].join(' ');
     indicator.textContent = labelText;
     if (modeText) modeText.textContent = labelText;
 

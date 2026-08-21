@@ -27,6 +27,7 @@
  */
 
 import Debug from '../utils/debug.js';
+import { slugifyId } from '../utils/slugify.js';
 
 // Mirrors ALN-TokenData/game.json `modes` — the pre-pack ALN game, baked.
 export const LEGACY_ALN_MODES = Object.freeze([
@@ -168,6 +169,24 @@ export function countsTowardGroups(modeId) {
 /** Does this mode publish to the evidence surface? */
 export function isEvidenceMode(modeId) {
     return resolveMode(modeId)?.displayBehavior.surface === 'scoreboard-evidence';
+}
+
+/**
+ * CSS classes for a mode (A3 slice 3c, R-3c-1): the slugged id class
+ * (pack-specific theming hook) plus ENGINE-DERIVED semantic classes —
+ * the same flags that gate behavior now key the visual-role rules, so
+ * a pack-open id renders styled instead of falling through the baked
+ * ALN selectors. Unresolvable ids get only their id class; null/empty
+ * ids get nothing.
+ * @param {*} modeId
+ * @returns {string[]} e.g. ['mode-blackmarket', 'mode-scoring']
+ */
+export function modeClassNames(modeId) {
+    if (modeId === null || modeId === undefined || modeId === '') return [];
+    const classes = [`mode-${slugifyId(modeId)}`];
+    if (isScoringMode(modeId)) classes.push('mode-scoring');
+    if (isEvidenceMode(modeId)) classes.push('mode-evidence');
+    return classes;
 }
 
 /**

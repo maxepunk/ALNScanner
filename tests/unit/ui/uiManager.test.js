@@ -230,7 +230,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       uiManager.updateModeDisplay('blackmarket');
 
       const indicator = document.getElementById('modeIndicator');
-      expect(indicator.className).toBe('mode-indicator mode-blackmarket');
+      expect(indicator.className).toBe('mode-indicator mode-blackmarket mode-scoring');
       expect(indicator.textContent).toBe('Black Market Mode');
       // Slice 1: the binary checkbox is retired — the segmented selector is
       // the N-mode control; blackmarket renders as the active segment.
@@ -243,7 +243,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       uiManager.updateModeDisplay('detective');
 
       const indicator = document.getElementById('modeIndicator');
-      expect(indicator.className).toBe('mode-indicator mode-detective');
+      expect(indicator.className).toBe('mode-indicator mode-detective mode-evidence');
       expect(indicator.textContent).toBe('Detective Mode');
       const activeSegment = document.querySelector('#modeSelector .mode-segment.active');
       expect(activeSegment.dataset.arg).toBe('detective');

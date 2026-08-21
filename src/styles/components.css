@@ -192,14 +192,6 @@
   padding-left: calc(var(--card-padding) - var(--card-border-left));
 }
 
-.card-accent.detective {
-  border-left-color: var(--color-mode-detective);
-}
-
-.card-accent.blackmarket {
-  border-left-color: var(--color-mode-blackmarket);
-}
-
 .card-accent.unknown {
   border-left-color: var(--color-text-muted);
   opacity: 0.9;
@@ -297,14 +289,16 @@
   transform: scale(1.05);
 }
 
-.mode-detective {
-  background: var(--color-mode-detective);
+/* Semantic mode classes (slice 3c): emitted by modeClassNames() from the
+   engine's flags — any pack's modes style correctly, no id-keyed rules. */
+.mode-evidence {
+  background: var(--color-mode-evidence);
   color: white;
   box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);
 }
 
-.mode-blackmarket {
-  background: var(--color-mode-blackmarket);
+.mode-scoring {
+  background: var(--color-mode-scoring);
   color: white;
   box-shadow: 0 0 12px rgba(255, 107, 53, 0.3);
 }
@@ -443,7 +437,7 @@
   position: absolute;
   cursor: pointer;
   inset: 0;
-  background-color: var(--color-mode-detective);
+  background-color: var(--color-status-connected);
   transition: var(--duration-normal) var(--ease-default);
   border-radius: var(--radius-full);
 }
@@ -462,7 +456,7 @@
 }
 
 input:checked + .slider {
-  background-color: var(--color-mode-blackmarket);
+  background-color: var(--color-accent-value);
 }
 
 input:checked + .slider::before {

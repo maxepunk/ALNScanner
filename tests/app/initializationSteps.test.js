@@ -15,7 +15,7 @@ describe('initializationSteps.syncModeDisplay (Phase 1B follow-up)', () => {
   beforeEach(() => {
     // The index.html defaults the pill fights against
     document.body.innerHTML = `
-      <div id="modeIndicator" class="mode-indicator mode-detective">Detective Mode</div>
+      <div id="modeIndicator" class="mode-indicator mode-detective mode-evidence">Detective Mode</div>
       <div id="modeSelector"></div>
       <button id="scoreboardButton" style="display: none;"></button>
     `;
@@ -28,7 +28,7 @@ describe('initializationSteps.syncModeDisplay (Phase 1B follow-up)', () => {
     syncModeDisplay(settings, uiManager);
 
     const indicator = document.getElementById('modeIndicator');
-    expect(indicator.className).toBe('mode-indicator mode-blackmarket');
+    expect(indicator.className).toBe('mode-indicator mode-blackmarket mode-scoring');
     expect(indicator.textContent).toBe('Black Market Mode');
     // Slice 1: checkbox retired; the segmented selector marks the active mode.
     expect(document.querySelector('#modeSelector .mode-segment.active')?.dataset.arg ?? 'blackmarket').toBe('blackmarket');
@@ -42,7 +42,7 @@ describe('initializationSteps.syncModeDisplay (Phase 1B follow-up)', () => {
     syncModeDisplay(settings, uiManager);
 
     const indicator = document.getElementById('modeIndicator');
-    expect(indicator.className).toBe('mode-indicator mode-detective');
+    expect(indicator.className).toBe('mode-indicator mode-detective mode-evidence');
     expect(indicator.textContent).toBe('Detective Mode');
     expect(document.getElementById('scoreboardButton').style.display).toBe('none');
   });
