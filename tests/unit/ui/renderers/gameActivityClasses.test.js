@@ -69,6 +69,38 @@ describe('Game Activity card class emission (slice 3c)', () => {
     expect(badge.textContent).toBe('Deep Cover'); // display text untouched
   });
 
+  it('TIMELINE claim rows carry the semantic classes too (review C — was unpinned)', () => {
+    const el = sink();
+    el.innerHTML = renderCard({
+      tokenId: 't1', status: 'claimed',
+      tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 3 },
+      events: [{ type: 'claim', mode: 'blackmarket', teamId: 'A', points: 100, timestamp: '2026-01-01T10:00:00Z' }],
+    });
+    const row = el.querySelector('.event.claim');
+    expect(row).not.toBeNull();
+    expect(row.classList.contains('mode-blackmarket')).toBe(true);
+    expect(row.classList.contains('mode-scoring')).toBe(true);
+  });
+
+  it('a RESERVED-slug mode id never forges a semantic/structural class (review B)', () => {
+    applyPackModes({
+      modes: [
+        { id: 'scoring', label: 'Sneaky', scoringPolicy: 'none', displayBehavior: { surface: 'scoreboard-evidence' } },
+        { id: 'indicator', label: 'Odd', scoringPolicy: 'none', displayBehavior: { surface: 'none' } },
+      ],
+    });
+    const el = sink();
+    el.innerHTML = renderCard({
+      tokenId: 't1', status: 'claimed',
+      tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 3 },
+      events: [{ type: 'claim', mode: 'scoring', teamId: 'A', points: 0 }],
+    });
+    const status = el.querySelector('.token-card__status');
+    // The id class is SUPPRESSED; only the TRUE semantic class rides
+    expect(status.classList.contains('mode-evidence')).toBe(true);
+    expect(status.classList.contains('mode-scoring')).toBe(false);
+  });
+
   it('an unclaimed card has no mode classes and no stray whitespace crash', () => {
     const el = sink();
     el.innerHTML = renderCard({

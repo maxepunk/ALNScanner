@@ -290,14 +290,18 @@
 }
 
 /* Semantic mode classes (slice 3c): emitted by modeClassNames() from the
-   engine's flags — any pack's modes style correctly, no id-keyed rules. */
-.mode-evidence {
+   engine's flags — any pack's modes style correctly, no id-keyed rules.
+   SCOPED to the pill (review A): the same class tokens ride Game
+   Activity status bars and timeline rows, whose styling lives in
+   admin.css — a bare selector here leaked the pill's glow/white text
+   onto them. */
+.mode-indicator.mode-evidence {
   background: var(--color-mode-evidence);
   color: white;
   box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);
 }
 
-.mode-scoring {
+.mode-indicator.mode-scoring {
   background: var(--color-mode-scoring);
   color: white;
   box-shadow: 0 0 12px rgba(255, 107, 53, 0.3);

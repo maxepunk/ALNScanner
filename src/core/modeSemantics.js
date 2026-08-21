@@ -181,9 +181,17 @@ export function isEvidenceMode(modeId) {
  * @param {*} modeId
  * @returns {string[]} e.g. ['mode-blackmarket', 'mode-scoring']
  */
+// Slugs whose mode-<slug> class would forge a SEMANTIC class or collide
+// with a STRUCTURAL one (review B): schema-legal ids like 'scoring' or
+// 'indicator' must never fabricate styling their flags don't grant —
+// such an id simply gets no id class (its true semantic classes still
+// apply).
+const RESERVED_MODE_CLASS_SLUGS = new Set(['scoring', 'evidence', 'indicator', 'segment', 'selector']);
+
 export function modeClassNames(modeId) {
     if (modeId === null || modeId === undefined || modeId === '') return [];
-    const classes = [`mode-${slugifyId(modeId)}`];
+    const slug = slugifyId(modeId);
+    const classes = RESERVED_MODE_CLASS_SLUGS.has(slug) ? [] : [`mode-${slug}`];
     if (isScoringMode(modeId)) classes.push('mode-scoring');
     if (isEvidenceMode(modeId)) classes.push('mode-evidence');
     return classes;
