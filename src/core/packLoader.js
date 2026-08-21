@@ -33,6 +33,13 @@ import { isOrchestratorServed } from '../utils/config.js';
 
 const POINTER_KEY = 'aln_pack_active';
 const CACHE_PREFIX = 'aln-pack-';
+// Pack schemaVersion THIS scanner reads (tokens-v2 cutover, A3 slice 2b).
+// EXACT match when declared — the backend gate's mirror: a v1 pack's
+// suffixed SF_Group names would silently read 1x multipliers here (this
+// code has no suffix parser), and a future pack must refuse loudly, never
+// half-parse. Enforced by tokenManager.loadDatabase on the loaded
+// gameConfig (the load boundary, covering ALL tiers incl. SW-cache).
+export const PACK_SCHEMA_VERSION = 2;
 // loadPack() runs on the fail-hard startup path (Phase 1A). A server that
 // accepts the connection but never responds must not hang the loading
 // screen — every fetch times out and falls through the tier ladder.

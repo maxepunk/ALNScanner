@@ -150,4 +150,21 @@ describe('pack groups block (D1b/v2 — the SOLE multiplier source)', () => {
     applyPackGroups(null); // no block (legacy game.json-less pack): all 1
     expect(parseGroupInfo('Server Logs')).toEqual({ name: 'Server Logs', multiplier: 1 });
   });
+
+  it("prototype-chain names never resolve; malformed declared multipliers read 1 (round-2 C16)", async () => {
+    const { applyPackGroups, parseGroupInfo, isDeclaredGroup } = await import('../../../src/core/scoring.js');
+    try {
+      applyPackGroups({ 'Fine': { multiplier: 3 }, 'Broken': {} });
+      // 'constructor' exists on Object.prototype — a truthy-index lookup
+      // would resolve it into NaN scores
+      expect(parseGroupInfo('constructor')).toEqual({ name: 'constructor', multiplier: 1 });
+      expect(isDeclaredGroup('constructor')).toBe(false);
+      // Declared but malformed entry: defensive 1, never NaN
+      expect(parseGroupInfo('Broken')).toEqual({ name: 'Broken', multiplier: 1 });
+      expect(isDeclaredGroup('Broken')).toBe(true); // declared, just unusable
+      expect(parseGroupInfo('Fine')).toEqual({ name: 'Fine', multiplier: 3 });
+    } finally {
+      applyPackGroups(null);
+    }
+  });
 });

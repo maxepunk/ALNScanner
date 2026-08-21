@@ -126,6 +126,60 @@ describe('TokenManager - ES6 Module', () => {
       warnSpy.mockRestore();
     });
 
+    it('applies the pack groups block at load (D1b wiring — round-2 review C20)', async () => {
+      // Deleting the applyPackGroups call in loadDatabase must fail a
+      // test — this pins the wiring end-to-end through parseGroupInfo.
+      const { parseGroupInfo, applyPackGroups } = require('../../../src/core/scoring.js');
+      mockPack({
+        tokens: { g1: { SF_RFID: 'g1', SF_ValueRating: 1, SF_MemoryType: 'Personal', SF_Group: 'Wired Set' } },
+        gameConfig: {
+          scoring: { baseValues: { 1: 100 }, typeMultipliers: { Personal: 1, UNKNOWN: 0 } },
+          groups: { 'Wired Set': { multiplier: 4 } },
+        },
+      });
+
+      try {
+        await TokenManager.loadDatabase();
+        expect(parseGroupInfo('Wired Set')).toEqual({ name: 'Wired Set', multiplier: 4 });
+      } finally {
+        applyPackGroups(null);
+      }
+    });
+
+    it('REFUSES a pack declaring a different schemaVersion (v2 cutover gate, round-2 review C2/C14)', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      for (const bad of [1, 3]) {
+        mockPack({
+          tokens: { t1: { SF_RFID: 't1', SF_ValueRating: 1, SF_MemoryType: 'Personal' } },
+          gameConfig: { schemaVersion: bad, scoring: { baseValues: { 1: 100 }, typeMultipliers: { Personal: 1, UNKNOWN: 0 } } },
+        });
+        const result = await TokenManager.loadDatabase();
+        expect(result).toBe(false);
+      }
+      // Declared MATCHING version loads
+      mockPack({
+        tokens: { t1: { SF_RFID: 't1', SF_ValueRating: 1, SF_MemoryType: 'Personal' } },
+        gameConfig: { schemaVersion: 2, scoring: { baseValues: { 1: 100 }, typeMultipliers: { Personal: 1, UNKNOWN: 0 } } },
+      });
+      expect(await TokenManager.loadDatabase()).toBe(true);
+      warnSpy.mockRestore();
+    });
+
+    it('warns LOUDLY when tokens name groups the pack does not declare (D1b client defense, C15)', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      mockPack({
+        tokens: { t1: { SF_RFID: 't1', SF_ValueRating: 1, SF_MemoryType: 'Personal', SF_Group: 'Ghost Group' } },
+        gameConfig: { scoring: { baseValues: { 1: 100 }, typeMultipliers: { Personal: 1, UNKNOWN: 0 } } }, // no groups block
+      });
+
+      await TokenManager.loadDatabase();
+
+      expect(warnSpy.mock.calls.some(([m]) =>
+        String(m).includes('UNDECLARED GROUP NAMES') && String(m).includes('Ghost Group')
+      )).toBe(true);
+      warnSpy.mockRestore();
+    });
+
     it('returns false and leaves the database empty when the pack load fails', async () => {
       // "CRITICAL: Fail hard if database cannot be loaded. Do NOT load demo data."
       TokenManager._packLoader = {

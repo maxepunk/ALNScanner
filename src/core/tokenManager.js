@@ -10,8 +10,8 @@
  */
 
 import Debug from '../utils/debug.js';
-import defaultPackLoader from './packLoader.js';
-import { applyPackScoring, applyPackGroups, parseGroupInfo } from './scoring.js';
+import defaultPackLoader, { PACK_SCHEMA_VERSION } from './packLoader.js';
+import { applyPackScoring, applyPackGroups, parseGroupInfo, isDeclaredGroup } from './scoring.js';
 import { applyPackModes } from './modeSemantics.js';
 
 /**
@@ -47,6 +47,20 @@ class TokenManagerClass {
     try {
       const pack = await this._packLoader.loadPack();
 
+      // Pack schemaVersion gate (tokens-v2 cutover, round-2 review
+      // C2/C14/C17 — the backend gate's EXACT-match mirror at the load
+      // boundary, covering every tier incl. SW-cache): a v1 pack's
+      // suffixed SF_Group names would silently read 1x here (this code
+      // has no suffix parser); a future pack must refuse, never
+      // half-parse. Fail-hard like any other unloadable database.
+      const declaredSchema = pack.gameConfig?.schemaVersion;
+      if (declaredSchema !== undefined && declaredSchema !== PACK_SCHEMA_VERSION) {
+        Debug.log(
+          `❌ Pack schemaVersion ${declaredSchema} — this scanner reads ` +
+          `${PACK_SCHEMA_VERSION} only (tokens-v2 cutover). Refusing the pack.`, true);
+        return false;
+      }
+
       this.database = pack.tokens;
       const info = pack.info;
       Debug.log(`✅ Loaded ${Object.keys(this.database).length} tokens — pack ${info.packId || 'unknown'} v${info.version || '?'} (${info.source})`);
@@ -57,6 +71,7 @@ class TokenManagerClass {
       // and warns loudly (transitional-debt ledger L2).
       applyPackScoring(pack.gameConfig?.scoring);
       applyPackGroups(pack.gameConfig?.groups);
+      this._warnUndeclaredGroups();
 
       // Runtime mode table from the same artifact (slice 1). Same shim
       // doctrine: no modes block → baked ALN table + loud warn (ledger L6).
@@ -72,6 +87,30 @@ class TokenManagerClass {
       // CRITICAL: Fail hard if database cannot be loaded.
       // Do NOT load demo data.
       return false;
+    }
+  }
+
+  /**
+   * Client defense (D1b, round-2 review C15 — the L2/L6 shim doctrine
+   * applied to groups): the BACKEND gate refuses undeclared group names
+   * at activation, but SW-cached / Pages-static packs never pass through
+   * it. A token naming a group absent from the applied groups block
+   * silently reads a 1x multiplier — legal fallback, but it must be
+   * LOUD, never silent.
+   */
+  _warnUndeclaredGroups() {
+    const undeclared = new Set();
+    for (const token of Object.values(this.database)) {
+      const name = (token.SF_Group || '').trim();
+      if (name && !isDeclaredGroup(name)) undeclared.add(name);
+    }
+    if (undeclared.size > 0) {
+      console.warn(
+        `[groups] UNDECLARED GROUP NAMES (D1b client defense): ` +
+        `${[...undeclared].join(', ')} — multipliers read 1x (no completion bonus). ` +
+        `The pack must declare them in game.json \`groups\`; a gated pack cannot ` +
+        `reach this state, so this pack bypassed the backend activation gate.`
+      );
     }
   }
 

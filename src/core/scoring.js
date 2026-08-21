@@ -120,11 +120,25 @@ export function parseGroupInfo(groupName) {
 
     const name = groupName.trim();
 
-    if (PACK_GROUPS && PACK_GROUPS[name]) {
-        return { name, multiplier: PACK_GROUPS[name].multiplier };
+    // Object.hasOwn (not truthy-index): a group named 'constructor' must
+    // never resolve via the prototype chain (round-2 review C16). A
+    // declared entry without a usable integer multiplier reads 1 — the
+    // backend gate refuses such packs; this is the never-gated-pack
+    // defense.
+    if (PACK_GROUPS && Object.hasOwn(PACK_GROUPS, name)) {
+        const m = PACK_GROUPS[name] && PACK_GROUPS[name].multiplier;
+        return { name, multiplier: (Number.isInteger(m) && m >= 1) ? m : 1 };
     }
 
     return { name, multiplier: 1 };
+}
+
+/** Is this (trimmed) group name declared in the applied pack groups
+ *  block? Distinguishes "declared x1" from "not declared at all" — the
+ *  tokenManager client-defense warn needs the difference (both read
+ *  multiplier 1 from parseGroupInfo). */
+export function isDeclaredGroup(name) {
+    return !!(PACK_GROUPS && Object.hasOwn(PACK_GROUPS, (name || '').trim()));
 }
 
 /**
