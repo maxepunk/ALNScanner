@@ -145,11 +145,16 @@ export class PackLoader {
             const pointer = this._readPointer();
             if (pointer && pointer.contentHash === manifest.contentHash) {
                 // Fast path: network-verified, content already active.
-                const fromCache = await this._readPackFromCache(pointer.contentHash);
+                // requireDeclaredStrings: a cache staged by PRE-3a code
+                // holds this pack's game.json (with its strings pointer)
+                // but not the sidecar — the network tier must treat that
+                // incomplete cache like a missing cache and refresh,
+                // never activate half a pack it could complete right now.
+                const fromCache = await this._readPackFromCache(pointer.contentHash, { requireDeclaredStrings: true });
                 if (fromCache) {
                     return this._activate(fromCache, manifest, 'network');
                 }
-                // Pointer without cache (cleared storage) — fall through to refresh.
+                // Pointer without (complete) cache — fall through to refresh.
             }
             const staged = await this._stagedRefresh(manifest, ch);
             if (staged) {
@@ -232,6 +237,15 @@ export class PackLoader {
             if (!this._isUsableTokenMap(content['tokens.json'])) {
                 throw new Error('canonical tokens.json is missing, empty, or not a token map');
             }
+            // Declared ⇒ must load (review D): a drifted/hand-built
+            // manifest — or a non-canonical sidecar filename the builders
+            // role as "other" — stages game+tokens but not the declared
+            // sidecar. Half-activating would silently split wording
+            // between backend and scanner; fail like a missing tokens.json.
+            const declaredStrings = this._stringsPath(content['game.json']);
+            if (declaredStrings && !Object.hasOwn(content, declaredStrings)) {
+                throw new Error(`game.json declares strings '${declaredStrings}' but the manifest staged no such rules file (role drift / non-canonical name)`);
+            }
 
             // Also persist the manifest itself for cache-tier identity.
             await staging.put('/pack-manifest.json', new Response(JSON.stringify(manifest), {
@@ -274,8 +288,17 @@ export class PackLoader {
         } catch { /* GC is best-effort */ }
     }
 
-    /** Read game.json/tokens.json (+manifest) from an activated pack cache. */
-    async _readPackFromCache(contentHash) {
+    /**
+     * Read game.json/tokens.json (+manifest) from an activated pack cache.
+     * requireDeclaredStrings (network fast path only): a cache whose
+     * game.json declares a sidecar the cache lacks — staged by pre-3a
+     * code whose rules set was {game, tokens} — reads as NO cache, so the
+     * caller falls through to the staged refresh and completes it. The
+     * OFFLINE cache tier keeps the default (tolerate: activating the
+     * cached tokens with baked wording beats dropping to stale bundled
+     * tokens for the sake of labels).
+     */
+    async _readPackFromCache(contentHash, { requireDeclaredStrings = false } = {}) {
         if (!this._caches) return null;
         try {
             const cache = await this._caches.open(`${CACHE_PREFIX}${contentHash}`);
@@ -288,12 +311,15 @@ export class PackLoader {
             const gameRes = await cache.match('/game.json');
             if (gameRes) content['game.json'] = await gameRes.json();
             // Strings sidecar rides the cache under its declared path
-            // (slice 3a). A pre-3a cached pack simply has neither pointer
-            // nor file — content stays without it and _activate reads null.
+            // (slice 3a).
             const stringsPath = this._stringsPath(content['game.json']);
             if (stringsPath) {
                 const stringsRes = await cache.match(`/${stringsPath}`);
                 if (stringsRes) content[stringsPath] = await stringsRes.json();
+                else if (requireDeclaredStrings) {
+                    Debug.log(`packLoader: cached pack lacks its declared sidecar '${stringsPath}' (pre-3a staging) — refreshing`);
+                    return null;
+                }
             }
             return content;
         } catch {

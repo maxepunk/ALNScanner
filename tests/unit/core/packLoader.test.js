@@ -492,6 +492,97 @@ describe('PackLoader', () => {
       expect(pack.strings).toEqual(STRINGS);
     });
 
+    it('fast path REFETCHES when the hash-matched cache lacks the DECLARED sidecar (pre-3a upgrade path)', async () => {
+      // Rollout ordering (review C): pre-3a code staged the 3a pack
+      // WITHOUT strings.json (its rules set was {game, tokens}) and
+      // flipped the pointer; sw.js exempts aln-pack-* caches from GC, so
+      // the incomplete cache survives the code update. The fast path
+      // must treat it like the pointer-without-cache case and fall
+      // through to the staged refresh — otherwise the device is stuck on
+      // baked wording until the pack's contentHash changes.
+      const caches = makeCaches();
+      const storage = makeStorage({
+        aln_pack_active: JSON.stringify({ packId: 'about-last-night', version: '1.2.0', contentHash: HASH_B }),
+      });
+      const cache = await caches.open(`aln-pack-${HASH_B}`);
+      await cache.put('/tokens.json', new Response(JSON.stringify(TOKENS)));
+      await cache.put('/game.json', new Response(JSON.stringify(GAME_WITH_STRINGS)));
+      // no /strings.json — staged by pre-3a code
+
+      const { loader, fetchFn } = makeLoader({
+        caches,
+        storage,
+        routes: {
+          'pack-manifest.json': jsonResponse(manifestFor(HASH_B, STRINGS_RULES_FILES)),
+          'game.json': jsonResponse(GAME_WITH_STRINGS),
+          'tokens.json': jsonResponse(TOKENS),
+          'strings.json': jsonResponse(STRINGS),
+        },
+      });
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('network');
+      expect(pack.strings).toEqual(STRINGS);
+      expect(fetchFn.mock.calls.map(([u]) => u)).toContain('strings.json');
+      // The refresh completed the cache for the next offline load
+      const completed = await (await caches.open(`aln-pack-${HASH_B}`)).match('/strings.json');
+      expect(await completed.json()).toEqual(STRINGS);
+    });
+
+    it('OFFLINE cache tier TOLERATES the incomplete pre-3a cache (tokens beat wording)', async () => {
+      // The same incomplete cache with no network: dropping to the stale
+      // bundled tier for the sake of wording would trade tokens for
+      // labels — baked wording is the benign loss, so the cache tier
+      // activates with strings null.
+      const caches = makeCaches();
+      const storage = makeStorage({
+        aln_pack_active: JSON.stringify({ packId: 'about-last-night', version: '1.2.0', contentHash: HASH_B }),
+      });
+      const cache = await caches.open(`aln-pack-${HASH_B}`);
+      await cache.put('/tokens.json', new Response(JSON.stringify(TOKENS)));
+      await cache.put('/game.json', new Response(JSON.stringify(GAME_WITH_STRINGS)));
+
+      const { loader } = makeLoader({ caches, storage, routes: {} }); // offline
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('cache');
+      expect(pack.tokens).toEqual(TOKENS);
+      expect(pack.strings).toBeNull();
+    });
+
+    it('staged refresh FAILS when game.json declares a sidecar the manifest never staged (role drift)', async () => {
+      // A drifted/hand-built manifest (or a non-canonical filename the
+      // builders role as "other") stages game+tokens but not the
+      // declared sidecar. Half-activating would silently split wording
+      // between backend and scanner — declared ⇒ must load.
+      const caches = makeCaches();
+      const storage = makeStorage({
+        aln_pack_active: JSON.stringify({ packId: 'about-last-night', version: '1.0.0', contentHash: HASH_A }),
+      });
+      const cache = await caches.open(`aln-pack-${HASH_A}`);
+      await cache.put('/tokens.json', new Response(JSON.stringify(TOKENS)));
+
+      const { loader } = makeLoader({
+        caches,
+        storage,
+        routes: {
+          'pack-manifest.json': jsonResponse(manifestFor(HASH_B, RULES_FILES.map(
+            f => (f.path === 'game.json' ? { ...f, sha1: sha1Of(GAME_WITH_STRINGS) } : f)
+          ))), // manifest has NO strings entry, but game.json declares one
+          'game.json': jsonResponse(GAME_WITH_STRINGS),
+          'tokens.json': jsonResponse(TOKENS),
+          'strings.json': jsonResponse(STRINGS), // reachable, but never staged
+        },
+      });
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('cache'); // refresh failed, prior pack survives
+      expect(JSON.parse(storage.getItem('aln_pack_active')).contentHash).toBe(HASH_A);
+    });
+
     it('bundled tier: a missing sidecar degrades to strings null, never a load failure', async () => {
       const { loader } = makeLoader({
         routes: {

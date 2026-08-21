@@ -283,6 +283,7 @@ describe('InitializationSteps - ES6 Module', () => {
       document.body.innerHTML = `
         <h2 id="scanPrompt">Tap Memory Token</h2>
         <div id="teamValueLabel">Total Value</div>
+        <div id="historyValueLabel">Total Value</div>
         <p id="scoreboard-evidence-hint">Awaiting evidence...</p>
       `;
     });
@@ -309,6 +310,7 @@ describe('InitializationSteps - ES6 Module', () => {
       expect(document.title).toBe('Fence Terminal');
       expect(document.getElementById('scanPrompt').textContent).toBe('Tap Loot Tag');
       expect(document.getElementById('teamValueLabel').textContent).toBe('Total Haul');
+      expect(document.getElementById('historyValueLabel').textContent).toBe('Total Haul');
       expect(document.getElementById('scoreboard-evidence-hint').textContent).toBe('Awaiting tips...');
     });
 

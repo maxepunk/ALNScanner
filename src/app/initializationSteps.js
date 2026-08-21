@@ -173,6 +173,10 @@ export function applyPackStringsToDom(doc = typeof document !== 'undefined' ? do
   if (prompt) prompt.textContent = getString('scanner.scanPrompt');
   const valueLabel = doc.getElementById('teamValueLabel');
   if (valueLabel) valueLabel.textContent = getString('scanner.statLabels.totalValue');
+  // History screen's summary label (static, never mode-toggled — same
+  // wording key; review found it as a missed consumer)
+  const historyLabel = doc.getElementById('historyValueLabel');
+  if (historyLabel) historyLabel.textContent = getString('scanner.statLabels.totalValue');
   const evidenceHint = doc.getElementById('scoreboard-evidence-hint');
   if (evidenceHint) evidenceHint.textContent = getString('scoreboard.emptyEvidence');
 }
