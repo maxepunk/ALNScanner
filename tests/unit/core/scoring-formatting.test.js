@@ -10,8 +10,22 @@
 // only the CONSTRUCTION and the scale derivation are shared.
 
 import { describe, it, expect, afterEach } from '@jest/globals';
-import { applyPackScoring, formatStars } from '../../../src/core/scoring.js';
+import { applyPackScoring, formatStars, SCORING_CONFIG } from '../../../src/core/scoring.js';
 import { formatCurrency, applyPackMoneyFormat } from '../../../src/utils/formatCurrency.js';
+
+// applyPackScoring(null) takes the SHIM path, which does NOT restore the
+// baked tables (review D — a 3-key pack would leak its scale into later
+// tests). Snapshot-and-restore like tokenManager.test.js does.
+const pristine = {
+  BASE_VALUES: { ...SCORING_CONFIG.BASE_VALUES },
+  TYPE_MULTIPLIERS: { ...SCORING_CONFIG.TYPE_MULTIPLIERS },
+};
+function restoreTables() {
+  for (const k of Object.keys(SCORING_CONFIG.BASE_VALUES)) delete SCORING_CONFIG.BASE_VALUES[k];
+  Object.assign(SCORING_CONFIG.BASE_VALUES, pristine.BASE_VALUES);
+  for (const k of Object.keys(SCORING_CONFIG.TYPE_MULTIPLIERS)) delete SCORING_CONFIG.TYPE_MULTIPLIERS[k];
+  Object.assign(SCORING_CONFIG.TYPE_MULTIPLIERS, pristine.TYPE_MULTIPLIERS);
+}
 
 const PACK_SCORING = {
   baseValues: { 1: 100, 2: 200, 3: 300, 4: 400, 5: 500 },
@@ -20,7 +34,7 @@ const PACK_SCORING = {
 
 describe('formatStars (slice 3b construction helper)', () => {
   afterEach(() => {
-    applyPackScoring(null); // shim path resets scale to the baked 5-table
+    restoreTables();
     applyPackMoneyFormat(null);
   });
 
@@ -62,7 +76,7 @@ describe('formatStars (slice 3b construction helper)', () => {
 
 describe('applyPackScoring drives the money format (slice 3b wiring)', () => {
   afterEach(() => {
-    applyPackScoring(null);
+    restoreTables();
     applyPackMoneyFormat(null);
   });
 

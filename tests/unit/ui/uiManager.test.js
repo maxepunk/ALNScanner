@@ -420,6 +420,25 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       expect(container.innerHTML).toContain('$5,000');
     });
 
+    it('pack money affixes are HTML-ESCAPED in innerHTML renders (3b review A — XSS)', () => {
+      // The affixes are pack-controlled since 3b; the grammar excludes
+      // only '#', so a drivable format can carry markup. Every innerHTML
+      // site must escape formatCurrency output like the scoreboard.html
+      // twin does (and like every adjacent pack value per F-GMS-04).
+      const { applyPackMoneyFormat } = require('../../../src/utils/formatCurrency.js');
+      applyPackMoneyFormat('<img src=x onerror=alert(1)>#,###');
+
+      try {
+        uiManager.renderScoreboard();
+        const container = document.getElementById('scoreboardContainer');
+        expect(container.innerHTML).not.toContain('<img');
+        expect(container.innerHTML).toContain('&lt;img');
+        expect(container.querySelector('img')).toBeNull();
+      } finally {
+        applyPackMoneyFormat(null);
+      }
+    });
+
     it('should show backend indicator when scores from orchestrator', () => {
       mockDataManager.getTeamScores.mockReturnValue([
         { teamId: '001', score: 5000, tokenCount: 1, isFromBackend: true }

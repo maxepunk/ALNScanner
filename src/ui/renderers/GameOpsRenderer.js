@@ -71,7 +71,7 @@ export class GameOpsRenderer {
             Team ${safeTeamId}
             <span class="scoreboard-tokens">(${team.tokenCount} tokens)</span>
           </div>
-          <div class="scoreboard-score">${formatCurrency(team.score)}</div>
+          <div class="scoreboard-score">${escapeHtml(formatCurrency(team.score))}</div>
         </div>
       `;
     }).join('');
@@ -103,7 +103,7 @@ export class GameOpsRenderer {
         <div>
           <div style="font-weight: bold; margin-bottom: 5px;">Group Completed!</div>
           <div style="font-size: 14px;">Team ${escapeHtml(data.teamId)} - ${escapeHtml(data.groupId)}</div>
-          <div style="font-size: 14px;">Bonus: +${formatCurrency(data.bonus)} (${data.multiplier}x)</div>
+          <div style="font-size: 14px;">Bonus: +${escapeHtml(formatCurrency(data.bonus))} (${data.multiplier}x)</div>
         </div>
       </div>
     `;
@@ -151,7 +151,7 @@ export class GameOpsRenderer {
                 <span class="completion-text">COMPLETE</span>
               </div>
               <div class="bonus-amount">
-                +${formatCurrency(group.bonusValue)} bonus (${group.multiplier}x)
+                +${escapeHtml(formatCurrency(group.bonusValue))} bonus (${group.multiplier}x)
               </div>
             </div>`;
         const hasActiveSession = this.sessionModeManager?.isNetworked() || this.sessionModeManager?.isStandalone();
@@ -241,7 +241,7 @@ export class GameOpsRenderer {
         <div class="transaction-detail" style="margin: 8px 0; padding: 12px; background: rgba(255, 193, 7, 0.1); border-left: 4px solid #ffc107; border-radius: 4px;">
           <label style="color: #856404; font-weight: bold;">⚠️ Admin Adjustments:</label>
           <span class="value" style="color: ${totalAdjustment >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">
-            ${totalAdjustment >= 0 ? '+' : ''}${formatCurrency(Math.abs(totalAdjustment))}
+            ${totalAdjustment >= 0 ? '+' : ''}${escapeHtml(formatCurrency(Math.abs(totalAdjustment)))}
           </span>
         </div>
         <div style="margin-left: 20px; font-size: 12px; color: #666;">
@@ -252,7 +252,7 @@ export class GameOpsRenderer {
         adjHtml += `
           <div style="margin: 4px 0; padding: 6px; background: #f8f9fa; border-radius: 3px;">
             <span style="color: ${adj.delta >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">
-              ${adj.delta >= 0 ? '+' : ''}${formatCurrency(Math.abs(adj.delta))}
+              ${adj.delta >= 0 ? '+' : ''}${escapeHtml(formatCurrency(Math.abs(adj.delta)))}
             </span>
             - ${escapeHtml(adj.reason || 'No reason provided')}
             <br><span style="font-size: 10px; color: #999;">${date} by ${escapeHtml(adj.gmStation || '')}</span>
@@ -310,12 +310,12 @@ export class GameOpsRenderer {
           <strong>${formatNumber(baseValue)}</strong> ×
           <strong>${multiplier}x</strong> ${safeMemoryType} ×
           <strong>${groupInfo.multiplier}x</strong> group =
-          <strong>${formatCurrency(finalValue)}</strong>`;
+          <strong>${escapeHtml(formatCurrency(finalValue))}</strong>`;
       } else {
         calculationText = `
           <strong>${formatNumber(baseValue)}</strong> ×
           <strong>${multiplier}x</strong> ${safeMemoryType} =
-          <strong>${formatCurrency(tokenValue)}</strong>`;
+          <strong>${escapeHtml(formatCurrency(tokenValue))}</strong>`;
       }
     } else {
       calculationText = 'Unknown token - No value';
@@ -336,7 +336,7 @@ export class GameOpsRenderer {
         <div class="token-detail-header">
           <span>${escapeHtml(token.group)}</span>
           <span class="token-detail-value" style="display: flex; align-items: center;">
-            <span style="margin-right: 8px;">${formatCurrency(displayValue)}</span>
+            <span style="margin-right: 8px;">${escapeHtml(formatCurrency(displayValue))}</span>
             ${deleteButton}
           </span>
         </div>
@@ -467,13 +467,13 @@ export class GameOpsRenderer {
     // (paid claims read as SOLD, unpaid as EXPOSED); wording is slice-3a scope.
     if (status === 'claimed' && isScoringMode(claimEvent?.mode)) {
       statusContent = `<span class="status-icon">💰</span> SOLD to ${escapeHtml(claimEvent?.teamId || 'Unknown')}
-        <span class="points">${formatCurrency(claimEvent?.points)}</span>`;
+        <span class="points">${escapeHtml(formatCurrency(claimEvent?.points))}</span>`;
     } else if (status === 'claimed' && claimEvent?.mode) {
       statusContent = `<span class="status-icon">🔍</span> EXPOSED by ${escapeHtml(claimEvent?.teamId || 'Unknown')}
-        <span class="points potential">Worth: ${formatCurrency(potentialValue)}</span>`;
+        <span class="points potential">Worth: ${escapeHtml(formatCurrency(potentialValue))}</span>`;
     } else {
       statusContent = `○ AVAILABLE
-        <span class="points potential">Worth: ${formatCurrency(potentialValue)}</span>`;
+        <span class="points potential">Worth: ${escapeHtml(formatCurrency(potentialValue))}</span>`;
     }
 
     return `
@@ -563,7 +563,7 @@ export class GameOpsRenderer {
             <span class="label">${escapeHtml(modeLabel(event.mode))}</span>
             <span class="team">${escapeHtml(event.teamId)}</span>
             <span class="time">${time}</span>
-            <span class="points">${formatCurrency(event.points)}</span>
+            <span class="points">${escapeHtml(formatCurrency(event.points))}</span>
             ${event.groupProgress ? `
               <div class="group-progress">
                 ${escapeHtml(event.groupProgress.name)} (${event.groupProgress.found}/${event.groupProgress.total})

@@ -15,6 +15,7 @@ import { escapeHtml } from '../utils/escapeHtml.js';
 import { formatCurrency } from '../utils/formatCurrency.js';
 import { wireModeIds, isScoringMode, modeHasSurface, modeLabel } from '../core/modeSemantics.js';
 import { getString } from '../core/strings.js';
+import { formatStars } from '../core/scoring.js';
 import { formatDuration } from '../utils/formatDuration.js';
 import { showToast as sharedShowToast } from '../utils/showToast.js';
 import { GameOpsRenderer } from './renderers/GameOpsRenderer.js';
@@ -467,7 +468,7 @@ class UIManager {
         });
         valueEl.textContent = formatCurrency(tokenScore);
       } else {
-        valueEl.textContent = '⭐'.repeat(token.SF_ValueRating || 0);
+        valueEl.textContent = formatStars(token.SF_ValueRating);
       }
 
       // Show summary if available (all modes - gives GM visibility on token content)
