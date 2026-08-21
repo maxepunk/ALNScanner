@@ -18,6 +18,8 @@
 // applyPackScoring(); this table only serves packs published before
 // game.json existed, and warns LOUDLY when active (F-TOOL-05 class).
 // Retirement (L2): delete one release cycle after the final cutover.
+import { applyPackMoneyFormat } from '../utils/formatCurrency.js';
+
 const bakedConfig = Object.freeze({
     baseValues: Object.freeze({ 1: 10000, 2: 25000, 3: 50000, 4: 75000, 5: 150000 }),
     typeMultipliers: Object.freeze({ Personal: 1, Mention: 3, Business: 3, Party: 5, Technical: 5, UNKNOWN: 0 }),
@@ -73,6 +75,7 @@ export function applyPackScoring(scoring) {
         console.warn('[scoring] LEGACY SHIM ACTIVE: pack has no usable game.json scoring block — using build-time baked values (F-TOOL-05 exposure)');
         SCORING_SOURCE = 'baked';
         SCORING_CONFIG.ALLOW_NEGATIVE = bakedConfig.semantics.allowNegative;
+        applyPackMoneyFormat(null); // R-3b-1: baked ALN money spec rides the shim
         return false;
     }
     Object.keys(SCORING_CONFIG.BASE_VALUES).forEach((k) => delete SCORING_CONFIG.BASE_VALUES[k]);
@@ -84,8 +87,33 @@ export function applyPackScoring(scoring) {
     // Strict === true, matching the backend's _normalizeScoring: a pack
     // that declares scoring but omits semantics gets the conservative floor.
     SCORING_CONFIG.ALLOW_NEGATIVE = !!(scoring.semantics && scoring.semantics.allowNegative === true);
+    // R-3b-1: the money display spec rides the same block. Undrivable or
+    // absent formats reset to the baked ALN spec inside the util (the
+    // backend gate refuses declared undrivable formats — only ungated
+    // tiers can carry one, and they land on baked affixes, never garbage).
+    applyPackMoneyFormat(scoring.display && scoring.display.format);
     SCORING_SOURCE = 'pack';
     return true;
+}
+
+/**
+ * Star-rating construction (A3 slice 3b): the ONE builder behind the
+ * three ad-hoc renderers (uiManager repeat, GameOpsRenderer's odd
+ * 1+repeat(r-1), and the hardcoded-5-scale card rating that threw
+ * RangeError for r>5). Glyphs stay per-surface baked (Q-3b-2 held);
+ * the SCALE derives from the applied pack's baseValues keys —
+ * schema-frozen at 5 today, future-proof against a wider pack.
+ *
+ * @param {number} rating
+ * @param {Object} [opts]
+ * @param {string} [opts.filled='⭐'] - glyph for earned stars
+ * @param {string|null} [opts.empty=null] - glyph for the remainder (null = filled-only)
+ * @returns {string}
+ */
+export function formatStars(rating, { filled = '⭐', empty = null } = {}) {
+    const scale = Object.keys(SCORING_CONFIG.BASE_VALUES).length || 5;
+    const r = Math.max(0, Math.min(scale, rating || 0));
+    return filled.repeat(r) + (empty ? empty.repeat(scale - r) : '');
 }
 
 /**

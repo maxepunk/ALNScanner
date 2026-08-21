@@ -442,7 +442,7 @@ class UIManager {
       groupEl.textContent = `Raw ID: ${tokenId}`;
 
       if (isScoringMode(this.settings.mode)) {
-        valueEl.textContent = '$0';
+        valueEl.textContent = formatCurrency(0);
       } else {
         valueEl.textContent = 'No Value';
       }

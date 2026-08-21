@@ -323,6 +323,25 @@ describe('InitializationSteps - ES6 Module', () => {
       expect(document.getElementById('scoreboard-evidence-hint').textContent).toBe('Awaiting evidence...');
     });
 
+    it('re-renders the static money seeds under the pack money spec (slice 3b)', () => {
+      const { applyPackMoneyFormat } = require('../../../src/utils/formatCurrency.js');
+      document.body.innerHTML += `
+        <span id="teamBaseScore">$0</span>
+        <span id="teamBonusScore">$0</span>
+        <span id="teamTotalScore">$0</span>
+      `;
+      applyPackMoneyFormat('#,### cr');
+
+      try {
+        applyPackStringsToDom();
+        expect(document.getElementById('teamBaseScore').textContent).toBe('0 cr');
+        expect(document.getElementById('teamBonusScore').textContent).toBe('0 cr');
+        expect(document.getElementById('teamTotalScore').textContent).toBe('0 cr');
+      } finally {
+        applyPackMoneyFormat(null);
+      }
+    });
+
     it('tolerates a partial DOM (elements absent) and a null document', () => {
       document.body.innerHTML = '';
       expect(() => applyPackStringsToDom()).not.toThrow();

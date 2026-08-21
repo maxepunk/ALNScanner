@@ -12,8 +12,9 @@
  */
 
 import { escapeHtml } from '../../utils/escapeHtml.js';
-import { formatCurrency } from '../../utils/formatCurrency.js';
+import { formatCurrency, formatNumber } from '../../utils/formatCurrency.js';
 import { isScoringMode, modeLabel } from '../../core/modeSemantics.js';
+import { formatStars } from '../../core/scoring.js';
 
 export class GameOpsRenderer {
   /**
@@ -306,13 +307,13 @@ export class GameOpsRenderer {
         const groupInfo = dataSource.parseGroupInfo(token.group);
         const finalValue = tokenValue * groupInfo.multiplier;
         calculationText = `
-          <strong>${baseValue.toLocaleString()}</strong> ×
+          <strong>${formatNumber(baseValue)}</strong> ×
           <strong>${multiplier}x</strong> ${safeMemoryType} ×
           <strong>${groupInfo.multiplier}x</strong> group =
           <strong>${formatCurrency(finalValue)}</strong>`;
       } else {
         calculationText = `
-          <strong>${baseValue.toLocaleString()}</strong> ×
+          <strong>${formatNumber(baseValue)}</strong> ×
           <strong>${multiplier}x</strong> ${safeMemoryType} =
           <strong>${formatCurrency(tokenValue)}</strong>`;
       }
@@ -351,7 +352,7 @@ export class GameOpsRenderer {
           <div class="token-detail-item">
             <span class="token-detail-label">Base Rating</span>
             <span class="token-detail-info">
-              ${isUnknown ? 'N/A' : `⭐${'⭐'.repeat(Math.max(0, token.valueRating - 1))}`}
+              ${isUnknown ? 'N/A' : formatStars(token.valueRating)}
             </span>
           </div>
           <div class="token-detail-item">
@@ -481,7 +482,7 @@ export class GameOpsRenderer {
           <span class="token-id">${escapeHtml(tokenId)}</span>
           <span class="token-type type-${escapeHtml(memoryType.toLowerCase())}">${escapeHtml(memoryType)}</span>
         </div>
-        <div class="token-card__rating">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</div>
+        <div class="token-card__rating">${formatStars(rating, { filled: '★', empty: '☆' })}</div>
 
         <div class="token-card__status status-${status} ${claimEvent?.mode || ''}">
           ${statusContent}

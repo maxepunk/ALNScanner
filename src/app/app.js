@@ -14,6 +14,7 @@
  */
 
 import Debug from '../utils/debug.js';
+import { formatCurrency } from '../utils/formatCurrency.js';
 import { isConsumingMode } from '../core/modeSemantics.js';
 import { isTokenValid } from '../utils/jwtUtils.js';
 import UIManager from '../ui/uiManager.js';
@@ -202,7 +203,7 @@ class App {
 
     this.networkedSession.addEventListener('group:completed', (event) => {
       const { teamId, bonusPoints } = event.detail || {};
-      const formattedBonus = bonusPoints ? ` +$${bonusPoints.toLocaleString()}` : '';
+      const formattedBonus = bonusPoints ? ` +${formatCurrency(bonusPoints)}` : '';
       this.uiManager.showToast(`Group completed by ${teamId || 'team'}${formattedBonus}`);
     });
 

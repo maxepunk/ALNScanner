@@ -25,6 +25,7 @@ import packLoader from '../core/packLoader.js';
 import { SCORING_SOURCE } from '../core/scoring.js';
 import { wireModeIds, defaultModeId } from '../core/modeSemantics.js';
 import { getString } from '../core/strings.js';
+import { formatCurrency } from '../utils/formatCurrency.js';
 
 /**
  * Initialize UIManager
@@ -179,6 +180,14 @@ export function applyPackStringsToDom(doc = typeof document !== 'undefined' ? do
   if (historyLabel) historyLabel.textContent = getString('scanner.statLabels.totalValue');
   const evidenceHint = doc.getElementById('scoreboard-evidence-hint');
   if (evidenceHint) evidenceHint.textContent = getString('scoreboard.emptyEvidence');
+  // Slice 3b: the static money seeds re-render under the PACK's money
+  // spec (same static-shell rewrite class as the wording above) — the
+  // renderers overwrite them on first update, but a pack with a
+  // non-dollar spec must never flash '$0'.
+  for (const id of ['teamBaseScore', 'teamBonusScore', 'teamTotalScore']) {
+    const el = doc.getElementById(id);
+    if (el) el.textContent = formatCurrency(0);
+  }
 }
 
 /**
