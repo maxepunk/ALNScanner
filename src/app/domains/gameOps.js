@@ -121,7 +121,9 @@ export class GameOpsDomain {
     const teamName = teamInput?.value?.trim();
 
     if (!teamName) {
-      uiManager.showError('Please enter a team name');
+      // Q1: entity noun is pack-declared (baked 'team' is byte-identical) —
+      // review-confirmed census miss, fixed post-build
+      uiManager.showError(`Please enter a ${entityLabel().toLowerCase()} name`);
       return;
     }
 
@@ -221,7 +223,10 @@ export class GameOpsDomain {
 
     if (!this.app.currentTeamId || this.app.currentTeamId.trim() === '') {
       debug.log('ERROR: No team selected - cannot process token', true);
-      uiManager.showError('Please select a team before scanning tokens');
+      // Q1: entity noun is pack-declared (baked 'team' is byte-identical) —
+      // review-confirmed census miss, fixed post-build. The unit pin at
+      // tests/app/app.test.js asserts the baked sentence byte-for-byte.
+      uiManager.showError(`Please select a ${entityLabel().toLowerCase()} before scanning tokens`);
       return;
     }
 
