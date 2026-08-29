@@ -155,7 +155,7 @@
 
         <!-- Team Entry Screen -->
         <div id="teamEntryScreen" class="screen">
-            <h2 class="screen-title">Select Team</h2>
+            <h2 class="screen-title" id="teamEntryTitle">Select Team</h2>
 
             <!-- UNIFIED: Single text input -->
             <div class="team-input-container">
@@ -180,7 +180,7 @@
         <!-- Scan Screen -->
         <div id="scanScreen" class="screen">
             <div class="status-message">
-                Team <strong id="currentTeam"></strong> Ready
+                <span id="currentTeamNoun">Team</span> <strong id="currentTeam"></strong> Ready
             </div>
             <div class="scan-area">
                 <div class="scan-icon">📡</div>
@@ -242,7 +242,7 @@
                 </div>
                 <div class="summary-stat">
                     <div class="value" id="uniqueTeams">0</div>
-                    <div class="label">Teams</div>
+                    <div class="label" id="uniqueTeamsLabel">Teams</div>
                 </div>
                 <div class="summary-stat">
                     <div class="value" id="totalValue">0</div>
@@ -269,7 +269,7 @@
         <div id="scoreboardScreen" class="screen">
             <div class="header" style="margin-bottom: 20px;">
                 <h2>🏆 Black Market Scoreboard</h2>
-                <p style="color: #666; font-size: 14px;">Team Rankings</p>
+                <p style="color: #666; font-size: 14px;" id="scoreboardSubtitle">Team Rankings</p>
             </div>
             
             <div id="scoreboardContainer" class="scoreboard-container">
@@ -531,7 +531,7 @@
 
             <!-- Score Board Section -->
             <section class="admin-section">
-                <h3>Team Scores</h3>
+                <h3 id="adminScoreboardTitle">Team Scores</h3>
                 <div id="admin-score-board" class="score-board">
                     <!-- Rendered by UIManager.renderScoreboard() -->
                 </div>

@@ -12,7 +12,7 @@ import {
   calculateTokenValue
 } from '../scoring.js';
 import { buildGameActivity } from '../gameActivityBuilder.js';
-import { isScoringMode, countsTowardGroups, isConsumingMode } from '../modeSemantics.js';
+import { isScoringMode, countsTowardGroups, isConsumingMode, entityLabel } from '../modeSemantics.js';
 
 export class LocalStorage extends IStorageStrategy {
   /**
@@ -527,7 +527,8 @@ export class LocalStorage extends IStorageStrategy {
     if (!this.sessionData.teams[teamId]) {
       return {
         success: false,
-        error: `Team not found: ${teamId}`
+        // Q1: entity noun is pack-declared (baked 'Team' is byte-identical)
+        error: `${entityLabel()} not found: ${teamId}`
       };
     }
 

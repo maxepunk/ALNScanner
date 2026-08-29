@@ -645,7 +645,8 @@
 }
 
 .team-list:empty::after {
-  content: 'No teams yet';
+  /* Q1: entity noun is pack-declared — applyPackStringsToDom sets the var */
+  content: var(--entity-empty-team-list, 'No teams yet');
   display: block;
   padding: var(--space-3);
   color: var(--color-text-tertiary);

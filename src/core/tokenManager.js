@@ -13,7 +13,7 @@ import Debug from '../utils/debug.js';
 import defaultPackLoader, { PACK_SCHEMA_VERSION } from './packLoader.js';
 import { applyPackScoring, applyPackGroups, parseGroupInfo, isDeclaredGroup } from './scoring.js';
 import { applyPackStrings } from './strings.js';
-import { applyPackModes } from './modeSemantics.js';
+import { applyPackModes, applyPackEntities } from './modeSemantics.js';
 
 /**
  * TokenManager Class
@@ -77,6 +77,11 @@ class TokenManagerClass {
       // Runtime mode table from the same artifact (slice 1). Same shim
       // doctrine: no modes block → baked ALN table + loud warn (ledger L6).
       applyPackModes(pack.gameConfig);
+
+      // Entity noun from the same artifact (Q1): ALN rebrands Team →
+      // Account. Benign wording class — absent block keeps the baked
+      // Team/Teams silently.
+      applyPackEntities(pack.gameConfig);
 
       // Runtime display strings from the pack's sidecar (slice 3a).
       // Benign-wording class: no sidecar → baked wording, NO loud shim

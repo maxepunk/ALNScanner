@@ -13,7 +13,10 @@
 
 import { escapeHtml } from '../../utils/escapeHtml.js';
 import { formatCurrency, formatNumber } from '../../utils/formatCurrency.js';
-import { isScoringMode, modeLabel, modeClassNames } from '../../core/modeSemantics.js';
+import {
+  isScoringMode, isConsumingMode, modeLabel, modeClassNames,
+  claimAnnouncement, resolveMode, entityLabel, entityLabelPlural,
+} from '../../core/modeSemantics.js';
 import { slugifyId } from '../../utils/slugify.js';
 import { formatStars } from '../../core/scoring.js';
 
@@ -44,10 +47,11 @@ export class GameOpsRenderer {
     const teamScores = dataSource.getTeamScores();
 
     if (teamScores.length === 0) {
+      // Q1: the entity noun is pack-declared (baked Team/Teams is byte-identical)
       targetContainer.innerHTML = `
         <div class="empty-state">
-          <h3>No Teams Yet</h3>
-          <p>Teams will appear here after scanning tokens</p>
+          <h3>No ${escapeHtml(entityLabelPlural())} Yet</h3>
+          <p>${escapeHtml(entityLabelPlural())} will appear here after scanning tokens</p>
         </div>
       `;
       return;
@@ -69,7 +73,7 @@ export class GameOpsRenderer {
         <div class="scoreboard-entry ${rankClass}" data-action="app.showTeamDetails" data-arg="${safeTeamId}" style="cursor: pointer;">
           <div class="scoreboard-rank">${medal}</div>
           <div class="scoreboard-team">
-            Team ${safeTeamId}
+            ${escapeHtml(entityLabel())} ${safeTeamId}
             <span class="scoreboard-tokens">(${team.tokenCount} tokens)</span>
           </div>
           <div class="scoreboard-score">${escapeHtml(formatCurrency(team.score))}</div>
@@ -103,7 +107,7 @@ export class GameOpsRenderer {
         <span style="font-size: 24px;">🏆</span>
         <div>
           <div style="font-weight: bold; margin-bottom: 5px;">Group Completed!</div>
-          <div style="font-size: 14px;">Team ${escapeHtml(data.teamId)} - ${escapeHtml(data.groupId)}</div>
+          <div style="font-size: 14px;">${escapeHtml(entityLabel())} ${escapeHtml(data.teamId)} - ${escapeHtml(data.groupId)}</div>
           <div style="font-size: 14px;">Bonus: +${escapeHtml(formatCurrency(data.bonus))} (${data.multiplier}x)</div>
         </div>
       </div>
@@ -133,7 +137,7 @@ export class GameOpsRenderer {
     const titleEl = document.getElementById('teamDetailsTitle');
     const summaryEl = document.getElementById('teamDetailsSummary');
 
-    if (titleEl) titleEl.textContent = `Team ${teamId}`;
+    if (titleEl) titleEl.textContent = `${entityLabel()} ${teamId}`;
     if (summaryEl) {
       summaryEl.textContent = `${transactions.length} token${transactions.length !== 1 ? 's' : ''} collected`;
     }
@@ -205,7 +209,7 @@ export class GameOpsRenderer {
       html = `
         <div class="empty-state">
           <h3>No Tokens</h3>
-          <p>This team hasn't scanned any tokens yet</p>
+          <p>This ${escapeHtml(entityLabel().toLowerCase())} hasn't scanned any tokens yet</p>
         </div>
       `;
     }
@@ -461,17 +465,29 @@ export class GameOpsRenderer {
 
     const scanEvents = events.filter(e => e.type === 'scan');
     const hasMultipleScans = scanEvents.length > 0;
-    const claimEvent = events.find(e => e.type === 'claim');
+    // Headline resolves the CONSUMING claim (R-Q2 #7): repeatable
+    // non-consuming actions can pile up claim events, but the card's
+    // status line answers "who holds this token" — first claim wins only
+    // when no consuming claim exists.
+    const claimEvent = events.find(e => e.type === 'claim' && isConsumingMode(e.mode))
+      || events.find(e => e.type === 'claim');
 
     let statusContent;
-    // Slice 1: claimed-status presentation follows the mode's scoringPolicy
-    // (paid claims read as SOLD, unpaid as EXPOSED); wording is slice-3a scope.
-    if (status === 'claimed' && isScoringMode(claimEvent?.mode)) {
-      statusContent = `<span class="status-icon">💰</span> SOLD to ${escapeHtml(claimEvent?.teamId || 'Unknown')}
-        <span class="points">${escapeHtml(formatCurrency(claimEvent?.points))}</span>`;
-    } else if (status === 'claimed' && claimEvent?.mode) {
-      statusContent = `<span class="status-icon">🔍</span> EXPOSED by ${escapeHtml(claimEvent?.teamId || 'Unknown')}
-        <span class="points potential">Worth: ${escapeHtml(formatCurrency(potentialValue))}</span>`;
+    // Claimed-status wording is the mode's pack-declared claimedLabel
+    // template (R-Q2; engine-generic fallback), rendered pre-escaped by
+    // claimAnnouncement. The icon is a pack TEXT GLYPH rendered as
+    // content — NEVER a class or attribute key (the CueRenderer
+    // icon-as-class pattern must not spread here). Value semantics stay
+    // gated on scoringPolicy: paid claims show EARNED points, unpaid
+    // show potential worth.
+    if (status === 'claimed' && claimEvent?.mode) {
+      const ann = claimAnnouncement(claimEvent.mode, claimEvent.teamId || 'Unknown');
+      const iconSpan = ann.icon ? `<span class="status-icon">${escapeHtml(ann.icon)}</span> ` : '';
+      const valueSpan = isScoringMode(claimEvent.mode)
+        ? `<span class="points">${escapeHtml(formatCurrency(claimEvent.points))}</span>`
+        : `<span class="points potential">Worth: ${escapeHtml(formatCurrency(potentialValue))}</span>`;
+      statusContent = `${iconSpan}${ann.html}
+        ${valueSpan}`;
     } else {
       statusContent = `○ AVAILABLE
         <span class="points potential">Worth: ${escapeHtml(formatCurrency(potentialValue))}</span>`;
@@ -557,10 +573,15 @@ export class GameOpsRenderer {
           </div>
         `;
 
-      case 'claim':
+      case 'claim': {
+        // Per-event icon = the mode's declared TEXT glyph (R-Q2; content
+        // only, never a class key). No declared icon → no icon span. The
+        // timeline keeps its per-event modeLabel wording — the claimedLabel
+        // announcement is the card HEADLINE's job.
+        const claimIcon = resolveMode(event.mode)?.icon;
         return `
           <div class="event claim ${modeClassNames(event.mode).join(' ')}">
-            <span class="icon">${isScoringMode(event.mode) ? '💰' : '🔍'}</span>
+            ${claimIcon ? `<span class="icon">${escapeHtml(claimIcon)}</span>` : ''}
             <span class="label">${escapeHtml(modeLabel(event.mode))}</span>
             <span class="team">${escapeHtml(event.teamId)}</span>
             <span class="time">${time}</span>
@@ -578,6 +599,7 @@ export class GameOpsRenderer {
             ` : ''}
           </div>
         `;
+      }
 
       default:
         return '';

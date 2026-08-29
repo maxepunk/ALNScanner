@@ -23,7 +23,7 @@ import { isTokenValid } from '../utils/jwtUtils.js';
 import stateValidationService from '../services/StateValidationService.js';
 import packLoader from '../core/packLoader.js';
 import { SCORING_SOURCE } from '../core/scoring.js';
-import { wireModeIds, defaultModeId } from '../core/modeSemantics.js';
+import { wireModeIds, defaultModeId, entityLabel, entityLabelPlural } from '../core/modeSemantics.js';
 import { getString } from '../core/strings.js';
 import { formatCurrency } from '../utils/formatCurrency.js';
 
@@ -187,6 +187,38 @@ export function applyPackStringsToDom(doc = typeof document !== 'undefined' ? do
   for (const id of ['teamBaseScore', 'teamBonusScore', 'teamTotalScore']) {
     const el = doc.getElementById(id);
     if (el) el.textContent = formatCurrency(0);
+  }
+
+  // Q1 (owner ruling 2026-08-22): the entity NOUN in the static shell is
+  // pack-declared via game.json entities.label (applied by
+  // applyPackEntities in the same loadDatabase pass) — ALN rebrands
+  // Team → Account. The shell ships the baked Team/Teams wording, so
+  // packless this is a byte-identical rewrite.
+  const noun = entityLabel();
+  const nounPlural = entityLabelPlural();
+  const nounLower = noun.toLowerCase();
+  const setText = (id, text) => {
+    const el = doc.getElementById(id);
+    if (el) el.textContent = text;
+  };
+  setText('teamEntryTitle', `Select ${noun}`);
+  setText('currentTeamNoun', noun);
+  setText('uniqueTeamsLabel', nounPlural);
+  setText('scoreboardSubtitle', `${noun} Rankings`);
+  setText('adminScoreboardTitle', `${noun} Scores`);
+  // Rewritten per-entity by renderTeamDetails; this is the pre-open static.
+  setText('teamDetailsTitle', `${noun} Details`);
+  const teamNameInput = doc.getElementById('teamNameInput');
+  if (teamNameInput) teamNameInput.placeholder = `Enter ${nounLower} name...`;
+  doc.querySelectorAll('button[data-action="app.finishTeam"]').forEach((btn) => {
+    btn.textContent = `Finish ${noun}`;
+  });
+  // The team-list empty state is CSS-rendered (.team-list:empty::after
+  // reads this custom property); JSON.stringify yields a valid quoted
+  // CSS <string> for any normalized label.
+  if (doc.documentElement?.style?.setProperty) {
+    doc.documentElement.style.setProperty(
+      '--entity-empty-team-list', JSON.stringify(`No ${nounPlural.toLowerCase()} yet`));
   }
 }
 

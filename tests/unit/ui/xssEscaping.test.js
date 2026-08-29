@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { UIManager } from '../../../src/ui/uiManager.js';
 import { App } from '../../../src/app/app.js';
 import { GameOpsRenderer } from '../../../src/ui/renderers/GameOpsRenderer.js';
+import * as modeSemantics from '../../../src/core/modeSemantics.js';
 
 const XSS_PAYLOAD = '<img src=x onerror="window.__pwned=true">';
 const QUOTE_PAYLOAD = `O'Brien & "Co." <b>bold</b>`;
@@ -282,6 +283,94 @@ describe('XSS escaping (F-GMS-04)', () => {
       jest.runAllTimers();
       expect(document.body.children).toHaveLength(0);
       jest.useRealTimers();
+    });
+  });
+
+  describe('pack-controlled strings (R-Q2 — claimedLabel/icon reach innerHTML escaped)', () => {
+    // The strings schema deliberately allows non-brace specials in
+    // claimedLabel (apostrophes, ampersands… and therefore angle
+    // brackets); on the UNGATED tiers (bundled pack, Pages static) a
+    // hand-edited pack can ship anything. Every interpolation of pack
+    // wording into innerHTML must escape — same doctrine as user input.
+    afterEach(() => modeSemantics._resetForTesting());
+
+    const claimedActivity = (mode, teamId) => ({
+      getGameActivity: jest.fn(() => ({
+        tokens: [{
+          tokenId: 'tok1',
+          tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 3 },
+          events: [{ type: 'claim', timestamp: '2025-11-11T10:00:00Z', mode, teamId, points: 100 }],
+          status: 'claimed',
+          discoveredByPlayers: true,
+          potentialValue: 250000
+        }],
+        stats: { totalTokens: 1, available: 0, claimed: 1, claimedWithoutDiscovery: 0 }
+      }))
+    });
+
+    const renderClaim = (mode, teamId) => {
+      document.body.innerHTML = '<div id="activitySink"></div>';
+      const container = document.getElementById('activitySink');
+      const renderer = new GameOpsRenderer({
+        dataManager: claimedActivity(mode, teamId),
+        sessionModeManager: { isNetworked: () => true, isStandalone: () => false },
+        app: {}
+      });
+      renderer.renderGameActivity(container, { showSummary: false, showFilters: false });
+      return container;
+    };
+
+    it('renders a markup-bearing claimedLabel template inert (escaped, legible)', () => {
+      modeSemantics.applyPackModes({
+        modes: [{
+          id: 'evil', label: 'Evil', scoringPolicy: 'standard', entityRole: 'ledger',
+          countsTowardGroups: true, displayBehavior: { surface: 'none' },
+          claimedLabel: `${XSS_PAYLOAD} SOLD & <b>gone</b> to {entity}`,
+        }],
+      });
+
+      const container = renderClaim('evil', 'Alpha');
+
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.querySelector('b')).toBeNull();
+      expect(window.__pwned).toBeUndefined();
+      // Operator still sees the declared wording verbatim as text
+      expect(container.textContent).toContain('SOLD & <b>gone</b> to Alpha');
+    });
+
+    it('a markup-bearing icon never reaches the DOM (resolver DECLINEs it — content-only doctrine)', () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      modeSemantics.applyPackModes({
+        modes: [{
+          id: 'evil', label: 'Evil', scoringPolicy: 'standard', entityRole: 'ledger',
+          countsTowardGroups: true, displayBehavior: { surface: 'none' },
+          claimedLabel: 'SOLD to {entity}', icon: '<i>',
+        }],
+      });
+
+      const container = renderClaim('evil', 'Alpha');
+
+      expect(container.querySelector('i')).toBeNull();
+      expect(container.querySelector('.status-icon')).toBeNull();
+      expect(container.innerHTML).toContain('SOLD to Alpha');
+      warnSpy.mockRestore();
+    });
+
+    it('escapes a hostile entity name substituted into a declared template ($-patterns stay literal)', () => {
+      modeSemantics.applyPackModes({
+        modes: [{
+          id: 'fence', label: 'Fence', scoringPolicy: 'standard', entityRole: 'ledger',
+          countsTowardGroups: true, displayBehavior: { surface: 'none' },
+          claimedLabel: 'FENCED by {entity}', icon: '💼',
+        }],
+      });
+
+      const container = renderClaim('fence', `${XSS_PAYLOAD} $& $$ Crew`);
+
+      expect(container.querySelector('img')).toBeNull();
+      expect(window.__pwned).toBeUndefined();
+      // Function replacement: GetSubstitution patterns in the NAME render literally
+      expect(container.textContent).toContain('$& $$ Crew');
     });
   });
 });

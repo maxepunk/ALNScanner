@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { UIManager } from '../../../src/ui/uiManager.js';
+import * as modeSemantics from '../../../src/core/modeSemantics.js';
 
 describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
   let uiManager;
@@ -717,7 +718,9 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
           {
             tokenId: 'jaw001',
             tokenData: { SF_MemoryType: 'Personal', SF_ValueRating: 4 },
-            potentialValue: 75000,  // Personal 4-star = $75,000 × 1
+            // Deliberately ≠ points: the paid-claim card must show what was
+            // EARNED, never the potential (R-Q2 #3 value-semantics pin)
+            potentialValue: 60000,
             events: [
               { type: 'discovery', timestamp: '2025-11-11T10:15:00Z', deviceId: 'player-001' },
               { type: 'claim', timestamp: '2025-11-11T10:25:00Z', mode: 'blackmarket', teamId: 'Alpha', points: 75000, groupProgress: { name: 'Server Logs', found: 2, total: 5 } }
@@ -733,9 +736,11 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       uiManager.renderGameActivity(container);
 
       expect(container.innerHTML).toContain('jaw001');
-      expect(container.innerHTML).toContain('SOLD to');
-      expect(container.innerHTML).toContain('Alpha');
-      expect(container.innerHTML).toContain('$75,000');
+      // BYTE-IDENTITY PIN (R-Q2): the baked ALN announcement renders the
+      // exact legacy markup — icon glyph as CONTENT, then the template
+      expect(container.innerHTML).toContain('<span class="status-icon">💰</span> SOLD to Alpha');
+      expect(container.innerHTML).toContain('$75,000');       // earned
+      expect(container.innerHTML).not.toContain('$60,000');   // never the potential
       expect(container.innerHTML).toContain('Black Market');
       expect(container.innerHTML).toContain('blackmarket');  // CSS class
     });
@@ -773,7 +778,8 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
             potentialValue: 25000,  // Personal 2-star = $25,000 × 1
             events: [
               { type: 'discovery', timestamp: '2025-11-11T11:00:00Z', deviceId: 'player-003' },
-              { type: 'claim', timestamp: '2025-11-11T11:15:00Z', mode: 'detective', teamId: 'Gamma', points: 25000, groupProgress: null, summary: 'Encrypted server logs revealing unauthorized access' }
+              // points: 0 — detective claims pay nothing; the card shows POTENTIAL worth
+              { type: 'claim', timestamp: '2025-11-11T11:15:00Z', mode: 'detective', teamId: 'Gamma', points: 0, groupProgress: null, summary: 'Encrypted server logs revealing unauthorized access' }
             ],
             status: 'claimed',
             discoveredByPlayers: true
@@ -785,8 +791,8 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       const container = document.getElementById('admin-game-activity');
       uiManager.renderGameActivity(container);
 
-      expect(container.innerHTML).toContain('EXPOSED by');
-      expect(container.innerHTML).toContain('Gamma');
+      // BYTE-IDENTITY PIN (R-Q2): baked ALN detective announcement
+      expect(container.innerHTML).toContain('<span class="status-icon">🔍</span> EXPOSED by Gamma');
       expect(container.innerHTML).toContain('Worth:');
       expect(container.innerHTML).toContain('$25,000');
       expect(container.innerHTML).toContain('Detective');
@@ -899,6 +905,117 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
 
       expect(container.innerHTML).not.toContain('Intel');
       expect(container.innerHTML).not.toContain('summary-toggle');
+    });
+  });
+
+  describe('Game Activity — pack-declared claim wording (R-Q2/Q1)', () => {
+    beforeEach(() => {
+      uiManager.init();
+      const gameActivityContainer = document.createElement('div');
+      gameActivityContainer.id = 'admin-game-activity';
+      document.body.appendChild(gameActivityContainer);
+    });
+
+    // Module-global pack state: apply per-test, ALWAYS reset after so the
+    // baked-shim tests elsewhere in this file stay on legacy wording.
+    afterEach(() => {
+      modeSemantics._resetForTesting();
+      const container = document.getElementById('admin-game-activity');
+      if (container) container.remove();
+    });
+
+    const activityWith = (events, status = 'claimed') => jest.fn(() => ({
+      tokens: [{
+        tokenId: 'loot01',
+        tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 3 },
+        potentialValue: 900,
+        events,
+        status,
+        discoveredByPlayers: true
+      }],
+      stats: { totalTokens: 1, available: 0, claimed: 1, claimedWithoutDiscovery: 0, totalPlayerScans: 1 }
+    }));
+
+    it('renders a declared claimedLabel template + icon glyph for a pack-open mode', () => {
+      modeSemantics.applyPackModes({
+        modes: [{
+          id: 'fence', label: 'Fence', scoringPolicy: 'standard', entityRole: 'ledger',
+          countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-rankings' },
+          claimedLabel: 'FENCED by {entity}', icon: '💼',
+        }],
+      });
+      mockDataManager.getGameActivity = activityWith([
+        { type: 'claim', timestamp: '2025-11-11T10:25:00Z', mode: 'fence', teamId: 'The Crew', points: 1300 }
+      ]);
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      expect(container.innerHTML).toContain('<span class="status-icon">💼</span> FENCED by The Crew');
+      expect(container.innerHTML).not.toContain('SOLD to');
+    });
+
+    it('announces generically (no icon) for a declared mode without claimedLabel', () => {
+      modeSemantics.applyPackModes({
+        modes: [{
+          id: 'appraise', label: 'Appraise', scoringPolicy: 'none', entityRole: 'ledger',
+          countsTowardGroups: false, displayBehavior: { surface: 'none' },
+        }],
+      });
+      mockDataManager.getGameActivity = activityWith([
+        { type: 'claim', timestamp: '2025-11-11T10:25:00Z', mode: 'appraise', teamId: 'The Crew', points: 0 }
+      ]);
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      expect(container.innerHTML).toContain('CLAIMED by The Crew');
+      expect(container.innerHTML).not.toContain('status-icon');
+      // unpaid claim → potential worth, not earned points
+      expect(container.innerHTML).toContain('Worth:');
+    });
+
+    it('HEADLINE resolves the CONSUMING claim over an earlier non-consuming one (R-Q2 #7)', () => {
+      modeSemantics.applyPackModes({
+        modes: [
+          {
+            id: 'appraise', label: 'Appraise', scoringPolicy: 'none', entityRole: 'ledger',
+            countsTowardGroups: false, claims: 'non-consuming', displayBehavior: { surface: 'none' },
+            claimedLabel: 'APPRAISED by {entity}', icon: '🔍',
+          },
+          {
+            id: 'fence', label: 'Fence', scoringPolicy: 'standard', entityRole: 'ledger',
+            countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-rankings' },
+            claimedLabel: 'FENCED by {entity}', icon: '💼',
+          },
+        ],
+      });
+      mockDataManager.getGameActivity = activityWith([
+        { type: 'claim', timestamp: '2025-11-11T10:20:00Z', mode: 'appraise', teamId: 'Lookout', points: 0 },
+        { type: 'claim', timestamp: '2025-11-11T10:25:00Z', mode: 'fence', teamId: 'The Crew', points: 1300 },
+      ]);
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      // Card headline: the consuming fence claim, though the appraisal came first
+      expect(container.innerHTML).toContain('<span class="status-icon">💼</span> FENCED by The Crew');
+      // Timeline still shows BOTH per-event entries with their own icons
+      expect(container.innerHTML).toContain('<span class="icon">🔍</span>');
+      expect(container.innerHTML).toContain('Appraise');
+    });
+
+    it('Q1: the entity noun in scoreboard/details wording follows the declared entities.label', () => {
+      modeSemantics.applyPackEntities({ entities: { label: { singular: 'Account', plural: 'Accounts' } } });
+
+      uiManager.renderScoreboard();
+      const scoreBoard = document.getElementById('scoreboardContainer');
+      expect(scoreBoard.innerHTML).toContain('Account 001');
+      expect(scoreBoard.innerHTML).not.toContain('Team 001');
+
+      mockDataManager.getTeamScores = jest.fn(() => []);
+      uiManager.renderScoreboard();
+      expect(scoreBoard.innerHTML).toContain('No Accounts Yet');
     });
   });
 

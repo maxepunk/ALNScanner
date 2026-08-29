@@ -14,7 +14,7 @@
  */
 
 import { escapeHtml } from '../../utils/escapeHtml.js';
-import { wireModeIds, isScoringMode, isConsumingMode, modeHasSurface } from '../../core/modeSemantics.js';
+import { wireModeIds, isScoringMode, isConsumingMode, modeHasSurface, entityLabel } from '../../core/modeSemantics.js';
 
 export class GameOpsDomain {
   /**
@@ -127,7 +127,8 @@ export class GameOpsDomain {
 
     const result = await teamRegistry.selectTeam(teamName);
     if (!result.success) {
-      uiManager.showError(result.error || 'Failed to select team');
+      // Q1: entity noun is pack-declared (baked 'team' is byte-identical)
+      uiManager.showError(result.error || `Failed to select ${entityLabel().toLowerCase()}`);
       return;
     }
 
@@ -461,7 +462,9 @@ export class GameOpsDomain {
 
   async adminResetScores() {
     const { sessionModeManager, dataManager, uiManager, viewController, debug } = this.app;
-    if (!confirm('Reset all team scores to zero? Transactions will be preserved.')) return;
+    // Q1: entity noun is pack-declared. This dialog text is E2E-LOAD-BEARING —
+    // backend/tests/e2e/flows/07d-02 asserts it pack-derived; keep in lockstep.
+    if (!confirm(`Reset all ${entityLabel().toLowerCase()} scores to zero? Transactions will be preserved.`)) return;
 
     if (sessionModeManager?.isStandalone()) {
       try {
@@ -510,7 +513,9 @@ export class GameOpsDomain {
     const { dataManager, uiManager, sessionModeManager, viewController, debug } = this.app;
     const teamId = this.app.currentInterventionTeamId;
     if (!teamId) {
-      alert('No team selected. Please open team details first.');
+      // Q1: entity noun is pack-declared (baked 'team' is byte-identical)
+      const noun = entityLabel().toLowerCase();
+      alert(`No ${noun} selected. Please open ${noun} details first.`);
       return;
     }
 

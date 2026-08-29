@@ -23,6 +23,10 @@ import {
   isConsumingMode,
   modeHasSurface,
   modeLabel,
+  claimAnnouncement,
+  applyPackEntities,
+  entityLabel,
+  entityLabelPlural,
   LEGACY_ALN_MODES,
   _resetForTesting,
 } from '../../../src/core/modeSemantics.js';
@@ -34,12 +38,14 @@ const ALN_CONFIG = {
       id: 'blackmarket', label: 'Black Market', verb: 'Sell',
       scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true,
       displayBehavior: { surface: 'scoreboard-rankings', when: 'immediate' },
+      claimedLabel: 'SOLD to {entity}', icon: '💰',
     },
     {
       id: 'detective', label: 'Detective', verb: 'Expose',
       scoringPolicy: 'none', entityRole: 'attribution', defaultEntity: 'Nova',
       countsTowardGroups: false,
       displayBehavior: { surface: 'scoreboard-evidence', fields: ['summary', 'owner'], when: 'immediate' },
+      claimedLabel: 'EXPOSED by {entity}', icon: '🔍',
     },
   ],
 };
@@ -84,6 +90,7 @@ describe('resolveMode — pack-declared flags (open vocabulary)', () => {
       id: 'fence', label: 'Fence', verb: null,
       scoringPolicy: 'standard', entityRole: 'ledger', defaultEntity: null,
       countsTowardGroups: true, claims: 'consuming',
+      claimedLabel: null, icon: null,
       displayBehavior: { surface: 'scoreboard-rankings', fields: [], when: 'immediate' },
     });
     expect(resolveMode('tipoff').defaultEntity).toBe('The Dispatcher');
@@ -170,6 +177,159 @@ describe('call-site sugar', () => {
 
   it('defaultModeId is the pack FIRST declared mode', () => {
     expect(defaultModeId()).toBe('fence');
+  });
+});
+
+describe('claimedLabel / icon normalization (R-Q2)', () => {
+  const base = { label: 'M', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: false };
+
+  it('normalizes declared claimedLabel and icon; absent fields normalize to null silently', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    applyPackModes({ modes: [
+      { ...base, id: 'declared', claimedLabel: 'FENCED by {entity}', icon: '💼' },
+      { ...base, id: 'bare' },
+    ] });
+    expect(resolveMode('declared').claimedLabel).toBe('FENCED by {entity}');
+    expect(resolveMode('declared').icon).toBe('💼');
+    expect(resolveMode('bare').claimedLabel).toBeNull();
+    expect(resolveMode('bare').icon).toBeNull();
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('DECLINES a claimedLabel without exactly one {entity} (gate refusal twin), warning once per mode', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    applyPackModes({ modes: [
+      { ...base, id: 'none-tok', claimedLabel: 'CLAIMED' },
+      { ...base, id: 'two-tok', claimedLabel: '{entity} beats {entity}' },
+      { ...base, id: 'stray-brace', claimedLabel: 'SOLD to {entity} {again}' },
+      { ...base, id: 'non-string', claimedLabel: 42 },
+    ] });
+    for (const id of ['none-tok', 'two-tok', 'stray-brace', 'non-string']) {
+      expect(resolveMode(id).claimedLabel).toBeNull();
+      resolveMode(id); // second resolution: no second warn
+    }
+    const warns = warnSpy.mock.calls.filter(([m]) => String(m).includes('claimedLabel'));
+    expect(warns).toHaveLength(4);
+    warnSpy.mockRestore();
+  });
+
+  it('strips C0/bidi control characters before validating', () => {
+    applyPackModes({ modes: [
+      { ...base, id: 'ctl', claimedLabel: 'SOLD\u202e to {entity}', icon: '\u200e💰' },
+    ] });
+    expect(resolveMode('ctl').claimedLabel).toBe('SOLD to {entity}');
+    expect(resolveMode('ctl').icon).toBe('💰');
+  });
+
+  it('DECLINES icons bearing markup characters, empty, over-long, or non-string values', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    applyPackModes({ modes: [
+      { ...base, id: 'markup', icon: '<b>' },
+      { ...base, id: 'empty', icon: '' },
+      { ...base, id: 'long', icon: '💰💰💰💰💰' },
+      { ...base, id: 'num', icon: 7 },
+      { ...base, id: 'multi-ok', icon: '💰⭐' },
+    ] });
+    expect(resolveMode('markup').icon).toBeNull();
+    expect(resolveMode('empty').icon).toBeNull();
+    expect(resolveMode('long').icon).toBeNull();
+    expect(resolveMode('num').icon).toBeNull();
+    // 2 code points (4 UTF-16 units) is within the 4-code-point bound
+    expect(resolveMode('multi-ok').icon).toBe('💰⭐');
+    warnSpy.mockRestore();
+  });
+});
+
+describe('claimAnnouncement (R-Q2)', () => {
+  const base = { label: 'M', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: false };
+
+  it('renders the declared template with the entity name, both halves escaped', () => {
+    applyPackModes({ modes: [{ ...base, id: 'fence', claimedLabel: 'FENCED by {entity}', icon: '💼' }] });
+    expect(claimAnnouncement('fence', 'The Crew')).toEqual({ html: 'FENCED by The Crew', icon: '💼' });
+    expect(claimAnnouncement('fence', '<img src=x onerror=alert(1)>').html)
+      .toBe('FENCED by &lt;img src=x onerror=alert(1)&gt;');
+  });
+
+  it('GETSUBSTITUTION PIN: an entity named with $-patterns renders literally (function replacement)', () => {
+    applyPackModes({ modes: [{ ...base, id: 'fence', claimedLabel: 'FENCED by {entity}' }] });
+    // A raw-string replaceAll would corrupt '$&' (whole-match insert) and
+    // '$$' (literal-$ collapse) — the same class of bug the backend's
+    // scoreboardWindowMarker fix pinned.
+    expect(claimAnnouncement('fence', 'Team $& $$ Inc').html).toBe('FENCED by Team $&amp; $$ Inc');
+  });
+
+  it('escapes markup-bearing templates (schema allows non-brace specials; the DOM must not run them)', () => {
+    applyPackModes({ modes: [{ ...base, id: 'evil', claimedLabel: '<b onmouseover=x>SOLD & gone</b> {entity}' }] });
+    expect(claimAnnouncement('evil', 'A').html)
+      .toBe('&lt;b onmouseover=x&gt;SOLD &amp; gone&lt;/b&gt; A');
+  });
+
+  it('falls back per-field: undeclared claimedLabel → engine-generic wording; undeclared icon → none', () => {
+    applyPackModes({ modes: [
+      { ...base, id: 'bare' },
+      { ...base, id: 'icon-only', icon: '🗂' },
+    ] });
+    expect(claimAnnouncement('bare', 'Alpha')).toEqual({ html: 'CLAIMED by Alpha', icon: null });
+    expect(claimAnnouncement('icon-only', 'Alpha')).toEqual({ html: 'CLAIMED by Alpha', icon: '🗂' });
+  });
+
+  it('unresolvable mode ids get the generic phrase with no icon', () => {
+    applyPackModes({ modes: [{ ...base, id: 'known' }] });
+    expect(claimAnnouncement('mystery', 'Alpha')).toEqual({ html: 'CLAIMED by Alpha', icon: null });
+  });
+
+  it('BYTE IDENTITY: the baked ALN table announces exactly the legacy wording', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(claimAnnouncement('blackmarket', 'Alpha')).toEqual({ html: 'SOLD to Alpha', icon: '💰' });
+    expect(claimAnnouncement('detective', 'Nova')).toEqual({ html: 'EXPOSED by Nova', icon: '🔍' });
+    warnSpy.mockRestore();
+  });
+});
+
+describe('entity label (Q1)', () => {
+  it('bakes Team/Teams when no pack entities are applied — the legacy wording, byte-identical', () => {
+    expect(entityLabel()).toBe('Team');
+    expect(entityLabelPlural()).toBe('Teams');
+  });
+
+  it('declared entities.label wins (the ALN pack rebrands Team → Account)', () => {
+    expect(applyPackEntities({ entities: { label: { singular: 'Account', plural: 'Accounts' } } })).toBe(true);
+    expect(entityLabel()).toBe('Account');
+    expect(entityLabelPlural()).toBe('Accounts');
+  });
+
+  it('absent entities block clears silently to baked', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    applyPackEntities({ entities: { label: { singular: 'Crew', plural: 'Crews' } } });
+    expect(applyPackEntities({})).toBe(false);
+    expect(entityLabel()).toBe('Team');
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('DECLINES a broken declared label loudly (gate refusal twin) and strips controls', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(applyPackEntities({ entities: { label: { singular: '', plural: 'Xs' } } })).toBe(false);
+    expect(applyPackEntities({ entities: { label: { singular: 'X' } } })).toBe(false);
+    expect(applyPackEntities({ entities: { label: 'Account' } })).toBe(false);
+    expect(entityLabel()).toBe('Team');
+    expect(warnSpy.mock.calls.filter(([m]) => String(m).includes('entities.label'))).toHaveLength(3);
+    expect(applyPackEntities({ entities: { label: { singular: 'Acc\u202eount', plural: 'Accounts' } } })).toBe(true);
+    expect(entityLabel()).toBe('Account');
+    expect(entityLabelPlural()).toBe('Accounts');
+    warnSpy.mockRestore();
+  });
+
+  it('DRIFT NOTE (deliberate non-mirror): the real ALN game.json declares Account — the bake stays Team', () => {
+    // Q1: the Account rebrand is DELIVERED BY THE PACK; packless keeps
+    // legacy Team wording. This inverted pin documents the asymmetry with
+    // the modes tripwire above — if game.json ever stops declaring
+    // entities.label, revisit the bake.
+    const gamePath = path.join(__dirname, '../../../data/game.json');
+    const realEntities = JSON.parse(fs.readFileSync(gamePath, 'utf8')).entities;
+    expect(realEntities.label).toEqual({ singular: 'Account', plural: 'Accounts' });
+    expect(entityLabel()).toBe('Team');
   });
 });
 

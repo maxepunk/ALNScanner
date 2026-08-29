@@ -28,6 +28,7 @@
 
 import Debug from '../utils/debug.js';
 import { slugifyId } from '../utils/slugify.js';
+import { escapeHtml } from '../utils/escapeHtml.js';
 
 // Mirrors ALN-TokenData/game.json `modes` — the pre-pack ALN game, baked.
 export const LEGACY_ALN_MODES = Object.freeze([
@@ -39,6 +40,8 @@ export const LEGACY_ALN_MODES = Object.freeze([
         entityRole: 'ledger',
         countsTowardGroups: true,
         displayBehavior: Object.freeze({ surface: 'scoreboard-rankings', when: 'immediate' }),
+        claimedLabel: 'SOLD to {entity}',
+        icon: '💰',
     }),
     Object.freeze({
         id: 'detective',
@@ -49,12 +52,26 @@ export const LEGACY_ALN_MODES = Object.freeze([
         defaultEntity: 'Nova',
         countsTowardGroups: false,
         displayBehavior: Object.freeze({ surface: 'scoreboard-evidence', fields: Object.freeze(['summary', 'owner']), when: 'immediate' }),
+        claimedLabel: 'EXPOSED by {entity}',
+        icon: '🔍',
     }),
 ]);
 
+// The entity NOUN the screens print ("Team", "Select Team", "Team
+// Rankings"…). Pack-declared via game.json entities.label (R-Q1, owner
+// ruling 2026-08-22: ALN's Account rebrand IS the intended fiction and is
+// DELIVERED BY THE PACK). This bake therefore deliberately does NOT
+// mirror the real ALN game.json (which declares Account/Accounts): the
+// packless/no-game.json tier keeps the legacy Team wording byte-identical
+// — so no drift tripwire pins this table to game.json, unlike the modes
+// bake above.
+const LEGACY_ENTITY_LABEL = Object.freeze({ singular: 'Team', plural: 'Teams' });
+
 let activeModes = null; // null = shim (legacy ALN table)
+let activeEntityLabel = null; // null = baked Team/Teams
 let warnedLegacy = false;
 let warnedUndrivableModes = new Set();
+let warnedDeclinedPresentation = new Set();
 
 /**
  * Apply the loaded pack's mode table (Phase 1A, after applyPackScoring).
@@ -114,11 +131,71 @@ function _drivableCountsTowardGroups(mode) {
     return counts;
 }
 
+// C0 controls + bidi controls (LRM/RLM, embeddings/overrides, isolates):
+// stripped from presentation fields before validation — a control char
+// must never reach the DOM or defeat the {entity} template check.
+const CONTROL_AND_BIDI = /[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+
+function _warnDeclined(modeId, field, reason) {
+    const key = `${modeId}:${field}`;
+    if (warnedDeclinedPresentation.has(key)) return;
+    warnedDeclinedPresentation.add(key);
+    console.warn(
+        `[modeSemantics] mode '${modeId}': declared ${field} is not usable (${reason}) — ` +
+        'declining the declaration (engine fallback applies). The orchestrator\'s ' +
+        'activation gate refuses this pack; fix the declaration.'
+    );
+}
+
+/**
+ * Normalize a declared claimedLabel (R-Q2 #1/#5): a TEMPLATE containing
+ * exactly one `{entity}` token and no other braces. Declared-but-broken
+ * DECLINEs to null with a once-per-mode warn (the activation gate's
+ * refusal twin — a standalone scanner never passes that gate).
+ */
+function _normalizeClaimedLabel(mode) {
+    if (mode.claimedLabel === undefined) return null; // absent = silent fallback
+    if (typeof mode.claimedLabel !== 'string') {
+        _warnDeclined(mode.id, 'claimedLabel', 'not a string');
+        return null;
+    }
+    const cleaned = mode.claimedLabel.replace(CONTROL_AND_BIDI, '');
+    // Exactly one {entity}, and the braces may spell nothing else.
+    const stripped = cleaned.split('{entity}');
+    if (stripped.length !== 2 || stripped.some((part) => /[{}]/.test(part))) {
+        _warnDeclined(mode.id, 'claimedLabel', 'must contain exactly one {entity} and no other braces');
+        return null;
+    }
+    return cleaned;
+}
+
+/**
+ * Normalize a declared icon (R-Q2 #1): a short TEXT GLYPH rendered as
+ * content — NEVER a class/attribute key. Markup characters or over-long
+ * values DECLINE to null (gate refusal twin, once-per-mode warn).
+ */
+function _normalizeIcon(mode) {
+    if (mode.icon === undefined) return null; // absent = silent no-icon
+    if (typeof mode.icon !== 'string') {
+        _warnDeclined(mode.id, 'icon', 'not a string');
+        return null;
+    }
+    const cleaned = mode.icon.replace(CONTROL_AND_BIDI, '');
+    // Mirrors the schema pattern: 1-4 code points, no markup/brace chars.
+    if (cleaned.length === 0 || [...cleaned].length > 4 || /[<>&"'{}]/.test(cleaned)) {
+        _warnDeclined(mode.id, 'icon', 'must be 1-4 plain text glyphs (no markup characters)');
+        return null;
+    }
+    return cleaned;
+}
+
 /**
  * Resolve a mode id to its normalized semantics record, or null when the
  * active table does not declare it. The record always carries every flag:
  * absent displayBehavior normalizes to {surface:'none'}, absent fields to
  * [], absent `when` to 'immediate' — identical to the backend resolver.
+ * Presentation fields (R-Q2): claimedLabel/icon normalize to null when
+ * absent or declined; consumers apply the engine-generic fallback.
  * @param {string} modeId
  * @returns {Object|null}
  */
@@ -136,6 +213,8 @@ export function resolveMode(modeId) {
         defaultEntity: mode.defaultEntity || null,
         countsTowardGroups: _drivableCountsTowardGroups(mode),
         claims: mode.claims === undefined ? 'consuming' : mode.claims,
+        claimedLabel: _normalizeClaimedLabel(mode),
+        icon: _normalizeIcon(mode),
         displayBehavior: {
             surface: db.surface || 'none',
             fields: Array.isArray(db.fields) ? [...db.fields] : [],
@@ -221,9 +300,80 @@ export function modeLabel(modeId) {
     return resolveMode(modeId)?.label ?? String(modeId);
 }
 
-/** Test-only: clear the applied table and re-arm the shim warn latch. */
+// Engine-generic claim wording — the fallback tier between a declared
+// claimedLabel and nothing (R-Q2 #3). Semantics-derived, never id-keyed.
+const GENERIC_CLAIMED_LABEL = 'CLAIMED by {entity}';
+
+/**
+ * The claim ANNOUNCEMENT for a mode (R-Q2): the pack-declared
+ * claimedLabel template rendered with the claiming entity's NAME
+ * (`{entity}` = the instance — a team/account name or defaultEntity —
+ * not the entity noun). Per-field fallback: no usable claimedLabel →
+ * engine-generic wording; no usable icon → no icon. Unresolvable mode
+ * ids get the generic phrase with no icon.
+ *
+ * Substitution is GetSubstitution-safe (function replacement — an entity
+ * named '$&' renders literally) and BOTH halves are escaped, so `html`
+ * is safe to interpolate into innerHTML as-is. `icon` is a plain text
+ * glyph (already normalized markup-free); render it as CONTENT, never as
+ * a class or attribute key.
+ *
+ * @param {string} modeId
+ * @param {string} entityName - the claiming entity instance's name
+ * @returns {{html: string, icon: string|null}}
+ */
+export function claimAnnouncement(modeId, entityName) {
+    const record = resolveMode(modeId);
+    const template = record?.claimedLabel || GENERIC_CLAIMED_LABEL;
+    const icon = record?.icon || null;
+    const html = escapeHtml(template).replaceAll('{entity}', () => escapeHtml(String(entityName)));
+    return { html, icon };
+}
+
+/**
+ * Apply the loaded pack's entity label (Q1 — same Phase 1A moment as
+ * applyPackModes). Absent block = silent baked Team/Teams (benign
+ * wording class); declared-but-broken DECLINEs loudly to baked (the
+ * gate refusal twin). Non-empty-string singular AND plural required.
+ * @param {Object|null} gameConfig - packLoader's loaded game.json (or null)
+ * @returns {boolean} true when a declared label is active
+ */
+export function applyPackEntities(gameConfig) {
+    const label = gameConfig?.entities?.label;
+    if (label === undefined) {
+        activeEntityLabel = null;
+        return false;
+    }
+    const singular = typeof label?.singular === 'string' ? label.singular.replace(CONTROL_AND_BIDI, '').trim() : '';
+    const plural = typeof label?.plural === 'string' ? label.plural.replace(CONTROL_AND_BIDI, '').trim() : '';
+    if (!singular || !plural) {
+        console.warn(
+            '[modeSemantics] declared entities.label is not usable (singular and plural must be ' +
+            'non-empty strings) — declining to the baked Team/Teams wording. The orchestrator\'s ' +
+            'activation gate refuses this pack; fix the declaration.'
+        );
+        activeEntityLabel = null;
+        return false;
+    }
+    activeEntityLabel = Object.freeze({ singular, plural });
+    return true;
+}
+
+/** The entity noun, singular ("Team" baked; ALN's pack declares "Account"). */
+export function entityLabel() {
+    return (activeEntityLabel || LEGACY_ENTITY_LABEL).singular;
+}
+
+/** The entity noun, plural ("Teams" baked; ALN's pack declares "Accounts"). */
+export function entityLabelPlural() {
+    return (activeEntityLabel || LEGACY_ENTITY_LABEL).plural;
+}
+
+/** Test-only: clear the applied tables and re-arm the warn latches. */
 export function _resetForTesting() {
     activeModes = null;
+    activeEntityLabel = null;
     warnedLegacy = false;
     warnedUndrivableModes = new Set();
+    warnedDeclinedPresentation = new Set();
 }

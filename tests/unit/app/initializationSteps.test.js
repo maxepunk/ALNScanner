@@ -348,6 +348,58 @@ describe('InitializationSteps - ES6 Module', () => {
       expect(() => applyPackStringsToDom(null)).not.toThrow();
     });
 
+    it('Q1: rewrites the entity-noun statics from the declared entities.label (ALN: Team → Account)', () => {
+      const { applyPackEntities, _resetForTesting } = require('../../../src/core/modeSemantics.js');
+      document.body.innerHTML += `
+        <h2 id="teamEntryTitle">Select Team</h2>
+        <span id="currentTeamNoun">Team</span>
+        <div id="uniqueTeamsLabel">Teams</div>
+        <p id="scoreboardSubtitle">Team Rankings</p>
+        <h3 id="adminScoreboardTitle">Team Scores</h3>
+        <h2 id="teamDetailsTitle">Team Details</h2>
+        <input id="teamNameInput" placeholder="Enter team name...">
+        <button data-action="app.finishTeam">Finish Team</button>
+        <button data-action="app.finishTeam">Finish Team</button>
+      `;
+
+      try {
+        applyPackEntities({ entities: { label: { singular: 'Account', plural: 'Accounts' } } });
+        applyPackStringsToDom();
+
+        expect(document.getElementById('teamEntryTitle').textContent).toBe('Select Account');
+        expect(document.getElementById('currentTeamNoun').textContent).toBe('Account');
+        expect(document.getElementById('uniqueTeamsLabel').textContent).toBe('Accounts');
+        expect(document.getElementById('scoreboardSubtitle').textContent).toBe('Account Rankings');
+        expect(document.getElementById('adminScoreboardTitle').textContent).toBe('Account Scores');
+        expect(document.getElementById('teamDetailsTitle').textContent).toBe('Account Details');
+        expect(document.getElementById('teamNameInput').placeholder).toBe('Enter account name...');
+        document.querySelectorAll('button[data-action="app.finishTeam"]').forEach((btn) => {
+          expect(btn.textContent).toBe('Finish Account');
+        });
+        // CSS-rendered empty state reads the custom property (quoted CSS string)
+        expect(document.documentElement.style.getPropertyValue('--entity-empty-team-list'))
+          .toBe('"No accounts yet"');
+      } finally {
+        _resetForTesting();
+        document.documentElement.style.removeProperty('--entity-empty-team-list');
+      }
+    });
+
+    it('Q1: with no declared entities, the statics keep the baked Team wording byte-identical', () => {
+      document.body.innerHTML += `
+        <h2 id="teamEntryTitle">Select Team</h2>
+        <input id="teamNameInput" placeholder="Enter team name...">
+      `;
+
+      applyPackStringsToDom();
+
+      expect(document.getElementById('teamEntryTitle').textContent).toBe('Select Team');
+      expect(document.getElementById('teamNameInput').placeholder).toBe('Enter team name...');
+      expect(document.documentElement.style.getPropertyValue('--entity-empty-team-list'))
+        .toBe('"No teams yet"');
+      document.documentElement.style.removeProperty('--entity-empty-team-list');
+    });
+
     it('loadTokenDatabase applies the pack wording to the DOM after a successful load', async () => {
       applyPackStrings({
         kind: 'strings', schemaVersion: 2, scanner: { scanPrompt: 'Tap Loot Tag' },
