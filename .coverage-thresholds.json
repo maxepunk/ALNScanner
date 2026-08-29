@@ -96,7 +96,7 @@
   },
   "./src/app/initializationSteps.js": {
     "branches": 80,
-    "functions": 90,
+    "functions": 95,
     "lines": 85
   },
   "./src/app/sessionModeManager.js": {
@@ -155,9 +155,9 @@
     "lines": 100
   },
   "./src/core/teamRegistry.js": {
-    "branches": 40,
-    "functions": 50,
-    "lines": 50
+    "branches": 45,
+    "functions": 60,
+    "lines": 65
   },
   "./src/core/tokenManager.js": {
     "branches": 85,
