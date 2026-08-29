@@ -13,6 +13,10 @@
  */
 
 import { SCORING_CONFIG } from './scoring.js';
+// Slice 1: report SECTION MEMBERSHIP is flag-driven (evidence surface /
+// scoring policy); the ALN-flavored section headings and wording stay as-is
+// until slice 3a (strings & theming) makes report text pack-driven.
+import { isScoringMode, isEvidenceMode } from './modeSemantics.js';
 
 export class SessionReportGenerator {
   /**
@@ -55,8 +59,8 @@ export class SessionReportGenerator {
    */
   _buildSessionSummary(session, scores, transactions, playerScans) {
     const accepted = transactions.filter(tx => tx.status === 'accepted');
-    const detective = accepted.filter(tx => tx.mode === 'detective');
-    const blackmarket = accepted.filter(tx => tx.mode === 'blackmarket');
+    const detective = accepted.filter(tx => isEvidenceMode(tx.mode));
+    const blackmarket = accepted.filter(tx => isScoringMode(tx.mode));
     const uniqueTokens = new Set(accepted.map(tx => tx.tokenId));
 
     // Sort scores descending
@@ -99,7 +103,7 @@ export class SessionReportGenerator {
    */
   _buildDetectiveSection(transactions) {
     const detective = transactions
-      .filter(tx => tx.status === 'accepted' && tx.mode === 'detective')
+      .filter(tx => tx.status === 'accepted' && isEvidenceMode(tx.mode))
       .sort((a, b) => a.tokenId.localeCompare(b.tokenId));
 
     const lines = [
@@ -136,7 +140,7 @@ export class SessionReportGenerator {
    */
   _buildScoringTimeline(transactions, scores) {
     const sales = transactions
-      .filter(tx => tx.status === 'accepted' && tx.mode === 'blackmarket')
+      .filter(tx => tx.status === 'accepted' && isScoringMode(tx.mode))
       .map(tx => ({
         timestamp: tx.timestamp,
         type: 'Sale',

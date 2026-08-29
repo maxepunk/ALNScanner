@@ -5,6 +5,7 @@
  * @module core/unifiedDataManager
  */
 
+import { isScoringMode, isEvidenceMode } from './modeSemantics.js';
 import { LocalStorage } from './storage/LocalStorage.js';
 import { NetworkedStorage } from './storage/NetworkedStorage.js';
 import {
@@ -290,7 +291,8 @@ export class UnifiedDataManager extends EventTarget {
    * transactions in `accepted` status).
    *
    * Mirrors the filter used by `backend/public/scoreboard.html#addEvidence`
-   * (`transaction.mode !== 'detective'` → rejected). Used by the GM scanner
+   * (slice 1: evidence = a mode whose displayBehavior.surface is
+   * 'scoreboard-evidence', never a mode-id literal). Used by the GM scanner
    * admin panel to populate the "Jump to Character" dropdown.
    *
    * @returns {string[]} Unique owner names, most-recently-exposed first
@@ -304,7 +306,7 @@ export class UnifiedDataManager extends EventTarget {
     // DESC). Mirrors backend/public/scoreboard.html.
     const lastExposed = new Map();
     for (const tx of transactions) {
-      if (!tx || tx.mode !== 'detective') continue;
+      if (!tx || !isEvidenceMode(tx.mode)) continue;
       if (tx.status && tx.status !== 'accepted') continue;
       // Prefer backend-resolved owner on the transaction; fall back to
       // the token database for locally-recorded transactions.
@@ -514,8 +516,9 @@ export class UnifiedDataManager extends EventTarget {
   // ============================================================================
 
   /**
-   * Parse group info from group string
-   * @param {string} groupString - e.g., "Server Logs (x5)"
+   * Parse group info from a v2 SF_Group value (pure name — multiplier
+   * resolves from the pack groups block via scoring.parseGroupInfo)
+   * @param {string} groupString - e.g., "Server Logs"
    * @returns {Object} { name, multiplier }
    */
   parseGroupInfo(groupString) {
@@ -681,7 +684,7 @@ export class UnifiedDataManager extends EventTarget {
    */
   calculateTeamScoreWithBonuses(teamId) {
     const transactions = this.getTeamTransactions(teamId).filter(t =>
-      t.mode === 'blackmarket' && !t.isUnknown
+      isScoringMode(t.mode) && !t.isUnknown
     );
 
     const completedGroups = this.getTeamCompletedGroups(teamId);

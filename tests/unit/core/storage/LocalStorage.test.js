@@ -188,33 +188,48 @@ describe('LocalStorage Strategy', () => {
   });
 
   describe('group completion', () => {
+    // v2 cutover: SF_Group/tx.group carry the PURE name; multipliers
+    // resolve from the pack groups block (scoring.applyPackGroups) —
+    // the "(xN)" suffix parsers are gone.
+    async function withPackGroups(groups, fn) {
+      const { applyPackGroups } = await import('../../../../src/core/scoring.js');
+      applyPackGroups(groups);
+      try {
+        await fn();
+      } finally {
+        applyPackGroups(null);
+      }
+    }
+
     it('should award bonus when all group tokens collected', async () => {
-      // Mock tokenManager to return group tokens
-      mockTokenManager.getAllTokens.mockReturnValue([
-        { SF_RFID: 'g1t1', SF_Group: 'GroupA (x2)' },
-        { SF_RFID: 'g1t2', SF_Group: 'GroupA (x2)' }
-      ]);
+      await withPackGroups({ GroupA: { multiplier: 2 } }, async () => {
+        // Mock tokenManager to return group tokens
+        mockTokenManager.getAllTokens.mockReturnValue([
+          { SF_RFID: 'g1t1', SF_Group: 'GroupA' },
+          { SF_RFID: 'g1t2', SF_Group: 'GroupA' }
+        ]);
 
-      // Add first token - no bonus yet
-      await storage.addTransaction({
-        id: 'tx-1', tokenId: 'g1t1', teamId: '001',
-        mode: 'blackmarket', points: 10000, group: 'GroupA (x2)',
-        timestamp: new Date().toISOString()
+        // Add first token - no bonus yet
+        await storage.addTransaction({
+          id: 'tx-1', tokenId: 'g1t1', teamId: '001',
+          mode: 'blackmarket', points: 10000, group: 'GroupA',
+          timestamp: new Date().toISOString()
+        });
+
+        expect(storage.getTeamScores()[0].score).toBe(10000);
+
+        // Add second token - group complete, bonus awarded
+        await storage.addTransaction({
+          id: 'tx-2', tokenId: 'g1t2', teamId: '001',
+          mode: 'blackmarket', points: 10000, group: 'GroupA',
+          timestamp: new Date().toISOString()
+        });
+
+        const scores = storage.getTeamScores();
+        // x2 multiplier means bonus = (2-1) * base = 1 * 20000 = 20000
+        expect(scores[0].score).toBe(40000); // 20000 base + 20000 bonus
+        expect(scores[0].bonusScore).toBe(20000);
       });
-
-      expect(storage.getTeamScores()[0].score).toBe(10000);
-
-      // Add second token - group complete, bonus awarded
-      await storage.addTransaction({
-        id: 'tx-2', tokenId: 'g1t2', teamId: '001',
-        mode: 'blackmarket', points: 10000, group: 'GroupA (x2)',
-        timestamp: new Date().toISOString()
-      });
-
-      const scores = storage.getTeamScores();
-      // x2 multiplier means bonus = (2-1) * base = 1 * 20000 = 20000
-      expect(scores[0].score).toBe(40000); // 20000 base + 20000 bonus
-      expect(scores[0].bonusScore).toBe(20000);
     });
 
     it('should not award bonus for groups with multiplier <= 1', async () => {
@@ -236,20 +251,138 @@ describe('LocalStorage Strategy', () => {
       // Backend rule (transactionService.isGroupComplete): groups with <= 1
       // token never complete. Standalone previously paid a x2 single-token
       // group, diverging from networked scoring AND docs/SCORING_LOGIC.md.
-      mockTokenManager.getAllTokens.mockReturnValue([
-        { SF_RFID: 'solo1', SF_Group: 'SoloGroup (x2)' }
-      ]);
+      await withPackGroups({ SoloGroup: { multiplier: 2 } }, async () => {
+        mockTokenManager.getAllTokens.mockReturnValue([
+          { SF_RFID: 'solo1', SF_Group: 'SoloGroup' }
+        ]);
 
-      await storage.addTransaction({
-        id: 'tx-1', tokenId: 'solo1', teamId: '001',
-        mode: 'blackmarket', points: 10000, group: 'SoloGroup (x2)',
-        timestamp: new Date().toISOString()
+        await storage.addTransaction({
+          id: 'tx-1', tokenId: 'solo1', teamId: '001',
+          mode: 'blackmarket', points: 10000, group: 'SoloGroup',
+          timestamp: new Date().toISOString()
+        });
+
+        const scores = storage.getTeamScores();
+        expect(scores[0].score).toBe(10000); // base only — no bonus
+        expect(scores[0].bonusScore).toBe(0);
+        expect(storage.sessionData.teams['001'].completedGroups).toEqual([]);
       });
+    });
+  });
 
-      const scores = storage.getTeamScores();
-      expect(scores[0].score).toBe(10000); // base only — no bonus
-      expect(scores[0].bonusScore).toBe(0);
-      expect(storage.sessionData.teams['001'].completedGroups).toEqual([]);
+  describe('per-mode claims flag (D3s2 — standalone is the FCFS authority)', () => {
+    const CLAIMS_MODES = {
+      modes: [
+        { id: 'sell', label: 'Sell', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-rankings' } },
+        { id: 'inspect', label: 'Inspect', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: false, claims: 'non-consuming', displayBehavior: { surface: 'none' } },
+      ],
+    };
+
+    async function withClaimsModes(fn) {
+      const { applyPackModes, _resetForTesting } = await import('../../../../src/core/modeSemantics.js');
+      applyPackModes(CLAIMS_MODES);
+      try {
+        await fn();
+      } finally {
+        _resetForTesting();
+      }
+    }
+
+    it('a non-consuming transaction never marks the token (repeatable action)', async () => {
+      await withClaimsModes(async () => {
+        await storage.addTransaction({
+          id: 'tx-1', tokenId: 'tok1', teamId: '001',
+          mode: 'inspect', points: 0, timestamp: new Date().toISOString()
+        });
+        expect(storage.scannedTokens.has('tok1')).toBe(false);
+
+        // …and the token's real CONSUMING claim still works afterwards
+        await storage.addTransaction({
+          id: 'tx-2', tokenId: 'tok1', teamId: '002',
+          mode: 'sell', points: 5000, timestamp: new Date().toISOString()
+        });
+        expect(storage.scannedTokens.has('tok1')).toBe(true);
+      });
+    });
+
+    it('reload repopulation skips non-consuming transactions', async () => {
+      await withClaimsModes(async () => {
+        storage.sessionData.transactions = [
+          { id: 'tx-1', tokenId: 'tok1', teamId: '001', mode: 'inspect', points: 0 },
+          { id: 'tx-2', tokenId: 'tok2', teamId: '001', mode: 'sell', points: 5000 },
+        ];
+        storage._repopulateScannedTokens();
+        expect(storage.scannedTokens.has('tok1')).toBe(false);
+        expect(storage.scannedTokens.has('tok2')).toBe(true);
+      });
+    });
+
+    it('deleting the consuming claim frees the token even when a non-consuming tx remains', async () => {
+      await withClaimsModes(async () => {
+        await storage.addTransaction({
+          id: 'tx-nc', tokenId: 'tok1', teamId: '001',
+          mode: 'inspect', points: 0, timestamp: new Date().toISOString()
+        });
+        await storage.addTransaction({
+          id: 'tx-c', tokenId: 'tok1', teamId: '002',
+          mode: 'sell', points: 5000, timestamp: new Date().toISOString()
+        });
+
+        await storage.removeTransaction('tx-c');
+
+        // The surviving non-consuming tx never held a claim — token is free
+        expect(storage.scannedTokens.has('tok1')).toBe(false);
+      });
+    });
+  });
+
+  describe('group completion — §2f parity pin (A3 slice 2)', () => {
+    // Backend §2f semantics: completion counts ANY counting-mode claim;
+    // the bonus base sums only SCORED contributions. This scanner has
+    // ALWAYS implemented that naturally — the completion guard is
+    // countsTowardGroups(tx.mode) and the bonus sums RECORDED points
+    // (an unscored claim records 0). This test pins the parity so a
+    // future refactor cannot silently regress either half.
+    it('an unscored counting-mode claim completes the group; bonus sums recorded points only', async () => {
+      const { applyPackModes, _resetForTesting } = await import('../../../../src/core/modeSemantics.js');
+      const { applyPackGroups } = await import('../../../../src/core/scoring.js');
+      applyPackModes({
+        modes: [
+          { id: 'fence', label: 'Fence', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-rankings' } },
+          { id: 'stash', label: 'Stash', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: true, displayBehavior: { surface: 'none' } },
+        ],
+      });
+      applyPackGroups({ EventSet: { multiplier: 2 } }); // v2: multiplier is pack-declared
+      try {
+        mockTokenManager.getAllTokens.mockReturnValue([
+          { SF_RFID: 'e1', SF_Group: 'EventSet' },
+          { SF_RFID: 'e2', SF_Group: 'EventSet' }
+        ]);
+
+        await storage.addTransaction({
+          id: 'tx-1', tokenId: 'e1', teamId: '001',
+          mode: 'fence', points: 10000, group: 'EventSet',
+          timestamp: new Date().toISOString()
+        });
+        // Unscored counting claim: records 0 points but completes the set
+        await storage.addTransaction({
+          id: 'tx-2', tokenId: 'e2', teamId: '001',
+          mode: 'stash', points: 0, group: 'EventSet',
+          timestamp: new Date().toISOString()
+        });
+
+        const scores = storage.getTeamScores();
+        // bonus = (2-1) × recorded points (10000 + 0) = 10000 — scored only
+        expect(storage.sessionData.teams['001'].completedGroups).toContain('EventSet');
+        expect(scores[0].bonusScore).toBe(10000);
+        expect(scores[0].score).toBe(20000);
+        // tokensScanned counts SCORED claims only (backend parity —
+        // review finding): fence yes, stash no
+        expect(storage.sessionData.teams['001'].tokensScanned).toBe(1);
+      } finally {
+        _resetForTesting();
+        applyPackGroups(null);
+      }
     });
   });
 
@@ -397,6 +530,137 @@ describe('LocalStorage Strategy', () => {
       await storage.adjustTeamScore('non-existent', 100, 'test');
 
       expect(seen).toHaveLength(0);
+    });
+
+    it('adjusts baseScore WITH score, so the next scoring scan cannot wipe the adjustment (invariant fix)', async () => {
+      // Pre-existing standalone bug (D2s2 census): only `score` was
+      // bumped, so the next scan's `score = baseScore + bonusPoints`
+      // recompute silently erased the adjustment.
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+      await storage.adjustTeamScore('001', 5000, 'Bonus award');
+
+      await storage.addTransaction({
+        id: 'tx-2', tokenId: 'token2', teamId: '001',
+        mode: 'blackmarket', points: 1000, timestamp: new Date().toISOString()
+      });
+
+      expect(storage.getTeamScores()[0].score).toBe(16000);
+    });
+  });
+
+  describe('pack-conditional score floor (D2s2 — backend parity)', () => {
+    afterEach(async () => {
+      // Restore the baked semantics (ALLOW_NEGATIVE true) for other suites
+      const { applyPackScoring } = await import('../../../../src/core/scoring.js');
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      applyPackScoring(null);
+      warnSpy.mockRestore();
+    });
+
+    async function setAllowNegative(allowNegative) {
+      const { applyPackScoring } = await import('../../../../src/core/scoring.js');
+      applyPackScoring({
+        baseValues: { 1: 10000, 2: 25000, 3: 50000, 4: 75000, 5: 150000 },
+        typeMultipliers: { Personal: 1, Mention: 3, Business: 3, Party: 5, Technical: 5, UNKNOWN: 0 },
+        semantics: { allowNegative },
+      });
+    }
+
+    it('allowNegative TRUE: an adjustment may take a team below zero', async () => {
+      await setAllowNegative(true);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+
+      const result = await storage.adjustTeamScore('001', -15000, 'Big penalty');
+
+      expect(result.success).toBe(true);
+      expect(storage.getTeamScores()[0].score).toBe(-5000);
+    });
+
+    it('allowNegative FALSE: rejects a zero-crossing adjustment; no mutation, no audit entry, no event', async () => {
+      await setAllowNegative(false);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+      const seen = [];
+      storage.addEventListener('team-score:updated', (e) => seen.push(e.detail));
+
+      const result = await storage.adjustTeamScore('001', -15000, 'Big penalty');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/would take 001 to -5000.*does not allow negative scores/);
+      expect(storage.getTeamScores()[0].score).toBe(10000);
+      expect(storage.sessionData.teams['001'].adminAdjustments).toHaveLength(0);
+      expect(seen).toHaveLength(0);
+    });
+
+    it('allowNegative FALSE: accepts a negative delta that lands exactly at zero', async () => {
+      await setAllowNegative(false);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+
+      const result = await storage.adjustTeamScore('001', -10000, 'Exact drain');
+
+      expect(result.success).toBe(true);
+      expect(storage.getTeamScores()[0].score).toBe(0);
+    });
+
+    it('deletion rebuild REPLAYS admin adjustments (backend parity — they were silently dropped)', async () => {
+      await setAllowNegative(true);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+      await storage.addTransaction({
+        id: 'tx-2', tokenId: 'token2', teamId: '001',
+        mode: 'blackmarket', points: 1000, timestamp: new Date().toISOString()
+      });
+      await storage.adjustTeamScore('001', 5000, 'Bonus award');
+
+      await storage.removeTransaction('tx-2');
+
+      // 10000 (remaining tx) + 5000 (replayed adjustment)
+      expect(storage.getTeamScores()[0].score).toBe(15000);
+      expect(storage.sessionData.teams['001'].adminAdjustments).toHaveLength(1);
+    });
+
+    it('deletion rebuild floors at 0 under allowNegative FALSE (the one reachable negative), loudly', async () => {
+      await setAllowNegative(false);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+      // Accepted while the base supported it…
+      await storage.adjustTeamScore('001', -8000, 'Penalty');
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // …then the base is deleted out from under it.
+      await storage.removeTransaction('tx-1');
+
+      expect(storage.getTeamScores()[0].score).toBe(0);
+      expect(warnSpy.mock.calls.some(([m]) => String(m).includes('Score floored at 0 during rebuild'))).toBe(true);
+      warnSpy.mockRestore();
+    });
+
+    it('deletion rebuild keeps the negative under allowNegative TRUE', async () => {
+      await setAllowNegative(true);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'token1', teamId: '001',
+        mode: 'blackmarket', points: 10000, timestamp: new Date().toISOString()
+      });
+      await storage.adjustTeamScore('001', -8000, 'Penalty');
+
+      await storage.removeTransaction('tx-1');
+
+      expect(storage.getTeamScores()[0].score).toBe(-8000);
     });
   });
 

@@ -31,7 +31,7 @@
   },
   "./src/admin/MonitoringDisplay.js": {
     "branches": 50,
-    "functions": 60,
+    "functions": 65,
     "lines": 65
   },
   "./src/admin/MusicController.js": {
@@ -70,14 +70,34 @@
     "lines": 95
   },
   "./src/app/app.js": {
-    "branches": 45,
-    "functions": 55,
-    "lines": 50
+    "branches": 65,
+    "functions": 65,
+    "lines": 75
+  },
+  "./src/app/domains/environment.js": {
+    "branches": 0,
+    "functions": 100,
+    "lines": 100
+  },
+  "./src/app/domains/gameAdmin.js": {
+    "branches": 25,
+    "functions": 75,
+    "lines": 40
+  },
+  "./src/app/domains/gameOps.js": {
+    "branches": 65,
+    "functions": 75,
+    "lines": 70
+  },
+  "./src/app/domains/showControl.js": {
+    "branches": 0,
+    "functions": 5,
+    "lines": 0
   },
   "./src/app/initializationSteps.js": {
-    "branches": 70,
-    "functions": 90,
-    "lines": 80
+    "branches": 80,
+    "functions": 95,
+    "lines": 85
   },
   "./src/app/sessionModeManager.js": {
     "branches": 100,
@@ -89,20 +109,30 @@
     "functions": 100,
     "lines": 95
   },
-  "./src/core/scoring.js": {
-    "branches": 70,
+  "./src/core/modeSemantics.js": {
+    "branches": 100,
     "functions": 100,
-    "lines": 80
+    "lines": 100
   },
-  "./src/core/sessionReportGenerator.js": {
-    "branches": 70,
-    "functions": 95,
+  "./src/core/packLoader.js": {
+    "branches": 90,
+    "functions": 85,
     "lines": 90
   },
-  "./src/core/stateStore.js": {
-    "branches": 90,
+  "./src/core/scoring.js": {
+    "branches": 85,
+    "functions": 100,
+    "lines": 90
+  },
+  "./src/core/sessionReportGenerator.js": {
+    "branches": 75,
     "functions": 100,
     "lines": 95
+  },
+  "./src/core/stateStore.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
   },
   "./src/core/storage/IStorageStrategy.js": {
     "branches": 0,
@@ -110,29 +140,34 @@
     "lines": 80
   },
   "./src/core/storage/LocalStorage.js": {
-    "branches": 75,
+    "branches": 80,
     "functions": 100,
     "lines": 95
   },
   "./src/core/storage/NetworkedStorage.js": {
-    "branches": 70,
+    "branches": 75,
     "functions": 90,
     "lines": 75
   },
+  "./src/core/strings.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
+  },
   "./src/core/teamRegistry.js": {
-    "branches": 40,
-    "functions": 50,
-    "lines": 50
+    "branches": 45,
+    "functions": 60,
+    "lines": 65
   },
   "./src/core/tokenManager.js": {
-    "branches": 75,
+    "branches": 85,
     "functions": 85,
-    "lines": 85
+    "lines": 90
   },
   "./src/core/unifiedDataManager.js": {
-    "branches": 40,
+    "branches": 45,
     "functions": 55,
-    "lines": 45
+    "lines": 50
   },
   "./src/main.js": {
     "branches": 0,
@@ -140,24 +175,29 @@
     "lines": 0
   },
   "./src/network/connectionManager.js": {
-    "branches": 65,
-    "functions": 80,
+    "branches": 75,
+    "functions": 90,
+    "lines": 90
+  },
+  "./src/network/messageRouters.js": {
+    "branches": 85,
+    "functions": 100,
     "lines": 85
   },
   "./src/network/networkedQueueManager.js": {
-    "branches": 80,
+    "branches": 85,
     "functions": 100,
     "lines": 95
   },
   "./src/network/networkedSession.js": {
-    "branches": 85,
+    "branches": 95,
     "functions": 100,
-    "lines": 90
+    "lines": 100
   },
   "./src/network/orchestratorClient.js": {
-    "branches": 50,
-    "functions": 80,
-    "lines": 80
+    "branches": 75,
+    "functions": 95,
+    "lines": 95
   },
   "./src/services/StateValidationService.js": {
     "branches": 100,
@@ -165,9 +205,9 @@
     "lines": 95
   },
   "./src/ui/connectionWizard.js": {
-    "branches": 35,
-    "functions": 30,
-    "lines": 40
+    "branches": 65,
+    "functions": 70,
+    "lines": 80
   },
   "./src/ui/renderers/CueRenderer.js": {
     "branches": 85,
@@ -184,6 +224,16 @@
     "functions": 100,
     "lines": 100
   },
+  "./src/ui/renderers/GameAdminRenderer.js": {
+    "branches": 55,
+    "functions": 100,
+    "lines": 90
+  },
+  "./src/ui/renderers/GameOpsRenderer.js": {
+    "branches": 65,
+    "functions": 70,
+    "lines": 80
+  },
   "./src/ui/renderers/HealthRenderer.js": {
     "branches": 85,
     "functions": 100,
@@ -195,9 +245,9 @@
     "lines": 80
   },
   "./src/ui/renderers/MusicRenderer.js": {
-    "branches": 70,
-    "functions": 65,
-    "lines": 80
+    "branches": 75,
+    "functions": 75,
+    "lines": 90
   },
   "./src/ui/renderers/SessionRenderer.js": {
     "branches": 80,
@@ -205,9 +255,9 @@
     "lines": 75
   },
   "./src/ui/renderers/VideoRenderer.js": {
-    "branches": 80,
-    "functions": 65,
-    "lines": 75
+    "branches": 85,
+    "functions": 70,
+    "lines": 85
   },
   "./src/ui/settings.js": {
     "branches": 100,
@@ -215,13 +265,13 @@
     "lines": 100
   },
   "./src/ui/uiManager.js": {
-    "branches": 65,
-    "functions": 65,
-    "lines": 75
+    "branches": 75,
+    "functions": 90,
+    "lines": 85
   },
   "./src/utils/config.js": {
-    "branches": 0,
-    "functions": 0,
+    "branches": 100,
+    "functions": 100,
     "lines": 100
   },
   "./src/utils/debug.js": {
@@ -230,12 +280,27 @@
     "lines": 75
   },
   "./src/utils/domEventBindings.js": {
-    "branches": 35,
+    "branches": 40,
     "functions": 90,
     "lines": 45
   },
+  "./src/utils/escapeCssAttrValue.js": {
+    "branches": 50,
+    "functions": 100,
+    "lines": 40
+  },
   "./src/utils/escapeHtml.js": {
     "branches": 100,
+    "functions": 100,
+    "lines": 100
+  },
+  "./src/utils/formatCurrency.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
+  },
+  "./src/utils/formatDuration.js": {
+    "branches": 75,
     "functions": 100,
     "lines": 100
   },
@@ -246,7 +311,17 @@
   },
   "./src/utils/nfcHandler.js": {
     "branches": 45,
-    "functions": 60,
-    "lines": 55
+    "functions": 75,
+    "lines": 70
+  },
+  "./src/utils/showToast.js": {
+    "branches": 25,
+    "functions": 30,
+    "lines": 50
+  },
+  "./src/utils/slugify.js": {
+    "branches": 100,
+    "functions": 100,
+    "lines": 100
   }
 }

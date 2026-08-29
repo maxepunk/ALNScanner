@@ -12,7 +12,13 @@
  */
 
 import { escapeHtml } from '../../utils/escapeHtml.js';
-import { formatCurrency } from '../../utils/formatCurrency.js';
+import { formatCurrency, formatNumber } from '../../utils/formatCurrency.js';
+import {
+  isScoringMode, isConsumingMode, modeLabel, modeClassNames,
+  claimAnnouncement, resolveMode, entityLabel, entityLabelPlural,
+} from '../../core/modeSemantics.js';
+import { slugifyId } from '../../utils/slugify.js';
+import { formatStars } from '../../core/scoring.js';
 
 export class GameOpsRenderer {
   /**
@@ -41,10 +47,11 @@ export class GameOpsRenderer {
     const teamScores = dataSource.getTeamScores();
 
     if (teamScores.length === 0) {
+      // Q1: the entity noun is pack-declared (baked Team/Teams is byte-identical)
       targetContainer.innerHTML = `
         <div class="empty-state">
-          <h3>No Teams Yet</h3>
-          <p>Teams will appear here after scanning tokens</p>
+          <h3>No ${escapeHtml(entityLabelPlural())} Yet</h3>
+          <p>${escapeHtml(entityLabelPlural())} will appear here after scanning tokens</p>
         </div>
       `;
       return;
@@ -66,10 +73,10 @@ export class GameOpsRenderer {
         <div class="scoreboard-entry ${rankClass}" data-action="app.showTeamDetails" data-arg="${safeTeamId}" style="cursor: pointer;">
           <div class="scoreboard-rank">${medal}</div>
           <div class="scoreboard-team">
-            Team ${safeTeamId}
+            ${escapeHtml(entityLabel())} ${safeTeamId}
             <span class="scoreboard-tokens">(${team.tokenCount} tokens)</span>
           </div>
-          <div class="scoreboard-score">${formatCurrency(team.score)}</div>
+          <div class="scoreboard-score">${escapeHtml(formatCurrency(team.score))}</div>
         </div>
       `;
     }).join('');
@@ -100,8 +107,8 @@ export class GameOpsRenderer {
         <span style="font-size: 24px;">🏆</span>
         <div>
           <div style="font-weight: bold; margin-bottom: 5px;">Group Completed!</div>
-          <div style="font-size: 14px;">Team ${escapeHtml(data.teamId)} - ${escapeHtml(data.groupId)}</div>
-          <div style="font-size: 14px;">Bonus: +${formatCurrency(data.bonus)} (${data.multiplier}x)</div>
+          <div style="font-size: 14px;">${escapeHtml(entityLabel())} ${escapeHtml(data.teamId)} - ${escapeHtml(data.groupId)}</div>
+          <div style="font-size: 14px;">Bonus: +${escapeHtml(formatCurrency(data.bonus))} (${data.multiplier}x)</div>
         </div>
       </div>
     `;
@@ -130,7 +137,7 @@ export class GameOpsRenderer {
     const titleEl = document.getElementById('teamDetailsTitle');
     const summaryEl = document.getElementById('teamDetailsSummary');
 
-    if (titleEl) titleEl.textContent = `Team ${teamId}`;
+    if (titleEl) titleEl.textContent = `${entityLabel()} ${teamId}`;
     if (summaryEl) {
       summaryEl.textContent = `${transactions.length} token${transactions.length !== 1 ? 's' : ''} collected`;
     }
@@ -149,7 +156,7 @@ export class GameOpsRenderer {
                 <span class="completion-text">COMPLETE</span>
               </div>
               <div class="bonus-amount">
-                +${formatCurrency(group.bonusValue)} bonus (${group.multiplier}x)
+                +${escapeHtml(formatCurrency(group.bonusValue))} bonus (${group.multiplier}x)
               </div>
             </div>`;
         const hasActiveSession = this.sessionModeManager?.isNetworked() || this.sessionModeManager?.isStandalone();
@@ -202,7 +209,7 @@ export class GameOpsRenderer {
       html = `
         <div class="empty-state">
           <h3>No Tokens</h3>
-          <p>This team hasn't scanned any tokens yet</p>
+          <p>This ${escapeHtml(entityLabel().toLowerCase())} hasn't scanned any tokens yet</p>
         </div>
       `;
     }
@@ -239,7 +246,7 @@ export class GameOpsRenderer {
         <div class="transaction-detail" style="margin: 8px 0; padding: 12px; background: rgba(255, 193, 7, 0.1); border-left: 4px solid #ffc107; border-radius: 4px;">
           <label style="color: #856404; font-weight: bold;">⚠️ Admin Adjustments:</label>
           <span class="value" style="color: ${totalAdjustment >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">
-            ${totalAdjustment >= 0 ? '+' : ''}${formatCurrency(Math.abs(totalAdjustment))}
+            ${totalAdjustment >= 0 ? '+' : ''}${escapeHtml(formatCurrency(Math.abs(totalAdjustment)))}
           </span>
         </div>
         <div style="margin-left: 20px; font-size: 12px; color: #666;">
@@ -250,7 +257,7 @@ export class GameOpsRenderer {
         adjHtml += `
           <div style="margin: 4px 0; padding: 6px; background: #f8f9fa; border-radius: 3px;">
             <span style="color: ${adj.delta >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">
-              ${adj.delta >= 0 ? '+' : ''}${formatCurrency(Math.abs(adj.delta))}
+              ${adj.delta >= 0 ? '+' : ''}${escapeHtml(formatCurrency(Math.abs(adj.delta)))}
             </span>
             - ${escapeHtml(adj.reason || 'No reason provided')}
             <br><span style="font-size: 10px; color: #999;">${date} by ${escapeHtml(adj.gmStation || '')}</span>
@@ -305,15 +312,15 @@ export class GameOpsRenderer {
         const groupInfo = dataSource.parseGroupInfo(token.group);
         const finalValue = tokenValue * groupInfo.multiplier;
         calculationText = `
-          <strong>${baseValue.toLocaleString()}</strong> ×
+          <strong>${formatNumber(baseValue)}</strong> ×
           <strong>${multiplier}x</strong> ${safeMemoryType} ×
           <strong>${groupInfo.multiplier}x</strong> group =
-          <strong>${formatCurrency(finalValue)}</strong>`;
+          <strong>${escapeHtml(formatCurrency(finalValue))}</strong>`;
       } else {
         calculationText = `
-          <strong>${baseValue.toLocaleString()}</strong> ×
+          <strong>${formatNumber(baseValue)}</strong> ×
           <strong>${multiplier}x</strong> ${safeMemoryType} =
-          <strong>${formatCurrency(tokenValue)}</strong>`;
+          <strong>${escapeHtml(formatCurrency(tokenValue))}</strong>`;
       }
     } else {
       calculationText = 'Unknown token - No value';
@@ -334,7 +341,7 @@ export class GameOpsRenderer {
         <div class="token-detail-header">
           <span>${escapeHtml(token.group)}</span>
           <span class="token-detail-value" style="display: flex; align-items: center;">
-            <span style="margin-right: 8px;">${formatCurrency(displayValue)}</span>
+            <span style="margin-right: 8px;">${escapeHtml(formatCurrency(displayValue))}</span>
             ${deleteButton}
           </span>
         </div>
@@ -350,7 +357,7 @@ export class GameOpsRenderer {
           <div class="token-detail-item">
             <span class="token-detail-label">Base Rating</span>
             <span class="token-detail-info">
-              ${isUnknown ? 'N/A' : `⭐${'⭐'.repeat(Math.max(0, token.valueRating - 1))}`}
+              ${isUnknown ? 'N/A' : formatStars(token.valueRating)}
             </span>
           </div>
           <div class="token-detail-item">
@@ -458,29 +465,43 @@ export class GameOpsRenderer {
 
     const scanEvents = events.filter(e => e.type === 'scan');
     const hasMultipleScans = scanEvents.length > 0;
-    const claimEvent = events.find(e => e.type === 'claim');
+    // Headline resolves the CONSUMING claim (R-Q2 #7): repeatable
+    // non-consuming actions can pile up claim events, but the card's
+    // status line answers "who holds this token" — first claim wins only
+    // when no consuming claim exists.
+    const claimEvent = events.find(e => e.type === 'claim' && isConsumingMode(e.mode))
+      || events.find(e => e.type === 'claim');
 
     let statusContent;
-    if (status === 'claimed' && claimEvent?.mode === 'blackmarket') {
-      statusContent = `<span class="status-icon">💰</span> SOLD to ${escapeHtml(claimEvent?.teamId || 'Unknown')}
-        <span class="points">${formatCurrency(claimEvent?.points)}</span>`;
-    } else if (status === 'claimed' && claimEvent?.mode === 'detective') {
-      statusContent = `<span class="status-icon">🔍</span> EXPOSED by ${escapeHtml(claimEvent?.teamId || 'Unknown')}
-        <span class="points potential">Worth: ${formatCurrency(potentialValue)}</span>`;
+    // Claimed-status wording is the mode's pack-declared claimedLabel
+    // template (R-Q2; engine-generic fallback), rendered pre-escaped by
+    // claimAnnouncement. The icon is a pack TEXT GLYPH rendered as
+    // content — NEVER a class or attribute key (the CueRenderer
+    // icon-as-class pattern must not spread here). Value semantics stay
+    // gated on scoringPolicy: paid claims show EARNED points, unpaid
+    // show potential worth.
+    if (status === 'claimed' && claimEvent?.mode) {
+      const ann = claimAnnouncement(claimEvent.mode, claimEvent.teamId || 'Unknown');
+      const iconSpan = ann.icon ? `<span class="status-icon">${escapeHtml(ann.icon)}</span> ` : '';
+      const valueSpan = isScoringMode(claimEvent.mode)
+        ? `<span class="points">${escapeHtml(formatCurrency(claimEvent.points))}</span>`
+        : `<span class="points potential">Worth: ${escapeHtml(formatCurrency(potentialValue))}</span>`;
+      statusContent = `${iconSpan}${ann.html}
+        ${valueSpan}`;
     } else {
       statusContent = `○ AVAILABLE
-        <span class="points potential">Worth: ${formatCurrency(potentialValue)}</span>`;
+        <span class="points potential">Worth: ${escapeHtml(formatCurrency(potentialValue))}</span>`;
     }
 
     return `
       <div class="token-card ${status}" data-token-id="${escapeHtml(tokenId)}">
         <div class="token-card__header">
           <span class="token-id">${escapeHtml(tokenId)}</span>
-          <span class="token-type type-${escapeHtml(memoryType.toLowerCase())}">${escapeHtml(memoryType)}</span>
+          <span class="token-type type-${slugifyId(memoryType)}">${escapeHtml(memoryType)}</span>
         </div>
-        <div class="token-card__rating">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</div>
+        <div class="token-card__rating">${formatStars(rating, { filled: '★', empty: '☆' })}</div>
 
-        <div class="token-card__status status-${status} ${claimEvent?.mode || ''}">
+        <div class="token-card__status status-${status} ${modeClassNames(claimEvent?.mode).join(' ')}">
           ${statusContent}
         </div>
 
@@ -552,14 +573,19 @@ export class GameOpsRenderer {
           </div>
         `;
 
-      case 'claim':
+      case 'claim': {
+        // Per-event icon = the mode's declared TEXT glyph (R-Q2; content
+        // only, never a class key). No declared icon → no icon span. The
+        // timeline keeps its per-event modeLabel wording — the claimedLabel
+        // announcement is the card HEADLINE's job.
+        const claimIcon = resolveMode(event.mode)?.icon;
         return `
-          <div class="event claim ${event.mode}">
-            <span class="icon">${event.mode === 'blackmarket' ? '💰' : '🔍'}</span>
-            <span class="label">${event.mode === 'blackmarket' ? 'Black Market' : 'Detective'}</span>
+          <div class="event claim ${modeClassNames(event.mode).join(' ')}">
+            ${claimIcon ? `<span class="icon">${escapeHtml(claimIcon)}</span>` : ''}
+            <span class="label">${escapeHtml(modeLabel(event.mode))}</span>
             <span class="team">${escapeHtml(event.teamId)}</span>
             <span class="time">${time}</span>
-            <span class="points">${formatCurrency(event.points)}</span>
+            <span class="points">${escapeHtml(formatCurrency(event.points))}</span>
             ${event.groupProgress ? `
               <div class="group-progress">
                 ${escapeHtml(event.groupProgress.name)} (${event.groupProgress.found}/${event.groupProgress.total})
@@ -573,6 +599,7 @@ export class GameOpsRenderer {
             ` : ''}
           </div>
         `;
+      }
 
       default:
         return '';

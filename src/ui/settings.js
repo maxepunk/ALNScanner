@@ -17,6 +17,13 @@ class Settings extends EventTarget {
   constructor() {
     super();
     this.deviceId = '001';
+    // 'detective' is the LEGACY SEED, not a live branch point (slice 1):
+    // settings load in Phase 1G, BEFORE the pack's mode table exists.
+    // initializationSteps.validateSettingsMode() runs after Phase 1A and
+    // resets any id the active pack does not declare to the pack's first
+    // declared mode — the effective mode is always pack-driven. Under the
+    // ALN pack the seed is valid and preserves the as-built
+    // detective-first fresh-device default.
     this.mode = 'detective';
   }
 
@@ -26,6 +33,7 @@ class Settings extends EventTarget {
    */
   load() {
     this.deviceId = localStorage.getItem('deviceId') || '001';
+    // Legacy seed fallback — see the constructor note (validated post-1A).
     this.mode = localStorage.getItem('mode') || 'detective';
 
     this.dispatchEvent(new CustomEvent('settings:loaded', {

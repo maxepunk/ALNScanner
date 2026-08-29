@@ -14,7 +14,7 @@ const mockTokenDatabase = {
     SF_RFID: 'mab001',
     SF_ValueRating: 5,
     SF_MemoryType: 'Technical',
-    SF_Group: 'Server Logs (x5)',
+    SF_Group: 'Server Logs',
     summary: '05/12/2022 - MARCUS refactors the prototype code.',
     owner: 'MARCUS'
   },

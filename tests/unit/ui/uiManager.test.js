@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { UIManager } from '../../../src/ui/uiManager.js';
+import * as modeSemantics from '../../../src/core/modeSemantics.js';
 
 describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
   let uiManager;
@@ -26,7 +27,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
     // Mock DataManager
     mockDataManager = {
       transactions: [
-        { id: '1', tokenId: 'token1', teamId: '001', timestamp: '2025-11-11T10:00:00Z', mode: 'blackmarket', valueRating: 3, memoryType: 'Technical', rfid: 'token1', group: 'Server Logs (x5)', isUnknown: false, points: 5000 }
+        { id: '1', tokenId: 'token1', teamId: '001', timestamp: '2025-11-11T10:00:00Z', mode: 'blackmarket', valueRating: 3, memoryType: 'Technical', rfid: 'token1', group: 'Server Logs', isUnknown: false, points: 5000 }
       ],
       backendScores: new Map(),
       SCORING_CONFIG: {
@@ -42,7 +43,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
         hasIncompleteGroups: false,
         hasUngroupedTokens: true,
         hasUnknownTokens: false,
-        ungroupedTokens: [{ rfid: 'token1', memoryType: 'Technical', valueRating: 3, group: 'Server Logs (x5)', isUnknown: false, id: 't1' }]
+        ungroupedTokens: [{ rfid: 'token1', memoryType: 'Technical', valueRating: 3, group: 'Server Logs', isUnknown: false, id: 't1' }]
       })),
       calculateTeamScoreWithBonuses: jest.fn(() => ({ baseScore: 5000, bonusScore: 0, totalScore: 5000 })),
       calculateTokenValue: jest.fn(() => 5000),
@@ -61,7 +62,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       getSessionStats: jest.fn(() => ({ count: 1, totalScore: 5000, totalValue: '⭐⭐⭐' })),
       getGlobalStats: jest.fn(() => ({ total: 1, teams: 1, totalValue: '5000', avgValue: '5000' })),
       getAllTeamScores: jest.fn(() => [{ teamId: '001', score: 5000, tokenCount: 1 }]),
-      getTeamTransactions: jest.fn(() => [{ rfid: 'token1', memoryType: 'Technical', valueRating: 3, group: 'Server Logs (x5)', isUnknown: false, id: 't1' }]),
+      getTeamTransactions: jest.fn(() => [{ rfid: 'token1', memoryType: 'Technical', valueRating: 3, group: 'Server Logs', isUnknown: false, id: 't1' }]),
       calculateTeamScoreWithBonuses: jest.fn(() => ({ baseScore: 5000, bonusScore: 0, totalScore: 5000 }))
     };
 
@@ -85,7 +86,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
 
       <div id="modeIndicator"></div>
       <span id="modeText"></span>
-      <input id="modeToggle" type="checkbox" />
+      <div id="modeSelector"></div>
       <button id="scoreboardButton"></button>
       <span id="teamDisplay"></span>
       <span id="teamTokenCount"></span>
@@ -230,18 +231,23 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       uiManager.updateModeDisplay('blackmarket');
 
       const indicator = document.getElementById('modeIndicator');
-      expect(indicator.className).toBe('mode-indicator mode-blackmarket');
+      expect(indicator.className).toBe('mode-indicator mode-blackmarket mode-scoring');
       expect(indicator.textContent).toBe('Black Market Mode');
-      expect(document.getElementById('modeToggle').checked).toBe(true);
+      // Slice 1: the binary checkbox is retired — the segmented selector is
+      // the N-mode control; blackmarket renders as the active segment.
+      const activeSegment = document.querySelector('#modeSelector .mode-segment.active');
+      expect(activeSegment.dataset.arg).toBe('blackmarket');
+      expect(activeSegment.textContent).toBe('Black Market');
     });
 
     it('should update mode display for detective', () => {
       uiManager.updateModeDisplay('detective');
 
       const indicator = document.getElementById('modeIndicator');
-      expect(indicator.className).toBe('mode-indicator mode-detective');
+      expect(indicator.className).toBe('mode-indicator mode-detective mode-evidence');
       expect(indicator.textContent).toBe('Detective Mode');
-      expect(document.getElementById('modeToggle').checked).toBe(false);
+      const activeSegment = document.querySelector('#modeSelector .mode-segment.active');
+      expect(activeSegment.dataset.arg).toBe('detective');
     });
 
     it('should show scoreboard button in blackmarket mode', () => {
@@ -342,6 +348,27 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       expect(document.getElementById('teamValueLabel').textContent).toBe('Total Value');
     });
 
+    it('stat labels come from the pack strings sidecar when one is applied (slice 3a)', () => {
+      const { applyPackStrings } = require('../../../src/core/strings.js');
+      applyPackStrings({
+        kind: 'strings',
+        schemaVersion: 2,
+        scanner: { statLabels: { score: 'Take', totalValue: 'Total Haul' } },
+      });
+
+      try {
+        mockSettings.mode = 'blackmarket';
+        uiManager.updateSessionStats();
+        expect(document.getElementById('teamValueLabel').textContent).toBe('Take');
+
+        mockSettings.mode = 'detective';
+        uiManager.updateSessionStats();
+        expect(document.getElementById('teamValueLabel').textContent).toBe('Total Haul');
+      } finally {
+        applyPackStrings(null);
+      }
+    });
+
     it('should update history badge with count', () => {
       mockDataManager.transactions = [{ id: '1' }, { id: '2' }, { id: '3' }];
       uiManager.updateHistoryBadge();
@@ -392,6 +419,25 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       const container = document.getElementById('scoreboardContainer');
       expect(container.innerHTML).toContain('Team 001');
       expect(container.innerHTML).toContain('$5,000');
+    });
+
+    it('pack money affixes are HTML-ESCAPED in innerHTML renders (3b review A — XSS)', () => {
+      // The affixes are pack-controlled since 3b; the grammar excludes
+      // only '#', so a drivable format can carry markup. Every innerHTML
+      // site must escape formatCurrency output like the scoreboard.html
+      // twin does (and like every adjacent pack value per F-GMS-04).
+      const { applyPackMoneyFormat } = require('../../../src/utils/formatCurrency.js');
+      applyPackMoneyFormat('<img src=x onerror=alert(1)>#,###');
+
+      try {
+        uiManager.renderScoreboard();
+        const container = document.getElementById('scoreboardContainer');
+        expect(container.innerHTML).not.toContain('<img');
+        expect(container.innerHTML).toContain('&lt;img');
+        expect(container.querySelector('img')).toBeNull();
+      } finally {
+        applyPackMoneyFormat(null);
+      }
     });
 
     it('should show backend indicator when scores from orchestrator', () => {
@@ -495,7 +541,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
         SF_RFID: 'token1',
         SF_MemoryType: 'Technical',
         SF_ValueRating: 3,
-        SF_Group: 'Server Logs (x5)',
+        SF_Group: 'Server Logs',
         summary: 'Test summary'
       };
 
@@ -672,7 +718,9 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
           {
             tokenId: 'jaw001',
             tokenData: { SF_MemoryType: 'Personal', SF_ValueRating: 4 },
-            potentialValue: 75000,  // Personal 4-star = $75,000 × 1
+            // Deliberately ≠ points: the paid-claim card must show what was
+            // EARNED, never the potential (R-Q2 #3 value-semantics pin)
+            potentialValue: 60000,
             events: [
               { type: 'discovery', timestamp: '2025-11-11T10:15:00Z', deviceId: 'player-001' },
               { type: 'claim', timestamp: '2025-11-11T10:25:00Z', mode: 'blackmarket', teamId: 'Alpha', points: 75000, groupProgress: { name: 'Server Logs', found: 2, total: 5 } }
@@ -688,9 +736,11 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       uiManager.renderGameActivity(container);
 
       expect(container.innerHTML).toContain('jaw001');
-      expect(container.innerHTML).toContain('SOLD to');
-      expect(container.innerHTML).toContain('Alpha');
-      expect(container.innerHTML).toContain('$75,000');
+      // BYTE-IDENTITY PIN (R-Q2): the baked ALN announcement renders the
+      // exact legacy markup — icon glyph as CONTENT, then the template
+      expect(container.innerHTML).toContain('<span class="status-icon">💰</span> SOLD to Alpha');
+      expect(container.innerHTML).toContain('$75,000');       // earned
+      expect(container.innerHTML).not.toContain('$60,000');   // never the potential
       expect(container.innerHTML).toContain('Black Market');
       expect(container.innerHTML).toContain('blackmarket');  // CSS class
     });
@@ -728,7 +778,8 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
             potentialValue: 25000,  // Personal 2-star = $25,000 × 1
             events: [
               { type: 'discovery', timestamp: '2025-11-11T11:00:00Z', deviceId: 'player-003' },
-              { type: 'claim', timestamp: '2025-11-11T11:15:00Z', mode: 'detective', teamId: 'Gamma', points: 25000, groupProgress: null, summary: 'Encrypted server logs revealing unauthorized access' }
+              // points: 0 — detective claims pay nothing; the card shows POTENTIAL worth
+              { type: 'claim', timestamp: '2025-11-11T11:15:00Z', mode: 'detective', teamId: 'Gamma', points: 0, groupProgress: null, summary: 'Encrypted server logs revealing unauthorized access' }
             ],
             status: 'claimed',
             discoveredByPlayers: true
@@ -740,8 +791,8 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       const container = document.getElementById('admin-game-activity');
       uiManager.renderGameActivity(container);
 
-      expect(container.innerHTML).toContain('EXPOSED by');
-      expect(container.innerHTML).toContain('Gamma');
+      // BYTE-IDENTITY PIN (R-Q2): baked ALN detective announcement
+      expect(container.innerHTML).toContain('<span class="status-icon">🔍</span> EXPOSED by Gamma');
       expect(container.innerHTML).toContain('Worth:');
       expect(container.innerHTML).toContain('$25,000');
       expect(container.innerHTML).toContain('Detective');
@@ -854,6 +905,117 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
 
       expect(container.innerHTML).not.toContain('Intel');
       expect(container.innerHTML).not.toContain('summary-toggle');
+    });
+  });
+
+  describe('Game Activity — pack-declared claim wording (R-Q2/Q1)', () => {
+    beforeEach(() => {
+      uiManager.init();
+      const gameActivityContainer = document.createElement('div');
+      gameActivityContainer.id = 'admin-game-activity';
+      document.body.appendChild(gameActivityContainer);
+    });
+
+    // Module-global pack state: apply per-test, ALWAYS reset after so the
+    // baked-shim tests elsewhere in this file stay on legacy wording.
+    afterEach(() => {
+      modeSemantics._resetForTesting();
+      const container = document.getElementById('admin-game-activity');
+      if (container) container.remove();
+    });
+
+    const activityWith = (events, status = 'claimed') => jest.fn(() => ({
+      tokens: [{
+        tokenId: 'loot01',
+        tokenData: { SF_MemoryType: 'Technical', SF_ValueRating: 3 },
+        potentialValue: 900,
+        events,
+        status,
+        discoveredByPlayers: true
+      }],
+      stats: { totalTokens: 1, available: 0, claimed: 1, claimedWithoutDiscovery: 0, totalPlayerScans: 1 }
+    }));
+
+    it('renders a declared claimedLabel template + icon glyph for a pack-open mode', () => {
+      modeSemantics.applyPackModes({
+        modes: [{
+          id: 'fence', label: 'Fence', scoringPolicy: 'standard', entityRole: 'ledger',
+          countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-rankings' },
+          claimedLabel: 'FENCED by {entity}', icon: '💼',
+        }],
+      });
+      mockDataManager.getGameActivity = activityWith([
+        { type: 'claim', timestamp: '2025-11-11T10:25:00Z', mode: 'fence', teamId: 'The Crew', points: 1300 }
+      ]);
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      expect(container.innerHTML).toContain('<span class="status-icon">💼</span> FENCED by The Crew');
+      expect(container.innerHTML).not.toContain('SOLD to');
+    });
+
+    it('announces generically (no icon) for a declared mode without claimedLabel', () => {
+      modeSemantics.applyPackModes({
+        modes: [{
+          id: 'appraise', label: 'Appraise', scoringPolicy: 'none', entityRole: 'ledger',
+          countsTowardGroups: false, displayBehavior: { surface: 'none' },
+        }],
+      });
+      mockDataManager.getGameActivity = activityWith([
+        { type: 'claim', timestamp: '2025-11-11T10:25:00Z', mode: 'appraise', teamId: 'The Crew', points: 0 }
+      ]);
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      expect(container.innerHTML).toContain('CLAIMED by The Crew');
+      expect(container.innerHTML).not.toContain('status-icon');
+      // unpaid claim → potential worth, not earned points
+      expect(container.innerHTML).toContain('Worth:');
+    });
+
+    it('HEADLINE resolves the CONSUMING claim over an earlier non-consuming one (R-Q2 #7)', () => {
+      modeSemantics.applyPackModes({
+        modes: [
+          {
+            id: 'appraise', label: 'Appraise', scoringPolicy: 'none', entityRole: 'ledger',
+            countsTowardGroups: false, claims: 'non-consuming', displayBehavior: { surface: 'none' },
+            claimedLabel: 'APPRAISED by {entity}', icon: '🔍',
+          },
+          {
+            id: 'fence', label: 'Fence', scoringPolicy: 'standard', entityRole: 'ledger',
+            countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-rankings' },
+            claimedLabel: 'FENCED by {entity}', icon: '💼',
+          },
+        ],
+      });
+      mockDataManager.getGameActivity = activityWith([
+        { type: 'claim', timestamp: '2025-11-11T10:20:00Z', mode: 'appraise', teamId: 'Lookout', points: 0 },
+        { type: 'claim', timestamp: '2025-11-11T10:25:00Z', mode: 'fence', teamId: 'The Crew', points: 1300 },
+      ]);
+
+      const container = document.getElementById('admin-game-activity');
+      uiManager.renderGameActivity(container);
+
+      // Card headline: the consuming fence claim, though the appraisal came first
+      expect(container.innerHTML).toContain('<span class="status-icon">💼</span> FENCED by The Crew');
+      // Timeline still shows BOTH per-event entries with their own icons
+      expect(container.innerHTML).toContain('<span class="icon">🔍</span>');
+      expect(container.innerHTML).toContain('Appraise');
+    });
+
+    it('Q1: the entity noun in scoreboard/details wording follows the declared entities.label', () => {
+      modeSemantics.applyPackEntities({ entities: { label: { singular: 'Account', plural: 'Accounts' } } });
+
+      uiManager.renderScoreboard();
+      const scoreBoard = document.getElementById('scoreboardContainer');
+      expect(scoreBoard.innerHTML).toContain('Account 001');
+      expect(scoreBoard.innerHTML).not.toContain('Team 001');
+
+      mockDataManager.getTeamScores = jest.fn(() => []);
+      uiManager.renderScoreboard();
+      expect(scoreBoard.innerHTML).toContain('No Accounts Yet');
     });
   });
 

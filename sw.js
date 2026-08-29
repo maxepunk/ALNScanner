@@ -15,7 +15,14 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((names) => Promise.all(
-        names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n))
+        names
+          // `aln-pack-<hash>` caches belong to the pack loader (A2 staged
+          // atomic refresh), NOT to this SW's runtime cache — deleting them
+          // here would wipe the activated game pack on every SW update and
+          // silently kill the offline cache tier. The loader GC's its own
+          // old pack caches at pointer-flip time.
+          .filter((n) => n !== CACHE_NAME && !n.startsWith('aln-pack-'))
+          .map((n) => caches.delete(n))
       ))
       .then(() => self.clients.claim())
   );

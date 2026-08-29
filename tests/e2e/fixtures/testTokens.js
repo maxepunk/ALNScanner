@@ -53,13 +53,13 @@ const mockTokens = {
       SF_RFID: 'rat002',
       SF_ValueRating: 5,
       SF_MemoryType: 'Technical',
-      SF_Group: 'Server Logs (x5)'
+      SF_Group: 'Server Logs'
     },
     sof002: {
       SF_RFID: 'sof002',
       SF_ValueRating: 4,
       SF_MemoryType: 'Business',
-      SF_Group: 'Financial Records (x3)'
+      SF_Group: 'Financial Records'
     },
     mab002: {
       SF_RFID: 'mab002',

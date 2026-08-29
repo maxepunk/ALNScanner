@@ -413,6 +413,40 @@ describe('NetworkedStorage Strategy', () => {
       expect(storage.scannedTokens.has('tok1')).toBe(true);
     });
 
+    it('a broadcast NON-CONSUMING transaction must NOT lock the token fleet-wide (D3s2)', async () => {
+      const { applyPackModes, _resetForTesting } = await import('../../../../src/core/modeSemantics.js');
+      applyPackModes({
+        modes: [
+          { id: 'sell', label: 'Sell', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true },
+          { id: 'inspect', label: 'Inspect', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: false, claims: 'non-consuming' },
+        ],
+      });
+      try {
+        storage.addTransactionFromBroadcast({ id: 'tx-nc', tokenId: 'tok1', mode: 'inspect' });
+        expect(storage.scannedTokens.has('tok1')).toBe(false);
+
+        storage.addTransactionFromBroadcast({ id: 'tx-c', tokenId: 'tok2', mode: 'sell' });
+        expect(storage.scannedTokens.has('tok2')).toBe(true);
+      } finally {
+        _resetForTesting();
+      }
+    });
+
+    it('addTransaction marks locally for CONSUMING modes only (D3s2)', async () => {
+      const { applyPackModes, _resetForTesting } = await import('../../../../src/core/modeSemantics.js');
+      applyPackModes({
+        modes: [
+          { id: 'inspect', label: 'Inspect', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: false, claims: 'non-consuming' },
+        ],
+      });
+      try {
+        await storage.addTransaction({ tokenId: 'tok1', teamId: '001', mode: 'inspect' });
+        expect(storage.scannedTokens.has('tok1')).toBe(false);
+      } finally {
+        _resetForTesting();
+      }
+    });
+
     it('should remove transaction from broadcast WITHOUT re-emitting the delete command (F-GMS-03)', () => {
       storage.transactions = [{ id: 'tx-1' }, { id: 'tx-2' }];
 
