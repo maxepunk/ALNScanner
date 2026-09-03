@@ -231,7 +231,7 @@ const COLOR_PROPS = Object.freeze({
  * @param {Document|null} doc
  */
 export function applyThemeColorsToDom(doc = typeof document !== 'undefined' ? document : null) {
-    if (!doc?.documentElement) return;
+    if (!doc?.documentElement?.style?.setProperty) return;
     const colors = PACK_THEME?.colors ?? {};
     for (const [key, prop] of Object.entries(COLOR_PROPS)) {
         const val = colors[key];

@@ -287,7 +287,14 @@ export class GameOpsDomain {
     if (groupEl) groupEl.textContent = 'Previously scanned';
 
     const valueEl = document.getElementById('resultValue');
-    if (valueEl) valueEl.textContent = 'No points awarded';
+    if (valueEl) {
+      // The value row is shared with showTokenResult, which hides it
+      // under a themed rating display of 'none' — make it visible
+      // before writing so duplicate feedback is never swallowed.
+      const valueRow = valueEl.closest('.transaction-detail');
+      if (valueRow) valueRow.style.display = '';
+      valueEl.textContent = 'No points awarded';
+    }
 
     this.app.uiManager.showScreen('result');
   }

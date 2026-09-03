@@ -645,7 +645,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       it("display 'none' hides the WHOLE Value Rating row (label included) and clears the span", () => {
         applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'none' } });
         uiManager.showTokenResult(token, 'token1', false);
-        expect(valueRow().hidden).toBe(true);
+        expect(valueRow().style.display).toBe('none');
         expect(document.getElementById('resultValue').textContent).toBe('');
       });
 
@@ -654,25 +654,25 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
         expect(document.getElementById('resultValue').textContent).toBe('⭐⭐⭐');
         applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'none' } });
         uiManager.showTokenResult(token, 'token2', false);
-        expect(valueRow().hidden).toBe(true);
+        expect(valueRow().style.display).toBe('none');
         expect(document.getElementById('resultValue').textContent).toBe('');
       });
 
       it("a scoring-mode render after a 'none' render UN-hides the row", () => {
         applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'none' } });
         uiManager.showTokenResult(token, 'token1', false);
-        expect(valueRow().hidden).toBe(true);
+        expect(valueRow().style.display).toBe('none');
         mockSettings.mode = 'blackmarket';
         mockDataManager.calculateTokenValue.mockReturnValue(5000);
         uiManager.showTokenResult(token, 'token1', false);
-        expect(valueRow().hidden).toBe(false);
+        expect(valueRow().style.display).toBe('');
         expect(document.getElementById('resultValue').textContent).toBe('$5,000');
       });
 
       it("display 'numeric' renders the plain rating digit", () => {
         applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'numeric' } });
         uiManager.showTokenResult(token, 'token1', false);
-        expect(valueRow().hidden).toBe(false);
+        expect(valueRow().style.display).toBe('');
         expect(document.getElementById('resultValue').textContent).toBe('3');
       });
 

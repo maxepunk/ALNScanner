@@ -437,7 +437,7 @@ class UIManager {
     // prior render's state (the themed 'none' hide, stale stars) can
     // never leak into this one.
     const valueRow = valueEl.closest('.transaction-detail');
-    if (valueRow) valueRow.hidden = false;
+    if (valueRow) valueRow.style.display = '';
     valueEl.textContent = '';
 
     if (isUnknown) {
@@ -483,7 +483,7 @@ class UIManager {
         // ruled star-drop — the whole row hides, label included).
         const display = ratingDisplay();
         if (display === 'none') {
-          if (valueRow) valueRow.hidden = true;
+          if (valueRow) valueRow.style.display = 'none';
         } else if (display === 'numeric') {
           valueEl.textContent = String(token.SF_ValueRating ?? '');
         } else {
