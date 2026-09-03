@@ -80,9 +80,9 @@
     "lines": 100
   },
   "./src/app/domains/gameAdmin.js": {
-    "branches": 25,
-    "functions": 75,
-    "lines": 40
+    "branches": 35,
+    "functions": 85,
+    "lines": 55
   },
   "./src/app/domains/gameOps.js": {
     "branches": 65,
@@ -125,7 +125,7 @@
     "lines": 90
   },
   "./src/core/sessionReportGenerator.js": {
-    "branches": 75,
+    "branches": 85,
     "functions": 100,
     "lines": 95
   },
@@ -160,7 +160,7 @@
     "lines": 65
   },
   "./src/core/tokenManager.js": {
-    "branches": 85,
+    "branches": 90,
     "functions": 85,
     "lines": 90
   },
