@@ -1,4 +1,5 @@
 import { escapeHtml } from '../../utils/escapeHtml.js';
+import { getString } from '../../core/strings.js';
 
 /**
  * EvidencePickerRenderer - Scoreboard evidence navigation picker
@@ -12,7 +13,7 @@ import { escapeHtml } from '../../utils/escapeHtml.js';
  *
  * Data source: `DataManager.getExposedOwners()` — derived from
  * detective-mode transactions, mirroring the filter applied on
- * scoreboard.html (`transaction.mode === 'detective'`).
+ * scoreboard.html (slice 1: evidence-surface modes via core/modeSemantics).
  */
 export class EvidencePickerRenderer {
   constructor(elements = {}) {
@@ -35,7 +36,7 @@ export class EvidencePickerRenderer {
     if (this.hint) {
       this.hint.textContent = hasEvidence
         ? `${list.length} character${list.length === 1 ? '' : 's'} on board`
-        : 'Awaiting evidence...';
+        : getString('scoreboard.emptyEvidence');
     }
 
     if (this.prevBtn) this.prevBtn.disabled = !hasEvidence;

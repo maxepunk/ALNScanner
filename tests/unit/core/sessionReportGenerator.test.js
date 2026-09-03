@@ -14,7 +14,7 @@ const mockTokenDatabase = {
     SF_RFID: 'mab001',
     SF_ValueRating: 5,
     SF_MemoryType: 'Technical',
-    SF_Group: 'Server Logs (x5)',
+    SF_Group: 'Server Logs',
     summary: '05/12/2022 - MARCUS refactors the prototype code.',
     owner: 'MARCUS'
   },
@@ -448,5 +448,13 @@ describe('SessionReportGenerator', () => {
       expect(formatted).toContain('2h');
       expect(formatted).toContain('15m');
     });
+  });
+});
+
+describe('_raw (unsanitized wording resolver — the single ?? "" home)', () => {
+  it('resolves a baked leaf, and empties a path neither pack nor bake declares', () => {
+    const gen = new SessionReportGenerator({});
+    expect(gen._raw('report.adjustmentLabel')).toBe('Adjustment');
+    expect(gen._raw('report.no.such.key')).toBe('');
   });
 });

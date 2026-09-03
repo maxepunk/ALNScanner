@@ -12,6 +12,7 @@ import {
   calculateTokenValue
 } from '../scoring.js';
 import { buildGameActivity } from '../gameActivityBuilder.js';
+import { isScoringMode, countsTowardGroups, isConsumingMode, entityLabel } from '../modeSemantics.js';
 
 export class LocalStorage extends IStorageStrategy {
   /**
@@ -98,7 +99,9 @@ export class LocalStorage extends IStorageStrategy {
     this.scannedTokens.clear();
     this.sessionData.transactions.forEach(tx => {
       const tokenId = tx.tokenId || tx.rfid;
-      if (tokenId) {
+      // Only CONSUMING claims rebuild the dedup Set (D3s2): a persisted
+      // non-consuming transaction must not lock its token after reload.
+      if (tokenId && isConsumingMode(tx.mode)) {
         this.scannedTokens.add(tokenId);
       }
     });
@@ -296,9 +299,11 @@ export class LocalStorage extends IStorageStrategy {
     // Add to transactions array
     this.sessionData.transactions.push(transaction);
 
-    // Mark token as scanned
+    // Mark token as scanned — CONSUMING claims only (D3s2): standalone
+    // mode is the FCFS authority, and a non-consuming action registers
+    // nothing (backend duplicatePolicy parity).
     const tokenId = transaction.tokenId || transaction.rfid;
-    if (tokenId) {
+    if (tokenId && isConsumingMode(transaction.mode)) {
       this.scannedTokens.add(tokenId);
     }
 
@@ -341,17 +346,25 @@ export class LocalStorage extends IStorageStrategy {
 
     const team = this.sessionData.teams[teamId];
 
-    // Only score blackmarket mode
-    if (transaction.mode === 'blackmarket' && transaction.points) {
+    // Only standard-scoring modes pay (slice 1: scoringPolicy flag,
+    // never mode-id equality — parity with backend gameRules/scoring)
+    if (isScoringMode(transaction.mode) && transaction.points) {
       team.baseScore += transaction.points;
       team.score = team.baseScore + team.bonusPoints;
     }
 
-    team.tokensScanned++;
+    // Parity with the backend (review finding): tokensScanned counts
+    // SCORED claims only — the backend increments it in updateTeamScore,
+    // which runs for standard-scoring modes; counting every claim here
+    // made standalone team stats diverge from networked for the same play.
+    if (isScoringMode(transaction.mode)) {
+      team.tokensScanned++;
+    }
     team.lastScanTime = transaction.timestamp;
 
-    // Check group completion
-    if (transaction.mode === 'blackmarket' && transaction.group) {
+    // Check group completion (slice 1: only counting modes build
+    // group progress — the countsTowardGroups flag, decision A1 generalized)
+    if (countsTowardGroups(transaction.mode) && transaction.group) {
       this._checkGroupCompletion(teamId, transaction.group);
     }
   }
@@ -369,7 +382,7 @@ export class LocalStorage extends IStorageStrategy {
 
     // Get all team transactions for this group
     const teamTxs = this.sessionData.transactions.filter(tx =>
-      tx.teamId === teamId && tx.mode === 'blackmarket'
+      tx.teamId === teamId && countsTowardGroups(tx.mode)
     );
 
     const groupTxs = teamTxs.filter(tx => {
@@ -425,9 +438,10 @@ export class LocalStorage extends IStorageStrategy {
     const tokenId = removedTx.tokenId || removedTx.rfid;
     const teamId = removedTx.teamId;
 
-    // Allow re-scanning if no other transactions have this token
+    // Allow re-scanning if no other CONSUMING transaction has this token
+    // (a remaining non-consuming tx never held a claim — D3s2)
     const tokenStillExists = this.sessionData.transactions.some(
-      tx => (tx.tokenId || tx.rfid) === tokenId
+      tx => (tx.tokenId || tx.rfid) === tokenId && isConsumingMode(tx.mode)
     );
     if (!tokenStillExists && tokenId) {
       this.scannedTokens.delete(tokenId);
@@ -471,7 +485,7 @@ export class LocalStorage extends IStorageStrategy {
   _recalculateTeamScores(teamId) {
     const team = this.sessionData.teams[teamId];
 
-    // Reset
+    // Reset (adminAdjustments audit trail survives, backend parity)
     team.baseScore = 0;
     team.bonusPoints = 0;
     team.score = 0;
@@ -482,6 +496,24 @@ export class LocalStorage extends IStorageStrategy {
     this.sessionData.transactions
       .filter(tx => tx.teamId === teamId)
       .forEach(tx => this._updateTeamScore(tx));
+
+    // Replay admin adjustments (backend parity: the networked rebuild
+    // replays deltas in transactionService.rebuildScoresFromTransactions
+    // — dropping them here silently erased GM adjustments on any
+    // standalone deletion; pre-existing divergence, D2s2 census).
+    const adjustments = team.adminAdjustments || [];
+    const totalDelta = adjustments.reduce((sum, adj) => sum + (adj.delta || 0), 0);
+    team.baseScore += totalDelta;
+    team.score = team.baseScore + team.bonusPoints;
+
+    // Pack-conditional floor on the recompute path (D2s2): a deletion can
+    // shrink the base an accepted adjustment leaned on — floor loudly,
+    // keeping score = baseScore + bonusPoints (backend rebuild parity).
+    if (team.score < 0 && SCORING_CONFIG.ALLOW_NEGATIVE !== true) {
+      console.warn(`[LocalStorage] Score floored at 0 during rebuild for ${teamId} (pack disallows negative scores; unfloored: ${team.score})`);
+      team.score = 0;
+      team.baseScore = -team.bonusPoints;
+    }
   }
 
   /**
@@ -495,7 +527,8 @@ export class LocalStorage extends IStorageStrategy {
     if (!this.sessionData.teams[teamId]) {
       return {
         success: false,
-        error: `Team not found: ${teamId}`
+        // Q1: entity noun is pack-declared (baked 'Team' is byte-identical)
+        error: `${entityLabel()} not found: ${teamId}`
       };
     }
 
@@ -511,8 +544,27 @@ export class LocalStorage extends IStorageStrategy {
       timestamp: new Date().toISOString()
     };
 
+    // Pack-conditional score floor (D2s2, backend parity with
+    // transactionService.adjustTeamScore): reject — never clamp — an
+    // adjustment that would cross zero when the pack does not allow
+    // negative scores. Checked BEFORE the audit push so a refused
+    // adjustment leaves no trace.
+    const projected = team.score + adjustment.delta;
+    if (projected < 0 && SCORING_CONFIG.ALLOW_NEGATIVE !== true) {
+      return {
+        success: false,
+        error: `Score adjustment refused: ${adjustment.delta} would take ${teamId} to ${projected}, ` +
+          'and the active pack does not allow negative scores (scoring.semantics.allowNegative)'
+      };
+    }
+
     team.adminAdjustments.push(adjustment);
+    // BOTH fields, backend parity (TeamScore.adjustScore): bumping only
+    // `score` broke the score = baseScore + bonusPoints invariant, so the
+    // next scoring scan's recompute silently WIPED the adjustment
+    // (pre-existing standalone bug, caught by the D2s2 census).
     team.score += adjustment.delta;
+    team.baseScore += adjustment.delta;
 
     this._saveSession();
 

@@ -14,6 +14,7 @@
  */
 
 import { escapeHtml } from '../../utils/escapeHtml.js';
+import { wireModeIds, isScoringMode, isConsumingMode, modeHasSurface, entityLabel } from '../../core/modeSemantics.js';
 
 export class GameOpsDomain {
   /**
@@ -25,16 +26,16 @@ export class GameOpsDomain {
 
   // ========== Settings Management ==========
 
+  /**
+   * Cycle to the next declared mode (slice 1: the pack declares N modes;
+   * the pill cycles them in declaration order — the two-mode ALN case
+   * behaves exactly like the old binary flip).
+   */
   toggleMode() {
-    const { settings, uiManager, config } = this.app;
-    settings.mode = settings.mode === 'detective' ? 'blackmarket' : 'detective';
-    settings.save();
-    uiManager.updateModeDisplay(settings.mode);
-
-    const scanScreen = document.getElementById('scanScreen');
-    if (scanScreen && scanScreen.classList.contains('active')) {
-      uiManager.updateSessionStats();
-    }
+    const { settings, config } = this.app;
+    const ids = wireModeIds();
+    const next = ids[(ids.indexOf(settings.mode) + 1) % ids.length];
+    this.selectMode(next);
 
     const indicator = document.getElementById('modeIndicator');
     if (indicator) {
@@ -42,6 +43,28 @@ export class GameOpsDomain {
       setTimeout(() => {
         indicator.style.transform = 'scale(1)';
       }, config.ANIMATION_DURATION);
+    }
+  }
+
+  /**
+   * Select a specific declared mode (segmented selector, slice 1). An id
+   * the active pack does not declare is REFUSED loudly — the affordance
+   * is disabled, never applied blind (design §3 client rule).
+   * @param {string} modeId
+   */
+  selectMode(modeId) {
+    const { settings, uiManager, debug } = this.app;
+    if (!wireModeIds().includes(modeId)) {
+      debug.log(`Mode selection refused: '${modeId}' is not declared by the active pack`, true);
+      return;
+    }
+    settings.mode = modeId;
+    settings.save();
+    uiManager.updateModeDisplay(settings.mode);
+
+    const scanScreen = document.getElementById('scanScreen');
+    if (scanScreen && scanScreen.classList.contains('active')) {
+      uiManager.updateSessionStats();
     }
   }
 
@@ -98,13 +121,16 @@ export class GameOpsDomain {
     const teamName = teamInput?.value?.trim();
 
     if (!teamName) {
-      uiManager.showError('Please enter a team name');
+      // Q1: entity noun is pack-declared (baked 'team' is byte-identical) —
+      // review-confirmed census miss, fixed post-build
+      uiManager.showError(`Please enter a ${entityLabel().toLowerCase()} name`);
       return;
     }
 
     const result = await teamRegistry.selectTeam(teamName);
     if (!result.success) {
-      uiManager.showError(result.error || 'Failed to select team');
+      // Q1: entity noun is pack-declared (baked 'team' is byte-identical)
+      uiManager.showError(result.error || `Failed to select ${entityLabel().toLowerCase()}`);
       return;
     }
 
@@ -197,7 +223,10 @@ export class GameOpsDomain {
 
     if (!this.app.currentTeamId || this.app.currentTeamId.trim() === '') {
       debug.log('ERROR: No team selected - cannot process token', true);
-      uiManager.showError('Please select a team before scanning tokens');
+      // Q1: entity noun is pack-declared (baked 'team' is byte-identical) —
+      // review-confirmed census miss, fixed post-build. The unit pin at
+      // tests/app/app.test.js asserts the baked sentence byte-for-byte.
+      uiManager.showError(`Please select a ${entityLabel().toLowerCase()} before scanning tokens`);
       return;
     }
 
@@ -217,7 +246,11 @@ export class GameOpsDomain {
     const tokenData = tokenManager.findToken(cleanId);
     const tokenId = tokenData ? tokenData.matchedId : cleanId;
 
-    if (dataManager.isTokenScanned(tokenId)) {
+    // D3s2: a NON-CONSUMING mode is a repeatable action — never blocked
+    // by the duplicate rules (backend duplicatePolicy parity). The local
+    // Set only ever holds consuming claims, so the check both ways is:
+    // consuming scans consult it, non-consuming scans skip it.
+    if (isConsumingMode(settings.mode) && dataManager.isTokenScanned(tokenId)) {
       debug.log(`Duplicate token detected: ${tokenId}`, true);
       this.showDuplicateError(tokenId);
       return;
@@ -276,14 +309,19 @@ export class GameOpsDomain {
       isUnknown,
     };
 
-    if (settings.mode === 'blackmarket' && !isUnknown) {
+    if (isScoringMode(settings.mode) && !isUnknown) {
       transaction.points = dataManager.calculateTokenValue(transaction);
     } else {
       transaction.points = 0;
     }
 
     if (sessionModeManager && sessionModeManager.isNetworked()) {
-      dataManager.markTokenAsScanned(tokenId);
+      // Optimistic mark for CONSUMING claims only (D3s2): a non-consuming
+      // action never registers, so marking it would wrongly block the
+      // token's real consuming claim later on this device.
+      if (isConsumingMode(settings.mode)) {
+        dataManager.markTokenAsScanned(tokenId);
+      }
 
       if (!networkedSession) {
         throw new Error('Cannot scan: NetworkedSession not initialized. Please reconnect.');
@@ -303,7 +341,9 @@ export class GameOpsDomain {
     } else {
       if (sessionModeManager && sessionModeManager.isStandalone()) {
         await dataManager.addTransaction(transaction);
-        dataManager.markTokenAsScanned(tokenId);
+        if (isConsumingMode(settings.mode)) {
+          dataManager.markTokenAsScanned(tokenId);
+        }
         debug.log('Transaction stored via UnifiedDataManager (standalone mode)');
       } else {
         debug.log('Warning: No session mode selected - cannot process transaction', true);
@@ -312,7 +352,7 @@ export class GameOpsDomain {
       }
     }
 
-    if (settings.mode === 'blackmarket' && !isUnknown) {
+    if (isScoringMode(settings.mode) && !isUnknown) {
       debug.log(`Token scored: $${transaction.points.toLocaleString()}`);
     }
 
@@ -373,8 +413,10 @@ export class GameOpsDomain {
 
   showScoreboard() {
     const { settings, uiManager, debug } = this.app;
-    if (settings.mode !== 'blackmarket') {
-      debug.log('Scoreboard only available in Black Market mode');
+    // The scoreboard screen is the RANKINGS surface — gated on the current
+    // mode's declared display surface, not a mode-id literal (slice 1).
+    if (!modeHasSurface(settings.mode, 'scoreboard-rankings')) {
+      debug.log('Scoreboard only available in a rankings-surface mode');
       return;
     }
     uiManager.renderScoreboard();
@@ -425,7 +467,9 @@ export class GameOpsDomain {
 
   async adminResetScores() {
     const { sessionModeManager, dataManager, uiManager, viewController, debug } = this.app;
-    if (!confirm('Reset all team scores to zero? Transactions will be preserved.')) return;
+    // Q1: entity noun is pack-declared. This dialog text is E2E-LOAD-BEARING —
+    // backend/tests/e2e/flows/07d-02 asserts it pack-derived; keep in lockstep.
+    if (!confirm(`Reset all ${entityLabel().toLowerCase()} scores to zero? Transactions will be preserved.`)) return;
 
     if (sessionModeManager?.isStandalone()) {
       try {
@@ -474,7 +518,9 @@ export class GameOpsDomain {
     const { dataManager, uiManager, sessionModeManager, viewController, debug } = this.app;
     const teamId = this.app.currentInterventionTeamId;
     if (!teamId) {
-      alert('No team selected. Please open team details first.');
+      // Q1: entity noun is pack-declared (baked 'team' is byte-identical)
+      const noun = entityLabel().toLowerCase();
+      alert(`No ${noun} selected. Please open ${noun} details first.`);
       return;
     }
 
@@ -489,7 +535,14 @@ export class GameOpsDomain {
 
     if (sessionModeManager?.isStandalone()) {
       try {
-        await dataManager.adjustTeamScore(teamId, delta, reason);
+        const result = await dataManager.adjustTeamScore(teamId, delta, reason);
+        // The strategy reports refusals as {success:false, error} without
+        // throwing (e.g. the D2s2 pack-conditional score floor) — a
+        // success toast on a refused adjustment lies to the GM.
+        if (result && result.success === false) {
+          uiManager.showError(`Failed to adjust score: ${result.error}`);
+          return;
+        }
         debug.log(`Score adjusted (standalone): Team ${teamId} ${delta > 0 ? '+' : ''}${delta} (${reason})`);
         if (deltaInput) deltaInput.value = '';
         if (reasonInput) reasonInput.value = '';

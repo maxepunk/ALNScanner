@@ -18,7 +18,13 @@
  * first coordinating with the GenAI pipeline owner.
  */
 
+import fs from 'fs';
+import path from 'path';
 import { SessionReportGenerator } from '../../src/core/sessionReportGenerator.js';
+import { applyPackModes, resolveMode } from '../../src/core/modeSemantics.js';
+import { applyPackStrings, getString } from '../../src/core/strings.js';
+import { applyPackMoneyFormat } from '../../src/utils/formatCurrency.js';
+import Debug from '../../src/utils/debug.js';
 
 // ---------------------------------------------------------------------------
 // Rich fixture: exercises all code paths (both transaction modes, group
@@ -41,7 +47,7 @@ const CONTRACT_TOKEN_DATABASE = {
     SF_RFID: 'mab001',
     SF_ValueRating: 5,
     SF_MemoryType: 'Technical',
-    SF_Group: 'Server Logs (x5)',
+    SF_Group: 'Server Logs',
     summary: 'Marcus refactors code.',
     owner: 'MARCUS',
   },
@@ -65,7 +71,7 @@ const CONTRACT_TOKEN_DATABASE = {
     SF_RFID: 'jam001',
     SF_ValueRating: 4,
     SF_MemoryType: 'Party',
-    SF_Group: 'Server Logs (x5)',
+    SF_Group: 'Server Logs',
     summary: 'James hosts party.',
     owner: 'JAMES',
   },
@@ -359,23 +365,24 @@ describe('SessionReportGenerator — External Contract (v1)', () => {
         report.indexOf('## Player Activity'),
       );
       // The Sale column (Type = Sale) must not list Red Handed as a team
+      const saleNoun = resolveMode('blackmarket').verbNoun; // 'Sale' from the baked table
       const saleRows = timelineSection
         .split('\n')
-        .filter(l => l.includes('| Sale |'));
+        .filter(l => l.includes(`| ${saleNoun} |`));
       for (const row of saleRows) {
         expect(row).not.toContain('Red Handed');
       }
     });
 
     it('includes admin adjustments in Scoring Timeline', () => {
-      expect(report).toContain('Adjustment');
+      expect(report).toContain(getString('report.adjustmentLabel'));
       expect(report).toContain('Puzzle bonus (GM_STATION_1)');
       expect(report).toContain('Penalty: rule violation (GM_STATION_2)');
     });
 
     it('includes both detective and blackmarket transaction counts in summary', () => {
-      expect(report).toContain('2 detective');
-      expect(report).toContain('3 black market');
+      expect(report).toContain(`2 ${getString('report.classLabels.evidence')}`);
+      expect(report).toContain(`3 ${getString('report.classLabels.scoring')}`);
     });
 
     it('sorts detective evidence log alphabetically by tokenId', () => {
@@ -438,5 +445,333 @@ describe('SessionReportGenerator — External Contract (v1)', () => {
       // after Scoring Timeline = 3 separators
       expect(separators.length).toBe(3);
     });
+  });
+});
+
+// ===========================================================================
+// A3 slice 7 — the wording/structure split, proven from both sides.
+//
+// Structure (Change Rules #1–#5) is asserted by ONE invariant helper run
+// against every render this file produces — the baked/ALN renders, the
+// sparse and empty goldens, a divergently-worded pack, and an ADVERSARIAL
+// pack whose every wording key tries to break the parse anchors. Wording
+// is pack-declared through strings.report.* + modes[].verbNoun; the baked
+// tier IS ALN's voice (ALN declares no report section), so the byte-exact
+// goldens in this file pin the exact bytes the pipeline consumes.
+//
+// The sparse/empty goldens live as fixture files (byte-exact carriers for
+// glyph-heavy content — ★ — × — regenerate by rendering the fixtures
+// below against a HEAD you trust and reviewing the diff by eye).
+// ===========================================================================
+
+const REPORT_FIXTURES_DIR = path.resolve(__dirname, 'fixtures/report');
+
+const SPARSE_TOKEN_DB = { tok1: { owner: null } };
+const SPARSE_INPUT = {
+  session: { name: 'Sparse Night', startTime: '2026-09-01T01:00:00.000Z', endTime: null, teams: ['001'] },
+  scores: [{ teamId: '001', score: -5000, adminAdjustments: [{ delta: -5000, timestamp: '2026-09-01T01:30:00.000Z', reason: null }] }],
+  transactions: [],
+  playerScans: [{ tokenId: 'tok1', deviceId: 'DEV_A', timestamp: '2026-09-01T01:10:00.000Z' }],
+};
+const EMPTY_INPUT = {
+  session: { name: 'Empty Night', startTime: null, endTime: null, teams: [] },
+  scores: [],
+  transactions: [],
+  playerScans: [],
+};
+
+/**
+ * The pipeline-facing structural invariants that hold for EVERY render,
+ * whatever wording the active pack declares (Change Rules #1–#5):
+ * H1 format, the metadata line's exactly-two unescaped separators, the
+ * four H2 sections in order, exactly 3 `---` rules, only contracted
+ * table header rows, and no row whose unescaped pipe count differs from
+ * its table's header (no wording may add or split a column).
+ */
+function assertStructuralInvariants(md) {
+  const lines = md.split('\n');
+  expect(lines[0]).toMatch(/^# Session Report: /);
+
+  const metaParts = lines[1].split(' | ');
+  expect(metaParts).toHaveLength(3);
+  expect(metaParts[0]).toMatch(/^\*\*/);
+  expect(metaParts[1]).toMatch(/^Duration: /);
+  expect(metaParts[2]).toMatch(/^Teams: \d+\*\*$/);
+
+  expect(lines.filter(l => /^## /.test(l))).toEqual([
+    '## Session Summary',
+    '## Detective Evidence Log',
+    '## Scoring Timeline',
+    '## Player Activity',
+  ]);
+  expect(lines.filter(l => l.trim() === '---')).toHaveLength(3);
+
+  const CONTRACTED_HEADERS = new Set([
+    '| Token | Owner | Exposed By | Time | Evidence |',
+    '| Time | Type | Detail | Team | Amount |',
+    '| Token | Owner | Device | Time |',
+  ]);
+  // GFM-live pipes: a pipe splits a column unless BACKSLASH-ESCAPED, and
+  // backslash escapes tokenize left-to-right — in `\\|` the first `\`
+  // escapes the second, leaving the pipe LIVE. A naive lookbehind
+  // ((?<!\\)\|) mis-reads that as escaped, which is exactly how the
+  // S7.3 double-escape MAJOR slipped past this helper. Tokenize the way
+  // GFM does: consume escape pairs, count the bare pipes that remain.
+  const unescapedPipes = (line) => {
+    let count = 0;
+    for (const m of line.matchAll(/\\.|\|/g)) if (m[0] === '|') count += 1;
+    return count;
+  };
+  let headerPipes = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('| ') && lines[i + 1]?.startsWith('|---')) {
+      expect(CONTRACTED_HEADERS.has(lines[i].trim())).toBe(true);
+      headerPipes = unescapedPipes(lines[i]);
+    } else if (lines[i].startsWith('|') && !lines[i].startsWith('|---') && headerPipes !== null) {
+      expect(unescapedPipes(lines[i])).toBe(headerPipes);
+    } else if (!lines[i].startsWith('|')) {
+      headerPipes = null;
+    }
+  }
+}
+
+describe('slice 7 — sparse and empty golden masters (the zero-byte defaults, byte-pinned)', () => {
+  let generator;
+
+  beforeAll(() => {
+    generator = new SessionReportGenerator(SPARSE_TOKEN_DB);
+  });
+
+  it('SPARSE GOLDEN: fallback wording renders byte-for-byte (Unknown duration, — reason, Unknown owner, singular scan, never-turned-in)', () => {
+    const report = generator.generate(SPARSE_INPUT);
+    expect(report).toBe(fs.readFileSync(path.join(REPORT_FIXTURES_DIR, 'sparse-golden.md'), 'utf8'));
+    assertStructuralInvariants(report);
+  });
+
+  it('EMPTY GOLDEN: the three placeholders + Unknown Date render byte-for-byte', () => {
+    const report = generator.generate(EMPTY_INPUT);
+    expect(report).toBe(fs.readFileSync(path.join(REPORT_FIXTURES_DIR, 'empty-golden.md'), 'utf8'));
+    assertStructuralInvariants(report);
+  });
+
+  it('the dense ALN render satisfies the shared structural invariants', () => {
+    const dense = new SessionReportGenerator(CONTRACT_TOKEN_DATABASE).generate({
+      session: CONTRACT_SESSION,
+      scores: CONTRACT_SCORES,
+      transactions: CONTRACT_TRANSACTIONS,
+      playerScans: CONTRACT_PLAYER_SCANS,
+    });
+    assertStructuralInvariants(dense);
+  });
+});
+
+describe('slice 7 — the baked report wording IS ALN\'s voice (snapshot pin)', () => {
+  it.each([
+    ['report.labels.teams', 'Teams'],
+    ['report.labels.totalTransactions', 'Total Transactions'],
+    ['report.labels.playerScans', 'Player Scans'],
+    ['report.labels.uniqueTokens', 'Unique Tokens Processed'],
+    ['report.labels.mostActiveDevices', 'Most Active Devices'],
+    ['report.labels.mostScannedTokens', 'Most Scanned Tokens'],
+    ['report.labels.neverTurnedIn', 'Tokens Scanned but Never Turned In'],
+    ['report.classLabels.evidence', 'detective'],
+    ['report.classLabels.scoring', 'black market'],
+    ['report.classLabels.other', 'other'],
+    ['report.empty.evidence', 'No detective transactions this session.'],
+    ['report.empty.scoring', 'No scoring events this session.'],
+    ['report.empty.playerScans', 'No player scans this session.'],
+    ['report.breakdown.transactions', 'transactions'],
+    ['report.breakdown.adjustments', 'adjustments'],
+    ['report.breakdown.sales', 'sales'],
+    ['report.fallback.dash', '—'],
+    ['report.fallback.unknownOwner', 'Unknown'],
+    ['report.fallback.unknownDuration', 'Unknown'],
+    ['report.fallback.unknownDate', 'Unknown Date'],
+    ['report.duration.hours', 'h'],
+    ['report.duration.minutes', 'm'],
+    ['report.adjustmentLabel', 'Adjustment'],
+    ['report.scanNoun', 'scan'],
+    ['report.scanNounPlural', 'scans'],
+  ])('%s bakes as %j (a mis-keyed bake fails loudly, never renders empty)', (key, expected) => {
+    expect(getString(key)).toBe(expected);
+  });
+});
+
+describe('slice 7 — a divergently-worded pack (the toy shape) rewords WITHOUT moving structure', () => {
+  const TOY_MODES = { modes: [
+    { id: 'fence', label: 'Fence', verbNoun: 'Fence', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-rankings' } },
+    { id: 'tipoff', label: 'Tip-Off', scoringPolicy: 'none', entityRole: 'attribution', countsTowardGroups: false, displayBehavior: { surface: 'scoreboard-evidence' } },
+    { id: 'appraise', label: 'Appraise', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: false, claims: 'non-consuming', displayBehavior: { surface: 'none' } },
+  ] };
+  const TOY_STRINGS = {
+    kind: 'strings', schemaVersion: 2,
+    scoreboard: { unknownOwner: 'Unattributed' },
+    report: {
+      classLabels: { evidence: 'tipoffs', scoring: 'fenced', other: 'appraisals' },
+      empty: { evidence: 'No tips phoned in.' },
+    },
+  };
+  const TOY_INPUT = {
+    session: { name: 'Heist Night', startTime: '2026-09-01T01:00:00.000Z', endTime: '2026-09-01T03:00:00.000Z', teams: ['crew-a'] },
+    scores: [{ teamId: 'crew-a', score: 2600, adminAdjustments: [] }],
+    transactions: [
+      { status: 'accepted', mode: 'fence', tokenId: 'gem001', teamId: 'crew-a', timestamp: '2026-09-01T01:20:00.000Z', points: 2600, valueRating: 2, memoryType: 'Contraband' },
+      { status: 'accepted', mode: 'tipoff', tokenId: 'map001', teamId: 'crew-a', timestamp: '2026-09-01T01:25:00.000Z', points: 0, summary: 'The vault floor plan.' },
+      { status: 'accepted', mode: 'appraise', tokenId: 'gem002', teamId: 'crew-a', timestamp: '2026-09-01T01:40:00.000Z', points: 0 },
+    ],
+    playerScans: [],
+  };
+
+  afterEach(() => {
+    applyPackStrings(null);
+    applyPackModes(null);
+    applyPackMoneyFormat(null);
+  });
+
+  it('renders declared class labels with the appraise residue term, the declared verbNoun, the pack money affix, and the layered unknownOwner', () => {
+    applyPackModes(TOY_MODES);
+    applyPackStrings(TOY_STRINGS);
+    applyPackMoneyFormat('#,### cr');
+    const report = new SessionReportGenerator({}).generate(TOY_INPUT);
+
+    expect(report).toContain('3 (1 tipoffs, 1 fenced, 1 appraisals)');
+    expect(report).toContain('| Fence |');
+    expect(report).toContain('2,600 cr');
+    expect(report).toContain('| gem001/Unattributed (');
+    // The ★ Detail cell's baseValue keeps the money AFFIX (adjudicated:
+    // it renders through formatCurrency under the pack money spec, same
+    // as every other money figure — the ALN golden pins `$150,000`
+    // in-cell; here the toy affix proves the same path pack-driven).
+    // Contraband is an unknown type → UNKNOWN → 0x on the baked values.
+    expect(report).toContain('(2★ Contraband, 25,000 cr × 0x)');
+    assertStructuralInvariants(report);
+  });
+
+  it('renders a DECLARED empty-section placeholder for a session with no evidence claims', () => {
+    applyPackModes(TOY_MODES);
+    applyPackStrings(TOY_STRINGS);
+    const report = new SessionReportGenerator({}).generate(EMPTY_INPUT);
+    expect(report).toContain('*No tips phoned in.*');
+    assertStructuralInvariants(report);
+  });
+});
+
+describe('slice 7 — a BOTH-class mode keeps the count line honest (tallies overlap; the residue is counted, never derived)', () => {
+  // Schema-legal today: nothing forbids scoringPolicy 'standard' WITH
+  // displayBehavior.surface 'scoreboard-evidence'. Such a claim counts in
+  // BOTH class tallies — and a subtraction-derived residue
+  // (accepted − evidence − scoring) would let it CANCEL a genuine
+  // neither-class claim out of the count line.
+  const BOTH_MODES = { modes: [
+    { id: 'exposesale', label: 'Expose-Sale', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-evidence' } },
+    { id: 'appraise', label: 'Appraise', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: false, claims: 'non-consuming', displayBehavior: { surface: 'none' } },
+  ] };
+  const BOTH_INPUT = {
+    session: { name: 'Overlap Night', startTime: '2026-09-01T01:00:00.000Z', endTime: '2026-09-01T02:00:00.000Z', teams: ['001'] },
+    scores: [{ teamId: '001', score: 100, adminAdjustments: [] }],
+    transactions: [
+      { status: 'accepted', mode: 'exposesale', tokenId: 'tok1', teamId: '001', timestamp: '2026-09-01T01:10:00.000Z', points: 100, valueRating: 1, memoryType: 'X', summary: 'Overlaps both classes.' },
+      { status: 'accepted', mode: 'appraise', tokenId: 'tok2', teamId: '001', timestamp: '2026-09-01T01:20:00.000Z', points: 0 },
+    ],
+    playerScans: [],
+  };
+
+  afterEach(() => {
+    applyPackModes(null);
+  });
+
+  it('a both-class claim never cancels a neither-class one out of the residue term, and the overlap is loud', () => {
+    applyPackModes(BOTH_MODES);
+    const logSpy = jest.spyOn(Debug, 'log').mockImplementation(() => {});
+    const report = new SessionReportGenerator({}).generate(BOTH_INPUT);
+    const sawOverlapWarn = logSpy.mock.calls.some(([m]) => String(m).includes('BOTH classes'));
+    logSpy.mockRestore();
+
+    // 2 accepted: exposesale counts in BOTH tallies; appraise is the
+    // genuine residue. Derived: max(0, 2−1−1) = 0 — the appraisal vanishes.
+    expect(report).toContain(`2 (1 ${getString('report.classLabels.evidence')}, 1 ${getString('report.classLabels.scoring')}, 1 ${getString('report.classLabels.other')})`);
+    expect(sawOverlapWarn).toBe(true);
+    assertStructuralInvariants(report);
+  });
+});
+
+describe('slice 7 — an ADVERSARIAL pack cannot move the parse anchors (the central safety property)', () => {
+  const HOSTILE = 'x|y\ny## z‮!';
+  const hostileLeaves = (obj) => JSON.parse(JSON.stringify(obj, (k, v) => (typeof v === 'string' ? HOSTILE : v)));
+
+  afterEach(() => {
+    applyPackStrings(null);
+    applyPackModes(null);
+  });
+
+  it('every report key carrying pipes, newlines, headings and bidi controls leaves structure byte-identical in the anchored elements', () => {
+    applyPackStrings({
+      kind: 'strings', schemaVersion: 2,
+      scoreboard: { unknownOwner: HOSTILE },
+      report: hostileLeaves({
+        labels: { teams: 'x', totalTransactions: 'x', playerScans: 'x', uniqueTokens: 'x', mostActiveDevices: 'x', mostScannedTokens: 'x', neverTurnedIn: 'x' },
+        classLabels: { evidence: 'x', scoring: 'x', other: 'x' },
+        empty: { evidence: 'x', scoring: 'x', playerScans: 'x' },
+        breakdown: { transactions: 'x', adjustments: 'x', sales: 'x' },
+        fallback: { dash: 'x', unknownOwner: 'x', unknownDuration: 'x', unknownDate: 'x' },
+        duration: { hours: 'x', minutes: 'x' },
+        adjustmentLabel: 'x', scanNoun: 'x', scanNounPlural: 'x',
+      }),
+    });
+    applyPackModes({ modes: [
+      { id: 'fence', label: 'F', verbNoun: HOSTILE, scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true },
+    ] });
+
+    const gen = new SessionReportGenerator(SPARSE_TOKEN_DB);
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const sparse = gen.generate(SPARSE_INPUT);
+    const dense = gen.generate({
+      ...SPARSE_INPUT,
+      transactions: [{ status: 'accepted', mode: 'fence', tokenId: 'tok1', teamId: '001', timestamp: '2026-09-01T01:15:00.000Z', points: 100, valueRating: 1, memoryType: 'X' }],
+    });
+    warnSpy.mockRestore();
+
+    assertStructuralInvariants(sparse);
+    assertStructuralInvariants(dense);
+    // The hostile verbNoun DECLINEs (table-breaker) — the Type cell falls
+    // to the engine-generic noun, never to a row-splitting string.
+    expect(dense).toContain('| Claim |');
+  });
+
+  // The S7.3 close-gate security refuter's MAJOR: the sanitizer claim
+  // covers "pack-declared OR DATA-CARRIED" wording, but the data half was
+  // never proven. session.name passes Joi with newlines, teamId is
+  // trim-only at commandExecutor, and deviceId rides the UNAUTHENTICATED
+  // POST /api/scan with no pattern — any of them could forge a section
+  // heading, displace the metadata line, or split a table row in the
+  // contract artifact. Every data interpolation must hold the invariants.
+  it('hostile SESSION DATA (names, team/token/device ids) cannot move the parse anchors either', () => {
+    const FORGED_SECTION = 'N\n\n## Player Activity\n\n| Token | Owner | Device | Time |\n|-------|-------|--------|------|\n| forged | Ghost | DEV | 01:00 AM |';
+    const gen = new SessionReportGenerator({});
+    const report = gen.generate({
+      session: {
+        name: FORGED_SECTION,
+        startTime: '2026-09-01T01:00:00.000Z',
+        endTime: '2026-09-01T02:00:00.000Z',
+        teams: ['A|B', 'C ## D'],
+      },
+      scores: [{ teamId: 'A|B', score: 100, adminAdjustments: [{ delta: -50, timestamp: '2026-09-01T01:30:00.000Z', reason: 'r|s' }] }],
+      transactions: [
+        { status: 'accepted', mode: 'blackmarket', tokenId: 'tok1|EXTRA', teamId: 'A|B', timestamp: '2026-09-01T01:15:00.000Z', points: 100, valueRating: 1, memoryType: 'Personal' },
+        { status: 'accepted', mode: 'detective', tokenId: 'tok2\n## H', teamId: 'A|B', timestamp: '2026-09-01T01:16:00.000Z', points: 0, summary: 's' },
+      ],
+      playerScans: [
+        { tokenId: 'tok3|X', deviceId: 'D\n## Injected Heading', timestamp: '2026-09-01T01:10:00.000Z' },
+        { tokenId: 'tok3|X', deviceId: 'D\n## Injected Heading', timestamp: '2026-09-01T01:11:00.000Z' },
+      ],
+    });
+
+    assertStructuralInvariants(report);
+    // The hostile text may survive INLINE (flattened, escaped) — what it
+    // must never do is claim a LINE: a heading only parses at line start,
+    // and a row only parses as a line beginning with a live pipe.
+    const lines = report.split('\n');
+    expect(lines.some(l => l.startsWith('## Injected Heading'))).toBe(false);
+    expect(lines.some(l => l.startsWith('| forged'))).toBe(false);
   });
 });

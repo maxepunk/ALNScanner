@@ -12,6 +12,7 @@
  */
 
 import { formatDuration } from '../../utils/formatDuration.js';
+import { packStringsApplied } from '../../core/strings.js';
 
 export class GameAdminDomain {
   /**
@@ -167,6 +168,28 @@ export class GameAdminDomain {
       if (!sessionData) {
         uiManager.showError('No session data available for report.');
         return;
+      }
+
+      // Provenance warn (slice 7): the exported markdown carries no pack
+      // identity (adding one would break the contract bytes — the B9
+      // bundle's engine stamp is the artifact that will), so this warn is
+      // the only staleness signal at the point of export. Two stale
+      // shapes: wording applied from a non-network tier, and a pack that
+      // DECLARES a strings sidecar none of which is applied (baked voice
+      // on a worded pack). Pack identity comes from tokenManager's
+      // retained load record — the domain never imports packLoader.
+      const packInfo = tokenManager?.packInfo;
+      if (packInfo && packInfo.source !== 'network') {
+        console.warn(
+          `[report] exporting with pack wording from the '${packInfo.source}' tier `
+          + `(pack ${packInfo.packId ?? 'unknown'}) — not refreshed from the orchestrator; `
+          + 'the report may carry stale or baked wording.'
+        );
+      } else if (packInfo && tokenManager?.gameConfig?.strings && !packStringsApplied()) {
+        console.warn(
+          `[report] the pack (${packInfo.packId ?? 'unknown'}) declares a strings sidecar `
+          + 'but none is applied — exporting with the baked wording, not the pack\'s declared voice.'
+        );
       }
 
       const generator = new SessionReportGenerator(tokenDatabase);

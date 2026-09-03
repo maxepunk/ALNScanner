@@ -23,6 +23,7 @@ export class SessionRenderer {
     this._clockTimer = null;
     this._lastElapsed = null;
     this._clockState = null;
+    this._phase = null;        // {id, label} | null (A3 slice 5 — pack phases)
   }
 
   /**
@@ -45,7 +46,7 @@ export class SessionRenderer {
       // gameclock:status may arrive before session:update, so the clock
       // display gets wiped by the template swap. Re-apply cached value.
       if (this._lastElapsed !== null && this._clockState !== null) {
-        this.renderGameClock({ state: this._clockState, elapsed: this._lastElapsed });
+        this.renderGameClock({ state: this._clockState, elapsed: this._lastElapsed, phase: this._phase });
       }
       return;
     }
@@ -110,10 +111,13 @@ export class SessionRenderer {
    * @param {Object|null} prev - Previous clock state
    */
   renderGameClock(clockState, prev = null) {
-    const { state, elapsed } = clockState;
+    const { state, elapsed, phase = null } = clockState;
 
-    // Skip if nothing changed
-    if (prev && state === prev.state && elapsed === prev.elapsed) return;
+    // Skip if nothing changed (phase identity included — a phase boundary
+    // arrives with the same status and a near-identical elapsed)
+    const phaseId = phase ? phase.id : null;
+    const prevPhaseId = prev && prev.phase ? prev.phase.id : null;
+    if (prev && state === prev.state && elapsed === prev.elapsed && phaseId === prevPhaseId) return;
 
     // Always clear existing timer first (prevents duplicates)
     this._stopClockTimer();
@@ -122,6 +126,7 @@ export class SessionRenderer {
     // e.g. store subscription fires before session template renders on sync:full)
     this._lastElapsed = elapsed;
     this._clockState = state;
+    this._phase = phase || null;
 
     // Always use getElementById — clock element may exist outside the cached container
     // scope (e.g., created by template swap or present as standalone element)
@@ -134,6 +139,11 @@ export class SessionRenderer {
     // Update styling
     display.classList.remove('clock-running', 'clock-paused', 'clock-stopped');
     display.classList.add(`clock-${state}`);
+
+    // Phase label (A3 slice 5): pack-declared label beside the clock —
+    // hidden when the pack declares no phase structure (ALN's degenerate
+    // case ships phase null, so ALN renders byte-identical)
+    this._renderPhaseLabel();
 
     // If running, start client-side timer to increment every second
     if (state === 'running') {
@@ -162,6 +172,23 @@ export class SessionRenderer {
       text.textContent = `+${Math.round(overtimeData.overtimeDuration)}m`;
     } else {
       container.style.display = 'none';
+    }
+  }
+
+  /**
+   * Render the phase label into #game-clock-phase (textContent — the label
+   * is pack-controlled wording and must never reach innerHTML).
+   * @private
+   */
+  _renderPhaseLabel() {
+    const el = document.getElementById('game-clock-phase');
+    if (!el) return;
+    if (this._phase && this._phase.label) {
+      el.textContent = this._phase.label;
+      el.style.display = '';
+    } else {
+      el.textContent = '';
+      el.style.display = 'none';
     }
   }
 
@@ -210,6 +237,7 @@ export class SessionRenderer {
           <div class="session-body">
             <div id="game-clock-container" class="clock-container">
               <span id="game-clock-display" class="clock-display">00:00</span>
+              <span id="game-clock-phase" class="clock-phase" style="display:none"></span>
             </div>
           </div>
           <div class="session-controls">
@@ -230,6 +258,7 @@ export class SessionRenderer {
           <div class="session-body">
             <div id="game-clock-container" class="clock-container">
               <span id="game-clock-display" class="clock-display">--:--</span>
+              <span id="game-clock-phase" class="clock-phase" style="display:none"></span>
             </div>
             <div id="session-overtime-container" style="display:none; color: #ffc107; font-weight: bold; margin-top: 5px;">
               Overtime: <span id="session-overtime-text"></span>
@@ -253,6 +282,7 @@ export class SessionRenderer {
           <div class="session-body">
             <div id="game-clock-container" class="clock-container">
               <span id="game-clock-display" class="clock-display">--:--</span>
+              <span id="game-clock-phase" class="clock-phase" style="display:none"></span>
             </div>
           </div>
           <div class="session-controls">
