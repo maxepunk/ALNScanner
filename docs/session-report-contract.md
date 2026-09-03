@@ -1,7 +1,7 @@
-# Session Report Format Contract — v1
+# Session Report Format Contract — v2
 
 **Status:** Active external contract  
-**Version:** v1 (implicit — no version marker in the markdown itself; the bytes ARE the contract until B9's structured bundle lands)  
+**Version:** v2 (implicit — no version marker in the markdown itself; the bytes ARE the contract until B9's structured bundle lands)  
 **Enforcement:** `tests/contract/sessionReport.contract.test.js`
 
 ---
@@ -10,7 +10,7 @@
 
 `src/core/sessionReportGenerator.js` produces a post-game markdown report that is consumed by an external GenAI pipeline at `github.com/maxepunk/aboutlastnight` (the `parseRawInput` function). The pipeline parses the markdown by **exact section heading strings and table column positions**. The markdown format is therefore an external API contract, not a mere rendering detail.
 
-Per **Decision B9** (`docs/decisions/2026-06-09-tier-b2-showcontrol-content-pipeline.md`): until Phase 3 delivers a structured JSON session bundle as the canonical artifact, the markdown format must remain byte-compatible. The planned migration: engine emits structured bundle → pack template renders markdown → pipeline consumes bundle directly. Until that migration is complete, this contract must not change without coordinating the pipeline update first.
+Per **Decision B9** (`docs/decisions/2026-06-09-tier-b2-showcontrol-content-pipeline.md`): until Phase 3 delivers a structured JSON session bundle as the canonical artifact, the markdown format must remain byte-compatible. The planned migration: engine emits the structured bundle (schema landed — slice 7) → pipeline consumes the bundle directly (ROADMAP §8.10). There is NO pack-template step — the pack-template design was superseded by the wording mechanism this document describes (program §13.4 ruling). Until that migration is complete, this contract must not change without coordinating the pipeline update first.
 
 ---
 

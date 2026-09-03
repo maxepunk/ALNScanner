@@ -17,9 +17,12 @@
  * pack-declared WORDING, resolved through strings.report.* (baked
  * defaults = ALN's exact voice, so the golden masters pin the shipped
  * tier byte-for-byte) — plus the per-mode `verbNoun` for the Scoring
- * Timeline Type cell. Every pack-declared leaf passes through _rt()
- * (escape `|`, newlines to spaces, strip control/bidi) so no wording can
- * split a table row or forge the metadata line.
+ * Timeline Type cell. Every pack-declared leaf passes through _rt() and
+ * every DATA-carried interpolation (session name, team/token/device ids,
+ * summaries, reasons) through _cell() — exactly once, at the sink —
+ * (escape `\` then `|`, controls/bidi/line-separators to spaces) so
+ * neither wording nor data can split a table row, forge a heading, or
+ * displace the metadata line.
  *
  * @module core/sessionReportGenerator
  */
@@ -31,9 +34,11 @@ import { formatCurrency } from '../utils/formatCurrency.js';
 import Debug from '../utils/debug.js';
 
 // C0 controls + DEL + bidi controls — same class the mode resolvers
-// strip. Kept local: modeSemantics does not export its copy, and the two
-// uses guard different sinks (DOM there, markdown here).
-const CONTROL_AND_BIDI = /[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+// strip — PLUS U+2028/2029 (line/paragraph separators): this sink is
+// line-oriented text, so the separator class matters here in a way the
+// DOM sinks never see. Kept local: modeSemantics does not export its
+// copy, and the two uses guard different sinks (DOM there, markdown here).
+const CONTROL_AND_BIDI = /[\u0000-\u001f\u007f\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
 
 export class SessionReportGenerator {
   /**
@@ -59,7 +64,7 @@ export class SessionReportGenerator {
     const teamCount = (session.teams || []).length;
 
     const sections = [
-      `# Session Report: ${session.name}`,
+      `# Session Report: ${this._cell(session.name)}`,
       `**${date} | Duration: ${duration} | Teams: ${teamCount}**`,
       '',
       this._buildSessionSummary(session, scores, transactions, playerScans),
@@ -111,7 +116,7 @@ export class SessionReportGenerator {
     const hasAnyAdjustments = sortedScores.some(s => s.adminAdjustments?.length > 0);
     const leaderboard = sortedScores
       .map((s, i) => {
-        let line = `${i + 1}. **${s.teamId}** — ${this._formatCurrency(s.score)}`;
+        let line = `${i + 1}. **${this._cell(s.teamId)}** — ${this._formatCurrency(s.score)}`;
         if (hasAnyAdjustments && s.adminAdjustments?.length > 0) {
           const adjTotal = s.adminAdjustments.reduce((sum, adj) => sum + adj.delta, 0);
           const txScore = s.score - adjTotal;
@@ -125,7 +130,7 @@ export class SessionReportGenerator {
     const lines = [
       '## Session Summary',
       '',
-      `- **${this._rt('report.labels.teams')}:** ${(session.teams || []).join(', ')}`,
+      `- **${this._rt('report.labels.teams')}:** ${this._cell((session.teams || []).join(', '))}`,
       `- **${this._rt('report.labels.totalTransactions')}:** ${accepted.length} (${classCounts})`,
       `- **${this._rt('report.labels.playerScans')}:** ${playerScans.length}`,
       `- **${this._rt('report.labels.uniqueTokens')}:** ${uniqueTokens.size}`,
@@ -166,10 +171,10 @@ export class SessionReportGenerator {
     lines.push('|-------|-------|------------|------|----------|');
 
     for (const tx of detective) {
-      const owner = this._getTokenOwner(tx.tokenId);
+      const owner = this._cell(this._getTokenOwner(tx.tokenId));
       const time = this._formatTimestamp(tx.timestamp);
-      const evidence = this._cell(tx.summary || this._rt('report.fallback.dash'));
-      lines.push(`| ${tx.tokenId} | ${owner} | ${tx.teamId} | ${time} | ${evidence} |`);
+      const evidence = this._cell(tx.summary || this._raw('report.fallback.dash'));
+      lines.push(`| ${this._cell(tx.tokenId)} | ${owner} | ${this._cell(tx.teamId)} | ${time} | ${evidence} |`);
     }
 
     lines.push('');
@@ -197,7 +202,10 @@ export class SessionReportGenerator {
       .filter(s => s.adminAdjustments?.length > 0)
       .flatMap(s => s.adminAdjustments.map(adj => ({
         timestamp: adj.timestamp,
-        type: this._rt('report.adjustmentLabel'),
+        // RAW here — the row renderer cells every event.type exactly once
+        // (cell-once discipline; a _rt here double-escaped a declared
+        // pipe into a GFM-LIVE one, the S7.3 review's second MAJOR).
+        type: this._raw('report.adjustmentLabel'),
         detail: this._formatAdjustmentDetail(adj),
         team: s.teamId,
         amount: adj.delta,
@@ -226,7 +234,7 @@ export class SessionReportGenerator {
     for (const event of timeline) {
       const time = this._formatTimestamp(event.timestamp);
       const amount = this._formatSignedCurrency(event.amount);
-      lines.push(`| ${time} | ${this._cell(event.type)} | ${event.detail} | ${event.team} | ${amount} |`);
+      lines.push(`| ${time} | ${this._cell(event.type)} | ${event.detail} | ${this._cell(event.team)} | ${amount} |`);
     }
 
     // Final Totals with breakdown
@@ -256,7 +264,7 @@ export class SessionReportGenerator {
       const finalDisplay = t.final >= 0
         ? this._formatCurrency(t.final)
         : `-${this._formatCurrency(Math.abs(t.final))}`;
-      lines.push(`- **${t.team}:** ${finalDisplay} (${this._formatCurrency(t.salesTotal)} ${this._rt('report.breakdown.sales')} ${adjSign} ${this._formatCurrency(adjAbs)} ${this._rt('report.breakdown.adjustments')})`);
+      lines.push(`- **${this._cell(t.team)}:** ${finalDisplay} (${this._formatCurrency(t.salesTotal)} ${this._rt('report.breakdown.sales')} ${adjSign} ${this._formatCurrency(adjAbs)} ${this._rt('report.breakdown.adjustments')})`);
     }
 
     lines.push('');
@@ -287,7 +295,7 @@ export class SessionReportGenerator {
    * Format adjustment detail with reason and GM station.
    */
   _formatAdjustmentDetail(adj) {
-    const reason = this._cell(adj.reason || this._rt('report.fallback.dash'));
+    const reason = this._cell(adj.reason || this._raw('report.fallback.dash'));
     const station = adj.gmStation;
     return station ? `${reason} (${this._cell(station)})` : reason;
   }
@@ -316,9 +324,9 @@ export class SessionReportGenerator {
     lines.push('|-------|-------|--------|------|');
 
     for (const scan of sorted) {
-      const owner = this._getTokenOwner(scan.tokenId);
+      const owner = this._cell(this._getTokenOwner(scan.tokenId));
       const time = this._formatTimestamp(scan.timestamp);
-      lines.push(`| ${scan.tokenId} | ${owner} | ${scan.deviceId} | ${time} |`);
+      lines.push(`| ${this._cell(scan.tokenId)} | ${owner} | ${this._cell(scan.deviceId)} | ${time} |`);
     }
 
     // Stats
@@ -335,7 +343,7 @@ export class SessionReportGenerator {
     lines.push(`**${this._rt('report.labels.mostActiveDevices')}:**`);
     for (const [deviceId, count] of sortedDevices) {
       const noun = count !== 1 ? this._rt('report.scanNounPlural') : this._rt('report.scanNoun');
-      lines.push(`- ${deviceId}: ${count} ${noun}`);
+      lines.push(`- ${this._cell(deviceId)}: ${count} ${noun}`);
     }
 
     // Most scanned tokens
@@ -349,8 +357,8 @@ export class SessionReportGenerator {
     if (topTokens.length > 0) {
       lines.push(`**${this._rt('report.labels.mostScannedTokens')}:**`);
       for (const [tokenId, count] of topTokens) {
-        const owner = this._getTokenOwner(tokenId);
-        lines.push(`- ${tokenId} (${owner}): ${count} ${this._rt('report.scanNounPlural')}`);
+        const owner = this._cell(this._getTokenOwner(tokenId));
+        lines.push(`- ${this._cell(tokenId)} (${owner}): ${count} ${this._rt('report.scanNounPlural')}`);
       }
       lines.push('');
     }
@@ -367,8 +375,8 @@ export class SessionReportGenerator {
     if (neverTurnedIn.length > 0) {
       lines.push(`**${this._rt('report.labels.neverTurnedIn')}:**`);
       for (const tokenId of neverTurnedIn.sort()) {
-        const owner = this._getTokenOwner(tokenId);
-        lines.push(`- ${tokenId} (${owner})`);
+        const owner = this._cell(this._getTokenOwner(tokenId));
+        lines.push(`- ${this._cell(tokenId)} (${owner})`);
       }
     }
 
@@ -387,38 +395,60 @@ export class SessionReportGenerator {
    * @returns {string}
    */
   _rt(path) {
-    return this._cell(getString(path) ?? '');
+    return this._cell(this._raw(path));
   }
 
   /**
-   * Sanitize free text bound for a markdown sink (table cells, the
-   * metadata line's interpolations): no wording — pack-declared or
-   * data-carried — may split a row, add a column, or smuggle controls.
+   * Resolve one wording leaf UNSANITIZED — for values that feed a later
+   * single _cell (cell-once discipline). Empty string for a path neither
+   * the pack nor the bake declares.
+   * @param {string} path
+   * @returns {string}
+   */
+  _raw(path) {
+    return getString(path) ?? '';
+  }
+
+  /**
+   * Sanitize free text bound for a markdown sink (table cells, list
+   * lines, the H1): no wording — pack-declared or data-carried — may
+   * split a row, add a column, forge a heading, or smuggle controls.
+   * Backslashes are escaped BEFORE pipes: GFM tokenizes escape pairs
+   * left-to-right, so a datum's own trailing backslash could otherwise
+   * disarm the pipe escape (`\` + `\|` reads as `\\` + LIVE `|`).
+   * Apply exactly ONCE per sink — celling celled text double-escapes a
+   * pipe into `\\|`, which is GFM-LIVE (the S7.3 review's second MAJOR);
+   * helpers therefore resolve RAW and the renderer cells at the sink.
    * @param {string} text
    * @returns {string}
    */
   _cell(text) {
     return String(text)
       .replace(CONTROL_AND_BIDI, ' ')
+      .replace(/\\/g, '\\\\')
       .replace(/\|/g, '\\|');
   }
 
   /**
-   * Look up the character owner name for a token. The unattributed
-   * fallback resolves in layers: a declared report.fallback.unknownOwner
-   * wins; else the pack's scoreboard.unknownOwner (one concept, one
-   * declaration — the toy's 'Unattributed' reaches its report without a
-   * second key); else the baked 'Unknown'. The scoreboard key is read
-   * PACK-tier only — it has no baked default and must never leak null.
+   * Look up the character owner name for a token — RAW, not sanitized:
+   * callers cell it at the sink (cell-once discipline; a pre-celled
+   * return re-celled inside _formatSaleDetail double-escaped a declared
+   * pipe into a GFM-LIVE one — the S7.3 review's second MAJOR). The
+   * unattributed fallback resolves in layers: a declared
+   * report.fallback.unknownOwner wins; else the pack's
+   * scoreboard.unknownOwner (one concept, one declaration — the toy's
+   * 'Unattributed' reaches its report without a second key); else the
+   * baked 'Unknown'. The scoreboard key is read PACK-tier only — it has
+   * no baked default and must never leak null.
    * @param {string} tokenId
    * @returns {string}
    */
   _getTokenOwner(tokenId) {
     const token = this.tokenDatabase[tokenId];
-    if (token?.owner) return this._cell(token.owner);
+    if (token?.owner) return String(token.owner);
     const declared = getPackString('report.fallback.unknownOwner')
       ?? getPackString('scoreboard.unknownOwner');
-    return this._cell(declared ?? getString('report.fallback.unknownOwner') ?? '');
+    return declared ?? this._raw('report.fallback.unknownOwner');
   }
 
   /**

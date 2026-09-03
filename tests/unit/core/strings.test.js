@@ -53,6 +53,19 @@ describe('Pack strings (A3 slice 3a)', () => {
       expect(alnStrings.kind).toBe('strings');
       expect(alnStrings.schemaVersion).toBe(STRINGS_SCHEMA_VERSION);
     });
+
+    it('INVERTED PIN (slice 7): ALN declares NO report section — the bake IS the report voice', () => {
+      // The LEGACY_ENTITY_LABEL pattern: the session-report goldens pin
+      // the BAKED tier byte-for-byte and claim that tier is what ALN
+      // ships. That claim is only true while data/strings.json stays
+      // silent on report wording — the moment ALN declares a report
+      // section, the rendered tier diverges from the pipeline-pinned
+      // goldens while every suite stays green. This pin makes that
+      // moment loud: declaring ALN report strings requires a
+      // coordinated golden + pipeline update FIRST
+      // (docs/session-report-contract.md).
+      expect(alnStrings.report).toBeUndefined();
+    });
   });
 
   describe('applyPackStrings', () => {

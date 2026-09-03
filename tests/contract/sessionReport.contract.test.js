@@ -511,7 +511,17 @@ function assertStructuralInvariants(md) {
     '| Time | Type | Detail | Team | Amount |',
     '| Token | Owner | Device | Time |',
   ]);
-  const unescapedPipes = (line) => (line.match(/(?<!\\)\|/g) || []).length;
+  // GFM-live pipes: a pipe splits a column unless BACKSLASH-ESCAPED, and
+  // backslash escapes tokenize left-to-right — in `\\|` the first `\`
+  // escapes the second, leaving the pipe LIVE. A naive lookbehind
+  // ((?<!\\)\|) mis-reads that as escaped, which is exactly how the
+  // S7.3 double-escape MAJOR slipped past this helper. Tokenize the way
+  // GFM does: consume escape pairs, count the bare pipes that remain.
+  const unescapedPipes = (line) => {
+    let count = 0;
+    for (const m of line.matchAll(/\\.|\|/g)) if (m[0] === '|') count += 1;
+    return count;
+  };
   let headerPipes = null;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].startsWith('| ') && lines[i + 1]?.startsWith('|---')) {
@@ -726,5 +736,42 @@ describe('slice 7 — an ADVERSARIAL pack cannot move the parse anchors (the cen
     // The hostile verbNoun DECLINEs (table-breaker) — the Type cell falls
     // to the engine-generic noun, never to a row-splitting string.
     expect(dense).toContain('| Claim |');
+  });
+
+  // The S7.3 close-gate security refuter's MAJOR: the sanitizer claim
+  // covers "pack-declared OR DATA-CARRIED" wording, but the data half was
+  // never proven. session.name passes Joi with newlines, teamId is
+  // trim-only at commandExecutor, and deviceId rides the UNAUTHENTICATED
+  // POST /api/scan with no pattern — any of them could forge a section
+  // heading, displace the metadata line, or split a table row in the
+  // contract artifact. Every data interpolation must hold the invariants.
+  it('hostile SESSION DATA (names, team/token/device ids) cannot move the parse anchors either', () => {
+    const FORGED_SECTION = 'N\n\n## Player Activity\n\n| Token | Owner | Device | Time |\n|-------|-------|--------|------|\n| forged | Ghost | DEV | 01:00 AM |';
+    const gen = new SessionReportGenerator({});
+    const report = gen.generate({
+      session: {
+        name: FORGED_SECTION,
+        startTime: '2026-09-01T01:00:00.000Z',
+        endTime: '2026-09-01T02:00:00.000Z',
+        teams: ['A|B', 'C ## D'],
+      },
+      scores: [{ teamId: 'A|B', score: 100, adminAdjustments: [{ delta: -50, timestamp: '2026-09-01T01:30:00.000Z', reason: 'r|s' }] }],
+      transactions: [
+        { status: 'accepted', mode: 'blackmarket', tokenId: 'tok1|EXTRA', teamId: 'A|B', timestamp: '2026-09-01T01:15:00.000Z', points: 100, valueRating: 1, memoryType: 'Personal' },
+        { status: 'accepted', mode: 'detective', tokenId: 'tok2\n## H', teamId: 'A|B', timestamp: '2026-09-01T01:16:00.000Z', points: 0, summary: 's' },
+      ],
+      playerScans: [
+        { tokenId: 'tok3|X', deviceId: 'D\n## Injected Heading', timestamp: '2026-09-01T01:10:00.000Z' },
+        { tokenId: 'tok3|X', deviceId: 'D\n## Injected Heading', timestamp: '2026-09-01T01:11:00.000Z' },
+      ],
+    });
+
+    assertStructuralInvariants(report);
+    // The hostile text may survive INLINE (flattened, escaped) — what it
+    // must never do is claim a LINE: a heading only parses at line start,
+    // and a row only parses as a line beginning with a live pipe.
+    const lines = report.split('\n');
+    expect(lines.some(l => l.startsWith('## Injected Heading'))).toBe(false);
+    expect(lines.some(l => l.startsWith('| forged'))).toBe(false);
   });
 });

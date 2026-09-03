@@ -450,3 +450,11 @@ describe('SessionReportGenerator', () => {
     });
   });
 });
+
+describe('_raw (unsanitized wording resolver — the single ?? "" home)', () => {
+  it('resolves a baked leaf, and empties a path neither pack nor bake declares', () => {
+    const gen = new SessionReportGenerator({});
+    expect(gen._raw('report.adjustmentLabel')).toBe('Adjustment');
+    expect(gen._raw('report.no.such.key')).toBe('');
+  });
+});
