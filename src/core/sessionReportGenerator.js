@@ -25,15 +25,10 @@
  */
 
 import { SCORING_CONFIG } from './scoring.js';
-import { isScoringMode, isEvidenceMode, resolveMode } from './modeSemantics.js';
+import { isScoringMode, isEvidenceMode, resolveMode, GENERIC_VERB_NOUN } from './modeSemantics.js';
 import { getString, getPackString } from './strings.js';
 import { formatCurrency } from '../utils/formatCurrency.js';
 import Debug from '../utils/debug.js';
-
-// The engine-generic Type-cell noun for a scoring-mode claim whose mode
-// declares no verbNoun (benign-wording class; ALN's 'Sale' arrives from
-// the declared/baked mode table, never from here).
-const GENERIC_VERB_NOUN = 'Claim';
 
 // C0 controls + DEL + bidi controls — same class the mode resolvers
 // strip. Kept local: modeSemantics does not export its copy, and the two
@@ -85,16 +80,30 @@ export class SessionReportGenerator {
     const blackmarket = accepted.filter(tx => isScoringMode(tx.mode));
     const uniqueTokens = new Set(accepted.map(tx => tx.tokenId));
 
-    // Claims in a mode that is neither evidence- nor scoring-class would
-    // otherwise vanish from this count line (toy 'appraise' is the shipped
-    // case). The residue term renders ONLY when non-zero, so ALN's
-    // two-class bytes never change; the warn makes the residue loud.
-    const unclassified = Math.max(0, accepted.length - detective.length - blackmarket.length);
+    // Per-claim class census. The class tallies are TALLIES, not a
+    // partition — a mode may declare BOTH the scoring policy and the
+    // evidence surface (schema-legal), and such a claim counts in both.
+    // The residue (neither class — toy 'appraise' is the shipped case) is
+    // therefore COUNTED directly, never derived by subtraction: a
+    // both-class claim would cancel a genuine neither-class one out of a
+    // derived residue. Residue and overlap render/warn only when present,
+    // so ALN's disjoint two-class bytes never change.
+    let bothClassCount = 0;
+    let unclassified = 0;
+    for (const tx of accepted) {
+      const inEvidence = isEvidenceMode(tx.mode);
+      const inScoring = isScoringMode(tx.mode);
+      if (inEvidence && inScoring) bothClassCount += 1;
+      else if (!inEvidence && !inScoring) unclassified += 1;
+    }
     let classCounts = `${detective.length} ${this._rt('report.classLabels.evidence')}, `
       + `${blackmarket.length} ${this._rt('report.classLabels.scoring')}`;
     if (unclassified > 0) {
       classCounts += `, ${unclassified} ${this._rt('report.classLabels.other')}`;
       Debug.log(`report: ${unclassified} accepted claim(s) fall in neither the evidence nor the scoring class — rendered under the '${this._rt('report.classLabels.other')}' term`, true);
+    }
+    if (bothClassCount > 0) {
+      Debug.log(`report: ${bothClassCount} accepted claim(s) fall in BOTH classes — the class tallies overlap and their sum exceeds the total (each tally counts its full class)`, true);
     }
 
     // Sort scores descending

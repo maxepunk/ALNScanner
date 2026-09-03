@@ -135,6 +135,17 @@ export function getString(path) {
 }
 
 /**
+ * Is a pack strings sidecar currently applied? Provenance introspection
+ * (slice 7): a pack that DECLARES strings whose sidecar was declined or
+ * never fetched renders in the baked voice — the report-export path warns
+ * on that mismatch, and this module owns the applied-state truth.
+ * @returns {boolean}
+ */
+export function packStringsApplied() {
+    return PACK_STRINGS !== null;
+}
+
+/**
  * Look up one string from the APPLIED PACK ONLY — no baked fallback.
  * For layered resolution where one concept has more than one legitimate
  * declaration site (slice 7: report.fallback.unknownOwner falls back to

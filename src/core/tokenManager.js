@@ -23,6 +23,8 @@ class TokenManagerClass {
   constructor() {
     this.database = {};
     this.groupInventory = null;
+    this.packInfo = null; // Retained load record {packId, version, contentHash, source}
+    this.gameConfig = null; // Retained pack game.json (or null when the pack ships none)
     this._dataManagerHelpers = null; // Injected dependency
     this._packLoader = defaultPackLoader; // Injectable for tests
   }
@@ -63,6 +65,12 @@ class TokenManagerClass {
       }
 
       this.database = pack.tokens;
+      // Retained for consumers that need the load's provenance later —
+      // e.g. the report-export warn reads packInfo/gameConfig from here,
+      // never from packLoader directly (App stays the sole injection
+      // point; domains reach pack state through App's collaborators).
+      this.packInfo = pack.info;
+      this.gameConfig = pack.gameConfig ?? null;
       const info = pack.info;
       Debug.log(`✅ Loaded ${Object.keys(this.database).length} tokens — pack ${info.packId || 'unknown'} v${info.version || '?'} (${info.source})`);
       Debug.log(`Sample keys: ${Object.keys(this.database).slice(0, 3).join(', ')}`);

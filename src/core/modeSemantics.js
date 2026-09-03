@@ -205,12 +205,21 @@ function _normalizeVerbNoun(mode) {
         return null;
     }
     const cleaned = mode.verbNoun.replace(CONTROL_AND_BIDI, '');
-    if (cleaned.length === 0 || cleaned.length > 24 || /[|{}]/.test(cleaned)) {
+    // Code points, not UTF-16 units — the schema's maxLength counts code
+    // points, and this twin must agree (same idiom as the icon cap).
+    if (cleaned.length === 0 || [...cleaned].length > 24 || /[|{}]/.test(cleaned)) {
         _warnDeclined(mode.id, 'verbNoun', 'must be 1-24 plain characters with no pipes or braces (it renders inside a markdown table row)');
         return null;
     }
     return cleaned;
 }
+
+// The engine-generic Type-cell noun for a scoring-mode claim whose mode
+// declares no usable verbNoun (benign-wording class; ALN's 'Sale' arrives
+// from the declared/baked mode table, never from here). Exported beside
+// its normalizer so the fallback and the DECLINE rule live in one module
+// (the report generator consumes both).
+export const GENERIC_VERB_NOUN = 'Claim';
 
 /**
  * Resolve a mode id to its normalized semantics record, or null when the

@@ -382,11 +382,20 @@ describe('verbNoun (slice 7 — the report Type-cell noun)', () => {
         expect(resolveMode('plain').verbNoun).toBeNull();
     });
 
+    it('counts CODE POINTS, not UTF-16 units — 13 astral glyphs sit within the 24 cap (schema maxLength semantics)', () => {
+        const glyphs = '💎'.repeat(13); // 26 UTF-16 units, 13 code points
+        applyPackModes({ modes: [
+            { id: 'gems', label: 'Gems', verbNoun: glyphs, scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true },
+        ] });
+        expect(resolveMode('gems').verbNoun).toBe(glyphs);
+    });
+
     it.each([
         ['a table-breaking pipe', 'Sa|le'],
         ['stray braces', 'Sa{le}'],
         ['a non-string value', 7],
         ['an over-long noun', 'x'.repeat(25)],
+        ['25 astral glyphs (over the code-point cap)', '💎'.repeat(25)],
         ['nothing but control characters', '\u0002\u0003'],
     ])('DECLINEs a verbNoun carrying %s with a warn (gate refusal twin)', (_label, bad) => {
         const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});

@@ -24,6 +24,7 @@ import { SessionReportGenerator } from '../../src/core/sessionReportGenerator.js
 import { applyPackModes, resolveMode } from '../../src/core/modeSemantics.js';
 import { applyPackStrings, getString } from '../../src/core/strings.js';
 import { applyPackMoneyFormat } from '../../src/utils/formatCurrency.js';
+import Debug from '../../src/utils/debug.js';
 
 // ---------------------------------------------------------------------------
 // Rich fixture: exercises all code paths (both transaction modes, group
@@ -627,6 +628,12 @@ describe('slice 7 — a divergently-worded pack (the toy shape) rewords WITHOUT 
     expect(report).toContain('| Fence |');
     expect(report).toContain('2,600 cr');
     expect(report).toContain('| gem001/Unattributed (');
+    // The ★ Detail cell's baseValue keeps the money AFFIX (adjudicated:
+    // it renders through formatCurrency under the pack money spec, same
+    // as every other money figure — the ALN golden pins `$150,000`
+    // in-cell; here the toy affix proves the same path pack-driven).
+    // Contraband is an unknown type → UNKNOWN → 0x on the baked values.
+    expect(report).toContain('(2★ Contraband, 25,000 cr × 0x)');
     assertStructuralInvariants(report);
   });
 
@@ -635,6 +642,45 @@ describe('slice 7 — a divergently-worded pack (the toy shape) rewords WITHOUT 
     applyPackStrings(TOY_STRINGS);
     const report = new SessionReportGenerator({}).generate(EMPTY_INPUT);
     expect(report).toContain('*No tips phoned in.*');
+    assertStructuralInvariants(report);
+  });
+});
+
+describe('slice 7 — a BOTH-class mode keeps the count line honest (tallies overlap; the residue is counted, never derived)', () => {
+  // Schema-legal today: nothing forbids scoringPolicy 'standard' WITH
+  // displayBehavior.surface 'scoreboard-evidence'. Such a claim counts in
+  // BOTH class tallies — and a subtraction-derived residue
+  // (accepted − evidence − scoring) would let it CANCEL a genuine
+  // neither-class claim out of the count line.
+  const BOTH_MODES = { modes: [
+    { id: 'exposesale', label: 'Expose-Sale', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true, displayBehavior: { surface: 'scoreboard-evidence' } },
+    { id: 'appraise', label: 'Appraise', scoringPolicy: 'none', entityRole: 'ledger', countsTowardGroups: false, claims: 'non-consuming', displayBehavior: { surface: 'none' } },
+  ] };
+  const BOTH_INPUT = {
+    session: { name: 'Overlap Night', startTime: '2026-09-01T01:00:00.000Z', endTime: '2026-09-01T02:00:00.000Z', teams: ['001'] },
+    scores: [{ teamId: '001', score: 100, adminAdjustments: [] }],
+    transactions: [
+      { status: 'accepted', mode: 'exposesale', tokenId: 'tok1', teamId: '001', timestamp: '2026-09-01T01:10:00.000Z', points: 100, valueRating: 1, memoryType: 'X', summary: 'Overlaps both classes.' },
+      { status: 'accepted', mode: 'appraise', tokenId: 'tok2', teamId: '001', timestamp: '2026-09-01T01:20:00.000Z', points: 0 },
+    ],
+    playerScans: [],
+  };
+
+  afterEach(() => {
+    applyPackModes(null);
+  });
+
+  it('a both-class claim never cancels a neither-class one out of the residue term, and the overlap is loud', () => {
+    applyPackModes(BOTH_MODES);
+    const logSpy = jest.spyOn(Debug, 'log').mockImplementation(() => {});
+    const report = new SessionReportGenerator({}).generate(BOTH_INPUT);
+    const sawOverlapWarn = logSpy.mock.calls.some(([m]) => String(m).includes('BOTH classes'));
+    logSpy.mockRestore();
+
+    // 2 accepted: exposesale counts in BOTH tallies; appraise is the
+    // genuine residue. Derived: max(0, 2−1−1) = 0 — the appraisal vanishes.
+    expect(report).toContain(`2 (1 ${getString('report.classLabels.evidence')}, 1 ${getString('report.classLabels.scoring')}, 1 ${getString('report.classLabels.other')})`);
+    expect(sawOverlapWarn).toBe(true);
     assertStructuralInvariants(report);
   });
 });
