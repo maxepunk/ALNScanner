@@ -13,6 +13,7 @@ import Debug from '../utils/debug.js';
 import defaultPackLoader, { PACK_SCHEMA_VERSION } from './packLoader.js';
 import { applyPackScoring, applyPackGroups, parseGroupInfo, isDeclaredGroup } from './scoring.js';
 import { applyPackStrings } from './strings.js';
+import { applyPackTheme } from './theme.js';
 import { applyPackModes, applyPackEntities } from './modeSemantics.js';
 
 /**
@@ -95,6 +96,11 @@ class TokenManagerClass {
       // Benign-wording class: no sidecar → baked wording, NO loud shim
       // (wrong wording can't corrupt a game the way wrong scoring can).
       applyPackStrings(pack.strings ?? null);
+
+      // Runtime visual identity from the pack's theme sidecar (theme
+      // unit). Same benign class as strings for the UNDECLARED case;
+      // declared-but-broken DECLINEs loudly inside applyPackTheme.
+      applyPackTheme(pack.theme ?? null);
 
       // Build group inventory for bonus calculations
       this.groupInventory = this.buildGroupInventory();

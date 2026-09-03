@@ -25,6 +25,7 @@ import packLoader from '../core/packLoader.js';
 import { SCORING_SOURCE } from '../core/scoring.js';
 import { wireModeIds, defaultModeId, entityLabel, entityLabelPlural } from '../core/modeSemantics.js';
 import { getString } from '../core/strings.js';
+import { applyThemeColorsToDom, packThemeApplied } from '../core/theme.js';
 import { formatCurrency } from '../utils/formatCurrency.js';
 
 /**
@@ -152,8 +153,15 @@ export async function loadTokenDatabase(tokenManager, uiManager) {
   }
 
   Debug.log('Token database loaded successfully');
-  renderPackInfo();
+  renderPackInfo(packLoader, undefined, {
+    declared: Boolean(tokenManager.gameConfig?.theme),
+    applied: packThemeApplied(),
+  });
   applyPackStringsToDom();
+  // Theme colors ride the same moment (theme unit): declared colors
+  // land as root custom properties; undeclared clears to the
+  // stylesheet's baked identity.
+  applyThemeColorsToDom();
   return true;
 }
 
@@ -228,7 +236,7 @@ export function applyPackStringsToDom(doc = typeof document !== 'undefined' ? do
  * when running from the build-time bundle (never refreshed). Null-guarded
  * on both pack state and DOM (headless harnesses have neither).
  */
-export function renderPackInfo(loader = packLoader, scoringSource = undefined) {
+export function renderPackInfo(loader = packLoader, scoringSource = undefined, themeState = undefined) {
   const info = loader.getActivePack();
   if (!info || typeof document === 'undefined') return;
   const line = document.getElementById('packInfoLine');
@@ -243,7 +251,12 @@ export function renderPackInfo(loader = packLoader, scoringSource = undefined) {
   // operator should see that here, not only in the console warn.
   const source = scoringSource !== undefined ? scoringSource : SCORING_SOURCE;
   const scoringNote = source === 'baked' ? ' · scoring: baked' : '';
-  if (display) display.textContent = `${info.version || 'unknown'} (${hashPrefix}) · ${info.source}${scoringNote}`;
+  // Theme provenance (theme unit §4a OBJ-2): a pack that DECLARES a
+  // theme which the scanner DECLINEd renders the full baked identity —
+  // the operator must see that here (the design-iteration loop must not
+  // fail silently; console warns are not an operator surface).
+  const themeNote = themeState && themeState.declared && !themeState.applied ? ' · theme: declined' : '';
+  if (display) display.textContent = `${info.version || 'unknown'} (${hashPrefix}) · ${info.source}${scoringNote}${themeNote}`;
   if (badge) badge.style.display = info.source === 'bundled' ? '' : 'none';
   line.style.display = '';
 }

@@ -114,7 +114,10 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       <span id="resultRfid"></span>
       <span id="resultType"></span>
       <span id="resultGroup"></span>
-      <span id="resultValue"></span>
+      <div class="transaction-detail">
+        <label>Value Rating:</label>
+        <span class="value" id="resultValue">-</span>
+      </div>
       <div id="resultSummaryContainer"></div>
       <p id="resultSummary"></p>
 
@@ -529,6 +532,53 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
 
       expect(document.getElementById('teamDetailsContainer').innerHTML).toContain('No Tokens');
     });
+
+    describe('themed rating display (theme unit ST.2 — site 2 of the star-drop)', () => {
+      const { applyPackTheme, _resetThemeForTesting } = require('../../../src/core/theme.js');
+      const container = () => document.getElementById('teamDetailsContainer');
+
+      afterEach(() => {
+        _resetThemeForTesting();
+      });
+
+      it('baked default renders the filled-only stars (byte-identical packless)', () => {
+        uiManager.renderTeamDetails('001', mockDataManager.transactions);
+        expect(container().innerHTML).toContain('⭐⭐⭐');
+        expect(container().innerHTML).toContain('Base Rating');
+      });
+
+      it("display 'none' omits the WHOLE Base Rating field", () => {
+        applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'none' } });
+        uiManager.renderTeamDetails('001', mockDataManager.transactions);
+        expect(container().innerHTML).not.toContain('Base Rating');
+        expect(container().innerHTML).not.toContain('⭐');
+      });
+
+      it("display 'numeric' renders the digit; the isUnknown branch keeps 'N/A'", () => {
+        applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'numeric' } });
+        mockDataManager.getEnhancedTeamTransactions.mockReturnValue({
+          hasCompletedGroups: false, hasIncompleteGroups: false,
+          hasUngroupedTokens: true, hasUnknownTokens: true,
+          ungroupedTokens: [
+            { rfid: 'token1', memoryType: 'Technical', valueRating: 3, group: 'G', isUnknown: false, id: 't1' },
+          ],
+          unknownTokens: [
+            { rfid: 'ghost', memoryType: 'UNKNOWN', valueRating: undefined, group: '', isUnknown: true, id: 't2' },
+          ],
+        });
+        uiManager.renderTeamDetails('001', mockDataManager.transactions);
+        const html = container().innerHTML;
+        expect(html).toContain('Base Rating');
+        expect(html).toMatch(/Base Rating[\s\S]*?>\s*3\s*</);
+        expect(html).toContain('N/A');
+      });
+
+      it('a hostile declined glyph never reaches the markup; a themed glyph renders ESCAPED as text', () => {
+        applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'stars', glyph: { filled: '💎' } } });
+        uiManager.renderTeamDetails('001', mockDataManager.transactions);
+        expect(container().innerHTML).toContain('💎💎💎');
+      });
+    });
   });
 
   describe('Token Result Display', () => {
@@ -577,6 +627,60 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       uiManager.showTokenResult(token, 'token1', false);
 
       expect(document.getElementById('resultValue').textContent).toBe('⭐⭐⭐');
+    });
+
+    describe('themed rating display (theme unit ST.2 — site 1 of the star-drop)', () => {
+      const { applyPackTheme, _resetThemeForTesting } = require('../../../src/core/theme.js');
+      const token = { SF_MemoryType: 'Technical', SF_ValueRating: 3, SF_Group: 'Group' };
+      const valueRow = () => document.getElementById('resultValue').closest('.transaction-detail');
+
+      beforeEach(() => {
+        mockSettings.mode = 'detective';
+      });
+
+      afterEach(() => {
+        _resetThemeForTesting();
+      });
+
+      it("display 'none' hides the WHOLE Value Rating row (label included) and clears the span", () => {
+        applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'none' } });
+        uiManager.showTokenResult(token, 'token1', false);
+        expect(valueRow().hidden).toBe(true);
+        expect(document.getElementById('resultValue').textContent).toBe('');
+      });
+
+      it("consecutive scans under 'none' never leak the prior render (show/hide on EVERY render — §4a T-1/O4)", () => {
+        uiManager.showTokenResult(token, 'token1', false); // stars render first
+        expect(document.getElementById('resultValue').textContent).toBe('⭐⭐⭐');
+        applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'none' } });
+        uiManager.showTokenResult(token, 'token2', false);
+        expect(valueRow().hidden).toBe(true);
+        expect(document.getElementById('resultValue').textContent).toBe('');
+      });
+
+      it("a scoring-mode render after a 'none' render UN-hides the row", () => {
+        applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'none' } });
+        uiManager.showTokenResult(token, 'token1', false);
+        expect(valueRow().hidden).toBe(true);
+        mockSettings.mode = 'blackmarket';
+        mockDataManager.calculateTokenValue.mockReturnValue(5000);
+        uiManager.showTokenResult(token, 'token1', false);
+        expect(valueRow().hidden).toBe(false);
+        expect(document.getElementById('resultValue').textContent).toBe('$5,000');
+      });
+
+      it("display 'numeric' renders the plain rating digit", () => {
+        applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'numeric' } });
+        uiManager.showTokenResult(token, 'token1', false);
+        expect(valueRow().hidden).toBe(false);
+        expect(document.getElementById('resultValue').textContent).toBe('3');
+      });
+
+      it("display 'stars' with a declared glyph renders the themed filled-only form", () => {
+        applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'stars', glyph: { filled: '💎' } } });
+        uiManager.showTokenResult(token, 'token1', false);
+        expect(document.getElementById('resultValue').textContent).toBe('💎💎💎');
+      });
     });
 
     it('should navigate to result screen', () => {

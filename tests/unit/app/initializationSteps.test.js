@@ -798,6 +798,21 @@ describe('InitializationSteps - ES6 Module', () => {
   });
 });
 
+describe('loadTokenDatabase applies theme colors to the DOM (theme unit ST.2)', () => {
+  const { applyPackTheme, _resetThemeForTesting } = require('../../../src/core/theme.js');
+
+  afterEach(() => {
+    _resetThemeForTesting();
+    document.documentElement.style.removeProperty('--color-mode-scoring');
+  });
+
+  it('injects declared colors after a successful load (the applyPackStringsToDom moment)', async () => {
+    applyPackTheme({ kind: 'theme', schemaVersion: 1, colors: { modeScoring: '#f0a020' } });
+    await loadTokenDatabase({ loadDatabase: jest.fn().mockResolvedValue(true) }, { showError: jest.fn() });
+    expect(document.documentElement.style.getPropertyValue('--color-mode-scoring')).toBe('#f0a020');
+  });
+});
+
 describe('renderPackInfo (Phase 3 A2 staleness visibility)', () => {
   const PACK_DOM = `
     <div class="device-id" id="packInfoLine" style="display: none;">Pack:
@@ -837,6 +852,36 @@ describe('renderPackInfo (Phase 3 A2 staleness visibility)', () => {
     expect(document.getElementById('packInfoDisplay').textContent)
       .toBe('unknown (no-hash) · bundled · scoring: baked');
     expect(document.getElementById('packBundledBadge').style.display).toBe('');
+  });
+
+  it('flags a DECLARED-but-DECLINED theme on the pack line (theme unit §4a OBJ-2 — console warns are not an operator surface)', () => {
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader({
+      packId: 'about-last-night',
+      version: '1.2.0',
+      contentHash: `sha256:${'c'.repeat(64)}`,
+      source: 'network',
+    }), 'pack', { declared: true, applied: false });
+
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('1.2.0 (cccccccc) · network · theme: declined');
+  });
+
+  it('shows NO theme note when the declared theme applied, or when none is declared', () => {
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader({
+      packId: 'about-last-night', version: '1.2.0',
+      contentHash: `sha256:${'c'.repeat(64)}`, source: 'network',
+    }), 'pack', { declared: true, applied: true });
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('1.2.0 (cccccccc) · network');
+
+    renderPackInfo(stubLoader({
+      packId: 'about-last-night', version: '1.2.0',
+      contentHash: `sha256:${'c'.repeat(64)}`, source: 'network',
+    }), 'pack', { declared: false, applied: false });
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('1.2.0 (cccccccc) · network');
   });
 
   it('flags baked scoring even when the pack itself came from the network (PR #12 review)', () => {

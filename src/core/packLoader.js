@@ -60,7 +60,7 @@ function fetchTimeoutSignal() {
 // declared ⇒ must load, so a missing declared sidecar fails the refresh
 // exactly like a missing tokens.json). Assets stay on their existing
 // channels.
-const RULES_ROLES = new Set(['game', 'tokens', 'strings']);
+const RULES_ROLES = new Set(['game', 'tokens', 'strings', 'theme']);
 
 async function webCryptoSha1Hex(buf) {
     const digest = await crypto.subtle.digest('SHA-1', buf);
@@ -150,7 +150,11 @@ export class PackLoader {
                 // but not the sidecar — the network tier must treat that
                 // incomplete cache like a missing cache and refresh,
                 // never activate half a pack it could complete right now.
-                const fromCache = await this._readPackFromCache(pointer.contentHash, { requireDeclaredStrings: true });
+                // requireDeclaredTheme joins for the same reason (theme
+                // unit §4a T-3): a pre-theme cache passes the hash check
+                // yet lacks the sidecar — half-activating would silently
+                // cancel a ruled theme choice (ALN's star-drop).
+                const fromCache = await this._readPackFromCache(pointer.contentHash, { requireDeclaredStrings: true, requireDeclaredTheme: true });
                 if (fromCache) {
                     return this._activate(fromCache, manifest, 'network');
                 }
@@ -246,6 +250,10 @@ export class PackLoader {
             if (declaredStrings && !Object.hasOwn(content, declaredStrings)) {
                 throw new Error(`game.json declares strings '${declaredStrings}' but the manifest staged no such rules file (role drift / non-canonical name)`);
             }
+            const declaredTheme = this._themePath(content['game.json']);
+            if (declaredTheme && !Object.hasOwn(content, declaredTheme)) {
+                throw new Error(`game.json declares theme '${declaredTheme}' but the manifest staged no such rules file (role drift / non-canonical name)`);
+            }
 
             // Also persist the manifest itself for cache-tier identity.
             await staging.put('/pack-manifest.json', new Response(JSON.stringify(manifest), {
@@ -298,7 +306,7 @@ export class PackLoader {
      * cached tokens with baked wording beats dropping to stale bundled
      * tokens for the sake of labels).
      */
-    async _readPackFromCache(contentHash, { requireDeclaredStrings = false } = {}) {
+    async _readPackFromCache(contentHash, { requireDeclaredStrings = false, requireDeclaredTheme = false } = {}) {
         if (!this._caches) return null;
         try {
             const cache = await this._caches.open(`${CACHE_PREFIX}${contentHash}`);
@@ -318,6 +326,16 @@ export class PackLoader {
                 if (stringsRes) content[stringsPath] = await stringsRes.json();
                 else if (requireDeclaredStrings) {
                     Debug.log(`packLoader: cached pack lacks its declared sidecar '${stringsPath}' (pre-3a staging) — refreshing`);
+                    return null;
+                }
+            }
+            // Theme sidecar: the same declared-path cache read (theme unit).
+            const themePath = this._themePath(content['game.json']);
+            if (themePath) {
+                const themeRes = await cache.match(`/${themePath}`);
+                if (themeRes) content[themePath] = await themeRes.json();
+                else if (requireDeclaredTheme) {
+                    Debug.log(`packLoader: cached pack lacks its declared sidecar '${themePath}' (pre-theme staging) — refreshing`);
                     return null;
                 }
             }
@@ -346,6 +364,13 @@ export class PackLoader {
         const strings = stringsPath
             ? await this._fetchBundledJson(stringsPath, `data/${stringsPath}`)
             : null;
+        // Theme sidecar: same best-effort class at this tier — a
+        // pre-theme bundled snapshot degrades to the baked identity,
+        // never to a load failure.
+        const themePath = this._themePath(game);
+        const theme = themePath
+            ? await this._fetchBundledJson(themePath, `data/${themePath}`)
+            : null;
         // Deliberate: when Tier 1 had no manifest this re-fetch 404s again
         // (≤2 extra requests on a pre-pack deployment). Accepted — bundled
         // identity display is worth it, and any published manifest ends it.
@@ -355,6 +380,7 @@ export class PackLoader {
                 'tokens.json': tokens,
                 ...(game ? { 'game.json': game } : {}),
                 ...(strings ? { [stringsPath]: strings } : {}),
+                ...(theme ? { [themePath]: theme } : {}),
             },
             identity: manifest
                 ? { packId: manifest.packId, version: manifest.version, contentHash: manifest.contentHash }
@@ -382,6 +408,11 @@ export class PackLoader {
         return typeof p === 'string' && p.length > 0 ? p : null;
     }
 
+    _themePath(gameConfig) {
+        const p = gameConfig?.theme;
+        return typeof p === 'string' && p.length > 0 ? p : null;
+    }
+
     _activate(content, identity, source) {
         const tokens = content['tokens.json'];
         // A 200 returning {} or a non-object would otherwise set an
@@ -406,10 +437,15 @@ export class PackLoader {
         const strings = stringsPath && Object.hasOwn(content, stringsPath)
             ? content[stringsPath]
             : null;
+        const themePath = this._themePath(gameConfig);
+        const theme = themePath && Object.hasOwn(content, themePath)
+            ? content[themePath]
+            : null;
         return {
             tokens,
             gameConfig,
             strings,
+            theme,
             info: this.getActivePack(),
         };
     }

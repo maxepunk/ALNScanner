@@ -599,4 +599,137 @@ describe('PackLoader', () => {
       expect(pack.strings).toBeNull();
     });
   });
+
+  describe('theme sidecar (theme unit ST.2 — the rules set grows again)', () => {
+    const THEME = { kind: 'theme', schemaVersion: 1, rating: { display: 'none' } };
+    const GAME_WITH_THEME = { ...GAME, theme: 'theme.json', requires: ['theme.identity'] };
+    const THEME_RULES_FILES = [
+      { path: 'game.json', role: 'game', sha1: sha1Of(GAME_WITH_THEME), size: 1 },
+      { path: 'tokens.json', role: 'tokens', sha1: sha1Of(TOKENS), size: 1 },
+      { path: 'theme.json', role: 'theme', sha1: sha1Of(THEME), size: 1 },
+    ];
+
+    it('network tier: fetches + verifies the declared theme, returns it as pack.theme + persists to cache', async () => {
+      const caches = makeCaches();
+      const { loader } = makeLoader({
+        caches,
+        routes: {
+          'pack-manifest.json': jsonResponse(manifestFor(HASH_B, THEME_RULES_FILES)),
+          'game.json': jsonResponse(GAME_WITH_THEME),
+          'tokens.json': jsonResponse(TOKENS),
+          'theme.json': jsonResponse(THEME),
+        },
+      });
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('network');
+      expect(pack.theme).toEqual(THEME);
+      const cached = await (await caches.open(`aln-pack-${HASH_B}`)).match('/theme.json');
+      expect(await cached.json()).toEqual(THEME);
+    });
+
+    it('a pack that declares no theme returns theme null (baked-identity class)', async () => {
+      const { loader } = makeLoader({
+        routes: {
+          'pack-manifest.json': jsonResponse(manifestFor(HASH_B, RULES_FILES)),
+          'game.json': jsonResponse(GAME),
+          'tokens.json': jsonResponse(TOKENS),
+        },
+      });
+      const pack = await loader.loadPack();
+      expect(pack.theme).toBeNull();
+    });
+
+    it('declared ⇒ must load: a 404ing declared theme fails the staged refresh (active pack untouched)', async () => {
+      const storage = makeStorage({
+        aln_pack_active: JSON.stringify({ packId: 'about-last-night', version: '1.0.0', contentHash: HASH_A }),
+      });
+      const caches = makeCaches();
+      const cache = await caches.open(`aln-pack-${HASH_A}`);
+      await cache.put('/tokens.json', new Response(JSON.stringify(TOKENS)));
+      await cache.put('/game.json', new Response(JSON.stringify(GAME)));
+
+      const { loader } = makeLoader({
+        caches,
+        storage,
+        routes: {
+          'pack-manifest.json': jsonResponse(manifestFor(HASH_B, THEME_RULES_FILES)),
+          'game.json': jsonResponse(GAME_WITH_THEME),
+          'tokens.json': jsonResponse(TOKENS),
+          // theme.json 404s — mid-publish / missing sidecar
+        },
+      });
+
+      const pack = await loader.loadPack();
+      // Refresh failed; the ladder lands on the prior ACTIVE cache.
+      expect(pack.info.contentHash).toBe(HASH_A);
+      expect(pack.theme).toBeNull();
+    });
+
+    it('fast path: a cache staged by PRE-THEME code is INCOMPLETE — refreshed, never half-activated (the §4a T-3 catch)', async () => {
+      // contentHash matches the pointer, but the cache predates the
+      // theme role: without requireDeclaredTheme the fast path would
+      // activate theme-less content and ALN's ruled star-drop would
+      // silently not happen.
+      const caches = makeCaches();
+      const storage = makeStorage({
+        aln_pack_active: JSON.stringify({ packId: 'about-last-night', version: '1.2.0', contentHash: HASH_B }),
+      });
+      const cache = await caches.open(`aln-pack-${HASH_B}`);
+      await cache.put('/tokens.json', new Response(JSON.stringify(TOKENS)));
+      await cache.put('/game.json', new Response(JSON.stringify(GAME_WITH_THEME)));
+      // no /theme.json — staged by pre-theme code
+
+      const { loader, fetchFn } = makeLoader({
+        caches,
+        storage,
+        routes: {
+          'pack-manifest.json': jsonResponse(manifestFor(HASH_B, THEME_RULES_FILES)),
+          'game.json': jsonResponse(GAME_WITH_THEME),
+          'tokens.json': jsonResponse(TOKENS),
+          'theme.json': jsonResponse(THEME),
+        },
+      });
+
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('network');
+      expect(pack.theme).toEqual(THEME);
+      expect(fetchFn.mock.calls.map(([u]) => u)).toContain('theme.json');
+      const completed = await (await caches.open(`aln-pack-${HASH_B}`)).match('/theme.json');
+      expect(await completed.json()).toEqual(THEME);
+    });
+
+    it('OFFLINE cache tier TOLERATES the incomplete pre-theme cache (tokens beat identity)', async () => {
+      const caches = makeCaches();
+      const storage = makeStorage({
+        aln_pack_active: JSON.stringify({ packId: 'about-last-night', version: '1.2.0', contentHash: HASH_B }),
+      });
+      const cache = await caches.open(`aln-pack-${HASH_B}`);
+      await cache.put('/tokens.json', new Response(JSON.stringify(TOKENS)));
+      await cache.put('/game.json', new Response(JSON.stringify(GAME_WITH_THEME)));
+      // no /theme.json, no network
+
+      const { loader } = makeLoader({ caches, storage, routes: {} });
+      const pack = await loader.loadPack();
+
+      expect(pack.info.source).toBe('cache');
+      expect(pack.tokens).toEqual(TOKENS);
+      expect(pack.theme).toBeNull();
+    });
+
+    it('bundled tier: theme is best-effort (an absent bundled theme degrades to baked, never a failure)', async () => {
+      const { loader } = makeLoader({
+        routes: {
+          'tokens.json': jsonResponse(TOKENS),
+          'game.json': jsonResponse(GAME_WITH_THEME),
+          // no theme.json at either bundled path
+        },
+      });
+      const pack = await loader.loadPack();
+      expect(pack.info.source).toBe('bundled');
+      expect(pack.theme).toBeNull();
+    });
+  });
 });

@@ -19,6 +19,7 @@ import {
 } from '../../core/modeSemantics.js';
 import { slugifyId } from '../../utils/slugify.js';
 import { formatStars } from '../../core/scoring.js';
+import { ratingDisplay, ratingGlyphs } from '../../core/theme.js';
 
 export class GameOpsRenderer {
   /**
@@ -354,12 +355,7 @@ export class GameOpsRenderer {
             <span class="token-detail-label">Memory Type</span>
             <span class="token-detail-info">${safeMemoryType}</span>
           </div>
-          <div class="token-detail-item">
-            <span class="token-detail-label">Base Rating</span>
-            <span class="token-detail-info">
-              ${isUnknown ? 'N/A' : formatStars(token.valueRating)}
-            </span>
-          </div>
+          ${this._renderBaseRatingField(isUnknown, token.valueRating)}
           <div class="token-detail-item">
             <span class="token-detail-label">Status</span>
             <span class="token-detail-info">
@@ -454,6 +450,56 @@ export class GameOpsRenderer {
   }
 
   /**
+   * The Team Details "Base Rating" field — SITE 2 of the three themed
+   * rating sites (theme unit; Q-3b-2/§13.5). 'none' omits the whole
+   * field ('N/A' included); 'numeric' renders the digit for rating ≥ 1
+   * and stays blank for unrated-known (the stars form's blank parallel);
+   * 'stars' is the baked filled-only form, glyphs themeable. Output is
+   * escaped at this innerHTML sink (§4a O1) like every neighboring
+   * pack-derived value.
+   * @param {boolean} isUnknown
+   * @param {number|undefined} valueRating
+   * @returns {string} HTML string ('' when the theme drops the field)
+   */
+  _renderBaseRatingField(isUnknown, valueRating) {
+    const display = ratingDisplay();
+    if (display === 'none') return '';
+    let info;
+    if (isUnknown) {
+      info = 'N/A';
+    } else if (display === 'numeric') {
+      info = valueRating >= 1 ? escapeHtml(String(valueRating)) : '';
+    } else {
+      info = escapeHtml(formatStars(valueRating, ratingGlyphs('filled-only')));
+    }
+    return `<div class="token-detail-item">
+            <span class="token-detail-label">Base Rating</span>
+            <span class="token-detail-info">
+              ${info}
+            </span>
+          </div>`;
+  }
+
+  /**
+   * The Game Activity card's rating line — SITE 3 of the three themed
+   * rating sites. 'none' omits the element; 'numeric' renders the digit
+   * for rating ≥ 1 and the unrated mark '—' otherwise (§4a T-6: a
+   * numeric 0 would read as a score, where the stars form's ☆☆☆☆☆ is a
+   * deliberate unrated affordance); 'stars' is the baked padded form,
+   * glyphs themeable. Escaped at the sink (§4a O1).
+   * @param {number} rating
+   * @returns {string} HTML string ('' when the theme drops the line)
+   */
+  _renderCardRating(rating) {
+    const display = ratingDisplay();
+    if (display === 'none') return '';
+    const content = display === 'numeric'
+      ? (rating >= 1 ? escapeHtml(String(rating)) : '—')
+      : escapeHtml(formatStars(rating, ratingGlyphs('padded')));
+    return `<div class="token-card__rating">${content}</div>`;
+  }
+
+  /**
    * Render a single token card for game activity.
    * @param {Object} token - Token activity data
    * @returns {string} HTML string
@@ -499,7 +545,7 @@ export class GameOpsRenderer {
           <span class="token-id">${escapeHtml(tokenId)}</span>
           <span class="token-type type-${slugifyId(memoryType)}">${escapeHtml(memoryType)}</span>
         </div>
-        <div class="token-card__rating">${formatStars(rating, { filled: '★', empty: '☆' })}</div>
+        ${this._renderCardRating(rating)}
 
         <div class="token-card__status status-${status} ${modeClassNames(claimEvent?.mode).join(' ')}">
           ${statusContent}

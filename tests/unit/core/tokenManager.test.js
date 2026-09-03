@@ -36,12 +36,28 @@ describe('TokenManager - ES6 Module', () => {
       source: 'network',
     };
 
-    function mockPack({ tokens, gameConfig = null }) {
+    function mockPack({ tokens, gameConfig = null, theme = null }) {
       TokenManager._packLoader = {
-        loadPack: jest.fn().mockResolvedValue({ tokens, gameConfig, info: { ...PACK_INFO } }),
+        loadPack: jest.fn().mockResolvedValue({ tokens, gameConfig, theme, info: { ...PACK_INFO } }),
         getActivePack: jest.fn(() => ({ ...PACK_INFO })),
       };
     }
+
+    it('applies the pack THEME sidecar at load (theme unit ST.2) and clears it when the next pack ships none', async () => {
+      const { ratingDisplay, _resetThemeForTesting } = require('../../../src/core/theme.js');
+      const mockTokens = { t1: { SF_RFID: 't1', SF_ValueRating: 1, SF_MemoryType: 'Personal' } };
+      try {
+        mockPack({ tokens: mockTokens, theme: { kind: 'theme', schemaVersion: 1, rating: { display: 'none' } } });
+        await TokenManager.loadDatabase();
+        expect(ratingDisplay()).toBe('none');
+
+        mockPack({ tokens: mockTokens });
+        await TokenManager.loadDatabase();
+        expect(ratingDisplay()).toBe('stars');
+      } finally {
+        _resetThemeForTesting();
+      }
+    });
 
     it('loads the token database and group inventory from the pack', async () => {
       const mockTokens = {

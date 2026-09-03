@@ -16,6 +16,7 @@ import { formatCurrency } from '../utils/formatCurrency.js';
 import { wireModeIds, isScoringMode, modeHasSurface, modeLabel, modeClassNames } from '../core/modeSemantics.js';
 import { getString } from '../core/strings.js';
 import { formatStars } from '../core/scoring.js';
+import { ratingDisplay, ratingGlyphs } from '../core/theme.js';
 import { formatDuration } from '../utils/formatDuration.js';
 import { showToast as sharedShowToast } from '../utils/showToast.js';
 import { GameOpsRenderer } from './renderers/GameOpsRenderer.js';
@@ -431,6 +432,14 @@ class UIManager {
 
     if (!statusEl || !rfidEl || !typeEl || !groupEl || !valueEl) return;
 
+    // Show/hide discipline on EVERY render (theme unit §4a T-1/O4): the
+    // value row is a static shared element — reset it up front so a
+    // prior render's state (the themed 'none' hide, stale stars) can
+    // never leak into this one.
+    const valueRow = valueEl.closest('.transaction-detail');
+    if (valueRow) valueRow.hidden = false;
+    valueEl.textContent = '';
+
     if (isUnknown) {
       statusEl.className = 'status-message error';
       statusEl.innerHTML = `
@@ -468,7 +477,18 @@ class UIManager {
         });
         valueEl.textContent = formatCurrency(tokenScore);
       } else {
-        valueEl.textContent = formatStars(token.SF_ValueRating);
+        // The rating display is a THEMED choice (theme unit, site 1 of
+        // the three GM-scanner rating sites — Q-3b-2/§13.5): 'stars'
+        // (baked, byte-identical packless), 'numeric', or 'none' (ALN's
+        // ruled star-drop — the whole row hides, label included).
+        const display = ratingDisplay();
+        if (display === 'none') {
+          if (valueRow) valueRow.hidden = true;
+        } else if (display === 'numeric') {
+          valueEl.textContent = String(token.SF_ValueRating ?? '');
+        } else {
+          valueEl.textContent = formatStars(token.SF_ValueRating, ratingGlyphs('filled-only'));
+        }
       }
 
       // Show summary if available (all modes - gives GM visibility on token content)
