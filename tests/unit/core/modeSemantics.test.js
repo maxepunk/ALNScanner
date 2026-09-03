@@ -87,7 +87,7 @@ describe('resolveMode — pack-declared flags (open vocabulary)', () => {
   it('resolves normalized records for modes the engine has never heard of', () => {
     applyPackModes(TOY_CONFIG);
     expect(resolveMode('fence')).toEqual({
-      id: 'fence', label: 'Fence', verb: null,
+      id: 'fence', label: 'Fence', verb: null, verbNoun: null,
       scoringPolicy: 'standard', entityRole: 'ledger', defaultEntity: null,
       countsTowardGroups: true, claims: 'consuming',
       claimedLabel: null, icon: null,
@@ -366,4 +366,40 @@ describe('legacy ALN shim (debt ledger L6)', () => {
     const realModes = JSON.parse(fs.readFileSync(gamePath, 'utf8')).modes;
     expect(JSON.parse(JSON.stringify(LEGACY_ALN_MODES))).toEqual(realModes);
   });
+});
+
+describe('verbNoun (slice 7 — the report Type-cell noun)', () => {
+    afterEach(() => {
+        applyPackModes(null);
+    });
+
+    it('resolveMode carries a declared verbNoun; absence normalizes to null', () => {
+        applyPackModes({ modes: [
+            { id: 'fence', label: 'Fence', verbNoun: 'Fence', scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true },
+            { id: 'plain', label: 'Plain', scoringPolicy: 'none', entityRole: 'attribution', countsTowardGroups: false },
+        ] });
+        expect(resolveMode('fence').verbNoun).toBe('Fence');
+        expect(resolveMode('plain').verbNoun).toBeNull();
+    });
+
+    it.each([
+        ['a table-breaking pipe', 'Sa|le'],
+        ['stray braces', 'Sa{le}'],
+        ['a non-string value', 7],
+        ['an over-long noun', 'x'.repeat(25)],
+        ['nothing but control characters', '\u0002\u0003'],
+    ])('DECLINEs a verbNoun carrying %s with a warn (gate refusal twin)', (_label, bad) => {
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        applyPackModes({ modes: [
+            { id: 'bad', label: 'Bad', verbNoun: bad, scoringPolicy: 'standard', entityRole: 'ledger', countsTowardGroups: true },
+        ] });
+        expect(resolveMode('bad').verbNoun).toBeNull();
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("mode 'bad': declared verbNoun is not usable"));
+        warnSpy.mockRestore();
+    });
+
+    it('the baked ALN table declares blackmarket verbNoun Sale (bound by the drift tripwire)', () => {
+        expect(LEGACY_ALN_MODES.find((m) => m.id === 'blackmarket').verbNoun).toBe('Sale');
+        expect(LEGACY_ALN_MODES.find((m) => m.id === 'detective').verbNoun).toBeUndefined();
+    });
 });

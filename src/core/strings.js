@@ -39,6 +39,51 @@ const BAKED_STRINGS = Object.freeze({
     scoreboard: Object.freeze({
         emptyEvidence: 'Awaiting evidence...',
     }),
+    // Session-report wording (A3 slice 7). This bake IS ALN's report
+    // voice: ALN's strings.json deliberately declares NO report section
+    // (the LEGACY_ENTITY_LABEL bake-is-the-voice pattern), so the
+    // contract goldens — which render with no pack applied — prove the
+    // exact bytes the pipeline consumes. A structural snapshot pin in
+    // sessionReport.contract.test.js fails loudly on any drift here.
+    report: Object.freeze({
+        labels: Object.freeze({
+            teams: 'Teams',
+            totalTransactions: 'Total Transactions',
+            playerScans: 'Player Scans',
+            uniqueTokens: 'Unique Tokens Processed',
+            mostActiveDevices: 'Most Active Devices',
+            mostScannedTokens: 'Most Scanned Tokens',
+            neverTurnedIn: 'Tokens Scanned but Never Turned In',
+        }),
+        classLabels: Object.freeze({
+            evidence: 'detective',
+            scoring: 'black market',
+            other: 'other',
+        }),
+        empty: Object.freeze({
+            evidence: 'No detective transactions this session.',
+            scoring: 'No scoring events this session.',
+            playerScans: 'No player scans this session.',
+        }),
+        breakdown: Object.freeze({
+            transactions: 'transactions',
+            adjustments: 'adjustments',
+            sales: 'sales',
+        }),
+        fallback: Object.freeze({
+            dash: '—',
+            unknownOwner: 'Unknown',
+            unknownDuration: 'Unknown',
+            unknownDate: 'Unknown Date',
+        }),
+        duration: Object.freeze({
+            hours: 'h',
+            minutes: 'm',
+        }),
+        adjustmentLabel: 'Adjustment',
+        scanNoun: 'scan',
+        scanNounPlural: 'scans',
+    }),
 });
 
 // The applied pack sidecar's sections (kind/schemaVersion stripped), or
@@ -87,6 +132,20 @@ export function getString(path) {
     if (typeof fromPack === 'string' && fromPack.length > 0) return fromPack;
     const baked = _walk(BAKED_STRINGS, segments);
     return typeof baked === 'string' && baked.length > 0 ? baked : null;
+}
+
+/**
+ * Look up one string from the APPLIED PACK ONLY — no baked fallback.
+ * For layered resolution where one concept has more than one legitimate
+ * declaration site (slice 7: report.fallback.unknownOwner falls back to
+ * the pack's scoreboard.unknownOwner before the bake). Returns null for
+ * anything but a declared non-empty string leaf.
+ * @param {string} path
+ * @returns {string|null}
+ */
+export function getPackString(path) {
+    const fromPack = _walk(PACK_STRINGS, path.split('.'));
+    return typeof fromPack === 'string' && fromPack.length > 0 ? fromPack : null;
 }
 
 // Object.hasOwn at every step: a section or key named 'constructor'

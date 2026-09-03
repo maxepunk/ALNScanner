@@ -169,6 +169,21 @@ export class GameAdminDomain {
         return;
       }
 
+      // Provenance warn (slice 7): the exported markdown carries no pack
+      // identity (adding one would break the contract bytes — the B9
+      // bundle's engine stamp is the artifact that will), so this warn is
+      // the only staleness signal at the point of export. Wording applied
+      // from a non-network tier may not be the pack the session ran under.
+      const { packLoader } = await import('../../core/packLoader.js');
+      const packInfo = packLoader.getActivePack();
+      if (packInfo && packInfo.source !== 'network') {
+        console.warn(
+          `[report] exporting with pack wording from the '${packInfo.source}' tier `
+          + `(pack ${packInfo.packId ?? 'unknown'}) — not refreshed from the orchestrator; `
+          + 'the report may carry stale or baked wording.'
+        );
+      }
+
       const generator = new SessionReportGenerator(tokenDatabase);
       const markdown = generator.generate({ session: sessionData, scores, transactions, playerScans });
 

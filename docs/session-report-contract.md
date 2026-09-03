@@ -108,7 +108,36 @@ The Player Activity section does NOT end with `---` (it is the final section).
 3. The presence or position of `---` section separators
 4. The format of the H1 header line (`# Session Report: {name}`)
 5. The format of the metadata line (`**{date} | Duration: {duration} | Teams: {count}**`)
-6. The "empty section" placeholder text (italics lines)
+6. *(revised, A3 slice 7)* — the placeholder/wording rule below
+
+**Wording is pack-declared (v2, A3 slice 7 — program §13.4).** Rules #1–#5
+name the STRUCTURE, which stays engine-fixed. Everything else the reader
+sees — the empty-section placeholders (the old Rule #6), the summary
+bullet labels (including the pipeline-read "Total Transactions" label),
+class-count terms, breakdown words, fallback copy, duration units, and
+the Scoring Timeline Type noun (per-mode `verbNoun`) — resolves through
+`strings.report.*` / the mode table at render time. Three mechanisms
+keep the pipeline's view of ALN output unchanged by construction:
+
+- The baked defaults ARE ALN's voice: ALN's pack deliberately declares
+  NO report strings section, so the golden masters (which render with no
+  pack applied) byte-pin the exact tier the pipeline consumes. A
+  snapshot pin fails loudly if any baked default drifts.
+- Every pack-declared leaf passes ONE sanitizer (`_rt`/`_cell`: escape
+  `|`, newlines to spaces, strip control/bidi) before ANY sink —
+  including the H1/metadata-line interpolations — so Rules #4/#5's
+  format lines are escape-protected: no wording can add an unescaped
+  `|` separator or split a table row. An adversarial-pack contract test
+  proves the anchors are byte-identical under hostile wording.
+- A divergently-worded pack changes only its OWN report's wording; the
+  structural invariants are asserted on every render the contract test
+  produces (baked, sparse, empty, divergent, adversarial).
+
+Provenance asymmetry, recorded: the B9 session bundle carries an
+`engine` identity stamp; this markdown cannot gain one without breaking
+the golden bytes. The scanner warns at export when the applied pack
+wording did not come from the network tier — that warn is the only
+staleness signal the exported file gets.
 
 **Safe changes** (do not affect pipeline):
 
@@ -136,11 +165,19 @@ To regenerate the golden string after an intentional (pipeline-coordinated) chan
 
 ## Phase 3 Migration Path (B9)
 
-When Phase 3 structured bundle lands:
-1. Engine emits `session-bundle.json` (versioned schema, game-agnostic)
-2. ALN pack includes a markdown template that renders the bundle into today's table format
-3. The GenAI pipeline migrates to consuming `session-bundle.json` directly
-4. This contract document is superseded by the bundle schema
-5. The golden master test is replaced by a bundle-schema validation test
+Status (A3 slice 7, 2026-09-03): the bundle SCHEMA landed as an engine
+contract artifact — `backend/contracts/session-bundle.schema.json`
+(integer schemaVersion const, engine identity stamp, optional data
+sections, reserved `intake` and per-game `gameState` namespaces) with
+its own contract suite. No emitter exists yet by design; Phase-4 D
+intake is the first writer. The old "markdown template" step is DEAD —
+program §13.4 ruled "no template language"; wording is a structured
+strings block instead (above).
+
+Remaining path (ROADMAP §8.10, owner-paced):
+1. Phase-4 D intake writes `session-bundle.json` instances
+2. The GenAI pipeline migrates to consuming the bundle directly
+3. This contract document is superseded by the bundle schema
+4. The golden master tests are replaced by bundle-schema validation
 
 Until step 3 is complete and confirmed, this contract is binding.

@@ -9,14 +9,36 @@
  * - playerScans: [{tokenId, deviceId, timestamp}]
  * - tokenDatabase: local tokens.json (has character field)
  *
+ * Wording vs structure (A3 slice 7, program §13.4): the section headings,
+ * table header rows, `---` separators, the H1/metadata line FORMATS and
+ * the ★ Detail-cell format are ENGINE-FIXED — they are the external
+ * pipeline's parse anchors (docs/session-report-contract.md, Change Rules
+ * #1–#5) and never move to pack data. Everything else the reader sees is
+ * pack-declared WORDING, resolved through strings.report.* (baked
+ * defaults = ALN's exact voice, so the golden masters pin the shipped
+ * tier byte-for-byte) — plus the per-mode `verbNoun` for the Scoring
+ * Timeline Type cell. Every pack-declared leaf passes through _rt()
+ * (escape `|`, newlines to spaces, strip control/bidi) so no wording can
+ * split a table row or forge the metadata line.
+ *
  * @module core/sessionReportGenerator
  */
 
 import { SCORING_CONFIG } from './scoring.js';
-// Slice 1: report SECTION MEMBERSHIP is flag-driven (evidence surface /
-// scoring policy); the ALN-flavored section headings and wording stay as-is
-// until slice 3a (strings & theming) makes report text pack-driven.
-import { isScoringMode, isEvidenceMode } from './modeSemantics.js';
+import { isScoringMode, isEvidenceMode, resolveMode } from './modeSemantics.js';
+import { getString, getPackString } from './strings.js';
+import { formatCurrency } from '../utils/formatCurrency.js';
+import Debug from '../utils/debug.js';
+
+// The engine-generic Type-cell noun for a scoring-mode claim whose mode
+// declares no verbNoun (benign-wording class; ALN's 'Sale' arrives from
+// the declared/baked mode table, never from here).
+const GENERIC_VERB_NOUN = 'Claim';
+
+// C0 controls + DEL + bidi controls — same class the mode resolvers
+// strip. Kept local: modeSemantics does not export its copy, and the two
+// uses guard different sinks (DOM there, markdown here).
+const CONTROL_AND_BIDI = /[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
 
 export class SessionReportGenerator {
   /**
@@ -63,6 +85,18 @@ export class SessionReportGenerator {
     const blackmarket = accepted.filter(tx => isScoringMode(tx.mode));
     const uniqueTokens = new Set(accepted.map(tx => tx.tokenId));
 
+    // Claims in a mode that is neither evidence- nor scoring-class would
+    // otherwise vanish from this count line (toy 'appraise' is the shipped
+    // case). The residue term renders ONLY when non-zero, so ALN's
+    // two-class bytes never change; the warn makes the residue loud.
+    const unclassified = Math.max(0, accepted.length - detective.length - blackmarket.length);
+    let classCounts = `${detective.length} ${this._rt('report.classLabels.evidence')}, `
+      + `${blackmarket.length} ${this._rt('report.classLabels.scoring')}`;
+    if (unclassified > 0) {
+      classCounts += `, ${unclassified} ${this._rt('report.classLabels.other')}`;
+      Debug.log(`report: ${unclassified} accepted claim(s) fall in neither the evidence nor the scoring class — rendered under the '${this._rt('report.classLabels.other')}' term`, true);
+    }
+
     // Sort scores descending
     const sortedScores = [...scores].sort((a, b) => b.score - a.score);
     const hasAnyAdjustments = sortedScores.some(s => s.adminAdjustments?.length > 0);
@@ -73,7 +107,7 @@ export class SessionReportGenerator {
           const adjTotal = s.adminAdjustments.reduce((sum, adj) => sum + adj.delta, 0);
           const txScore = s.score - adjTotal;
           const sign = adjTotal >= 0 ? '+' : '';
-          line += ` (${this._formatCurrency(txScore)} transactions ${sign}${this._formatCurrency(adjTotal)} adjustments)`;
+          line += ` (${this._formatCurrency(txScore)} ${this._rt('report.breakdown.transactions')} ${sign}${this._formatCurrency(adjTotal)} ${this._rt('report.breakdown.adjustments')})`;
         }
         return line;
       })
@@ -82,10 +116,10 @@ export class SessionReportGenerator {
     const lines = [
       '## Session Summary',
       '',
-      `- **Teams:** ${(session.teams || []).join(', ')}`,
-      `- **Total Transactions:** ${accepted.length} (${detective.length} detective, ${blackmarket.length} black market)`,
-      `- **Player Scans:** ${playerScans.length}`,
-      `- **Unique Tokens Processed:** ${uniqueTokens.size}`,
+      `- **${this._rt('report.labels.teams')}:** ${(session.teams || []).join(', ')}`,
+      `- **${this._rt('report.labels.totalTransactions')}:** ${accepted.length} (${classCounts})`,
+      `- **${this._rt('report.labels.playerScans')}:** ${playerScans.length}`,
+      `- **${this._rt('report.labels.uniqueTokens')}:** ${uniqueTokens.size}`,
       '',
       '### Final Standings',
       '',
@@ -112,7 +146,7 @@ export class SessionReportGenerator {
     ];
 
     if (detective.length === 0) {
-      lines.push('*No detective transactions this session.*');
+      lines.push(`*${this._rt('report.empty.evidence')}*`);
       lines.push('');
       lines.push('---');
       lines.push('');
@@ -125,7 +159,7 @@ export class SessionReportGenerator {
     for (const tx of detective) {
       const owner = this._getTokenOwner(tx.tokenId);
       const time = this._formatTimestamp(tx.timestamp);
-      const evidence = (tx.summary || '—').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+      const evidence = this._cell(tx.summary || this._rt('report.fallback.dash'));
       lines.push(`| ${tx.tokenId} | ${owner} | ${tx.teamId} | ${time} | ${evidence} |`);
     }
 
@@ -143,7 +177,7 @@ export class SessionReportGenerator {
       .filter(tx => tx.status === 'accepted' && isScoringMode(tx.mode))
       .map(tx => ({
         timestamp: tx.timestamp,
-        type: 'Sale',
+        type: resolveMode(tx.mode)?.verbNoun ?? GENERIC_VERB_NOUN,
         detail: this._formatSaleDetail(tx),
         team: tx.teamId,
         amount: tx.points,
@@ -154,7 +188,7 @@ export class SessionReportGenerator {
       .filter(s => s.adminAdjustments?.length > 0)
       .flatMap(s => s.adminAdjustments.map(adj => ({
         timestamp: adj.timestamp,
-        type: 'Adjustment',
+        type: this._rt('report.adjustmentLabel'),
         detail: this._formatAdjustmentDetail(adj),
         team: s.teamId,
         amount: adj.delta,
@@ -170,7 +204,7 @@ export class SessionReportGenerator {
     ];
 
     if (timeline.length === 0) {
-      lines.push('*No scoring events this session.*');
+      lines.push(`*${this._rt('report.empty.scoring')}*`);
       lines.push('');
       lines.push('---');
       lines.push('');
@@ -183,7 +217,7 @@ export class SessionReportGenerator {
     for (const event of timeline) {
       const time = this._formatTimestamp(event.timestamp);
       const amount = this._formatSignedCurrency(event.amount);
-      lines.push(`| ${time} | ${event.type} | ${event.detail} | ${event.team} | ${amount} |`);
+      lines.push(`| ${time} | ${this._cell(event.type)} | ${event.detail} | ${event.team} | ${amount} |`);
     }
 
     // Final Totals with breakdown
@@ -213,7 +247,7 @@ export class SessionReportGenerator {
       const finalDisplay = t.final >= 0
         ? this._formatCurrency(t.final)
         : `-${this._formatCurrency(Math.abs(t.final))}`;
-      lines.push(`- **${t.team}:** ${finalDisplay} (${this._formatCurrency(t.salesTotal)} sales ${adjSign} ${this._formatCurrency(adjAbs)} adjustments)`);
+      lines.push(`- **${t.team}:** ${finalDisplay} (${this._formatCurrency(t.salesTotal)} ${this._rt('report.breakdown.sales')} ${adjSign} ${this._formatCurrency(adjAbs)} ${this._rt('report.breakdown.adjustments')})`);
     }
 
     lines.push('');
@@ -223,7 +257,12 @@ export class SessionReportGenerator {
   }
 
   /**
-   * Format sale detail with parenthetical scoring breakdown.
+   * Format sale detail with parenthetical scoring breakdown. The format
+   * itself — `{tokenId}/{owner} ({rating}★ {type}, {base} × {mult}x)` —
+   * is a CONTRACTED shape (the ★ is a contracted delimiter,
+   * session-report-contract.md:64); the money affixes ride the pack's
+   * scoring.display.format like every other scanner surface (slice 3b's
+   * recorded slice-7 deferral, completed here).
    */
   _formatSaleDetail(tx) {
     const owner = this._getTokenOwner(tx.tokenId);
@@ -232,17 +271,16 @@ export class SessionReportGenerator {
     const baseValue = SCORING_CONFIG.BASE_VALUES[rating] || 0;
     const multiplier = SCORING_CONFIG.TYPE_MULTIPLIERS[type]
       ?? SCORING_CONFIG.TYPE_MULTIPLIERS.UNKNOWN ?? 0;
-    return `${tx.tokenId}/${owner} (${rating}★ ${type}, ${this._formatCurrency(baseValue)} × ${multiplier}x)`
-      .replace(/\|/g, '\\|');
+    return this._cell(`${tx.tokenId}/${owner} (${rating}★ ${type}, ${this._formatCurrency(baseValue)} × ${multiplier}x)`);
   }
 
   /**
    * Format adjustment detail with reason and GM station.
    */
   _formatAdjustmentDetail(adj) {
-    const reason = (adj.reason || '—').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+    const reason = this._cell(adj.reason || this._rt('report.fallback.dash'));
     const station = adj.gmStation;
-    return station ? `${reason} (${station})` : reason;
+    return station ? `${reason} (${this._cell(station)})` : reason;
   }
 
   /**
@@ -255,7 +293,7 @@ export class SessionReportGenerator {
     ];
 
     if (playerScans.length === 0) {
-      lines.push('*No player scans this session.*');
+      lines.push(`*${this._rt('report.empty.playerScans')}*`);
       lines.push('');
       return lines.join('\n');
     }
@@ -285,9 +323,10 @@ export class SessionReportGenerator {
       deviceCounts[scan.deviceId] = (deviceCounts[scan.deviceId] || 0) + 1;
     }
     const sortedDevices = Object.entries(deviceCounts).sort((a, b) => b[1] - a[1]);
-    lines.push('**Most Active Devices:**');
+    lines.push(`**${this._rt('report.labels.mostActiveDevices')}:**`);
     for (const [deviceId, count] of sortedDevices) {
-      lines.push(`- ${deviceId}: ${count} scan${count !== 1 ? 's' : ''}`);
+      const noun = count !== 1 ? this._rt('report.scanNounPlural') : this._rt('report.scanNoun');
+      lines.push(`- ${deviceId}: ${count} ${noun}`);
     }
 
     // Most scanned tokens
@@ -299,10 +338,10 @@ export class SessionReportGenerator {
     const sortedTokens = Object.entries(tokenCounts).sort((a, b) => b[1] - a[1]);
     const topTokens = sortedTokens.filter(([, count]) => count > 1);
     if (topTokens.length > 0) {
-      lines.push('**Most Scanned Tokens:**');
+      lines.push(`**${this._rt('report.labels.mostScannedTokens')}:**`);
       for (const [tokenId, count] of topTokens) {
         const owner = this._getTokenOwner(tokenId);
-        lines.push(`- ${tokenId} (${owner}): ${count} scans`);
+        lines.push(`- ${tokenId} (${owner}): ${count} ${this._rt('report.scanNounPlural')}`);
       }
       lines.push('');
     }
@@ -317,7 +356,7 @@ export class SessionReportGenerator {
     const neverTurnedIn = [...scannedTokenIds].filter(id => !processedTokenIds.has(id));
 
     if (neverTurnedIn.length > 0) {
-      lines.push('**Tokens Scanned but Never Turned In:**');
+      lines.push(`**${this._rt('report.labels.neverTurnedIn')}:**`);
       for (const tokenId of neverTurnedIn.sort()) {
         const owner = this._getTokenOwner(tokenId);
         lines.push(`- ${tokenId} (${owner})`);
@@ -331,22 +370,57 @@ export class SessionReportGenerator {
   // --- Utility methods ---
 
   /**
-   * Look up the character owner name for a token.
-   * @param {string} tokenId
-   * @returns {string} Character name or 'Unknown'
+   * Resolve one pack-declared report wording leaf, sanitized for every
+   * report sink: control/bidi stripped, `|` escaped, newlines to spaces.
+   * ONE boundary instead of per-site judgement calls — byte-neutral for
+   * the baked/ALN wording, so the golden masters prove the identity.
+   * @param {string} path - dotted strings path under report.*
+   * @returns {string}
    */
-  _getTokenOwner(tokenId) {
-    const token = this.tokenDatabase[tokenId];
-    return token?.owner || 'Unknown';
+  _rt(path) {
+    return this._cell(getString(path) ?? '');
   }
 
   /**
-   * Format a number as currency with dollar sign and commas.
+   * Sanitize free text bound for a markdown sink (table cells, the
+   * metadata line's interpolations): no wording — pack-declared or
+   * data-carried — may split a row, add a column, or smuggle controls.
+   * @param {string} text
+   * @returns {string}
+   */
+  _cell(text) {
+    return String(text)
+      .replace(CONTROL_AND_BIDI, ' ')
+      .replace(/\|/g, '\\|');
+  }
+
+  /**
+   * Look up the character owner name for a token. The unattributed
+   * fallback resolves in layers: a declared report.fallback.unknownOwner
+   * wins; else the pack's scoreboard.unknownOwner (one concept, one
+   * declaration — the toy's 'Unattributed' reaches its report without a
+   * second key); else the baked 'Unknown'. The scoreboard key is read
+   * PACK-tier only — it has no baked default and must never leak null.
+   * @param {string} tokenId
+   * @returns {string}
+   */
+  _getTokenOwner(tokenId) {
+    const token = this.tokenDatabase[tokenId];
+    if (token?.owner) return this._cell(token.owner);
+    const declared = getPackString('report.fallback.unknownOwner')
+      ?? getPackString('scoreboard.unknownOwner');
+    return this._cell(declared ?? getString('report.fallback.unknownOwner') ?? '');
+  }
+
+  /**
+   * Format a number under the ACTIVE pack's money spec (slice 3b) — the
+   * baked ALN spec renders byte-identical to the legacy '$' + en-US
+   * grouping, including the $-25,000 negative quirk the golden pins.
    * @param {number} amount
    * @returns {string}
    */
   _formatCurrency(amount) {
-    return '$' + (amount ?? 0).toLocaleString('en-US');
+    return formatCurrency(amount ?? 0);
   }
 
   /**
@@ -366,7 +440,7 @@ export class SessionReportGenerator {
    * @returns {string}
    */
   _formatTimestamp(isoTimestamp) {
-    if (!isoTimestamp) return '—';
+    if (!isoTimestamp) return this._rt('report.fallback.dash');
     const date = new Date(isoTimestamp);
     return date.toLocaleTimeString('en-US', {
       hour: '2-digit',
@@ -381,7 +455,7 @@ export class SessionReportGenerator {
    * @returns {string}
    */
   _formatDate(isoTimestamp) {
-    if (!isoTimestamp) return 'Unknown Date';
+    if (!isoTimestamp) return this._rt('report.fallback.unknownDate');
     const date = new Date(isoTimestamp);
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
@@ -398,11 +472,11 @@ export class SessionReportGenerator {
    * @returns {string}
    */
   _formatDuration(startTime, endTime) {
-    if (!startTime || !endTime) return 'Unknown';
+    if (!startTime || !endTime) return this._rt('report.fallback.unknownDuration');
     const ms = new Date(endTime) - new Date(startTime);
     const totalMinutes = Math.floor(ms / 60000);
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
-    return `${hours}h ${minutes}m`;
+    return `${hours}${this._rt('report.duration.hours')} ${minutes}${this._rt('report.duration.minutes')}`;
   }
 }

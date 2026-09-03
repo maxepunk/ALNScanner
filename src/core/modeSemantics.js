@@ -35,6 +35,7 @@ export const LEGACY_ALN_MODES = Object.freeze([
     Object.freeze({
         id: 'blackmarket',
         label: 'Black Market',
+        verbNoun: 'Sale',
         verb: 'Sell',
         scoringPolicy: 'standard',
         entityRole: 'ledger',
@@ -190,6 +191,28 @@ function _normalizeIcon(mode) {
 }
 
 /**
+ * Normalize a declared verbNoun (slice 7): the NOUN form of the mode's
+ * action ('Sale', 'Fence'), rendered as the session report's Scoring
+ * Timeline Type cell. Table-breakers (pipes, braces), over-long or
+ * empty values DECLINE to null with a once-per-mode warn (the
+ * activation gate's refusal twin — mirrors the backend's
+ * normalizedVerbNoun exactly).
+ */
+function _normalizeVerbNoun(mode) {
+    if (mode.verbNoun === undefined) return null; // absent = silent fallback
+    if (typeof mode.verbNoun !== 'string') {
+        _warnDeclined(mode.id, 'verbNoun', 'not a string');
+        return null;
+    }
+    const cleaned = mode.verbNoun.replace(CONTROL_AND_BIDI, '');
+    if (cleaned.length === 0 || cleaned.length > 24 || /[|{}]/.test(cleaned)) {
+        _warnDeclined(mode.id, 'verbNoun', 'must be 1-24 plain characters with no pipes or braces (it renders inside a markdown table row)');
+        return null;
+    }
+    return cleaned;
+}
+
+/**
  * Resolve a mode id to its normalized semantics record, or null when the
  * active table does not declare it. The record always carries every flag:
  * absent displayBehavior normalizes to {surface:'none'}, absent fields to
@@ -215,6 +238,7 @@ export function resolveMode(modeId) {
         claims: mode.claims === undefined ? 'consuming' : mode.claims,
         claimedLabel: _normalizeClaimedLabel(mode),
         icon: _normalizeIcon(mode),
+        verbNoun: _normalizeVerbNoun(mode),
         displayBehavior: {
             surface: db.surface || 'none',
             fields: Array.isArray(db.fields) ? [...db.fields] : [],
