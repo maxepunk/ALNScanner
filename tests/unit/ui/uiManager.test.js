@@ -676,6 +676,12 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
         expect(document.getElementById('resultValue').textContent).toBe('3');
       });
 
+      it("numeric NEVER renders a sub-1 rating as a score — 0 is blank, like the stars form (close review, T-6's rationale)", () => {
+        applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'numeric' } });
+        uiManager.showTokenResult({ ...token, SF_ValueRating: 0 }, 'token0', false);
+        expect(document.getElementById('resultValue').textContent).toBe('');
+      });
+
       it("display 'stars' with a declared glyph renders the themed filled-only form", () => {
         applyPackTheme({ kind: 'theme', schemaVersion: 1, rating: { display: 'stars', glyph: { filled: '💎' } } });
         uiManager.showTokenResult(token, 'token1', false);

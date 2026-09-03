@@ -112,6 +112,11 @@ export function applyPackTheme(sidecar) {
     }
 
     const applied = {};
+    // Tracks whether any SCANNER-CONSUMABLE leaf/section was attempted
+    // and declined — the whole-DECLINE trigger below. Unknown-section
+    // warns deliberately don't count (a future section beside working
+    // content must not flip the theme to declined).
+    let anyDeclined = false;
 
     const colors = sidecar.colors;
     if (colors && typeof colors === 'object' && !Array.isArray(colors)) {
@@ -121,6 +126,7 @@ export function applyPackTheme(sidecar) {
                 _warn(`theme colors key '${key}' is unknown`);
             } else if (typeof val !== 'string' || !THEME_HEX.test(val)) {
                 _warn(`theme colors.${key} '${val}' is not a strict 6-digit hex color`);
+                anyDeclined = true;
             } else {
                 out[key] = val;
             }
@@ -128,6 +134,7 @@ export function applyPackTheme(sidecar) {
         if (Object.keys(out).length > 0) applied.colors = out;
     } else if (colors !== undefined) {
         _warn('theme colors section is not an object');
+        anyDeclined = true;
     }
 
     const rating = sidecar.rating;
@@ -135,6 +142,7 @@ export function applyPackTheme(sidecar) {
         if (!RATING_DISPLAYS.has(rating.display)) {
             // The whole section declines: display drives the sites.
             _warn(`theme rating.display '${rating.display}' is not drivable (stars/numeric/none)`);
+            anyDeclined = true;
         } else {
             const out = { display: rating.display };
             const glyph = rating.glyph;
@@ -157,6 +165,27 @@ export function applyPackTheme(sidecar) {
         }
     } else if (rating !== undefined) {
         _warn('theme rating section is not an object');
+        anyDeclined = true;
+    }
+
+    // Loudness parity with the gate's unknown-section vocabulary (close
+    // review F3): 'scoreboard' is KNOWN — the TV page consumes it, the
+    // scanner just has nothing to do with it, so it stays silent.
+    for (const key of Object.keys(sidecar)) {
+        if (!['kind', 'schemaVersion', 'colors', 'rating', 'scoreboard'].includes(key)) {
+            _warn(`theme section '${key}' is unknown (future sections arrive by engine consumption, never tolerance)`);
+        }
+    }
+
+    // Attempted-and-ALL-declined = whole DECLINE (close review F2): an
+    // all-typos sidecar must not read as applied — the pack line's
+    // 'theme: declined' note is the operator's only signal on the
+    // gate-less standalone tiers (§4a OBJ-2). Nothing-attempted
+    // (headers-only / scoreboard-only) stays vacuously applied.
+    if (anyDeclined && Object.keys(applied).length === 0) {
+        _warn('theme sidecar declared visual identity but EVERY leaf declined — whole DECLINE, baked identity stands');
+        PACK_THEME = null;
+        return false;
     }
 
     PACK_THEME = applied;

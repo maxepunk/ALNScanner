@@ -485,7 +485,10 @@ class UIManager {
         if (display === 'none') {
           if (valueRow) valueRow.style.display = 'none';
         } else if (display === 'numeric') {
-          valueEl.textContent = String(token.SF_ValueRating ?? '');
+          // A sub-1 rating renders BLANK, never '0' — a numeric zero
+          // reads as a score (T-6's rationale; the stars form is blank
+          // for the same token).
+          valueEl.textContent = token.SF_ValueRating >= 1 ? String(token.SF_ValueRating) : '';
         } else {
           valueEl.textContent = formatStars(token.SF_ValueRating, ratingGlyphs('filled-only'));
         }
