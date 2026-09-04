@@ -4,7 +4,7 @@ const mockTokenManager = {
   findToken: jest.fn((id) => ({
     SF_MemoryType: 'Technical',
     SF_ValueRating: 3,
-    SF_Group: 'Test Group (x3)',
+    SF_Group: 'Test Group',
     summary: 'Test summary'
   }))
 };

@@ -68,8 +68,15 @@
             </div>
             <div class="header-content">
                 <h1>Transaction Station</h1>
-                <div id="modeIndicator" class="mode-indicator mode-detective" data-action="app.toggleMode" title="Click to switch mode">Detective Mode</div>
+                <div id="modeIndicator" class="mode-indicator mode-detective mode-evidence" data-action="app.toggleMode" title="Click to switch mode">Detective Mode</div>
+                <!-- Slice 1: segmented selector rendered from the pack's declared
+                     modes (uiManager.renderModeSelector) — the N-mode control the
+                     binary toggle grew into; the pill above cycles + indicates. -->
+                <div id="modeSelector" class="mode-selector" role="group" aria-label="Game mode"></div>
                 <div class="device-id">Device ID: <span id="deviceIdDisplay">001</span></div>
+                <!-- A2 staleness visibility: pack <version> (<hash-prefix>) · <source>,
+                     plus a warning badge when running from the build-time bundle -->
+                <div class="device-id" id="packInfoLine" style="display: none;">Pack: <span id="packInfoDisplay"></span> <span id="packBundledBadge" style="display: none; color: var(--color-accent-warning);" title="Pack never refreshed on this device — running the build-time copy">⚠ bundled</span></div>
             </div>
         </div>
 
@@ -148,7 +155,7 @@
 
         <!-- Team Entry Screen -->
         <div id="teamEntryScreen" class="screen">
-            <h2 class="screen-title">Select Team</h2>
+            <h2 class="screen-title" id="teamEntryTitle">Select Team</h2>
 
             <!-- UNIFIED: Single text input -->
             <div class="team-input-container">
@@ -173,11 +180,11 @@
         <!-- Scan Screen -->
         <div id="scanScreen" class="screen">
             <div class="status-message">
-                Team <strong id="currentTeam"></strong> Ready
+                <span id="currentTeamNoun">Team</span> <strong id="currentTeam"></strong> Ready
             </div>
             <div class="scan-area">
                 <div class="scan-icon">📡</div>
-                <h2>Tap Memory Token</h2>
+                <h2 id="scanPrompt">Tap Memory Token</h2>
                 <p id="scanStatus">Scanning... Tap a token</p>
             </div>
             <button class="btn btn-secondary" data-action="app.manualEntry">Manual Entry</button>
@@ -235,11 +242,11 @@
                 </div>
                 <div class="summary-stat">
                     <div class="value" id="uniqueTeams">0</div>
-                    <div class="label">Teams</div>
+                    <div class="label" id="uniqueTeamsLabel">Teams</div>
                 </div>
                 <div class="summary-stat">
                     <div class="value" id="totalValue">0</div>
-                    <div class="label">Total Value</div>
+                    <div class="label" id="historyValueLabel">Total Value</div>
                 </div>
                 <div class="summary-stat">
                     <div class="value" id="avgValue">0</div>
@@ -262,7 +269,7 @@
         <div id="scoreboardScreen" class="screen">
             <div class="header" style="margin-bottom: 20px;">
                 <h2>🏆 Black Market Scoreboard</h2>
-                <p style="color: #666; font-size: 14px;">Team Rankings</p>
+                <p style="color: #666; font-size: 14px;" id="scoreboardSubtitle">Team Rankings</p>
             </div>
             
             <div id="scoreboardContainer" class="scoreboard-container">
@@ -524,7 +531,7 @@
 
             <!-- Score Board Section -->
             <section class="admin-section">
-                <h3>Team Scores</h3>
+                <h3 id="adminScoreboardTitle">Team Scores</h3>
                 <div id="admin-score-board" class="score-board">
                     <!-- Rendered by UIManager.renderScoreboard() -->
                 </div>

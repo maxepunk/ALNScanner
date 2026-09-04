@@ -12,10 +12,13 @@ import {
   detectNFCSupport,
   registerServiceWorker,
   loadTokenDatabase,
+  renderPackInfo,
+  applyPackStringsToDom,
   applyURLModeOverride,
   determineInitialScreen,
   applyInitialScreenDecision,
-  showLoadingScreen
+  showLoadingScreen,
+  validateSettingsMode,
 } from '../../../src/app/initializationSteps.js';
 import Debug from '../../../src/utils/debug.js';
 
@@ -273,6 +276,186 @@ describe('InitializationSteps - ES6 Module', () => {
     });
   });
 
+  describe('applyPackStringsToDom() (slice 3a — pack rewording of the static shell)', () => {
+    const { applyPackStrings } = require('../../../src/core/strings.js');
+
+    beforeEach(() => {
+      document.body.innerHTML = `
+        <h2 id="scanPrompt">Tap Memory Token</h2>
+        <div id="teamValueLabel">Total Value</div>
+        <div id="historyValueLabel">Total Value</div>
+        <p id="scoreboard-evidence-hint">Awaiting evidence...</p>
+      `;
+    });
+
+    afterEach(() => {
+      applyPackStrings(null);
+      document.body.innerHTML = '';
+    });
+
+    it('rewrites title, scan prompt, stat label, and evidence hint from the applied sidecar', () => {
+      applyPackStrings({
+        kind: 'strings',
+        schemaVersion: 2,
+        scanner: {
+          appTitle: 'Fence Terminal',
+          scanPrompt: 'Tap Loot Tag',
+          statLabels: { totalValue: 'Total Haul' },
+        },
+        scoreboard: { emptyEvidence: 'Awaiting tips...' },
+      });
+
+      applyPackStringsToDom();
+
+      expect(document.title).toBe('Fence Terminal');
+      expect(document.getElementById('scanPrompt').textContent).toBe('Tap Loot Tag');
+      expect(document.getElementById('teamValueLabel').textContent).toBe('Total Haul');
+      expect(document.getElementById('historyValueLabel').textContent).toBe('Total Haul');
+      expect(document.getElementById('scoreboard-evidence-hint').textContent).toBe('Awaiting tips...');
+    });
+
+    it('with no sidecar applied, rewrites the shell with the baked wording (no-op for ALN)', () => {
+      applyPackStringsToDom();
+
+      expect(document.title).toBe('Memory Transaction Station');
+      expect(document.getElementById('scanPrompt').textContent).toBe('Tap Memory Token');
+      expect(document.getElementById('teamValueLabel').textContent).toBe('Total Value');
+      expect(document.getElementById('scoreboard-evidence-hint').textContent).toBe('Awaiting evidence...');
+    });
+
+    it('re-renders the static money seeds under the pack money spec (slice 3b)', () => {
+      const { applyPackMoneyFormat } = require('../../../src/utils/formatCurrency.js');
+      document.body.innerHTML += `
+        <span id="teamBaseScore">$0</span>
+        <span id="teamBonusScore">$0</span>
+        <span id="teamTotalScore">$0</span>
+      `;
+      applyPackMoneyFormat('#,### cr');
+
+      try {
+        applyPackStringsToDom();
+        expect(document.getElementById('teamBaseScore').textContent).toBe('0 cr');
+        expect(document.getElementById('teamBonusScore').textContent).toBe('0 cr');
+        expect(document.getElementById('teamTotalScore').textContent).toBe('0 cr');
+      } finally {
+        applyPackMoneyFormat(null);
+      }
+    });
+
+    it('tolerates a partial DOM (elements absent) and a null document', () => {
+      document.body.innerHTML = '';
+      expect(() => applyPackStringsToDom()).not.toThrow();
+      expect(() => applyPackStringsToDom(null)).not.toThrow();
+    });
+
+    it('Q1: rewrites the entity-noun statics from the declared entities.label (ALN: Team → Account)', () => {
+      const { applyPackEntities, _resetForTesting } = require('../../../src/core/modeSemantics.js');
+      document.body.innerHTML += `
+        <h2 id="teamEntryTitle">Select Team</h2>
+        <span id="currentTeamNoun">Team</span>
+        <div id="uniqueTeamsLabel">Teams</div>
+        <p id="scoreboardSubtitle">Team Rankings</p>
+        <h3 id="adminScoreboardTitle">Team Scores</h3>
+        <h2 id="teamDetailsTitle">Team Details</h2>
+        <input id="teamNameInput" placeholder="Enter team name...">
+        <button data-action="app.finishTeam">Finish Team</button>
+        <button data-action="app.finishTeam">Finish Team</button>
+      `;
+
+      try {
+        applyPackEntities({ entities: { label: { singular: 'Account', plural: 'Accounts' } } });
+        applyPackStringsToDom();
+
+        expect(document.getElementById('teamEntryTitle').textContent).toBe('Select Account');
+        expect(document.getElementById('currentTeamNoun').textContent).toBe('Account');
+        expect(document.getElementById('uniqueTeamsLabel').textContent).toBe('Accounts');
+        expect(document.getElementById('scoreboardSubtitle').textContent).toBe('Account Rankings');
+        expect(document.getElementById('adminScoreboardTitle').textContent).toBe('Account Scores');
+        expect(document.getElementById('teamDetailsTitle').textContent).toBe('Account Details');
+        expect(document.getElementById('teamNameInput').placeholder).toBe('Enter account name...');
+        document.querySelectorAll('button[data-action="app.finishTeam"]').forEach((btn) => {
+          expect(btn.textContent).toBe('Finish Account');
+        });
+        // CSS-rendered empty state reads the custom property (quoted CSS string)
+        expect(document.documentElement.style.getPropertyValue('--entity-empty-team-list'))
+          .toBe('"No accounts yet"');
+      } finally {
+        _resetForTesting();
+        document.documentElement.style.removeProperty('--entity-empty-team-list');
+      }
+    });
+
+    it('Q1: with no declared entities, the statics keep the baked Team wording byte-identical', () => {
+      document.body.innerHTML += `
+        <h2 id="teamEntryTitle">Select Team</h2>
+        <input id="teamNameInput" placeholder="Enter team name...">
+      `;
+
+      applyPackStringsToDom();
+
+      expect(document.getElementById('teamEntryTitle').textContent).toBe('Select Team');
+      expect(document.getElementById('teamNameInput').placeholder).toBe('Enter team name...');
+      expect(document.documentElement.style.getPropertyValue('--entity-empty-team-list'))
+        .toBe('"No teams yet"');
+      document.documentElement.style.removeProperty('--entity-empty-team-list');
+    });
+
+    it('loadTokenDatabase applies the pack wording to the DOM after a successful load', async () => {
+      applyPackStrings({
+        kind: 'strings', schemaVersion: 2, scanner: { scanPrompt: 'Tap Loot Tag' },
+      });
+      mockTokenManager.loadDatabase.mockResolvedValue(true);
+
+      await loadTokenDatabase(mockTokenManager, mockUIManager);
+
+      expect(document.getElementById('scanPrompt').textContent).toBe('Tap Loot Tag');
+    });
+  });
+
+  describe('default-export completeness (structural — the L2 boot-failure class)', () => {
+    it('every named function export is present on the default export object', async () => {
+      // app.js consumes the DEFAULT export object; a named export missing
+      // from it is invisible to jsdom unit tests (they mock the module)
+      // and boots-fails the real app ("...is not a function" at init —
+      // caught by L2 when validateSettingsMode was first left off).
+      const mod = await import('../../../src/app/initializationSteps.js');
+      const named = Object.keys(mod).filter(
+        (k) => k !== 'default' && typeof mod[k] === 'function'
+      );
+      const missing = named.filter((k) => typeof mod.default[k] !== 'function');
+      expect(missing).toEqual([]);
+    });
+  });
+
+  describe('validateSettingsMode() (slice 1 — stale saved mode resets to the pack default)', () => {
+    let mockSettings;
+
+    beforeEach(() => {
+      mockSettings = { mode: 'detective', save: jest.fn() };
+    });
+
+    it('keeps a persisted mode the active pack declares (no reset, no save)', () => {
+      const reset = validateSettingsMode(mockSettings);
+
+      expect(reset).toBe(false);
+      expect(mockSettings.mode).toBe('detective');
+      expect(mockSettings.save).not.toHaveBeenCalled();
+    });
+
+    it('RESETS a stale persisted id to the pack FIRST declared mode with a loud log', () => {
+      mockSettings.mode = 'constellation'; // pack switched under a saved setting
+      const initialCount = Debug.messages.length;
+
+      const reset = validateSettingsMode(mockSettings);
+
+      expect(reset).toBe(true);
+      expect(mockSettings.mode).toBe('blackmarket'); // ALN table modes[0]
+      expect(mockSettings.save).toHaveBeenCalled();
+      expect(Debug.messages.length).toBeGreaterThan(initialCount);
+      expect(Debug.messages.some((m) => String(m).includes('STALE MODE RESET'))).toBe(true);
+    });
+  });
+
   describe('applyURLModeOverride()', () => {
     it('should set blackmarket mode when ?mode=blackmarket is present', () => {
       const result = applyURLModeOverride('?mode=blackmarket', mockSettings);
@@ -297,8 +480,16 @@ describe('InitializationSteps - ES6 Module', () => {
       expect(mockSettings.save).not.toHaveBeenCalled();
     });
 
-    it('should return false when mode parameter is different', () => {
+    it('applies ?mode=detective too (slice 1: any pack-declared id is a valid override)', () => {
       const result = applyURLModeOverride('?mode=detective', mockSettings);
+
+      expect(result).toBe(true);
+      expect(mockSettings.mode).toBe('detective');
+      expect(mockSettings.save).toHaveBeenCalled();
+    });
+
+    it('REFUSES an id the active pack does not declare (loud, never applied blind)', () => {
+      const result = applyURLModeOverride('?mode=constellation', mockSettings);
 
       expect(result).toBe(false);
       expect(mockSettings.save).not.toHaveBeenCalled();
@@ -604,5 +795,121 @@ describe('InitializationSteps - ES6 Module', () => {
       await expect(loadTokenDatabase(mockTokenManager, mockUIManager)).rejects.toThrow();
       expect(mockUIManager.showError).toHaveBeenCalled();
     });
+  });
+});
+
+describe('loadTokenDatabase applies theme colors to the DOM (theme unit ST.2)', () => {
+  const { applyPackTheme, _resetThemeForTesting } = require('../../../src/core/theme.js');
+
+  afterEach(() => {
+    _resetThemeForTesting();
+    document.documentElement.style.removeProperty('--color-mode-scoring');
+  });
+
+  it('injects declared colors after a successful load (the applyPackStringsToDom moment)', async () => {
+    applyPackTheme({ kind: 'theme', schemaVersion: 1, colors: { modeScoring: '#f0a020' } });
+    await loadTokenDatabase({ loadDatabase: jest.fn().mockResolvedValue(true) }, { showError: jest.fn() });
+    expect(document.documentElement.style.getPropertyValue('--color-mode-scoring')).toBe('#f0a020');
+  });
+});
+
+describe('renderPackInfo (Phase 3 A2 staleness visibility)', () => {
+  const PACK_DOM = `
+    <div class="device-id" id="packInfoLine" style="display: none;">Pack:
+      <span id="packInfoDisplay"></span>
+      <span id="packBundledBadge" style="display: none;">⚠ bundled</span>
+    </div>`;
+
+  function stubLoader(info) {
+    return { getActivePack: jest.fn(() => info) };
+  }
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('renders `<version> (<hash-prefix>) · <source>` and reveals the line', () => {
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader({
+      packId: 'about-last-night',
+      version: '1.2.0',
+      contentHash: `sha256:${'a'.repeat(64)}`,
+      source: 'network',
+    }), 'pack');
+
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('1.2.0 (aaaaaaaa) · network');
+    expect(document.getElementById('packInfoLine').style.display).toBe('');
+    expect(document.getElementById('packBundledBadge').style.display).toBe('none');
+  });
+
+  it('shows the warning badge for the bundled source, with null-identity fallbacks', () => {
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader({
+      packId: null, version: null, contentHash: null, source: 'bundled',
+    }), 'baked');
+
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('unknown (no-hash) · bundled · scoring: baked');
+    expect(document.getElementById('packBundledBadge').style.display).toBe('');
+  });
+
+  it('flags a DECLARED-but-DECLINED theme on the pack line (theme unit §4a OBJ-2 — console warns are not an operator surface)', () => {
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader({
+      packId: 'about-last-night',
+      version: '1.2.0',
+      contentHash: `sha256:${'c'.repeat(64)}`,
+      source: 'network',
+    }), 'pack', { declared: true, applied: false });
+
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('1.2.0 (cccccccc) · network · theme: declined');
+  });
+
+  it('shows NO theme note when the declared theme applied, or when none is declared', () => {
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader({
+      packId: 'about-last-night', version: '1.2.0',
+      contentHash: `sha256:${'c'.repeat(64)}`, source: 'network',
+    }), 'pack', { declared: true, applied: true });
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('1.2.0 (cccccccc) · network');
+
+    renderPackInfo(stubLoader({
+      packId: 'about-last-night', version: '1.2.0',
+      contentHash: `sha256:${'c'.repeat(64)}`, source: 'network',
+    }), 'pack', { declared: false, applied: false });
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('1.2.0 (cccccccc) · network');
+  });
+
+  it('flags baked scoring even when the pack itself came from the network (PR #12 review)', () => {
+    // A network-sourced pack that ships no game.json still runs the L2
+    // scoring shim — the operator must see that on the pack line, not
+    // only in the console warn.
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader({
+      packId: 'about-last-night',
+      version: '1.2.0',
+      contentHash: `sha256:${'b'.repeat(64)}`,
+      source: 'network',
+    }), 'baked');
+
+    expect(document.getElementById('packInfoDisplay').textContent)
+      .toBe('1.2.0 (bbbbbbbb) · network · scoring: baked');
+  });
+
+  it('is a no-op before any pack load (null info)', () => {
+    document.body.innerHTML = PACK_DOM;
+    renderPackInfo(stubLoader(null));
+    expect(document.getElementById('packInfoLine').style.display).toBe('none');
+  });
+
+  it('is a no-op when the settings DOM is absent (headless harnesses)', () => {
+    document.body.innerHTML = '';
+    expect(() => renderPackInfo(stubLoader({
+      packId: 'x', version: '1', contentHash: null, source: 'cache',
+    }))).not.toThrow();
   });
 });

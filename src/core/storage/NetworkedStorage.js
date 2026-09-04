@@ -8,6 +8,7 @@
 import { IStorageStrategy } from './IStorageStrategy.js';
 import { calculateTokenValue } from '../scoring.js';
 import { buildGameActivity } from '../gameActivityBuilder.js';
+import { isConsumingMode } from '../modeSemantics.js';
 
 export class NetworkedStorage extends IStorageStrategy {
   /**
@@ -147,8 +148,9 @@ export class NetworkedStorage extends IStorageStrategy {
       timestamp: new Date().toISOString()
     });
 
-    // Mark locally for duplicate prevention
-    if (transaction.tokenId) {
+    // Mark locally for duplicate prevention — CONSUMING claims only
+    // (D3s2: a non-consuming action never registers, backend parity)
+    if (transaction.tokenId && isConsumingMode(transaction.mode)) {
       this.scannedTokens.add(transaction.tokenId);
     }
 
@@ -371,7 +373,9 @@ export class NetworkedStorage extends IStorageStrategy {
     // device is blocked up-front instead of showing an optimistic success the
     // backend will reject as duplicate. Mutates the Set in place (shared
     // reference with UnifiedDataManager via _syncScannedTokens).
-    if (tx.tokenId) {
+    // CONSUMING claims only (D3s2): a broadcast non-consuming transaction
+    // must NOT lock the token fleet-wide — it claimed nothing.
+    if (tx.tokenId && isConsumingMode(tx.mode)) {
       this.scannedTokens.add(tx.tokenId);
       this.persistScannedTokens();
     }

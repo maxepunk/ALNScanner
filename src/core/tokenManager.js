@@ -10,6 +10,11 @@
  */
 
 import Debug from '../utils/debug.js';
+import defaultPackLoader, { PACK_SCHEMA_VERSION } from './packLoader.js';
+import { applyPackScoring, applyPackGroups, parseGroupInfo, isDeclaredGroup } from './scoring.js';
+import { applyPackStrings } from './strings.js';
+import { applyPackTheme } from './theme.js';
+import { applyPackModes, applyPackEntities } from './modeSemantics.js';
 
 /**
  * TokenManager Class
@@ -19,7 +24,10 @@ class TokenManagerClass {
   constructor() {
     this.database = {};
     this.groupInventory = null;
+    this.packInfo = null; // Retained load record {packId, version, contentHash, source}
+    this.gameConfig = null; // Retained pack game.json (or null when the pack ships none)
     this._dataManagerHelpers = null; // Injected dependency
+    this._packLoader = defaultPackLoader; // Injectable for tests
   }
 
   /**
@@ -31,43 +39,68 @@ class TokenManagerClass {
   }
 
   /**
-   * Load token database from external JSON file
+   * Load the token database via the game-pack loader (Phase 3 A2).
+   *
+   * The packLoader owns the load order (network → cache → bundled), the
+   * staged atomic refresh, and the HTTP-3/HTTP-4 hardening the old direct
+   * fetch chain carried. Runtime scoring is applied here from the pack's
+   * game.json — replacing the build-time bake (F-TOOL-05).
    * @returns {Promise<boolean>} Success status
    */
   async loadDatabase() {
     try {
-      // HTTP-3: the dist ROOT is the real location — vite publicDir:'data' copies
-      // the CONTENTS of data/ into the dist root, so data/tokens.json does not
-      // exist in production (it 404'd ~29x per session, logging an error on the
-      // critical path each load). Try the root first; keep data/ as a dev/
-      // back-compat fallback. A first-try miss is debug-level, not error-level.
-      let response = await fetch('tokens.json');
-      if (!response.ok) {
-        Debug.log('tokens.json not at root, trying data/ fallback'); // debug-level
-        response = await fetch('data/tokens.json');
-        if (!response.ok) {
-          throw new Error('Failed to load tokens.json from root or data/');
-        }
+      const pack = await this._packLoader.loadPack();
+
+      // Pack schemaVersion gate (tokens-v2 cutover, round-2 review
+      // C2/C14/C17 — the backend gate's EXACT-match mirror at the load
+      // boundary, covering every tier incl. SW-cache): a v1 pack's
+      // suffixed SF_Group names would silently read 1x here (this code
+      // has no suffix parser); a future pack must refuse, never
+      // half-parse. Fail-hard like any other unloadable database.
+      const declaredSchema = pack.gameConfig?.schemaVersion;
+      if (declaredSchema !== undefined && declaredSchema !== PACK_SCHEMA_VERSION) {
+        Debug.log(
+          `❌ Pack schemaVersion ${declaredSchema} — this scanner reads ` +
+          `${PACK_SCHEMA_VERSION} only (tokens-v2 cutover). Refusing the pack.`, true);
+        return false;
       }
 
-      // HTTP-4: a 200 can still be the SPA HTML shell for an unknown static path.
-      // Check the content-type before parsing so we fail with a clear cause
-      // instead of an opaque "Unexpected token <" SyntaxError.
-      const contentType = response.headers?.get?.('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error('Token database response was not JSON (got SPA shell?)');
-      }
-
-      const parsed = await response.json();
-      // A 200 returning {} or a non-object would otherwise set an empty/invalid
-      // database silently. Require a non-empty plain-object token map.
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.keys(parsed).length === 0) {
-        throw new Error('Token database is empty or not a token map');
-      }
-
-      this.database = parsed;
-      Debug.log(`✅ Loaded ${Object.keys(this.database).length} tokens from ${response.url}`);
+      this.database = pack.tokens;
+      // Retained for consumers that need the load's provenance later —
+      // e.g. the report-export warn reads packInfo/gameConfig from here,
+      // never from packLoader directly (App stays the sole injection
+      // point; domains reach pack state through App's collaborators).
+      this.packInfo = pack.info;
+      this.gameConfig = pack.gameConfig ?? null;
+      const info = pack.info;
+      Debug.log(`✅ Loaded ${Object.keys(this.database).length} tokens — pack ${info.packId || 'unknown'} v${info.version || '?'} (${info.source})`);
       Debug.log(`Sample keys: ${Object.keys(this.database).slice(0, 3).join(', ')}`);
+
+      // Runtime scoring from the pack's rules artifact (game.json). When
+      // absent (older published pack), the baked legacy shim stays active
+      // and warns loudly (transitional-debt ledger L2).
+      applyPackScoring(pack.gameConfig?.scoring);
+      applyPackGroups(pack.gameConfig?.groups);
+      this._warnUndeclaredGroups();
+
+      // Runtime mode table from the same artifact (slice 1). Same shim
+      // doctrine: no modes block → baked ALN table + loud warn (ledger L6).
+      applyPackModes(pack.gameConfig);
+
+      // Entity noun from the same artifact (Q1): ALN rebrands Team →
+      // Account. Benign wording class — absent block keeps the baked
+      // Team/Teams silently.
+      applyPackEntities(pack.gameConfig);
+
+      // Runtime display strings from the pack's sidecar (slice 3a).
+      // Benign-wording class: no sidecar → baked wording, NO loud shim
+      // (wrong wording can't corrupt a game the way wrong scoring can).
+      applyPackStrings(pack.strings ?? null);
+
+      // Runtime visual identity from the pack's theme sidecar (theme
+      // unit). Same benign class as strings for the UNDECLARED case;
+      // declared-but-broken DECLINEs loudly inside applyPackTheme.
+      applyPackTheme(pack.theme ?? null);
 
       // Build group inventory for bonus calculations
       this.groupInventory = this.buildGroupInventory();
@@ -79,6 +112,30 @@ class TokenManagerClass {
       // CRITICAL: Fail hard if database cannot be loaded.
       // Do NOT load demo data.
       return false;
+    }
+  }
+
+  /**
+   * Client defense (D1b, round-2 review C15 — the L2/L6 shim doctrine
+   * applied to groups): the BACKEND gate refuses undeclared group names
+   * at activation, but SW-cached / Pages-static packs never pass through
+   * it. A token naming a group absent from the applied groups block
+   * silently reads a 1x multiplier — legal fallback, but it must be
+   * LOUD, never silent.
+   */
+  _warnUndeclaredGroups() {
+    const undeclared = new Set();
+    for (const token of Object.values(this.database)) {
+      const name = (token.SF_Group || '').trim();
+      if (name && !isDeclaredGroup(name)) undeclared.add(name);
+    }
+    if (undeclared.size > 0) {
+      console.warn(
+        `[groups] UNDECLARED GROUP NAMES (D1b client defense): ` +
+        `${[...undeclared].join(', ')} — multipliers read 1x (no completion bonus). ` +
+        `The pack must declare them in game.json \`groups\`; a gated pack cannot ` +
+        `reach this state, so this pack bypassed the backend activation gate.`
+      );
     }
   }
 
@@ -144,23 +201,16 @@ class TokenManagerClass {
   }
 
   /**
-   * Fallback group info parser (until DataManager is converted)
-   * Format: "Group Name (xN)" where N is multiplier
+   * Fallback group info parser (when no DataManager helpers injected).
+   * v2 cutover: delegates to the canonical scoring.parseGroupInfo — the
+   * second inline "(xN)" regex died with the suffix format (D3b); pure
+   * names + the pack groups block are the only multiplier source.
    */
   _parseGroupInfoFallback(groupString) {
     if (!groupString) {
       return { name: '', multiplier: 1 };
     }
-
-    const match = groupString.match(/^(.+?)\s*\(x(\d+)\)$/i);
-    if (match) {
-      return {
-        name: match[1].trim(),
-        multiplier: parseInt(match[2], 10)
-      };
-    }
-
-    return { name: groupString.trim(), multiplier: 1 };
+    return parseGroupInfo(groupString);
   }
 
   /**

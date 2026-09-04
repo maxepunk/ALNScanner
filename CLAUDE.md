@@ -287,19 +287,11 @@ localStorage.setItem('aln_auth_token', createValidToken());
 
 ### Scoring System (Black Market Mode Only)
 
-**Scoring Configuration (scoring.js:20-25):**
+**Scoring Configuration (Phase 3 A2 — runtime pack loading):**
 
-Values are dynamically loaded from the shared `data/scoring-config.json` submodule (not hardcoded):
-```javascript
-import sharedConfig from '../../data/scoring-config.json';
+Authoritative values arrive at RUNTIME from the loaded game pack's `game.json` `scoring` block, applied by `applyPackScoring()` in `src/core/scoring.js` (called from `tokenManager.loadDatabase()` after `packLoader.loadPack()`). A pack publish changes standalone scoring with NO rebuild. The baked last-resort shim is a VENDORED frozen literal in `scoring.js` (the legacy `scoring-config.json` retired with ledger L1 in A3 slice 2 — nothing imports it anymore); it logs `[scoring] LEGACY SHIM ACTIVE` when a pack has no usable scoring block (transitional-debt ledger L2 in the parent repo's `docs/plans/PHASE3-STATUS.md`), and a unit drift tripwire pins it equal to `data/game.json`'s scoring block.
 
-export const SCORING_CONFIG = {
-    BASE_VALUES: Object.fromEntries(
-        Object.entries(sharedConfig.baseValues).map(([k, v]) => [parseInt(k), v])
-    ),
-    TYPE_MULTIPLIERS: { ...sharedConfig.typeMultipliers }
-};
-```
+**Pack loading (`src/core/packLoader.js`):** load order network → SW-cache → bundled with staged atomic refresh (staging cache `aln-pack-<hash>`, per-file sha1 verify, single pointer flip, discard-on-failure). Channel by SERVING ORIGIN: orchestrator-served (`/gm-scanner`) → `/api/pack/*`; anywhere else → same-origin static files. Every load records `{packId, version, contentHash, source}` — shown in the settings header (`pack <version> (<hash-prefix>) · <source>`, warning badge when `bundled`) and reported as `packHash` in the WS handshake auth. GOTCHA: `sw.js`'s cache GC deliberately EXEMPTS `aln-pack-*` caches — re-tightening that filter wipes the activated pack on every SW update.
 
 **Token Score Formula:**
 ```
@@ -311,7 +303,7 @@ Example: 5-star Technical token = $150,000 × 5 = $750,000
 **Group Completion Bonuses:**
 - Collect ALL tokens in a group → unlock bonus multiplier
 - Bonus Formula: `(groupMultiplier - 1) × totalBaseScore`
-- Example: "Server Logs (x5)" with 3 tokens worth $15,000 base
+- Example: "Server Logs" declared x5 with 3 tokens worth $15,000 base
   - Bonus = (5 - 1) × $15,000 = $60,000
   - Total = $15,000 + $60,000 = $75,000
 
@@ -333,12 +325,15 @@ Example: 5-star Technical token = $150,000 × 5 = $750,000
   `backend/src/gameRules/duplicatePolicy.js`); a token claimed on another
   GM station is rejected server-side with "claimed by Team X" (decision A7)
 
-**Implementation (app.js `processNFCRead`):**
+**Implementation (gameOps.js `processNFCRead` — claims-aware since A3
+slice 2 D3s2: a mode declaring `claims: 'non-consuming'` is a repeatable
+action, never blocked and never marked; the local Set only ever holds
+CONSUMING claims):**
 ```javascript
-if (this.dataManager.isTokenScanned(tokenId)) {
-    this.debug.log(`Duplicate token detected: ${tokenId}`, true);
-    this.showDuplicateError(tokenId);
-    return;
+if (isConsumingMode(settings.mode) && dataManager.isTokenScanned(tokenId)) {
+  debug.log(`Duplicate token detected: ${tokenId}`, true);
+  this.showDuplicateError(tokenId);
+  return;
 }
 ```
 
@@ -635,7 +630,7 @@ DataManager emits events (`transaction:added`, `transaction:deleted`, `team-scor
     "SF_RFID": "token_id",           // Required: Unique identifier
     "SF_ValueRating": 1-5,            // Required: Star rating (1-5)
     "SF_MemoryType": "Technical",     // Required: Personal|Business|Technical|Mention|Party
-    "SF_Group": "Group Name (xN)",    // Optional: Group with multiplier
+    "SF_Group": "Group Name",         // Optional: PURE name (v2) — multiplier lives in game.json `groups`
     "image": "assets/images/...",     // Player scanner only
     "audio": null,                    // Player scanner only
     "video": null                     // Player scanner only
