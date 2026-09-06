@@ -907,6 +907,30 @@ describe('LocalStorage Strategy', () => {
       const event = await eventPromise;
       expect(event.type).toBe('scores:cleared');
     });
+
+    it('also emits data:cleared — the full restart deletes transactions, so transaction-derived UI must refresh (fix-vehicle review)', async () => {
+      // MAJOR-8 widened resetScores from score-zeroing to a full restart.
+      // scores:cleared only refreshes scoreboards (main.js); the history
+      // badge, scan-screen stats and admin Game Activity are wired to
+      // transaction events and data:cleared. A reset that deletes
+      // transactions without announcing data:cleared leaves those
+      // surfaces rendering rows that no longer exist.
+      await storage.createSession('Test Session', []);
+      await storage.addTransaction({
+        id: 'tx-002', tokenId: 'token-2', teamId: 'Team Alpha',
+        mode: 'blackmarket', points: 50000,
+        timestamp: new Date().toISOString()
+      });
+
+      const eventPromise = new Promise(resolve => {
+        storage.addEventListener('data:cleared', resolve, { once: true });
+      });
+
+      await storage.resetScores();
+
+      const event = await eventPromise;
+      expect(event.type).toBe('data:cleared');
+    });
   });
 
   describe('Session Lifecycle', () => {

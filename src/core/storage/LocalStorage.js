@@ -277,9 +277,16 @@ export class LocalStorage extends IStorageStrategy {
 
     this._saveSession();
 
-    // Emit event for UI updates
+    // Emit BOTH events (fix-vehicle review): scores:cleared refreshes the
+    // scoreboards; data:cleared refreshes the transaction-derived surfaces
+    // (history badge, scan-screen stats, admin Game Activity) — the full
+    // restart deletes transactions, so announcing only a score change
+    // leaves those surfaces rendering rows that no longer exist.
     this.dispatchEvent(new CustomEvent('scores:cleared', {
       detail: {}
+    }));
+    this.dispatchEvent(new CustomEvent('data:cleared', {
+      detail: { source: 'resetScores' }
     }));
 
     return { success: true };
