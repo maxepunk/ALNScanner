@@ -38,6 +38,7 @@ import Debug from '../utils/debug.js';
 // line-oriented text, so the separator class matters here in a way the
 // DOM sinks never see. Kept local: modeSemantics does not export its
 // copy, and the two uses guard different sinks (DOM there, markdown here).
+// eslint-disable-next-line no-control-regex -- deliberate: this IS the control-character strip (value-twin doctrine)
 const CONTROL_AND_BIDI = /[\u0000-\u001f\u007f\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
 
 export class SessionReportGenerator {

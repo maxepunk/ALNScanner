@@ -2,7 +2,7 @@ import { MonitoringDisplay } from '../../../src/admin/MonitoringDisplay.js';
 import { StateStore } from '../../../src/core/stateStore.js';
 
 describe('MonitoringDisplay - Phase 2', () => {
-  let display, mockClient, store, container;
+  let display, mockClient, store;
 
   beforeEach(() => {
     // Setup DOM with Phase 2 elements
@@ -22,7 +22,6 @@ describe('MonitoringDisplay - Phase 2', () => {
 
     // Create display instance
     display = new MonitoringDisplay(mockClient, store);
-    container = document.getElementById('session-status-container');
   });
 
   afterEach(() => {

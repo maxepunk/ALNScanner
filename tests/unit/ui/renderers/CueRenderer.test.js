@@ -5,7 +5,6 @@
  * @jest-environment jsdom
  */
 
-import { jest } from '@jest/globals';
 import { CueRenderer } from '../../../../src/ui/renderers/CueRenderer.js';
 
 describe('CueRenderer', () => {

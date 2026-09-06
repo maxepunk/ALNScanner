@@ -34,7 +34,7 @@ export class CueRenderer {
    * @param {Object} state - { cues: Map, activeCues: Map, disabledCues: Set }
    * @param {Object|null} prev - Previous state (null on first render)
    */
-  render(state, prev = null) {
+  render(state, _prev = null) {
     if (!state || !state.cues) return;
 
     // Quick fire: build once (cue definitions don't change during session)
@@ -184,7 +184,7 @@ export class CueRenderer {
 
   _buildActiveCues(cuesMap, entries) {
     this.activeListEl.innerHTML = entries.map(([cueId, details]) => {
-      const { state, progress, duration } = details || { state: 'running', progress: 0, duration: 0 };
+      const { state, progress } = details || { state: 'running', progress: 0 };
       const progressPercent = Math.round((progress || 0) * 100);
       const isPaused = state === 'paused';
       const cueDef = cuesMap.get(cueId);

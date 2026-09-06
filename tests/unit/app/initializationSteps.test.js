@@ -252,7 +252,7 @@ describe('InitializationSteps - ES6 Module', () => {
 
       try {
         await loadTokenDatabase(mockTokenManager, mockUIManager);
-      } catch (error) {
+      } catch {
         // Expected error
       }
 
@@ -267,7 +267,7 @@ describe('InitializationSteps - ES6 Module', () => {
 
       try {
         await loadTokenDatabase(mockTokenManager, mockUIManager);
-      } catch (error) {
+      } catch {
         // Expected error
       }
 

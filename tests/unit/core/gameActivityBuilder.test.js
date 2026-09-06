@@ -1,7 +1,7 @@
 import { buildGameActivity } from '../../../src/core/gameActivityBuilder.js';
 
 const mockTokenManager = {
-  findToken: jest.fn((id) => ({
+  findToken: jest.fn(() => ({
     SF_MemoryType: 'Technical',
     SF_ValueRating: 3,
     SF_Group: 'Test Group',

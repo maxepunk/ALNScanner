@@ -475,7 +475,6 @@ describe('ConnectionWizard', () => {
 
 describe('setupCleanupHandlers() — page lifecycle (RL-2)', () => {
   let lifecycleApp;
-  let mockClient;
   let mockConnectionManager;
 
   const setVisibility = (state) => {
@@ -493,7 +492,6 @@ describe('setupCleanupHandlers() — page lifecycle (RL-2)', () => {
     // time) keeps the per-test call counts correct.
     const client = { disconnect: jest.fn().mockResolvedValue(undefined) };
     const cm = { connect: jest.fn().mockResolvedValue(undefined), disconnect: jest.fn().mockResolvedValue(undefined) };
-    mockClient = client;
     mockConnectionManager = cm;
     lifecycleApp = {
       networkedSession: {

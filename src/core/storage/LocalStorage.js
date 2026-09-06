@@ -8,8 +8,7 @@
 import { IStorageStrategy } from './IStorageStrategy.js';
 import {
   SCORING_CONFIG,
-  parseGroupInfo,
-  calculateTokenValue
+  parseGroupInfo
 } from '../scoring.js';
 import { buildGameActivity } from '../gameActivityBuilder.js';
 import { isScoringMode, countsTowardGroups, isConsumingMode, entityLabel } from '../modeSemantics.js';
@@ -85,7 +84,7 @@ export class LocalStorage extends IStorageStrategy {
           this._repopulateScannedTokens();
           this.debug?.log(`Loaded session: ${parsed.sessionId}`);
         }
-      } catch (e) {
+      } catch {
         this.debug?.log('Failed to load session', true);
       }
     }
@@ -161,7 +160,7 @@ export class LocalStorage extends IStorageStrategy {
    * @param {Array} teams - Initial teams array
    * @returns {Promise<SessionInfo>}
    */
-  async createSession(name, teams) {
+  async createSession(name, _teams) {
     this.sessionData = {
       sessionId: this._generateSessionId(),
       name: name,

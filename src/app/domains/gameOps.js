@@ -71,7 +71,7 @@ export class GameOpsDomain {
   // ========== Team Entry ==========
 
   initTeamEntryUI() {
-    const { uiManager, teamRegistry } = this.app;
+    const { teamRegistry } = this.app;
     const teamInput = document.getElementById('teamNameInput');
     const teamList = document.getElementById('teamList');
     const listLabel = document.getElementById('teamListLabel');

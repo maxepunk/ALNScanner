@@ -135,6 +135,7 @@ function _drivableCountsTowardGroups(mode) {
 // C0 controls + bidi controls (LRM/RLM, embeddings/overrides, isolates):
 // stripped from presentation fields before validation — a control char
 // must never reach the DOM or defeat the {entity} template check.
+// eslint-disable-next-line no-control-regex -- deliberate: this IS the control-character strip (value-twin doctrine)
 const CONTROL_AND_BIDI = /[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
 
 function _warnDeclined(modeId, field, reason) {

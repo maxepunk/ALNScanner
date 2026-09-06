@@ -82,8 +82,6 @@ describe('Storage Strategy Integration', () => {
         timestamp: new Date().toISOString()
       });
 
-      const originalSessionId = storage.getCurrentSession().sessionId;
-
       // Create NEW storage instance (simulates page reload)
       const reloadedStorage = new LocalStorage({
         tokenManager: { getAllTokens: () => [], findToken: () => null }

@@ -6,7 +6,6 @@
  * @jest-environment jsdom
  */
 
-import { jest } from '@jest/globals';
 import { EnvironmentRenderer } from '../../../../src/ui/renderers/EnvironmentRenderer.js';
 
 describe('EnvironmentRenderer', () => {

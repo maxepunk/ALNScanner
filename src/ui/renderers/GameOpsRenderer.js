@@ -304,7 +304,7 @@ export class GameOpsRenderer {
     // F-GMS-04: group/rfid/memoryType are NFC-controlled — escape every site
     const safeMemoryType = escapeHtml(token.memoryType);
 
-    let calculationText = '';
+    let calculationText;
     if (!isUnknown && !token.isUnknown) {
       const baseValue = dataSource.SCORING_CONFIG.BASE_VALUES[token.valueRating] || 0;
       const multiplier = dataSource.SCORING_CONFIG.TYPE_MULTIPLIERS[token.memoryType] ?? 0;

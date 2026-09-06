@@ -2,8 +2,7 @@
  * Diagnostic test to identify the timeout issue
  */
 
-const { test, expect } = require('@playwright/test');
-const { GMScannerPage } = require('../page-objects/GMScannerPage');
+const { test } = require('@playwright/test');
 
 test.describe('Diagnostic - Step by step', () => {
   test('step 1: can we load the page?', async ({ page }) => {

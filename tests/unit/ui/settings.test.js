@@ -217,14 +217,12 @@ describe('Settings - ES6 Module (Event-Driven)', () => {
     it('should allow multiple listeners on same event', (done) => {
       const instance = new Settings();
       let listener1Called = false;
-      let listener2Called = false;
 
       instance.addEventListener('settings:loaded', () => {
         listener1Called = true;
       });
 
       instance.addEventListener('settings:loaded', () => {
-        listener2Called = true;
         expect(listener1Called).toBe(true);
         done();
       });

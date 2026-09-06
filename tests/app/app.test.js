@@ -187,7 +187,6 @@ const TokenManager = require('../../src/core/tokenManager.js').default;
 const NFCHandler = require('../../src/utils/nfcHandler.js').default;
 const CONFIG = require('../../src/utils/config.js').default;
 const InitializationSteps = require('../../src/app/initializationSteps.js').default;
-const SessionModeManager = require('../../src/app/sessionModeManager.js').default;
 
 describe('App', () => {
   let app;

@@ -656,9 +656,7 @@ describe('NetworkedQueueManager', () => {
     it('should ignore non-matching transaction results', async () => {
       const transaction = { tokenId: 'token6', teamId: '006' };
 
-      let handlerRef;
       mockClient.addEventListener.mockImplementation((eventType, handler) => {
-        handlerRef = handler;
         // Send non-matching result first
         setTimeout(() => {
           handler({

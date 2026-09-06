@@ -420,7 +420,7 @@ export class NetworkedQueueManager extends EventTarget {
    */
   destroy() {
     // Clear all active handlers
-    for (const [key, handler] of this.activeHandlers.entries()) {
+    for (const handler of this.activeHandlers.values()) {
       this.client.removeEventListener('message:received', handler);
     }
     this.activeHandlers.clear();

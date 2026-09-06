@@ -67,7 +67,7 @@ export class EnvironmentRenderer {
    * @param {Object} lightingState - { connected, activeScene, scenes }
    * @param {Object|null} prev - Previous lighting state
    */
-  renderLighting(lightingState, prev = null) {
+  renderLighting(lightingState, _prev = null) {
     if (!this.lightingSection) return;
 
     const { connected, activeScene, scenes } = lightingState;
@@ -143,7 +143,7 @@ export class EnvironmentRenderer {
    * @param {Object} audioState - { routes, availableSinks, ducking }
    * @param {Object|null} prev - Previous audio state
    */
-  renderAudio(audioState, prev = null) {
+  renderAudio(audioState, _prev = null) {
     const { routes, availableSinks, volumes } = audioState;
 
     // Seed slider cache + live DOM from persisted volumes (orchestrator owns
@@ -284,7 +284,7 @@ export class EnvironmentRenderer {
    * @param {Object} btState - { scanning, connectedDevices, pairedDevices }
    * @param {Object|null} prev - Previous bluetooth state
    */
-  renderBluetooth(btState, prev = null) {
+  renderBluetooth(btState, _prev = null) {
     // SR-4: bluetoothService.getState() supplies only connected + paired devices
     // (single A2DP stream on the Pi; pair-then-connect known speakers). There is
     // no discoveredDevices over service:state, so we don't render arbitrary
@@ -363,7 +363,7 @@ export class EnvironmentRenderer {
     if (isConnected) itemClass += ' bt-device-item--connected';
     else if (isPaired) itemClass += ' bt-device-item--paired';
 
-    let actionBtn = '';
+    let actionBtn;
     if (isConnected) {
       actionBtn = `
         <span class="bt-device-status status-connected">Connected</span>

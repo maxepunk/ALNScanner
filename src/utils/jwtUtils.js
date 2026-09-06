@@ -1,3 +1,5 @@
+/* global Buffer -- Node-only fallback branch below; browsers take the atob path */
+
 /**
  * Validate JWT token expiration with 1-minute safety buffer.
  * Shared utility — replaces 4 duplicate implementations.
