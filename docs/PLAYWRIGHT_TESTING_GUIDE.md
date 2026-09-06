@@ -171,12 +171,12 @@ page.locator('button:has-text("Standalone Game")')
 
 ```javascript
 // ✅ CORRECT - Specific container
-await page.locator('#historyContainer .transaction-card').count();
+await page.locator('#historyContainer .token-card').count();
 await page.locator('#scoreboardContainer .scoreboard-entry').count();
 await page.locator('#teamDetailsContainer .token-detail-card').count();
 
 // ❌ WRONG - Ambiguous, might match wrong container
-await page.locator('.history-container .transaction-card').count();
+await page.locator('.history-container .token-card').count();
 ```
 
 ### 4. Form Elements - Use IDs or name attributes
@@ -499,8 +499,8 @@ _getDataSource() {
 **Problem: E2E test selector not finding transactions**
 - **Symptom**: Test fails with "Expected 1, received 0" for transaction count
 - **Cause**: Test uses wrong CSS selector
-- **Fix**: Use `#historyContainer .transaction-card` (NOT `#history-list .transaction-item`)
-- **File**: backend/tests/e2e/flows/07d-gm-scanner-admin-panel.test.js:689, 758
+- **Fix**: Use `#historyContainer .token-card` — the game-activity renderer (GameOpsRenderer) emits `.token-card` elements; `.transaction-card` survives only in CSS and matches nothing
+- **File**: backend/tests/e2e/flows/07d-diagnostic.test.js (working example)
 
 ### Admin Panel Key Files
 - `src/main.js` - DataManager event listeners for UI updates
@@ -523,7 +523,7 @@ await gmScanner2.enterTeam('001');
 await gmScanner2.manualScan(tokenId);
 
 // Verify Scanner 1 auto-updates
-await expect(page1.locator('#historyContainer .transaction-card')).toHaveCount(1);
+await expect(page1.locator('#historyContainer .token-card')).toHaveCount(1);
 ```
 
 **Critical Test Requirements:**

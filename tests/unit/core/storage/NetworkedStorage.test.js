@@ -507,6 +507,28 @@ describe('NetworkedStorage Strategy', () => {
       expect(storage.backendScores.get('002').currentScore).toBe(0);
     });
 
+    it('clears the local claim set IN PLACE on reset (train-review MAJOR 8, networked twin)', () => {
+      // The backend's reset clears its claim registry; this station's
+      // duplicate-check set must follow or previously scanned tokens
+      // stay locked ON THIS DEVICE. In place: the Set reference is
+      // shared with UnifiedDataManager (TQ-7).
+      const sharedSetRef = storage.scannedTokens;
+      storage.currentSessionId = 'reset-test-session';
+      storage.scannedTokens.add('tok-1');
+      storage.scannedTokens.add('tok-2');
+      storage.persistScannedTokens();
+      const key = 'networkedScannedTokens:reset-test-session';
+      expect(JSON.parse(localStorage.getItem(key))).toHaveLength(2);
+      storage.setBackendScores('001', { currentScore: 50000 });
+
+      storage.resetBackendScores();
+
+      expect(storage.scannedTokens).toBe(sharedSetRef);
+      expect(storage.scannedTokens.size).toBe(0);
+      // Persisted: a reload must not resurrect the claims
+      expect(JSON.parse(localStorage.getItem(key))).toEqual([]);
+    });
+
     it('should clear backend scores (remove all entries)', () => {
       storage.setBackendScores('001', { currentScore: 50000 });
       storage.clearBackendScores();

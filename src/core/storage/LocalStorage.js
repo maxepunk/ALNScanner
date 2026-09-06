@@ -250,19 +250,31 @@ export class LocalStorage extends IStorageStrategy {
   }
 
   /**
-   * Reset all team scores to zero
-   * Keeps transactions for audit trail
+   * Reset All Scores — the FULL restart, matching the backend's ruled
+   * reset (train-review MAJOR 8 / LB-1). Standalone is the scoring
+   * AUTHORITY in its mode, so it must implement the same reset the
+   * backend does: scores to zero AND the session's transactions, token
+   * claims and group state cleared. The old zero-scores-only reset left
+   * every token permanently unclaimable ("Token Already Scanned" on
+   * re-tap), kept groups complete, and was silently UNDONE by the next
+   * transaction deletion (removeTransaction replays the survivors).
    * @returns {Promise<{success: boolean}>}
    */
   async resetScores() {
-    // Zero all team scores
     Object.keys(this.sessionData.teams).forEach(teamId => {
       const team = this.sessionData.teams[teamId];
       team.score = 0;
       team.baseScore = 0;
       team.bonusPoints = 0;
       team.adminAdjustments = [];
+      team.tokensScanned = 0;
+      team.completedGroups = [];
+      team.lastScanTime = null;
     });
+    this.sessionData.transactions = [];
+    // IN PLACE — the Set reference is shared with UnifiedDataManager
+    // (TQ-7: replacing it desyncs the shared reference)
+    this.scannedTokens.clear();
 
     this._saveSession();
 

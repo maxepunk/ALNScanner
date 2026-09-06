@@ -429,6 +429,13 @@ export class NetworkedStorage extends IStorageStrategy {
         adminAdjustments: []
       });
     }
+    // The backend's reset clears its claim registry — this station's
+    // local duplicate-check set must follow, or every previously
+    // scanned token stays locked ON THIS DEVICE after a reset
+    // (train-review MAJOR 8, the networked twin of LB-1). IN PLACE:
+    // the Set reference is shared with UnifiedDataManager (TQ-7).
+    this.scannedTokens.clear();
+    this.persistScannedTokens();
     return teamIds;
   }
 

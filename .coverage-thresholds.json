@@ -159,6 +159,11 @@
     "functions": 60,
     "lines": 65
   },
+  "./src/core/theme.js": {
+    "branches": 90,
+    "functions": 100,
+    "lines": 90
+  },
   "./src/core/tokenManager.js": {
     "branches": 90,
     "functions": 85,
@@ -230,8 +235,8 @@
     "lines": 90
   },
   "./src/ui/renderers/GameOpsRenderer.js": {
-    "branches": 65,
-    "functions": 70,
+    "branches": 70,
+    "functions": 75,
     "lines": 80
   },
   "./src/ui/renderers/HealthRenderer.js": {
@@ -267,7 +272,7 @@
   "./src/ui/uiManager.js": {
     "branches": 75,
     "functions": 90,
-    "lines": 85
+    "lines": 90
   },
   "./src/utils/config.js": {
     "branches": 100,

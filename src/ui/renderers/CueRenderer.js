@@ -1,5 +1,6 @@
 import { escapeHtml } from '../../utils/escapeHtml.js';
 import { escapeCssAttrValue } from '../../utils/escapeCssAttrValue.js';
+import { slugifyId } from '../../utils/slugify.js';
 
 /**
  * CueRenderer - Differential DOM Rendering for Cue System
@@ -66,7 +67,11 @@ export class CueRenderer {
     }
 
     this.gridEl.innerHTML = quickFireCues.map(cue => {
-      const icon = cue.icon || 'default';
+      // Cues are PACK CONTENT (lowest trust tier) — every class-name
+      // interpolation of pack data goes through slugifyId, never raw
+      // (train-review MAJOR 7 / LC-1: a markup-bearing icon broke out
+      // of the class attribute and ran in the operator-JWT origin).
+      const icon = slugifyId(cue.icon) || 'default';
       const label = cue.label || cue.id;
       return `
         <button

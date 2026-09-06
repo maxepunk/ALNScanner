@@ -621,8 +621,9 @@ describe('App', () => {
       expect(document.getElementById('resultType').textContent).toBe('DUPLICATE');
     });
 
-    it('should process unknown token', async () => {
+    it('should show unknown-token feedback without claiming the id (LB-4)', async () => {
       const TokenManager = require('../../src/core/tokenManager.js').default;
+      const UIManager = require('../../src/ui/uiManager.js').default;
       TokenManager.findToken.mockReturnValue(null);
       mockSessionModeManager.isStandalone.mockReturnValue(true);
       app.currentTeamId = '123';
@@ -632,8 +633,10 @@ describe('App', () => {
 
       await app.processNFCRead({ id: 'unknown', source: 'nfc', raw: 'unknown' });
 
-      // Assert on injected dataManager, not global mock
-      expect(app.dataManager.markTokenAsScanned).toHaveBeenCalledWith('unknown');
+      // Backend parity: refused, not recorded or claim-locked
+      expect(UIManager.showTokenResult).toHaveBeenCalledWith(null, 'unknown', true);
+      expect(app.dataManager.markTokenAsScanned).not.toHaveBeenCalled();
+      expect(app.dataManager.addTransaction).not.toHaveBeenCalled();
     });
 
     it('should process known token', async () => {
@@ -734,15 +737,16 @@ describe('App', () => {
       expect(app.dataManager.calculateTokenValue).toHaveBeenCalled();
     });
 
-    it('should set points to 0 for unknown tokens', async () => {
+    it('should refuse unknown tokens in standalone mode (LB-4 backend parity)', async () => {
       mockSessionModeManager.isStandalone.mockReturnValue(true);
       app.currentTeamId = '123';
 
       await app.recordTransaction(null, 'unknown', true);
 
-      // Should create transaction with points: 0
-      const call = app.dataManager.addTransaction.mock.calls[0];
-      expect(call[0].points).toBe(0);
+      // The backend answers TOKEN_NOT_FOUND and records nothing; the
+      // standalone authority applies the same rule — feedback only.
+      expect(app.dataManager.addTransaction).not.toHaveBeenCalled();
+      expect(app.dataManager.markTokenAsScanned).not.toHaveBeenCalled();
     });
   });
 
