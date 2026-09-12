@@ -125,10 +125,10 @@ export class HealthRenderer {
         : `All Systems Operational (${healthyCount}/${totalCount})`;
       this.container.innerHTML = `
         <div class="health-dashboard health-dashboard--ok">
-          <div class="health-dashboard__summary" data-action="admin.toggleHealthDetail" role="button" tabindex="0">
+          <button type="button" class="health-dashboard__summary" data-action="admin.toggleHealthDetail">
             <span class="health-indicator health-indicator--ok"></span>
             ${escapeHtml(summary)}
-          </div>
+          </button>
         </div>
       `;
       this._summaryEl = this.container.querySelector('.health-dashboard__summary');
@@ -153,10 +153,10 @@ export class HealthRenderer {
 
     this.container.innerHTML = `
       <div class="health-dashboard health-dashboard--degraded">
-        <div class="health-dashboard__summary" data-action="admin.toggleHealthDetail" role="button" tabindex="0">
+        <button type="button" class="health-dashboard__summary" data-action="admin.toggleHealthDetail">
           <span class="health-indicator health-indicator--degraded"></span>
           <span class="health-dashboard__summary-text">Systems: ${healthyCount}/${totalCount} Operational</span>
-        </div>
+        </button>
         <div class="health-dashboard__grid">
           ${serviceCards}
         </div>

@@ -331,6 +331,39 @@ describe('HealthRenderer', () => {
         expect(summary.dataset.action).toBe('admin.toggleHealthDetail');
       });
 
+      it('the collapsed summary is a real <button>, not a div playing one (PR #17 review)', () => {
+        // A `div role="button" tabindex="0"` gets Tab focus but never an
+        // Enter/Space click from the browser — domEventBindings only
+        // delegates 'click'. A real button gets that activation for free.
+        renderer.render({ serviceHealth: allHealthy() });
+        const summary = container.querySelector('.health-dashboard__summary');
+        expect(summary.tagName).toBe('BUTTON');
+        expect(summary.getAttribute('type')).toBe('button');
+        expect(summary.hasAttribute('role')).toBe(false);
+        expect(summary.hasAttribute('tabindex')).toBe(false);
+        expect(summary.dataset.action).toBe('admin.toggleHealthDetail');
+      });
+
+      it('the EXPANDED summary is also a real <button> (PR #17 review)', () => {
+        renderer.render({ serviceHealth: { ...allHealthy(), lighting: dormant('operator') } });
+        const summary = container.querySelector('.health-dashboard__summary');
+        expect(summary.tagName).toBe('BUTTON');
+        expect(summary.hasAttribute('role')).toBe(false);
+        expect(summary.hasAttribute('tabindex')).toBe(false);
+      });
+
+      it('a click on the <button> summary still toggles the dashboard open', () => {
+        renderer.render({ serviceHealth: { ...allHealthy(), lighting: dormant('profile') } });
+        const summary = container.querySelector('.health-dashboard__summary');
+        // Mirrors what domEventBindings' click delegation does for
+        // data-action elements, without pulling in the whole wiring module.
+        summary.addEventListener('click', () => renderer.toggleDetail());
+
+        summary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+        expect(container.querySelector('.health-dashboard--degraded')).toBeTruthy();
+      });
+
       it('a later render keeps the forced-open state', () => {
         const health = { ...allHealthy(), lighting: dormant('profile') };
         renderer.render({ serviceHealth: health });

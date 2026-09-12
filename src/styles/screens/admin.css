@@ -1112,3 +1112,20 @@ body.standalone-mode [data-requires="networked"] {
   cursor: pointer;
   user-select: none;
 }
+
+/* The summary is a real <button> now (PR #17 review — a `div role="button"`
+   never gets Enter/Space activation from the browser; domEventBindings
+   only delegates 'click'). This undoes the browser's default button
+   chrome so the row still reads and lays out exactly like the plain text
+   row it replaces. */
+.health-dashboard__summary {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
