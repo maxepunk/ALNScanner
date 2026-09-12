@@ -31,9 +31,12 @@
   --color-accent-error: #ef4444;        /* Red - errors, alerts */
   --color-accent-info: #3b82f6;         /* Blue - informational */
 
-  /* Mode-specific colors */
-  --color-mode-detective: #22c55e;      /* Green for detective mode */
-  --color-mode-blackmarket: #ff6b35;    /* Orange for black market mode */
+  /* Mode-SEMANTIC colors (slice 3c, R-3c-1): keyed to the engine's
+     semantic flags, not pack mode ids — any pack's scoring mode renders
+     orange, any evidence mode green. */
+  --color-mode-scoring: #ff6b35;        /* Orange for scoring modes */
+  --color-mode-evidence: #22c55e;       /* Green for evidence modes */
+  --color-accent-value: #ff6b35;        /* Neutral money-value accent (was mode-coupled) */
 
   /* Status indicators */
   --color-status-connected: #22c55e;

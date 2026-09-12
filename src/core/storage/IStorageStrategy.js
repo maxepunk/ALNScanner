@@ -10,11 +10,11 @@
  * @property {string} id - Unique transaction ID
  * @property {string} tokenId - Token identifier (from NFC/manual entry)
  * @property {string} teamId - Team identifier
- * @property {string} mode - Transaction mode ('blackmarket' | 'detective')
+ * @property {string} mode - Transaction mode (a pack-declared mode id; semantics via core/modeSemantics)
  * @property {number} [points] - Score value (blackmarket mode only)
  * @property {number} [valueRating] - Token star rating (1-5)
  * @property {string} [memoryType] - Token type ('Personal' | 'Business' | 'Technical')
- * @property {string} [group] - Group name with multiplier, e.g., "Server Logs (x5)"
+ * @property {string} [group] - Pure group name (v2), e.g., "Server Logs" — multiplier lives in the pack groups block
  * @property {boolean} [isUnknown] - True if token not found in database
  * @property {string} timestamp - ISO timestamp of transaction
  */

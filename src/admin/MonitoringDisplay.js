@@ -177,11 +177,13 @@ export class MonitoringDisplay {
       this.healthRenderer.render(state, prev);
     });
 
-    // Game Clock — map 'status' field to 'state' for SessionRenderer
+    // Game Clock — map 'status' field to 'state' for SessionRenderer.
+    // A3 slice 5: `phase` threads through (this adapter STRIPS unknown
+    // fields by design — a new clock field surfaces nowhere until named here)
     on('gameclock', (state, prev) => {
       this.sessionRenderer.renderGameClock(
-        { state: state.status || state.state, elapsed: state.elapsed },
-        prev ? { state: prev.status || prev.state, elapsed: prev.elapsed } : null
+        { state: state.status || state.state, elapsed: state.elapsed, phase: state.phase ?? null },
+        prev ? { state: prev.status || prev.state, elapsed: prev.elapsed, phase: prev.phase ?? null } : null
       );
     });
   }

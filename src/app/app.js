@@ -14,6 +14,8 @@
  */
 
 import Debug from '../utils/debug.js';
+import { formatCurrency } from '../utils/formatCurrency.js';
+import { isConsumingMode, entityLabel } from '../core/modeSemantics.js';
 import { isTokenValid } from '../utils/jwtUtils.js';
 import UIManager from '../ui/uiManager.js';
 import Settings from '../ui/settings.js';
@@ -118,6 +120,11 @@ class App {
     // Load token database (Phase 1A)
     await this.initializationSteps.loadTokenDatabase(this.tokenManager, this.uiManager);
 
+    // Validate the persisted mode against the ACTIVE pack's declared modes
+    // (slice 1 — the pack's mode table went live in Phase 1A; a stale saved
+    // id resets to the pack's first declared mode with a loud log)
+    this.initializationSteps.validateSettingsMode(this.settings);
+
     // Apply URL parameter mode override (Phase 1B)
     this.initializationSteps.applyURLModeOverride(window.location.search, this.settings);
 
@@ -196,8 +203,9 @@ class App {
 
     this.networkedSession.addEventListener('group:completed', (event) => {
       const { teamId, bonusPoints } = event.detail || {};
-      const formattedBonus = bonusPoints ? ` +$${bonusPoints.toLocaleString()}` : '';
-      this.uiManager.showToast(`Group completed by ${teamId || 'team'}${formattedBonus}`);
+      const formattedBonus = bonusPoints ? ` +${formatCurrency(bonusPoints)}` : '';
+      // Q1: fallback noun is pack-declared (baked 'team' is byte-identical)
+      this.uiManager.showToast(`Group completed by ${teamId || entityLabel().toLowerCase()}${formattedBonus}`);
     });
 
     // scoreboard:page echo — the GM scanner SENT this navigation command; the
@@ -246,7 +254,11 @@ class App {
         return;
       }
       this.uiManager.showError(`Scan rejected${tokenId ? ` (${tokenId})` : ''}: ${message || status || 'failed'}`);
-      if (tokenId) {
+      // Unmark ONLY when the failing transaction was a CONSUMING claim
+      // (D3s2 review finding): a non-consuming scan never placed a mark,
+      // so unmarking on its failure would erase the mark a DIFFERENT
+      // consuming claim placed for the same token on this device.
+      if (tokenId && isConsumingMode(transaction?.mode)) {
         this.dataManager.unmarkTokenAsScanned(tokenId);
       }
     });
@@ -359,6 +371,7 @@ class App {
   // ========== Settings Management (Game Ops) ==========
 
   toggleMode() { return this._gameOps.toggleMode(); }
+  selectMode(modeId) { return this._gameOps.selectMode(modeId); }
 
   // ========== Team Entry (Game Ops) ==========
 

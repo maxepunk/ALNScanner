@@ -17,6 +17,8 @@
  * @module core/teamRegistry
  */
 
+import { entityLabel, entityLabelPlural } from './modeSemantics.js';
+
 class TeamRegistry extends EventTarget {
     constructor() {
         super();
@@ -192,46 +194,6 @@ class TeamRegistry extends EventTarget {
         }));
     }
 
-    /**
-     * Populate a select element with team options
-     * Used for dropdown UI
-     * @param {HTMLSelectElement} selectElement - Select element to populate
-     * @param {Object} [options={}] - Options
-     * @param {string} [options.placeholder='Select Team...'] - Placeholder text
-     * @param {string} [options.selectedTeamId] - Currently selected team ID
-     */
-    populateDropdown(selectElement, options = {}) {
-        if (!selectElement) return;
-
-        const { placeholder = 'Select Team...', selectedTeamId = null } = options;
-
-        // Clear existing options
-        selectElement.innerHTML = '';
-
-        // Add placeholder option
-        const placeholderOption = document.createElement('option');
-        placeholderOption.value = '';
-        placeholderOption.textContent = placeholder;
-        placeholderOption.disabled = true;
-        placeholderOption.selected = !selectedTeamId;
-        selectElement.appendChild(placeholderOption);
-
-        // Add team options
-        const teams = this.getTeams().sort((a, b) =>
-            a.teamId.localeCompare(b.teamId)
-        );
-
-        teams.forEach(team => {
-            const option = document.createElement('option');
-            option.value = team.teamId;
-            option.textContent = team.teamId;
-            if (team.teamId === selectedTeamId) {
-                option.selected = true;
-            }
-            selectElement.appendChild(option);
-        });
-    }
-
     // ============================================================================
     // UNIFIED API - Mode-agnostic team operations
     // ============================================================================
@@ -245,7 +207,8 @@ class TeamRegistry extends EventTarget {
      */
     async selectTeam(teamName) {
         if (!teamName?.trim()) {
-            return { success: false, error: 'Team name required' };
+            // Q1: entity noun is pack-declared (baked 'Team' is byte-identical)
+            return { success: false, error: `${entityLabel()} name required` };
         }
 
         const normalized = teamName.trim();
@@ -283,9 +246,10 @@ class TeamRegistry extends EventTarget {
      * @returns {string} Label text
      */
     getTeamListLabel() {
+        // Q1: entity noun is pack-declared (baked 'Teams' is byte-identical)
         return this.sessionModeManager?.isStandalone()
-            ? 'Recent Teams:'
-            : 'Session Teams:';
+            ? `Recent ${entityLabelPlural()}:`
+            : `Session ${entityLabelPlural()}:`;
     }
 
     // ============================================================================

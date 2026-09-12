@@ -14,6 +14,8 @@
  * - Transaction processing (backend)
  */
 
+import { isConsumingMode } from '../core/modeSemantics.js';
+
 let _attemptSeq = 0; // monotonic per-attempt nonce for activeHandlers keys (NQ-2)
 
 export class NetworkedQueueManager extends EventTarget {
@@ -131,7 +133,13 @@ export class NetworkedQueueManager extends EventTarget {
     if (!Array.isArray(scannedTokenIds) || scannedTokenIds.length === 0) return;
     const recorded = new Set(scannedTokenIds);
     const before = this.tempQueue.length;
-    this.tempQueue = this.tempQueue.filter(t => !recorded.has(t.tokenId));
+    // Drop only queued CONSUMING transactions (D3s2 review finding): the
+    // server registry holds consuming claims, so a queued NON-consuming
+    // action whose token was consumed earlier is NOT already recorded —
+    // it is a distinct repeatable action and must still replay.
+    this.tempQueue = this.tempQueue.filter(
+      t => !(recorded.has(t.tokenId) && isConsumingMode(t.mode))
+    );
     if (this.tempQueue.length !== before) {
       this.saveQueue();
       this.dispatchEvent(new CustomEvent('queue:changed', {

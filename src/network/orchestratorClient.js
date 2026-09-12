@@ -17,6 +17,8 @@
  * - Admin module initialization (AdminController)
  */
 
+import packLoader from '../core/packLoader.js';
+
 /**
  * Server→client event names this client forwards as `message:received`.
  * Exported so contract tests can cross-check against the AsyncAPI subscribe set.
@@ -91,7 +93,12 @@ export class OrchestratorClient extends EventTarget {
         token: token,
         deviceId: auth.deviceId,
         deviceType: auth.deviceType,
-        version: this.config.version
+        version: this.config.version,
+        // A2 staleness visibility: report the pack THIS client loaded.
+        // The server loud-warns on mismatch with its active pack (and C1
+        // preflight will fail on it). Null before pack load / on pre-pack
+        // deploys — the server tolerates absence (legacy clients).
+        packHash: packLoader.getActivePack()?.contentHash ?? null
       }
     });
 

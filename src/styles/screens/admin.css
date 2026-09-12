@@ -828,6 +828,10 @@ body.standalone-mode [data-requires="networked"] {
   font-size: var(--text-xs);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
+  /* Open-vocabulary floor (slice 3c): a pack type outside the baked set
+     below renders like type-unknown instead of an unstyled badge. */
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
 }
 
 /* Type-specific colors */
@@ -867,12 +871,18 @@ body.standalone-mode [data-requires="networked"] {
 }
 
 /* Mode-specific status bar styling with colored borders */
-.token-card__status.blackmarket {
-  border-left: 3px solid #f59e0b;  /* Orange for sold */
+/* Mode-keyed rules read the mode TOKENS (theme unit §4a T-2): a rule
+   keyed on the 3c semantic classes must style with the semantic pair —
+   the old literals (#f59e0b/#3b82f6, the warning/info values) meant a
+   theme could never recolor these, and they disagreed with the mode
+   indicator colors on the same screen. ALN-visible change: amber→orange,
+   blue→green (owner-visibility item (a) in the design doc). */
+.token-card__status.mode-scoring {
+  border-left: 3px solid var(--color-mode-scoring);
 }
 
-.token-card__status.detective {
-  border-left: 3px solid #3b82f6;  /* Blue for exposed */
+.token-card__status.mode-evidence {
+  border-left: 3px solid var(--color-mode-evidence);
 }
 
 .token-card__status.status-available {
@@ -949,8 +959,8 @@ body.standalone-mode [data-requires="networked"] {
 /* Event type borders */
 .token-card__timeline .event.discovery { border-left: 2px solid var(--color-accent-success); }
 .token-card__timeline .event.scan { border-left: 2px solid var(--color-text-muted); }
-.token-card__timeline .event.claim.blackmarket { border-left: 2px solid #f59e0b; }
-.token-card__timeline .event.claim.detective { border-left: 2px solid #3b82f6; }
+.token-card__timeline .event.claim.mode-scoring { border-left: 2px solid var(--color-mode-scoring); }
+.token-card__timeline .event.claim.mode-evidence { border-left: 2px solid var(--color-mode-evidence); }
 .token-card__timeline .event.warning { border-left: 2px solid #ef4444; background: rgba(239, 68, 68, 0.1); }
 
 /* Event components */

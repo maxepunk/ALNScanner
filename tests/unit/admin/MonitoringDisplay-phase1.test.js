@@ -101,6 +101,26 @@ describe('MonitoringDisplay - Phase 1', () => {
       expect(clockDisplay).toBeTruthy();
       expect(clockDisplay.textContent).toContain('00:00');
     });
+
+    it('threads the phase through the adapter to the label (A3 slice 5 — the adapter strips unnamed fields)', () => {
+      store.update('gameclock', {
+        status: 'running', elapsed: 30,
+        phase: { id: 'casing', label: 'Casing the Joint' },
+      });
+
+      const phaseEl = document.getElementById('game-clock-phase');
+      expect(phaseEl).toBeTruthy();
+      expect(phaseEl.textContent).toBe('Casing the Joint');
+      expect(phaseEl.style.display).not.toBe('none');
+    });
+
+    it('keeps the phase label hidden when the store carries no phase (ALN degenerate)', () => {
+      store.update('gameclock', { status: 'running', elapsed: 30, phase: null });
+
+      const phaseEl = document.getElementById('game-clock-phase');
+      expect(phaseEl).toBeTruthy();
+      expect(phaseEl.style.display).toBe('none');
+    });
   });
 
   describe('cue:fired toast', () => {

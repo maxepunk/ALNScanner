@@ -69,6 +69,22 @@ describe('EvidencePickerRenderer', () => {
       renderer.render(undefined);
       expect(hint.textContent).toBe('Awaiting evidence...');
     });
+
+    it('empty-state hint is pack-declared wording when a sidecar is applied (slice 3a — shared ×3 key)', () => {
+      const { applyPackStrings } = require('../../../../src/core/strings.js');
+      applyPackStrings({
+        kind: 'strings',
+        schemaVersion: 2,
+        scoreboard: { emptyEvidence: 'Awaiting tips...' },
+      });
+
+      try {
+        renderer.render([]);
+        expect(hint.textContent).toBe('Awaiting tips...');
+      } finally {
+        applyPackStrings(null);
+      }
+    });
   });
 
   describe('populated state', () => {

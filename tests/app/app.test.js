@@ -109,6 +109,7 @@ jest.mock('../../src/app/initializationSteps.js', () => ({
     loadDataManager: jest.fn(),
     detectNFCSupport: jest.fn(() => Promise.resolve(false)),
     loadTokenDatabase: jest.fn(),
+    validateSettingsMode: jest.fn(),
     applyURLModeOverride: jest.fn(),
     syncModeDisplay: jest.fn(),
     registerServiceWorker: jest.fn(),
@@ -808,7 +809,7 @@ describe('App', () => {
 
       app.showScoreboard();
 
-      expect(Debug.log).toHaveBeenCalledWith('Scoreboard only available in Black Market mode');
+      expect(Debug.log).toHaveBeenCalledWith('Scoreboard only available in a rankings-surface mode');
     });
 
     it('should close scoreboard', () => {

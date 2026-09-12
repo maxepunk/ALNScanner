@@ -304,6 +304,60 @@ describe('SessionRenderer', () => {
     });
   });
 
+  describe('phase label (A3 slice 5 — pack-declared phases)', () => {
+    it('renders the pack label into #game-clock-phase and shows it', () => {
+      renderer.render({ name: 'Game', status: 'active' });
+      renderer.renderGameClock({ state: 'running', elapsed: 10, phase: { id: 'casing', label: 'Casing the Joint' } });
+
+      const el = container.querySelector('#game-clock-phase');
+      expect(el.textContent).toBe('Casing the Joint');
+      expect(el.style.display).not.toBe('none');
+    });
+
+    it('stays hidden when phase is null (ALN degenerate — byte-identical)', () => {
+      renderer.render({ name: 'Game', status: 'active' });
+      renderer.renderGameClock({ state: 'running', elapsed: 10, phase: null });
+
+      const el = container.querySelector('#game-clock-phase');
+      expect(el.textContent).toBe('');
+      expect(el.style.display).toBe('none');
+    });
+
+    it('re-renders on a phase change even when status and elapsed are unchanged (differential guard)', () => {
+      renderer.render({ name: 'Game', status: 'active' });
+      const prev = { state: 'running', elapsed: 60, phase: { id: 'casing', label: 'Casing the Joint' } };
+      renderer.renderGameClock(prev);
+      renderer.renderGameClock(
+        { state: 'running', elapsed: 60, phase: { id: 'the-job', label: 'The Job' } },
+        prev
+      );
+
+      expect(container.querySelector('#game-clock-phase').textContent).toBe('The Job');
+    });
+
+    it('the label uses textContent — pack wording never executes as markup', () => {
+      renderer.render({ name: 'Game', status: 'active' });
+      renderer.renderGameClock({
+        state: 'running', elapsed: 5,
+        phase: { id: 'x', label: '<img src=x onerror=window.__pwned=1>' },
+      });
+
+      const el = container.querySelector('#game-clock-phase');
+      expect(el.querySelector('img')).toBeNull();
+      expect(el.textContent).toContain('<img');
+    });
+
+    it('survives a template swap (restore re-applies the cached phase)', () => {
+      renderer.render({ name: 'Game', status: 'active' });
+      renderer.renderGameClock({ state: 'running', elapsed: 30, phase: { id: 'casing', label: 'Casing the Joint' } });
+
+      // Template swap: active → paused wipes the DOM; render() restores
+      renderer.render({ name: 'Game', status: 'paused' });
+
+      expect(container.querySelector('#game-clock-phase').textContent).toBe('Casing the Joint');
+    });
+  });
+
   describe('clock restoration after template swap', () => {
     it('should restore clock state after viewState change', () => {
       renderer.render({ name: 'Game', status: 'active' });

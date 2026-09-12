@@ -6,6 +6,8 @@
  * with proper ES6 module architecture and dependency injection.
  */
 
+import { isOrchestratorServed } from '../utils/config.js';
+
 /**
  * ConnectionWizard class - Manages connection wizard UI and workflow
  * Receives app instance via dependency injection (no window globals)
@@ -93,8 +95,10 @@ export class ConnectionWizard {
         results.push(...settled);
       }
 
-      // Try current origin if served from orchestrator
-      if (window.location.pathname.startsWith('/gm-scanner/')) {
+      // Try current origin if served from orchestrator (shared predicate —
+      // also covers the no-trailing-slash /gm-scanner case the old
+      // startsWith('/gm-scanner/') check missed)
+      if (isOrchestratorServed(window.location.pathname)) {
         results.push(window.location.origin);
       }
 
