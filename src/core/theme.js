@@ -39,6 +39,7 @@ export const THEME_SCHEMA_VERSION = 1;
 // local (the slice-7 precedent): modeSemantics does not export its
 // copy, and this module's sinks are formatStars strings + CSS custom
 // properties, not the DOM announcement path.
+// eslint-disable-next-line no-control-regex -- deliberate: this IS the control-character strip (value-twin doctrine)
 const CONTROL_AND_BIDI = /[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
 
 // Strict 6-digit hex — the CSS-sink injection-safety rule (D-T.1):

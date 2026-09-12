@@ -132,6 +132,48 @@ describe('GameOpsDomain — claims gates + floor surfacing (slice-2 closers)', (
     });
   });
 
+  describe('LB-4 — standalone refuses unrecognised tokens (backend parity)', () => {
+    // The backend refuses a scan whose tokenId is not in the catalog
+    // (TOKEN_NOT_FOUND) — nothing is recorded, nothing is claimed. The
+    // standalone scanner IS the authority in its mode, so it must apply
+    // the same rule: show the unknown-token feedback, record nothing.
+    it('an unknown id is NOT recorded, NOT claim-locked, NOT counted — feedback only', async () => {
+      deps.settings.mode = 'sell';
+      deps.tokenManager.findToken.mockReturnValue(null);
+
+      await app.processNFCRead({ id: 'ghost1', source: 'manual' });
+
+      expect(deps.dataManager.addTransaction).not.toHaveBeenCalled();
+      expect(deps.dataManager.markTokenAsScanned).not.toHaveBeenCalled();
+      // The operator still sees the unknown-token result screen
+      expect(deps.uiManager.showTokenResult).toHaveBeenCalledWith(null, 'ghost1', true);
+    });
+
+    it('re-tapping the same unknown id is refused again, never blocked as a duplicate', async () => {
+      deps.settings.mode = 'sell';
+      deps.tokenManager.findToken.mockReturnValue(null);
+
+      await app.processNFCRead({ id: 'ghost1', source: 'manual' });
+      await app.processNFCRead({ id: 'ghost1', source: 'manual' });
+
+      // Both taps reach the unknown-token feedback (no claim was
+      // registered, so the duplicate gate never fires)
+      expect(deps.uiManager.showTokenResult).toHaveBeenCalledTimes(2);
+      expect(deps.dataManager.addTransaction).not.toHaveBeenCalled();
+    });
+
+    it('NETWORKED scope pin: an unknown id still queues to the backend (the authority refuses it there)', async () => {
+      deps.sessionModeManager.isNetworked.mockReturnValue(true);
+      deps.sessionModeManager.isStandalone.mockReturnValue(false);
+      deps.settings.mode = 'sell';
+      deps.tokenManager.findToken.mockReturnValue(null);
+
+      await app.processNFCRead({ id: 'ghost1', source: 'manual' });
+
+      expect(queueTransaction).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('D2s2 — standalone score-adjustment refusal surfaces honestly', () => {
     it('a {success:false} refusal shows an error and NEVER a success toast', async () => {
       app.currentInterventionTeamId = 'Team Alpha';

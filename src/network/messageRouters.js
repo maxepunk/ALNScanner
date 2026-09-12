@@ -158,7 +158,7 @@ export function sharedInfraRouter(type, payload, dataManager, session, store, se
       // AUTH-7: post-connection auth failures → auth:required + token clear
       const code = payload?.code;
       if (typeof code === 'string' && (code.startsWith('AUTH_') || code === 'PERMISSION_DENIED')) {
-        try { localStorage.removeItem('aln_auth_token'); } catch (_e) { /* private mode */ }
+        try { localStorage.removeItem('aln_auth_token'); } catch { /* private mode */ }
         session.dispatchEvent(new CustomEvent('auth:required'));
       }
       session.dispatchEvent(new CustomEvent('backend:error', {

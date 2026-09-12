@@ -5,7 +5,6 @@
  * @jest-environment jsdom
  */
 
-import { jest } from '@jest/globals';
 import { CueRenderer } from '../../../../src/ui/renderers/CueRenderer.js';
 
 describe('CueRenderer', () => {
@@ -112,6 +111,35 @@ describe('CueRenderer', () => {
       expect(tile.querySelector('.cue-tile__label').textContent).toBe('Tension Hit');
       expect(tile.querySelector('.cue-icon--lightning')).toBeTruthy();
       expect(tile.classList.contains('cue-tile--lightning')).toBe(true);
+    });
+
+    it('a markup-bearing pack icon can NEVER escape the class attribute (train-review MAJOR 7 / LC-1)', () => {
+      // The review's live exploit: cues are PACK CONTENT (the lowest
+      // trust tier) and `icon` was interpolated raw into two class
+      // attributes — a gate-passing icon value broke out of the
+      // attribute and ran script in the origin holding the operator
+      // JWT. Every class-name interpolation of pack data goes through
+      // slugifyId (the 3c convention modeSemantics already uses).
+      const cues = new Map([
+        ['hostile', {
+          id: 'hostile',
+          label: 'Hostile',
+          icon: 'x" onmouseover="window.__pwned=1" data-y="',
+          triggerType: null,
+          quickFire: true,
+          enabled: true,
+        }],
+      ]);
+      renderer.render({ cues, activeCues: new Map(), disabledCues: new Set() });
+
+      const tile = gridEl.querySelector('[data-cue-id="hostile"]');
+      expect(tile).toBeTruthy();
+      expect(tile.hasAttribute('onmouseover')).toBe(false);
+      expect(window.__pwned).toBeUndefined();
+      // The hostile value survives only as one collapsed class token
+      expect(tile.className).not.toContain('"');
+      // The honest happy path is untouched (pinned above): plain icons
+      // like 'lightning' slug to themselves.
     });
 
     it('should show empty state when no quick fire cues exist', () => {

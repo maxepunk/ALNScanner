@@ -90,7 +90,7 @@ async function waitForElement(page, selector, timeout = 5000) {
     await page.waitForSelector(selector, { timeout, state: 'visible' });
     return page.locator(selector);
   } catch (error) {
-    throw new Error(`Element "${selector}" not found within ${timeout}ms`);
+    throw new Error(`Element "${selector}" not found within ${timeout}ms`, { cause: error });
   }
 }
 

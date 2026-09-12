@@ -493,7 +493,7 @@ describe('OrchestratorClient - Dumb Pipe', () => {
     it('should cleanup connection timeout if destroyed during connection', async () => {
       jest.useFakeTimers();
 
-      const connectPromise = client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
+      client.connect('token', { deviceId: 'TEST', deviceType: 'gm' });
 
       // Destroy while connection in progress
       client.destroy();

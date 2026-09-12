@@ -5,7 +5,6 @@
  * @jest-environment jsdom
  */
 
-import { jest } from '@jest/globals';
 import { VideoRenderer } from '../../../../src/ui/renderers/VideoRenderer.js';
 
 describe('VideoRenderer', () => {

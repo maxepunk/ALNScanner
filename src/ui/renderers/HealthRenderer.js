@@ -33,7 +33,7 @@ export class HealthRenderer {
    * @param {Object} data - { serviceHealth: { serviceId: { status, message } } } or flat health map
    * @param {Object|null} prev - Previous state (null on first render)
    */
-  render(data, prev = null) {
+  render(data, _prev = null) {
     if (!this.container) return;
 
     const health = data?.serviceHealth || data || {};

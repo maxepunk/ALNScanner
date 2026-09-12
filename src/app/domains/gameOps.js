@@ -71,7 +71,7 @@ export class GameOpsDomain {
   // ========== Team Entry ==========
 
   initTeamEntryUI() {
-    const { uiManager, teamRegistry } = this.app;
+    const { teamRegistry } = this.app;
     const teamInput = document.getElementById('teamNameInput');
     const teamList = document.getElementById('teamList');
     const listLabel = document.getElementById('teamListLabel');
@@ -347,11 +347,20 @@ export class GameOpsDomain {
       debug.log(`Transaction queued for orchestrator: ${txId}`);
     } else {
       if (sessionModeManager && sessionModeManager.isStandalone()) {
-        await dataManager.addTransaction(transaction);
-        if (isConsumingMode(settings.mode)) {
-          dataManager.markTokenAsScanned(tokenId);
+        if (isUnknown) {
+          // LB-4 backend parity: an unrecognised id is REFUSED, not
+          // recorded — the backend answers TOKEN_NOT_FOUND and stores
+          // nothing. Standalone is the authority in its mode, so it
+          // applies the same rule: feedback only (showTokenResult below),
+          // no transaction, no claim lock, no stats count.
+          debug.log(`Unknown token refused (standalone): ${tokenId}`, true);
+        } else {
+          await dataManager.addTransaction(transaction);
+          if (isConsumingMode(settings.mode)) {
+            dataManager.markTokenAsScanned(tokenId);
+          }
+          debug.log('Transaction stored via UnifiedDataManager (standalone mode)');
         }
-        debug.log('Transaction stored via UnifiedDataManager (standalone mode)');
       } else {
         debug.log('Warning: No session mode selected - cannot process transaction', true);
         uiManager.showError('Please select a game mode first');
@@ -474,9 +483,13 @@ export class GameOpsDomain {
 
   async adminResetScores() {
     const { sessionModeManager, dataManager, uiManager, viewController, debug } = this.app;
-    // Q1: entity noun is pack-declared. This dialog text is E2E-LOAD-BEARING —
-    // backend/tests/e2e/flows/07d-02 asserts it pack-derived; keep in lockstep.
-    if (!confirm(`Reset all ${entityLabel().toLowerCase()} scores to zero? Transactions will be preserved.`)) return;
+    // Q1: entity noun is pack-declared. The FIRST sentence is
+    // E2E-LOAD-BEARING — backend/tests/e2e/flows/07d-02 asserts it
+    // pack-derived; keep in lockstep. The second sentence tells the
+    // truth about the ruled full-restart reset (train-review LB-5:
+    // "Transactions will be preserved" was false in networked mode and
+    // is now false in both — the reset clears them by design).
+    if (!confirm(`Reset all ${entityLabel().toLowerCase()} scores to zero? This clears the session's transactions and token claims — a fresh start.`)) return;
 
     if (sessionModeManager?.isStandalone()) {
       try {

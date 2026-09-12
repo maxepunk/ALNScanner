@@ -826,10 +826,14 @@ describe('LocalStorage Strategy', () => {
   });
 
   describe('resetScores', () => {
-    it('should zero all team scores while keeping transactions', async () => {
+    // Train-review MAJOR 8 / LB-1: the ruled reset is the FULL restart
+    // the backend performs — the old zero-scores-only behavior (pinned
+    // by this test's previous version) left tokens locked, groups
+    // complete, and was undone by the next deletion.
+    it('performs the full restart: transactions, claims and group state cleared; re-scan accepted', async () => {
       await storage.createSession('Test Session', []);
+      const sharedSetRef = storage.scannedTokens;
 
-      // Add some transactions
       await storage.addTransaction({
         id: 'tx-001', tokenId: 'token-1', teamId: 'Team Alpha',
         mode: 'blackmarket', points: 50000, valueRating: 3, memoryType: 'Personal',
@@ -840,21 +844,50 @@ describe('LocalStorage Strategy', () => {
         mode: 'blackmarket', points: 75000, valueRating: 4, memoryType: 'Personal',
         timestamp: new Date().toISOString()
       });
+      expect(storage.getTeamScores().find(t => t.teamId === 'Team Alpha').score).toBeGreaterThan(0);
 
-      // Verify scores exist
-      let scores = storage.getTeamScores();
-      expect(scores.find(t => t.teamId === 'Team Alpha').score).toBeGreaterThan(0);
-
-      // Reset scores
       const result = await storage.resetScores();
-
       expect(result.success).toBe(true);
 
-      // Verify scores are zero but transactions remain
-      scores = storage.getTeamScores();
+      const scores = storage.getTeamScores();
       expect(scores.find(t => t.teamId === 'Team Alpha').score).toBe(0);
-      expect(scores.find(t => t.teamId === 'Team Beta').score).toBe(0);
-      expect(storage.getTransactions().length).toBe(2);
+      expect(scores.find(t => t.teamId === 'Team Alpha').tokenCount).toBe(0);
+      expect(scores.find(t => t.teamId === 'Team Alpha').completedGroups).toBe(0);
+      expect(storage.getTransactions()).toEqual([]);
+      // Claims cleared IN PLACE — same Set reference (TQ-7)
+      expect(storage.scannedTokens).toBe(sharedSetRef);
+      expect(storage.scannedTokens.size).toBe(0);
+
+      // A re-tap of a previously claimed token is ACCEPTED after reset
+      const rescan = await storage.addTransaction({
+        id: 'tx-003', tokenId: 'token-1', teamId: 'Team Alpha',
+        mode: 'blackmarket', points: 50000, valueRating: 3, memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      });
+      expect(rescan.success).toBe(true);
+      expect(storage.getTeamScores().find(t => t.teamId === 'Team Alpha').score).toBe(50000);
+    });
+
+    it('a deletion after reset cannot resurrect pre-reset scores (the silent-undo class)', async () => {
+      await storage.createSession('Test Session', []);
+      await storage.addTransaction({
+        id: 'tx-old', tokenId: 'token-1', teamId: 'Team Alpha',
+        mode: 'blackmarket', points: 50000, valueRating: 3, memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      });
+      await storage.resetScores();
+
+      // New game: one scan, then the GM deletes it (wrong team)
+      await storage.addTransaction({
+        id: 'tx-new', tokenId: 'token-2', teamId: 'Team Alpha',
+        mode: 'blackmarket', points: 25000, valueRating: 2, memoryType: 'Personal',
+        timestamp: new Date().toISOString()
+      });
+      await storage.removeTransaction('tx-new');
+
+      // Zero — the pre-reset 50,000 stays gone (the old reset left
+      // tx-old in place and the rebuild replayed it here)
+      expect(storage.getTeamScores().find(t => t.teamId === 'Team Alpha').score).toBe(0);
     });
 
     it('should emit scores:cleared event', async () => {
@@ -873,6 +906,30 @@ describe('LocalStorage Strategy', () => {
 
       const event = await eventPromise;
       expect(event.type).toBe('scores:cleared');
+    });
+
+    it('also emits data:cleared — the full restart deletes transactions, so transaction-derived UI must refresh (fix-vehicle review)', async () => {
+      // MAJOR-8 widened resetScores from score-zeroing to a full restart.
+      // scores:cleared only refreshes scoreboards (main.js); the history
+      // badge, scan-screen stats and admin Game Activity are wired to
+      // transaction events and data:cleared. A reset that deletes
+      // transactions without announcing data:cleared leaves those
+      // surfaces rendering rows that no longer exist.
+      await storage.createSession('Test Session', []);
+      await storage.addTransaction({
+        id: 'tx-002', tokenId: 'token-2', teamId: 'Team Alpha',
+        mode: 'blackmarket', points: 50000,
+        timestamp: new Date().toISOString()
+      });
+
+      const eventPromise = new Promise(resolve => {
+        storage.addEventListener('data:cleared', resolve, { once: true });
+      });
+
+      await storage.resetScores();
+
+      const event = await eventPromise;
+      expect(event.type).toBe('data:cleared');
     });
   });
 

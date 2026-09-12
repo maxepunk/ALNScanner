@@ -97,7 +97,7 @@ export async function detectNFCSupport(nfcHandler) {
  * @param {Object} uiManager - UIManager instance
  * @returns {Promise<boolean>} True if registration succeeded
  */
-export async function registerServiceWorker(navigatorObj, uiManager) {
+export async function registerServiceWorker(navigatorObj, _uiManager) {
   if (!('serviceWorker' in navigatorObj)) {
     return false;
   }

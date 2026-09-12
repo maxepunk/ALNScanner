@@ -42,7 +42,7 @@ describe('Session Report Download', () => {
   });
 
   it('should handle real character name format from Notion', () => {
-    const report = generator.generate(mockSessionData);
+    generator.generate(mockSessionData);
     // Character name should be used as-is from token database
     expect(generator._getTokenOwner('tok001')).toBe('Alex Reeves');
   });

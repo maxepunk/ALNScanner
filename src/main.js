@@ -148,6 +148,13 @@ DataManager.addEventListener('transaction:deleted', () => {
 
 DataManager.addEventListener('data:cleared', () => {
   UIManager.updateHistoryBadge();
+  // Full transaction-derived refresh (fix-vehicle review): a standalone
+  // reset deletes transactions, so scan-screen stats, the history screen
+  // and team details must re-render from the (now empty) data, not just
+  // the badge and scoreboards. All renderers self-guard on missing DOM.
+  UIManager.updateSessionStats();
+  refreshHistoryScreen();
+  refreshTeamDetails();
   clearScoreboards();
   const adminActivity = document.getElementById('admin-game-activity');
   if (adminActivity) adminActivity.innerHTML = '';

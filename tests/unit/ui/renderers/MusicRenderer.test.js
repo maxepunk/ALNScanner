@@ -124,6 +124,9 @@ describe('MusicRenderer', () => {
       { connected: true, state: 'stopped', volume: 70, playlists: [{ id: 'a', name: 'A' }] }
     );
     expect(container.querySelector('.music__playlist-picker').children.length).toBe(1);
+    // Same-node assertion — the picker element itself survives (the test's
+    // stated intent; a length check alone passes even after a wipe+rebuild).
+    expect(container.querySelector('.music__playlist-picker')).toBe(firstPicker);
   });
 
   test('renderDucking shows + hides ducking indicator', () => {

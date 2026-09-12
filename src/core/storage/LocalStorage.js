@@ -8,8 +8,7 @@
 import { IStorageStrategy } from './IStorageStrategy.js';
 import {
   SCORING_CONFIG,
-  parseGroupInfo,
-  calculateTokenValue
+  parseGroupInfo
 } from '../scoring.js';
 import { buildGameActivity } from '../gameActivityBuilder.js';
 import { isScoringMode, countsTowardGroups, isConsumingMode, entityLabel } from '../modeSemantics.js';
@@ -85,7 +84,7 @@ export class LocalStorage extends IStorageStrategy {
           this._repopulateScannedTokens();
           this.debug?.log(`Loaded session: ${parsed.sessionId}`);
         }
-      } catch (e) {
+      } catch {
         this.debug?.log('Failed to load session', true);
       }
     }
@@ -161,7 +160,7 @@ export class LocalStorage extends IStorageStrategy {
    * @param {Array} teams - Initial teams array
    * @returns {Promise<SessionInfo>}
    */
-  async createSession(name, teams) {
+  async createSession(name, _teams) {
     this.sessionData = {
       sessionId: this._generateSessionId(),
       name: name,
@@ -250,25 +249,44 @@ export class LocalStorage extends IStorageStrategy {
   }
 
   /**
-   * Reset all team scores to zero
-   * Keeps transactions for audit trail
+   * Reset All Scores — the FULL restart, matching the backend's ruled
+   * reset (train-review MAJOR 8 / LB-1). Standalone is the scoring
+   * AUTHORITY in its mode, so it must implement the same reset the
+   * backend does: scores to zero AND the session's transactions, token
+   * claims and group state cleared. The old zero-scores-only reset left
+   * every token permanently unclaimable ("Token Already Scanned" on
+   * re-tap), kept groups complete, and was silently UNDONE by the next
+   * transaction deletion (removeTransaction replays the survivors).
    * @returns {Promise<{success: boolean}>}
    */
   async resetScores() {
-    // Zero all team scores
     Object.keys(this.sessionData.teams).forEach(teamId => {
       const team = this.sessionData.teams[teamId];
       team.score = 0;
       team.baseScore = 0;
       team.bonusPoints = 0;
       team.adminAdjustments = [];
+      team.tokensScanned = 0;
+      team.completedGroups = [];
+      team.lastScanTime = null;
     });
+    this.sessionData.transactions = [];
+    // IN PLACE — the Set reference is shared with UnifiedDataManager
+    // (TQ-7: replacing it desyncs the shared reference)
+    this.scannedTokens.clear();
 
     this._saveSession();
 
-    // Emit event for UI updates
+    // Emit BOTH events (fix-vehicle review): scores:cleared refreshes the
+    // scoreboards; data:cleared refreshes the transaction-derived surfaces
+    // (history badge, scan-screen stats, admin Game Activity) — the full
+    // restart deletes transactions, so announcing only a score change
+    // leaves those surfaces rendering rows that no longer exist.
     this.dispatchEvent(new CustomEvent('scores:cleared', {
       detail: {}
+    }));
+    this.dispatchEvent(new CustomEvent('data:cleared', {
+      detail: { source: 'resetScores' }
     }));
 
     return { success: true };

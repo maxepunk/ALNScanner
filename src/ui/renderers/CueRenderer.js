@@ -1,5 +1,6 @@
 import { escapeHtml } from '../../utils/escapeHtml.js';
 import { escapeCssAttrValue } from '../../utils/escapeCssAttrValue.js';
+import { slugifyId } from '../../utils/slugify.js';
 
 /**
  * CueRenderer - Differential DOM Rendering for Cue System
@@ -33,7 +34,7 @@ export class CueRenderer {
    * @param {Object} state - { cues: Map, activeCues: Map, disabledCues: Set }
    * @param {Object|null} prev - Previous state (null on first render)
    */
-  render(state, prev = null) {
+  render(state, _prev = null) {
     if (!state || !state.cues) return;
 
     // Quick fire: build once (cue definitions don't change during session)
@@ -66,7 +67,11 @@ export class CueRenderer {
     }
 
     this.gridEl.innerHTML = quickFireCues.map(cue => {
-      const icon = cue.icon || 'default';
+      // Cues are PACK CONTENT (lowest trust tier) — every class-name
+      // interpolation of pack data goes through slugifyId, never raw
+      // (train-review MAJOR 7 / LC-1: a markup-bearing icon broke out
+      // of the class attribute and ran in the operator-JWT origin).
+      const icon = slugifyId(cue.icon) || 'default';
       const label = cue.label || cue.id;
       return `
         <button
@@ -179,7 +184,7 @@ export class CueRenderer {
 
   _buildActiveCues(cuesMap, entries) {
     this.activeListEl.innerHTML = entries.map(([cueId, details]) => {
-      const { state, progress, duration } = details || { state: 'running', progress: 0, duration: 0 };
+      const { state, progress } = details || { state: 'running', progress: 0 };
       const progressPercent = Math.round((progress || 0) * 100);
       const isPaused = state === 'paused';
       const cueDef = cuesMap.get(cueId);

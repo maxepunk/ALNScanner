@@ -203,10 +203,17 @@ export function calculateTokenValue(transaction) {
     if (transaction.isUnknown) return 0;
 
     const baseValue = SCORING_CONFIG.BASE_VALUES[transaction.valueRating] || 0;
-    // Use UNKNOWN multiplier (0) for unknown types - matches backend behavior
-    const multiplier = SCORING_CONFIG.TYPE_MULTIPLIERS[transaction.memoryType]
-        ?? SCORING_CONFIG.TYPE_MULTIPLIERS.UNKNOWN
-        ?? 0;
+    // PARITY (backend tokenService.calculateTokenValue): Object.hasOwn,
+    // not bare index — a type named 'constructor' would resolve via the
+    // prototype chain into NaN (backend round-2 C10; scanner twin LB-3).
+    // `??`-style fallback preserved: a declared 0 multiplier pays 0. The
+    // trailing `?? 0` covers a pack table without an UNKNOWN entry (the
+    // backend's getScoringRules guarantees one; applyPackScoring doesn't).
+    const multiplier = Object.hasOwn(SCORING_CONFIG.TYPE_MULTIPLIERS, transaction.memoryType ?? '')
+        ? SCORING_CONFIG.TYPE_MULTIPLIERS[transaction.memoryType]
+        : (SCORING_CONFIG.TYPE_MULTIPLIERS.UNKNOWN ?? 0);
 
-    return baseValue * multiplier;
+    // Math.floor mirrors the backend (LB-2): fractional pack multipliers
+    // must pay the same integer on both sides of the parity surface.
+    return Math.floor(baseValue * multiplier);
 }

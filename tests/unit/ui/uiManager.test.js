@@ -47,7 +47,7 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       })),
       calculateTeamScoreWithBonuses: jest.fn(() => ({ baseScore: 5000, bonusScore: 0, totalScore: 5000 })),
       calculateTokenValue: jest.fn(() => 5000),
-      parseGroupInfo: jest.fn((group) => ({ groupId: 'Server Logs', multiplier: 5 })),
+      parseGroupInfo: jest.fn(() => ({ groupId: 'Server Logs', multiplier: 5 })),
       getActiveStrategyType: jest.fn(() => 'local')
     };
 

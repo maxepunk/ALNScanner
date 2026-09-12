@@ -1,34 +1,22 @@
-// ESLint Flat Config — permissive baseline (eslint:recommended)
+// ESLint Flat Config — eslint:recommended at ERROR.
 //
-// Goal: a lint gate that passes TODAY on the existing codebase while still
-// catching real errors (syntax issues, obvious mistakes). Rules that the
-// current code violates pervasively are downgraded to 'warn' so they surface
-// in output without failing CI. Ratchet rules to 'error' over time.
+// The former "noisyDowngrades" warn-level block died with the train fix
+// vehicle (owner ruling: "pre-existing" is an attribution, not a verdict —
+// the backlog was cleaned, not carried). Everything from eslint:recommended
+// now fails the gate; the entries below either carry a deliberate option
+// or enable rules recommended doesn't include. Deliberate exceptions live
+// as line-level eslint-disable comments with a stated reason (the three
+// CONTROL_AND_BIDI strips), never as a rule downgrade.
 
 const js = require('@eslint/js');
 const globals = require('globals');
 
-// Rules from eslint:recommended that are noisy on the current codebase.
-// Keep them visible as warnings; do not fail the lint gate on them yet.
-const noisyDowngrades = {
-  'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-  'no-undef': 'warn',
-  'no-empty': 'warn',
-  'no-prototype-builtins': 'warn',
-  'no-useless-escape': 'warn',
-  'no-case-declarations': 'warn',
-  'no-fallthrough': 'warn',
-  'no-async-promise-executor': 'warn',
-  'no-control-regex': 'warn',
-  'no-cond-assign': 'warn',
-  'no-constant-condition': ['warn', { checkLoops: false }],
-  'no-inner-declarations': 'warn',
-  'no-redeclare': 'warn',
-  'no-import-assign': 'warn',
-  'no-dupe-class-members': 'warn',
-  'no-unsafe-optional-chaining': 'warn',
-  'no-useless-assignment': 'warn',
-  'preserve-caught-error': 'warn',
+const sharedRuleOverrides = {
+  'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+  'no-constant-condition': ['error', { checkLoops: false }],
+  // Not in eslint:recommended — enabled deliberately (kept from the old block).
+  'no-useless-assignment': 'error',
+  'preserve-caught-error': 'error',
 };
 
 module.exports = [
@@ -53,11 +41,13 @@ module.exports = [
       globals: {
         ...globals.browser,
         ...globals.serviceworker,
+        io: 'readonly', // socket.io client script tag (index.html)
+        NDEFReader: 'readonly', // Web NFC (not yet in the globals lib)
       },
     },
     rules: {
       ...js.configs.recommended.rules,
-      ...noisyDowngrades,
+      ...sharedRuleOverrides,
     },
   },
 
@@ -75,7 +65,7 @@ module.exports = [
     },
     rules: {
       ...js.configs.recommended.rules,
-      ...noisyDowngrades,
+      ...sharedRuleOverrides,
     },
   },
 ];

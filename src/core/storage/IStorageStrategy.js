@@ -70,7 +70,7 @@ export class IStorageStrategy extends EventTarget {
    * @param {Transaction} transaction - Transaction data
    * @returns {Promise<TransactionResult>}
    */
-  async addTransaction(transaction) {
+  async addTransaction(_transaction) {
     throw new Error('IStorageStrategy.addTransaction() must be implemented');
   }
 
@@ -79,7 +79,7 @@ export class IStorageStrategy extends EventTarget {
    * @param {string} transactionId - Transaction ID to remove
    * @returns {Promise<TransactionResult>}
    */
-  async removeTransaction(transactionId) {
+  async removeTransaction(_transactionId) {
     throw new Error('IStorageStrategy.removeTransaction() must be implemented');
   }
 
@@ -106,7 +106,7 @@ export class IStorageStrategy extends EventTarget {
    * @param {string} reason - Reason for adjustment
    * @returns {Promise<TransactionResult>}
    */
-  async adjustTeamScore(teamId, delta, reason) {
+  async adjustTeamScore(_teamId, _delta, _reason) {
     throw new Error('IStorageStrategy.adjustTeamScore() must be implemented');
   }
 
@@ -124,7 +124,7 @@ export class IStorageStrategy extends EventTarget {
    * @param {Array} teams - Initial teams array
    * @returns {Promise<SessionInfo>}
    */
-  async createSession(name, teams) {
+  async createSession(_name, _teams) {
     throw new Error('IStorageStrategy.createSession() must be implemented');
   }
 
