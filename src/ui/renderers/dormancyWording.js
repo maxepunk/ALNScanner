@@ -1,7 +1,7 @@
 /**
  * dormancyWording — the GM-facing sentence for a dormant service's door.
  *
- * PARITY COPY of `backend/src/services/dormancyWording.js`. The backend
+ * PARITY COPY of `backend/src/gameRules/dormancyWording.js`. The backend
  * builds its refusal messages from its copy; this one builds the dashboard
  * rows and the cue badges. They must say the same thing about the same
  * door — a GM who reads "not installed tonight" in a toast and "unavailable"
