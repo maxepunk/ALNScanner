@@ -76,7 +76,10 @@ describe('domEventBindings - safeAdminAction', () => {
   const mockApp = {
     networkedSession: {
       getService: jest.fn(() => mockAdminController)
-    }
+    },
+    // T1a D13 (R12): admin.startGame now routes through the app layer,
+    // which owns the typed NO-GO dialog around SessionManager.startGame.
+    adminStartGame: jest.fn(() => mockSessionManager.startGame())
   };
 
   const mockDebug = {

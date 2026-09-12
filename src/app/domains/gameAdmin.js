@@ -22,6 +22,9 @@ export class GameAdminDomain {
     this.app = app;
   }
 
+  /** The ack prefix the backend uses for a refused session:start (R11). */
+  static NO_GO_PREFIX = 'NO-GO: ';
+
   // ========== Session Lifecycle ==========
 
   async adminCreateSession() {
@@ -53,6 +56,60 @@ export class GameAdminDomain {
     } catch (error) {
       console.error('Failed to create session:', error);
       uiManager.showError('Failed to create session. Check connection.');
+    }
+  }
+
+  /**
+   * Start the game, with the typed way past a preflight NO-GO
+   * (Block 2 T1a D13, ruling R12; pin P7).
+   *
+   * The backend refuses `session:start` while a need the pack marked
+   * `onAbsent: require` is unresolved, acking `NO-GO: ` + the reasons. That
+   * refusal is a DECISION for the GM, not an error: they may know something
+   * the profile does not. The price of overriding is typing why, once —
+   * a blank reason is a click-through, and click-throughs are exactly what
+   * the gate exists to prevent, so an empty answer stops.
+   */
+  async adminStartGame() {
+    const { uiManager, viewController, debug } = this.app;
+
+    const sessionManager = viewController?.adminInstances?.sessionManager;
+    if (!sessionManager) {
+      uiManager.showError('Admin functions not available. Please ensure you are connected.');
+      return;
+    }
+
+    try {
+      await sessionManager.startGame({});
+      debug.log('Game started');
+      return;
+    } catch (error) {
+      const message = error?.message || '';
+      if (!message.startsWith(GameAdminDomain.NO_GO_PREFIX)) {
+        console.error('Failed to start game:', error);
+        uiManager.showError(`Failed to start game: ${message}`);
+        return;
+      }
+
+      const reasons = message.slice(GameAdminDomain.NO_GO_PREFIX.length);
+      const typed = prompt(
+        `Preflight NO-GO:\n\n${reasons}\n\nType a reason to start anyway, or Cancel:`
+      );
+      const reason = (typed || '').trim();
+      if (!reason) {
+        debug.log(`Start cancelled at the preflight gate: ${reasons}`, true);
+        uiManager.showError(message);
+        return;
+      }
+
+      try {
+        await sessionManager.startGame({ startAnyway: true, reason });
+        debug.log(`Game started over a preflight NO-GO: ${reason}`, true);
+        uiManager.showToast('Game started over a preflight NO-GO', 'warning');
+      } catch (overrideError) {
+        console.error('Failed to start game over the NO-GO:', overrideError);
+        uiManager.showError(`Failed to start game: ${overrideError?.message || 'Unknown error'}`);
+      }
     }
   }
 
