@@ -1,5 +1,11 @@
 # GM Scanner Maintenance Guide
 
+> **Production device (the game-day Pi): do not run `sync.py` here.** That checkout is
+> pinned to the `production-2026-07` branch, and `sync.py` pulls and pushes `main`, which
+> carries an incompatible token-data format (tokens v2). On the production device, token
+> updates follow "Token Update Before a Game" in the parent repo's `DEPLOYMENT_GUIDE.md`.
+> Everything below is for development checkouts on `main`.
+
 ## Token Synchronization
 
 The GM Scanner shares a token database with the Player Scanner through a git submodule. This guide covers maintenance tasks for keeping tokens synchronized.
