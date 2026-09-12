@@ -523,4 +523,237 @@ describe('CueRenderer', () => {
       expect(gridIds).not.toContain('midgame-tension');
     });
   });
+  // ══════════════════════════════════════════════════════════════════
+  // Block 2 T1a D13 — dormancy in the cue panel (pins P3/P4).
+  //
+  // A cue silenced because the equipment it needs is not in the room must
+  // LOOK silenced before a GM taps it. And a MIXED cue — one command on
+  // absent equipment, the rest live — must say which half will be skipped,
+  // because it still fires and the GM should not be surprised by the
+  // silence where the lighting hit should have been.
+  // ══════════════════════════════════════════════════════════════════
+  describe('dormancy (T1a D13)', () => {
+    const dormantCues = () => new Map([
+      ['vault-alarm-hit', {
+        id: 'vault-alarm-hit', label: 'Vault Alarm', icon: 'alert',
+        triggerType: null, quickFire: true,
+        enabled: false, disabledBy: 'dormant',
+        dormantCommands: [{ action: 'lighting:scene:activate', service: 'lighting', door: 'profile' }],
+      }],
+      ['all-clear-chime', {
+        id: 'all-clear-chime', label: 'All Clear Chime', icon: 'sound',
+        triggerType: null, quickFire: true,
+        enabled: true, disabledBy: null,
+        dormantCommands: [{ action: 'lighting:scene:activate', service: 'lighting', door: 'profile' }],
+      }],
+      ['heist-sting', {
+        id: 'heist-sting', label: 'Heist Sting', icon: 'sound',
+        triggerType: null, quickFire: true,
+        enabled: true, disabledBy: null, dormantCommands: [],
+      }],
+      ['standing-lights', {
+        id: 'standing-lights', label: 'Standing Lights',
+        triggerType: 'event', quickFire: false,
+        enabled: false, disabledBy: 'dormant',
+        dormantCommands: [{ action: 'lighting:scene:activate', service: 'lighting', door: 'operator' }],
+      }],
+      ['standing-gm-off', {
+        id: 'standing-gm-off', label: 'Standing GM Off',
+        triggerType: 'clock', quickFire: false,
+        enabled: false, disabledBy: 'gm', dormantCommands: [],
+      }],
+    ]);
+
+    const renderDormant = () => renderer.render({
+      cues: dormantCues(), activeCues: new Map(), disabledCues: new Set(),
+    });
+
+    describe('standing cue list', () => {
+      it('a dormancy-disabled row is grey and says its door', () => {
+        renderDormant();
+        const row = standingListEl.querySelector('[data-cue-id="standing-lights"]');
+        expect(row.classList.contains('standing-cue-item--dormant')).toBe(true);
+        expect(row.textContent).toContain('Out of service');
+      });
+
+      it('offers NO Enable button for a dormancy-disabled row', () => {
+        // The backend refuses cue:enable on a dormant cue. A button that
+        // exists only to be refused is worse than no button.
+        renderDormant();
+        const row = standingListEl.querySelector('[data-cue-id="standing-lights"]');
+        expect(row.querySelector('[data-action="admin.enableCue"]')).toBeNull();
+        expect(row.querySelector('[data-action="admin.disableCue"]')).toBeNull();
+      });
+
+      it('a GM-disabled row keeps its Enable button', () => {
+        renderDormant();
+        const row = standingListEl.querySelector('[data-cue-id="standing-gm-off"]');
+        expect(row.classList.contains('standing-cue-item--dormant')).toBe(false);
+        expect(row.querySelector('[data-action="admin.enableCue"]')).toBeTruthy();
+      });
+
+      it('the differential path keeps the dormant row dormant', () => {
+        renderDormant();
+        renderDormant();
+        const row = standingListEl.querySelector('[data-cue-id="standing-lights"]');
+        expect(row.classList.contains('standing-cue-item--dormant')).toBe(true);
+        expect(row.querySelector('[data-action="admin.enableCue"]')).toBeNull();
+      });
+
+      it('re-renders the dormant note when the door flips profile → operator while disabledBy stays "dormant" (PR #17 review)', () => {
+        // _updateStandingCues()'s guard (isDisabled !== wasDisabled ||
+        // isDormant !== wasDormant) skips the update whenever a row stays
+        // dormant across renders, so the door's wording went stale.
+        const cues = dormantCues();
+        cues.set('standing-lights', {
+          ...cues.get('standing-lights'),
+          dormantCommands: [{ action: 'lighting:scene:activate', service: 'lighting', door: 'profile' }],
+        });
+        renderer.render({ cues, activeCues: new Map(), disabledCues: new Set() });
+        let row = standingListEl.querySelector('[data-cue-id="standing-lights"]');
+        expect(row.textContent).toContain('Not installed tonight');
+
+        const flipped = dormantCues();
+        flipped.set('standing-lights', {
+          ...flipped.get('standing-lights'),
+          dormantCommands: [{ action: 'lighting:scene:activate', service: 'lighting', door: 'operator' }],
+        });
+        renderer.render({ cues: flipped, activeCues: new Map(), disabledCues: new Set() });
+
+        row = standingListEl.querySelector('[data-cue-id="standing-lights"]');
+        expect(row.textContent).toContain('Out of service');
+        expect(row.textContent).not.toContain('Not installed tonight');
+      });
+
+      it('a row that LEAVES the dormancy set gets its buttons back', () => {
+        renderDormant();
+        const revived = dormantCues();
+        revived.set('standing-lights', {
+          ...revived.get('standing-lights'),
+          enabled: true, disabledBy: null, dormantCommands: [],
+        });
+        renderer.render({ cues: revived, activeCues: new Map(), disabledCues: new Set() });
+
+        const row = standingListEl.querySelector('[data-cue-id="standing-lights"]');
+        expect(row.classList.contains('standing-cue-item--dormant')).toBe(false);
+        expect(row.querySelector('[data-action="admin.disableCue"]')).toBeTruthy();
+      });
+    });
+
+    describe('quick fire grid', () => {
+      it('a disabled tile is really disabled, with the reason in its title', () => {
+        renderDormant();
+        const tile = gridEl.querySelector('[data-cue-id="vault-alarm-hit"]');
+        expect(tile.disabled).toBe(true);
+        expect(tile.classList.contains('cue-tile--disabled')).toBe(true);
+        expect(tile.getAttribute('title')).toContain('Not installed tonight');
+      });
+
+      it('a tile disabled by the GM is also disabled, with its own reason', () => {
+        const cues = dormantCues();
+        cues.set('heist-sting', {
+          ...cues.get('heist-sting'), enabled: false, disabledBy: 'gm',
+        });
+        renderer.render({ cues, activeCues: new Map(), disabledCues: new Set() });
+
+        const tile = gridEl.querySelector('[data-cue-id="heist-sting"]');
+        expect(tile.disabled).toBe(true);
+        expect(tile.getAttribute('title')).toContain('Disabled');
+      });
+
+      it('a MIXED cue stays enabled and shows a badge counting its skipped commands', () => {
+        renderDormant();
+        const tile = gridEl.querySelector('[data-cue-id="all-clear-chime"]');
+        expect(tile.disabled).toBe(false);
+        const badge = tile.querySelector('.cue-tile__badge');
+        expect(badge).toBeTruthy();
+        expect(badge.textContent.trim()).toBe('1');
+        expect(badge.getAttribute('title'))
+          .toBe('lighting:scene:activate → lighting (Not installed tonight)');
+      });
+
+      it('a wholly live cue gets no badge', () => {
+        renderDormant();
+        const tile = gridEl.querySelector('[data-cue-id="heist-sting"]');
+        expect(tile.querySelector('.cue-tile__badge')).toBeNull();
+        expect(tile.disabled).toBe(false);
+      });
+
+      it('the grid REBUILDS when the disabled/dormant picture changes', () => {
+        // The grid used to be built exactly once, so a cue disabled after
+        // the first render still looked tappable.
+        renderer.render({
+          cues: dormantCues(), activeCues: new Map(), disabledCues: new Set(),
+        });
+        expect(gridEl.querySelector('[data-cue-id="heist-sting"]').disabled).toBe(false);
+
+        const cues = dormantCues();
+        cues.set('heist-sting', { ...cues.get('heist-sting'), enabled: false, disabledBy: 'gm' });
+        renderer.render({ cues, activeCues: new Map(), disabledCues: new Set() });
+
+        expect(gridEl.querySelector('[data-cue-id="heist-sting"]').disabled).toBe(true);
+      });
+
+      it('the grid REBUILDS when the dormant service/door changes but the skipped-command COUNT stays the same (PR #17 review)', () => {
+        // _gridSignatureOf() used to fold only dormantCommands.length, so a
+        // MIXED cue whose absent SERVICE changed while the count held
+        // steady left the stale service in the badge title.
+        renderDormant();
+        let tile = gridEl.querySelector('[data-cue-id="all-clear-chime"]');
+        expect(tile.querySelector('.cue-tile__badge').getAttribute('title'))
+          .toBe('lighting:scene:activate → lighting (Not installed tonight)');
+
+        const changed = dormantCues();
+        changed.set('all-clear-chime', {
+          ...changed.get('all-clear-chime'),
+          dormantCommands: [{ action: 'lighting:scene:activate', service: 'audio', door: 'profile' }],
+        });
+        renderer.render({ cues: changed, activeCues: new Map(), disabledCues: new Set() });
+
+        tile = gridEl.querySelector('[data-cue-id="all-clear-chime"]');
+        expect(tile.querySelector('.cue-tile__badge').getAttribute('title'))
+          .toBe('lighting:scene:activate → audio (Not installed tonight)');
+      });
+
+      it('the grid REBUILDS when the dormant DOOR changes but the skipped-command COUNT stays the same (PR #17 review)', () => {
+        // Same bug, on the door half of the pair: a disabled tile's title
+        // text is built from the first dormant command's door, and the
+        // count alone does not change when only the door does.
+        renderDormant();
+        let tile = gridEl.querySelector('[data-cue-id="vault-alarm-hit"]');
+        expect(tile.getAttribute('title')).toContain('Not installed tonight');
+
+        const changed = dormantCues();
+        changed.set('vault-alarm-hit', {
+          ...changed.get('vault-alarm-hit'),
+          dormantCommands: [{ action: 'lighting:scene:activate', service: 'lighting', door: 'operator' }],
+        });
+        renderer.render({ cues: changed, activeCues: new Map(), disabledCues: new Set() });
+
+        tile = gridEl.querySelector('[data-cue-id="vault-alarm-hit"]');
+        expect(tile.getAttribute('title')).toContain('Out of service');
+        expect(tile.getAttribute('title')).not.toContain('Not installed tonight');
+      });
+
+      it('a markup-bearing action name stays INSIDE the badge title attribute', () => {
+        // Cue commands are PACK CONTENT (lowest trust tier). The badge
+        // title is built from the action name, so a quote in it must not
+        // close the attribute. (Asserted on the live DOM, not on
+        // innerHTML: the HTML serializer legitimately leaves < and > raw
+        // inside an attribute VALUE, so a substring check there would
+        // pass on a real escape and fail on a fake one.)
+        const cues = dormantCues();
+        cues.set('all-clear-chime', {
+          ...cues.get('all-clear-chime'),
+          dormantCommands: [{ action: '"><img src=x onerror=alert(1)>', service: 'lighting', door: 'profile' }],
+        });
+        renderer.render({ cues, activeCues: new Map(), disabledCues: new Set() });
+
+        expect(gridEl.querySelector('img')).toBeNull();
+        const badge = gridEl.querySelector('[data-cue-id="all-clear-chime"] .cue-tile__badge');
+        expect(badge.getAttribute('title'))
+          .toBe('"><img src=x onerror=alert(1)> → lighting (Not installed tonight)');
+      });
+    });
+  });
 });

@@ -378,6 +378,14 @@ export class MonitoringDisplay {
   }
 
   /**
+   * Open (or re-close) the service-health dashboard from its collapsed
+   * summary (T1a D13). Wired from `data-action="admin.toggleHealthDetail"`.
+   */
+  toggleHealthDetail() {
+    this.healthRenderer.toggleDetail();
+  }
+
+  /**
    * Resume monitoring (socket reconnected)
    */
   resume() {

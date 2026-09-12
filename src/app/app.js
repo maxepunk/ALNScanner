@@ -665,6 +665,7 @@ class App {
   // ========== Admin Actions (Game Admin) ==========
 
   async adminCreateSession() { return this._gameAdmin.adminCreateSession(); }
+  async adminStartGame() { return this._gameAdmin.adminStartGame(); }
   async adminPauseSession() { return this._gameAdmin.adminPauseSession(); }
   async adminResumeSession() { return this._gameAdmin.adminResumeSession(); }
   async adminEndSession() { return this._gameAdmin.adminEndSession(); }

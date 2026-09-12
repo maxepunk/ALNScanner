@@ -1,6 +1,7 @@
 import { escapeHtml } from '../../utils/escapeHtml.js';
 import { escapeCssAttrValue } from '../../utils/escapeCssAttrValue.js';
 import { slugifyId } from '../../utils/slugify.js';
+import { doorWording } from './dormancyWording.js';
 
 /**
  * CueRenderer - Differential DOM Rendering for Cue System
@@ -23,7 +24,10 @@ export class CueRenderer {
     this.standingListEl = elements.standingCuesList || document.getElementById('standing-cues-list');
     this.activeListEl = elements.activeCuesList || document.getElementById('active-cues-list');
 
-    this._gridBuilt = false;
+    // Was a boolean "built once": a cue disabled AFTER the first render
+    // still rendered as a normal, tappable tile (T1a D13). The grid is now
+    // keyed on the disabled/dormant picture and rebuilds when it changes.
+    this._gridSignature = null;
     this._standingEls = null; // { cueId: { item, actionSlot } }
     this._activeEls = null;   // { cueId: { item, stateEl, progressFill, progressText, actionSlot } }
     this._lastActiveIds = null; // sorted comma-joined string for quick comparison
@@ -37,10 +41,11 @@ export class CueRenderer {
   render(state, _prev = null) {
     if (!state || !state.cues) return;
 
-    // Quick fire: build once (cue definitions don't change during session)
-    if (!this._gridBuilt) {
+    // Quick fire: rebuild when the disabled/dormant picture changes
+    const signature = CueRenderer._gridSignatureOf(state.cues);
+    if (signature !== this._gridSignature) {
       this._buildQuickFireGrid(state.cues);
-      this._gridBuilt = true;
+      this._gridSignature = signature;
     }
 
     // Standing cues: build once, then toggle enable/disable
@@ -55,6 +60,42 @@ export class CueRenderer {
   }
 
   // ─── Quick Fire Grid (build once) ──────────────────────────────
+
+  /**
+   * Everything about a cue that changes how its TILE looks. The grid is
+   * rebuilt when this changes and not otherwise.
+   * @private
+   */
+  static _gridSignatureOf(cuesMap) {
+    return Array.from(cuesMap.values())
+      .filter(cue => cue.quickFire === true)
+      .map(cue => {
+        // The count alone is not enough (PR #17 review): a MIXED cue whose
+        // absent service/door changes while the skipped-command COUNT holds
+        // steady must still rebuild — the badge title and the disabled-tile
+        // reason text are both built from the FIRST dormant command.
+        const [first] = cue.dormantCommands || [];
+        return `${cue.id}:${cue.enabled === false ? 1 : 0}:${cue.disabledBy || ''}:`
+          + `${(cue.dormantCommands || []).length}:${first?.service || ''}:${first?.door || ''}`;
+      })
+      .join('|');
+  }
+
+  /**
+   * Why this cue cannot fire right now, in the GM's words, or null.
+   * @private
+   */
+  static _disabledReason(cue) {
+    if (cue.enabled !== false) return null;
+    if (cue.disabledBy === 'dormant') {
+      const [first] = cue.dormantCommands || [];
+      return first
+        ? `${doorWording(first.door)} (${first.service})`
+        : 'Dormant';
+    }
+    if (cue.disabledBy === 'once') return 'Already fired (once cue)';
+    return 'Disabled';
+  }
 
   _buildQuickFireGrid(cuesMap) {
     if (!this.gridEl) return;
@@ -73,15 +114,27 @@ export class CueRenderer {
       // of the class attribute and ran in the operator-JWT origin).
       const icon = slugifyId(cue.icon) || 'default';
       const label = cue.label || cue.id;
+      const reason = CueRenderer._disabledReason(cue);
+      // T1a D13 (P3): a MIXED cue still fires — the badge is the warning
+      // that part of it will be silent, so the GM is not left wondering
+      // why the lighting hit did not land.
+      const dormantCmds = cue.dormantCommands || [];
+      const badgeTitle = dormantCmds
+        .map(c => `${c.action} → ${c.service} (${doorWording(c.door)})`)
+        .join('; ');
       return `
         <button
-          class="cue-tile cue-tile--${icon}"
+          class="cue-tile cue-tile--${icon}${reason ? ' cue-tile--disabled' : ''}"
           data-action="admin.fireCue"
           data-cue-id="${escapeHtml(cue.id)}"
-          title="${escapeHtml(label)}"
+          title="${escapeHtml(reason ? `${label} — ${reason}` : label)}"
+          ${reason ? 'disabled' : ''}
         >
           <span class="cue-tile__icon cue-icon--${icon}"></span>
           <span class="cue-tile__label">${escapeHtml(label)}</span>
+          ${dormantCmds.length > 0
+    ? `<span class="cue-tile__badge" title="${escapeHtml(badgeTitle)}">${dormantCmds.length}</span>`
+    : ''}
         </button>
       `;
     }).join('');
@@ -101,8 +154,12 @@ export class CueRenderer {
     }
 
     this.standingListEl.innerHTML = standingCues.map(cue => {
-      const isDisabled = disabledCuesSet?.has(cue.id) || cue.enabled === false;
-      const statusClass = isDisabled ? 'standing-cue-item--disabled' : 'standing-cue-item--enabled';
+      const isDormant = cue.disabledBy === 'dormant';
+      const isDisabled = isDormant
+        || disabledCuesSet?.has(cue.id) || cue.enabled === false;
+      const statusClass = isDormant
+        ? 'standing-cue-item--dormant'
+        : (isDisabled ? 'standing-cue-item--disabled' : 'standing-cue-item--enabled');
       const triggerLabel = cue.triggerType === 'clock' ? '\u23F1 clock' : '\u26A1 event';
 
       return `
@@ -112,10 +169,7 @@ export class CueRenderer {
             <span class="standing-cue-item__trigger">${escapeHtml(triggerLabel)}</span>
           </div>
           <div class="standing-cue-item__actions">
-            ${isDisabled ?
-          `<button class="btn btn-sm btn-success" data-action="admin.enableCue" data-cue-id="${escapeHtml(cue.id)}">Enable</button>` :
-          `<button class="btn btn-sm btn-secondary" data-action="admin.disableCue" data-cue-id="${escapeHtml(cue.id)}">Disable</button>`
-        }
+            ${CueRenderer._standingActions(cue, isDormant, isDisabled)}
           </div>
         </div>
       `;
@@ -128,10 +182,42 @@ export class CueRenderer {
       if (item) {
         this._standingEls[cue.id] = {
           item,
-          actionSlot: item.querySelector('.standing-cue-item__actions')
+          actionSlot: item.querySelector('.standing-cue-item__actions'),
+          dormantSig: CueRenderer._dormantNoteSignature(cue)
         };
       }
     }
+  }
+
+  /**
+   * Everything the DORMANT-NOTE half of `_standingActions()` reads: which
+   * door disabled it and (for completeness) which service. Folded into
+   * `_updateStandingCues()`'s rebuild guard so a door change (e.g.
+   * `profile` → `operator`) re-renders the note even though `disabledBy`
+   * stays `'dormant'` across both renders (PR #17 review).
+   * @private
+   */
+  static _dormantNoteSignature(cue) {
+    const [first] = cue.dormantCommands || [];
+    return `${cue.disabledBy || ''}:${first?.door || ''}:${first?.service || ''}`;
+  }
+
+  /**
+   * The buttons a standing row offers. A DORMANCY-disabled row offers none:
+   * the backend refuses cue:enable on it (T1a D5/P4), and a button whose
+   * only outcome is a refusal is worse than no button. It shows the door's
+   * wording instead, so the GM knows why and that it is not theirs to fix.
+   * @private
+   */
+  static _standingActions(cue, isDormant, isDisabled) {
+    if (isDormant) {
+      const [first] = cue.dormantCommands || [];
+      return `<span class="standing-cue-item__dormant-note">${escapeHtml(doorWording(first?.door))}</span>`;
+    }
+    const id = escapeHtml(cue.id);
+    return isDisabled
+      ? `<button class="btn btn-sm btn-success" data-action="admin.enableCue" data-cue-id="${id}">Enable</button>`
+      : `<button class="btn btn-sm btn-secondary" data-action="admin.disableCue" data-cue-id="${id}">Disable</button>`;
   }
 
   _updateStandingCues(cuesMap, disabledCuesSet) {
@@ -141,15 +227,21 @@ export class CueRenderer {
       const cue = cuesMap.get(cueId);
       if (!cue) continue;
 
-      const isDisabled = disabledCuesSet?.has(cueId) || cue.enabled === false;
-      const wasDisabled = els.item.classList.contains('standing-cue-item--disabled');
+      const isDormant = cue.disabledBy === 'dormant';
+      const isDisabled = isDormant
+        || disabledCuesSet?.has(cueId) || cue.enabled === false;
+      const wasDormant = els.item.classList.contains('standing-cue-item--dormant');
+      const wasDisabled = wasDormant
+        || els.item.classList.contains('standing-cue-item--disabled');
+      const dormantSig = CueRenderer._dormantNoteSignature(cue);
+      const dormantSigChanged = dormantSig !== els.dormantSig;
 
-      if (isDisabled !== wasDisabled) {
-        els.item.classList.toggle('standing-cue-item--disabled', isDisabled);
+      if (isDisabled !== wasDisabled || isDormant !== wasDormant || dormantSigChanged) {
+        els.item.classList.toggle('standing-cue-item--dormant', isDormant);
+        els.item.classList.toggle('standing-cue-item--disabled', isDisabled && !isDormant);
         els.item.classList.toggle('standing-cue-item--enabled', !isDisabled);
-        els.actionSlot.innerHTML = isDisabled
-          ? `<button class="btn btn-sm btn-success" data-action="admin.enableCue" data-cue-id="${escapeHtml(cueId)}">Enable</button>`
-          : `<button class="btn btn-sm btn-secondary" data-action="admin.disableCue" data-cue-id="${escapeHtml(cueId)}">Disable</button>`;
+        els.actionSlot.innerHTML = CueRenderer._standingActions(cue, isDormant, isDisabled);
+        els.dormantSig = dormantSig;
       }
     }
   }

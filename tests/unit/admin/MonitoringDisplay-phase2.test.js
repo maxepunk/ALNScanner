@@ -151,6 +151,15 @@ describe('MonitoringDisplay - Phase 2', () => {
 
       expect(renderSpy).toHaveBeenCalled();
     });
+
+    // PR #17 review coverage note: this delegation wasn't directly exercised.
+    it('toggleHealthDetail() delegates to healthRenderer.toggleDetail()', () => {
+      const toggleSpy = jest.spyOn(display.healthRenderer, 'toggleDetail');
+
+      display.toggleHealthDetail();
+
+      expect(toggleSpy).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Phase 4: HeldItemsRenderer wiring via store', () => {

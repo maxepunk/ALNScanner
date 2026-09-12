@@ -32,11 +32,21 @@ export class SessionManager {
   }
 
   /**
-   * Start the game (transition from setup to active)
+   * Start the game (transition from setup to active).
+   *
+   * The backend REFUSES the start while a need the pack marked
+   * `onAbsent: require` is unresolved (Block 2 T1a, pin P7); the ack comes
+   * back `success:false` with a message beginning `NO-GO: `. The typed way
+   * past it — collecting a reason from the operator and re-sending — lives
+   * in `app/domains/gameAdmin.js`, where the scanner's prompt() idiom is;
+   * this method only carries the payload.
+   *
+   * @param {{startAnyway?: boolean, reason?: string}} [opts]
    * @returns {Promise<Object>} Start response
    */
-  async startGame() {
-    return sendCommand(this.connection, 'session:start', {});
+  async startGame({ startAnyway = false, reason } = {}) {
+    const payload = startAnyway ? { startAnyway: true, reason } : {};
+    return sendCommand(this.connection, 'session:start', payload);
   }
 
   /**
