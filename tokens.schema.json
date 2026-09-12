@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aln.tokens/tokens.schema.json",
+  "title": "ALN Token Database (tokens.json) — v2",
+  "description": "Schema for the shared token definitions produced by scripts/sync_notion_to_tokens.py and consumed by the backend orchestrator, GM scanner, web player scanner, and ESP32 scanner. v2 (A3 slice 2b): SF_Group carries the PURE group name — the '(xN)' microformat is retired; multipliers are pack RULES in game.json `groups`, and the activation gate refuses tokens naming undeclared groups. SF_MemoryType is an OPEN pack-declared id (exact-case; the gate refuses types absent from the pack's own scoring.typeMultipliers — the closed ALN enum died with the R11 genericization). Invariant not expressible here: each token's SF_RFID must equal its object key (enforced by the backend contract test and the sync script's alignment check).",
+  "type": "object",
+  "minProperties": 1,
+  "patternProperties": {
+    "^[A-Za-z0-9_-]+$": { "$ref": "#/$defs/token" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "token": {
+      "type": "object",
+      "required": [
+        "image",
+        "audio",
+        "video",
+        "processingImage",
+        "SF_RFID",
+        "SF_ValueRating",
+        "SF_MemoryType",
+        "SF_Group"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "description": "Memory image shown by player scanners, relative to the token-data root. BMP only — the ESP32 renderer cannot decode other formats",
+          "type": ["string", "null"],
+          "pattern": "^assets/images/.+\\.bmp$"
+        },
+        "audio": {
+          "description": "Memory audio played by player scanners, relative to the token-data root",
+          "type": ["string", "null"],
+          "pattern": "^assets/audio/.+\\.(wav|mp3)$"
+        },
+        "video": {
+          "description": "Video filename (no path) played by the orchestrator on TV when a player scans this token",
+          "type": ["string", "null"],
+          "pattern": "^[^/]+\\.mp4$"
+        },
+        "processingImage": {
+          "description": "Interstitial image shown while a video token is queued. BMP only, as with image",
+          "type": ["string", "null"],
+          "pattern": "^assets/images/.+\\.bmp$"
+        },
+        "SF_RFID": {
+          "description": "Token identifier — MUST equal this token's object key",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "SF_ValueRating": {
+          "description": "1-5 star rating; multiplied with the SF_MemoryType multiplier per game.json scoring.typeMultipliers",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "SF_MemoryType": {
+          "description": "Pack-declared memory type id driving the scoring multiplier — OPEN vocabulary, EXACT-CASE (v2/R11: the engine's activation gate refuses ids absent from the pack's own scoring.typeMultipliers). null is tolerated but scores 0x (UNKNOWN) — the sync script warns",
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "SF_Group": {
+          "description": "PURE group name (v2) — '' means no group. The completion multiplier lives in game.json `groups` (D1b); the activation gate refuses a token naming an undeclared group. The '(xN)' suffix is RETIRED and schema-illegal",
+          "type": "string",
+          "not": { "pattern": "\\(x[0-9]+\\)\\s*$" }
+        },
+        "summary": {
+          "description": "Public summary shown on the scoreboard when the token is exposed via a Detective transaction",
+          "type": "string"
+        },
+        "owner": {
+          "description": "Character who owns this memory (resolved from Notion's Elements→Characters relation, role prefix stripped)",
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

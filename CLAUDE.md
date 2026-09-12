@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-02-06
+Last verified: 2026-06-18
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -19,10 +19,20 @@ ALN-TokenData/
     aln-tools.js       # Shared utilities (config, NFC, token loading)
   tokens.json          # Token definitions (synced from Notion)
   tokens.json.backup   # Manual backup
-  scoring-config.json  # Shared scoring values (loaded by backend + GM Scanner)
+  tokens.schema.json   # JSON Schema for tokens.json (enforced by backend contract test)
+  game.json            # Pack RULES file: scoring, modes, groupRules, duplicatePolicy, gameClock
+  game.schema.json     # JSON Schema for game.json
+  pack-manifest.json   # Pack inventory + contentHash (regenerate after ANY pack-file edit:
+                       #   node backend/scripts/build-pack-manifest.js <packDir>)
+  pack-manifest.schema.json
   tag-writer.html      # NFC tag programming tool
   token-checkin.html   # Token inventory check-in tool
 ```
+
+Note: the legacy `scoring-config.json` was RETIRED in Phase 3 A3 slice 2
+(debt ledger L1) — `game.json`'s `scoring` block is the sole shared
+scoring source, and the manifest builders permanently exclude a file by
+the old name from pack inventory (tombstone).
 
 ## Token Schema
 
@@ -35,8 +45,8 @@ ALN-TokenData/
     "processingImage": "assets/images/{tokenId}.bmp" | null,
     "SF_RFID": "tokenId",
     "SF_ValueRating": 1-5,
-    "SF_MemoryType": "Personal" | "Business" | "Technical" | "Mention" | "Party",
-    "SF_Group": "Group Name (xN)" | "",
+    "SF_MemoryType": "Personal" | "Business" | "Technical" | "Mention" | "Party" | null,
+    "SF_Group": "Group Name" | "",
     "summary": "Optional description text",
     "owner": "Character Name" | null
   }
@@ -45,7 +55,8 @@ ALN-TokenData/
 
 **Field Notes:**
 - `SF_*` fields are synced from Notion (source of truth)
-- `SF_Group` format: `"Group Name (xN)"` where N is the group size multiplier
+- `SF_MemoryType: null` is tolerated (scores 0x as UNKNOWN); the sync script warns on it. Since D2b the type set is OPEN and pack-declared (exact-case match against `game.json` `scoring.typeMultipliers`; ALN declares Personal/Business/Technical/Mention/Party)
+- `SF_Group` (tokens v2, A3 slice 2b): the PURE group name — a `"(xN)"` suffix is schema-ILLEGAL (tokens.schema.json). Multipliers live in `game.json` `groups` (sole source). The `Group Name (xN)` shorthand survives only as the Notion authoring format; `sync_notion_to_tokens.py` is its sole parser (derives the groups block, emits pure names)
 - `video` tokens use `processingImage` as placeholder during playback
 - Asset paths are relative to the consuming application's asset directory
 - `owner`: Character who owns this memory, resolved from Notion Elements→Characters Owner relation during sync (role prefix stripped)
@@ -146,13 +157,22 @@ sleep(ms)
 formatRelativeTime(date)
 ```
 
-## Scoring Config (`scoring-config.json`)
+## Scoring Values (`game.json` `scoring` block)
 
-Single source of truth for scoring values, loaded at runtime by both the backend (`backend/src/config/index.js`) and GM Scanner (`ALNScanner/src/core/scoring.js`). Contains `baseValues` (rating -> dollar amount) and `typeMultipliers` (memory type -> multiplier). Formula:
+Single source of truth for scoring values, read at runtime by the backend
+(`packService.getScoringRules()`), the GM Scanner (`applyPackScoring()`
+via its packLoader), the post-session validators, and the config-tool
+economy editor. Contains `baseValues` (rating -> dollar amount) and
+`typeMultipliers` (memory type -> multiplier). Formula:
 
 ```
-tokenScore = baseValues[SF_ValueRating] × typeMultipliers[SF_MemoryType]
+tokenScore = scoring.baseValues[SF_ValueRating] × scoring.typeMultipliers[SF_MemoryType]
 ```
+
+After editing, regenerate the manifest
+(`node backend/scripts/build-pack-manifest.js .`) — the backend's
+freshness contract test and the scanners' per-file sha1 verify both fail
+on a drifted pack without it.
 
 ## Editing tokens.json
 

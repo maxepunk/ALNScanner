@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aln.tokens/strings.schema.json",
+  "title": "ALN Game Pack Strings (strings.json)",
+  "description": "Pack-declared display strings (Phase 3 A3 slice 3a; design: docs/plans/2026-08-21-phase3-a3-slice3a-strings.md in ALN-Ecosystem). game.json's `strings` field names this sidecar file; the manifest builder assigns it the `strings` role. Content is namespaced sections of LEAF STRING values (sections nest — e.g. strings.scanner.statLabels.score). The section vocabulary is deliberately OPEN (schema-open, gate-enforced house rule): consumers fall back to their baked defaults for any key a pack omits — missing strings are benign wording, never wrong scoring — while a DECLARED strings file that is missing or malformed refuses activation loudly (declared ⇒ must load).",
+  "type": "object",
+  "required": ["kind", "schemaVersion"],
+  "properties": {
+    "kind": {
+      "const": "strings"
+    },
+    "schemaVersion": {
+      "const": 2
+    }
+  },
+  "additionalProperties": {
+    "$ref": "#/$defs/section"
+  },
+  "$defs": {
+    "section": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          { "type": "string", "minLength": 1 },
+          { "$ref": "#/$defs/section" }
+        ]
+      }
+    }
+  }
+}

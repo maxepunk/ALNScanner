@@ -1,0 +1,564 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aln.tokens/game.schema.json",
+  "title": "Game Pack Rules (game.json) \u2014 v1",
+  "description": "The rules of a game, expressed as data (Phase 3 A1; design: docs/plans/2026-06-13-phase3-1-pack-schemas.md in ALN-Ecosystem). game.json answers 'how does this game score and flow'; the pack-manifest answers 'what is in this pack'. v1 constrains to the engine-implemented subset; enum values marked HEADROOM in the design doc are included only where the engine can validate-and-reject them cleanly at load time. The AUTH FLOOR (owner decision 2026-07-09) is encoded structurally: session-lifecycle, show-control, and score-intervention accept only [\"staffed\"]. Invariants not expressible here (enforced by the contract test): mode ids unique; defaultEntity only meaningful on attribution-role modes; typeMultipliers keys must cover the token database's SF_MemoryType values.",
+  "type": "object",
+  "required": [
+    "kind",
+    "schemaVersion",
+    "id",
+    "title",
+    "modes",
+    "scoring",
+    "groupRules",
+    "duplicatePolicy",
+    "entities",
+    "functions",
+    "gameClock"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "const": "game"
+    },
+    "schemaVersion": {
+      "const": 2
+    },
+    "requires": {
+      "type": "array",
+      "description": "Engine capability ids this pack needs. The engine's capability gate refuses activation LOUDLY when any id is outside its implemented set \u2014 headroom is never silently absorbed. Optional: a pack that declares nothing is gated on nothing beyond schema/engine versions.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "modes": {
+      "description": "B1: a game defines its own transaction modes (1..n). Wire 'mode' values are validated against this list at runtime.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "scoringPolicy",
+          "entityRole",
+          "countsTowardGroups"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "verb": {
+            "description": "PRESENTATION stratum (never branched on). Declared-NOT-YET-CONSUMED: the present-tense action affordance (mode selector / scan button) is Track-D UX territory; no engine site reads verb today. It cannot derive claimedLabel ('Sell' -> 'SOLD to {entity}' is not computable morphology).",
+            "type": "string"
+          },
+          "verbNoun": {
+            "description": "A3 slice 7 (PRESENTATION stratum — never branched on; additive-optional, NO schemaVersion bump per the R-Q2 precedent). The NOUN form of this mode's action ('Sale', 'Fence') — rendered as the session report's Scoring Timeline Type cell for claims in this mode. Distinct from the sibling 'verb' (present-tense affordance, 'Sell'): noun morphology is not computable from it. Absent ⇒ engine-generic 'Claim' (benign-wording class); declared-but-undrivable ⇒ activation refusal (R-3b-1 twin class). Pattern forbids pipes/braces and the C0 controls (newlines included) — the cell must never split a markdown table row; DEL and bidi controls pass the pattern but are stripped-then-checked by the VALUE twins (activation gate + scanner DECLINE), which are the runtime authority (the generator sanitizes too; this pattern is the authoring-time twin, deliberately no stricter than the values the twins can accept). Same boundary rule as claimedLabel: mode-varying wording lives here, all other report wording lives in strings.report.*.",
+            "type": "string",
+            "maxLength": 24,
+            "pattern": "^[^|{}\u0000-\u001f]{1,24}$"
+          },
+          "claimedLabel": {
+            "description": "A3 closers R-Q2 (PRESENTATION stratum \u2014 never branched on; additive-optional, NO schemaVersion bump per the D3s2 precedent). The past-tense claim ANNOUNCEMENT as a TEMPLATE containing exactly one {entity} token (e.g. 'SOLD to {entity}', 'EXPOSED by {entity}') \u2014 a template because the preposition varies per mode and word order must survive future packs. Rendered as TEXT (escaped) with the entity substituted via function replacement. Absent \u21d2 engine-generic 'CLAIMED by {entity}' (benign-wording class); declared-but-undrivable \u21d2 activation refusal (R-3b-1 twin class). NOT cross-checked against scoringPolicy \u2014 a non-scoring mode still renders potential value, not an amount paid (authoring hazard). Boundary rule: wording that varies WITH THE MODE and is needed at call sites holding only a mode id lives here; all other pack wording lives in strings.*.",
+            "type": "string",
+            "maxLength": 48,
+            "pattern": "^[^{}\u0000-\u001f]*\\{entity\\}[^{}\u0000-\u001f]*$"
+          },
+          "icon": {
+            "description": "A3 closers R-Q2 (PRESENTATION stratum). A short TEXT GLYPH (emoji) shown beside the claim announcement. Renders as TEXT CONTENT ONLY \u2014 never into a class, attribute, CSS custom property or style (unlike cues.json's 'icon', which is a CSS class key). Escaped at every interpolation regardless.",
+            "type": "string",
+            "maxLength": 4,
+            "pattern": "^[^<>&\"'{}\u0000-\u001f]{1,4}$"
+          },
+          "scoringPolicy": {
+            "description": "OPEN vocabulary (slice 1): any string is schema-valid; the ENGINE's capability gate refuses activation of values it cannot drive (engine 3.x drives: 'standard', 'none'). New values ship WITH their engine module + capability id \u2014 never by schema edit alone.",
+            "type": "string",
+            "minLength": 1
+          },
+          "entityRole": {
+            "description": "O1/P2 (corrected 2026-07-09): what the entity field MEANS in this mode \u2014 'ledger' = wallet/account that accumulates value; 'attribution' = byline identity receiving narrative credit (feeds the report, never score math). OPEN vocabulary (slice 1): schema-valid as any string; the engine's gate refuses values it cannot drive (engine 3.x drives: 'ledger', 'attribution').",
+            "type": "string",
+            "minLength": 1
+          },
+          "defaultEntity": {
+            "description": "Optional picker prefill for this mode (e.g. the anonymous NPC identity in an attribution-role mode)",
+            "type": "string",
+            "minLength": 1
+          },
+          "countsTowardGroups": {
+            "type": "boolean"
+          },
+          "claims": {
+            "description": "A2/D3s2: whether a transaction in this mode CONSUMES the token. 'consuming' (the default when absent \u2014 every pre-claims mode consumed) registers a FCFS claim under duplicatePolicy; 'non-consuming' is a repeatable action \u2014 never blocked by the duplicate rules, never registering a claim. OPEN vocabulary (slice 1 convention): schema-valid as any string; the engine's gate refuses values it cannot drive (engine 3.x drives: 'consuming', 'non-consuming'). v1 limitation: 'non-consuming' with countsTowardGroups is refused at activation (non-consumed group presence needs its own contribution-semantics design).",
+            "type": "string",
+            "minLength": 1
+          },
+          "displayBehavior": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "surface": {
+                "description": "OPEN vocabulary (slice 1): schema-valid as any string; the engine's gate refuses surfaces it cannot render (engine 3.x drives: 'scoreboard-rankings', 'scoreboard-evidence', 'none'). B12/slice 6 makes the surface set pack-extensible through this same seam.",
+                "type": "string",
+                "minLength": 1
+              },
+              "fields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "when": {
+                "enum": [
+                  "immediate"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "scoring": {
+      "description": "B2/B6: pack-supplied tables over the engine's fixed formula base[rating] \u00d7 mult[type]. Absorbs scoring-config.json (legacy file read as fallback during migration only).",
+      "type": "object",
+      "required": [
+        "baseValues",
+        "typeMultipliers"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "baseValues": {
+          "type": "object",
+          "required": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "1": {
+              "type": "number",
+              "minimum": 0
+            },
+            "2": {
+              "type": "number",
+              "minimum": 0
+            },
+            "3": {
+              "type": "number",
+              "minimum": 0
+            },
+            "4": {
+              "type": "number",
+              "minimum": 0
+            },
+            "5": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "typeMultipliers": {
+          "description": "Keys are the token database's SF_MemoryType values; UNKNOWN is the required fallback for null/unrecognized types",
+          "type": "object",
+          "required": [
+            "UNKNOWN"
+          ],
+          "minProperties": 2,
+          "properties": {
+            "UNKNOWN": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "display": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "unit": {
+              "type": "string"
+            },
+            "format": {
+              "type": "string",
+              "description": "Money display spec (A3 slice 3b, ruling R-3b-1): exactly one '#,###' number token (signed integer, comma-grouped) wrapped by literal prefix/suffix affixes — e.g. \"$#,###\" or \"#,### cr\". Schema-open elsewhere, gate-enforced: the engine refuses formats it cannot drive.",
+              "pattern": "^[^#]*#,###[^#]*$"
+            }
+          }
+        },
+        "semantics": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allowNegative": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "groupRules": {
+      "description": "B3/A1. v1 engine implements type 'all'; 'threshold' and 'ordered' are schema headroom \u2014 a pack declaring them is REJECTED at load until the engine grows the variant.",
+      "type": "object",
+      "required": [
+        "type",
+        "minSize"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "all",
+            "threshold",
+            "ordered"
+          ]
+        },
+        "minSize": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "completion": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bonusFormula": {
+              "enum": [
+                "multiplier-minus-one-times-base"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "groups": {
+      "description": "D1b (A3 slice 2b): group multipliers are GAME RULES and live here \u2014 tokens carry only the group NAME (tokens.schema v2 kills the '(xN)' microformat). Keys are group display names; the activation gate refuses a v2 pack whose tokens name an undeclared group (loud, boot-time). The per-token multiplier redundancy and its inconsistent-variant failure class die with this block.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "multiplier"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "multiplier": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "duplicatePolicy": {
+      "description": "A2: token claim consumption. v1 engine implements claim 'once' (FCFS, session-scoped, all transacting modes).",
+      "type": "object",
+      "required": [
+        "claim"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "claim": {
+          "enum": [
+            "once",
+            "per-entity",
+            "unlimited"
+          ]
+        },
+        "view": {
+          "enum": [
+            "unlimited"
+          ]
+        }
+      }
+    },
+    "entities": {
+      "description": "O1/P1: the score-holder is an abstract ledger; the pack names it and sets creation policy. Wire field remains teamId (alias) through Phase 3.",
+      "type": "object",
+      "required": [
+        "label",
+        "creation",
+        "membership"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "object",
+          "required": [
+            "singular",
+            "plural"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "singular": {
+              "type": "string",
+              "minLength": 1
+            },
+            "plural": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "creation": {
+          "enum": [
+            "freeform-at-action",
+            "pre-registered",
+            "both"
+          ]
+        },
+        "membership": {
+          "enum": [
+            "untracked",
+            "roster"
+          ]
+        }
+      }
+    },
+    "functions": {
+      "description": "O2/P4: pack assigns engine functions to device classes, validated against class affordances (P5) at design time. AUTH FLOOR (owner 2026-07-09): the three floor functions are structurally locked to [\"staffed\"] \u2014 a pack cannot assign them lower, by schema.",
+      "type": "object",
+      "required": [
+        "view-content",
+        "transact",
+        "entity-binding",
+        "session-lifecycle",
+        "show-control",
+        "score-intervention",
+        "report-intake"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "view-content": {
+          "$ref": "#/$defs/assignableFunction"
+        },
+        "transact": {
+          "type": "object",
+          "required": [
+            "classes"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "classes": {
+              "$ref": "#/$defs/classList"
+            },
+            "modes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            }
+          }
+        },
+        "entity-binding": {
+          "$ref": "#/$defs/assignableFunction"
+        },
+        "session-lifecycle": {
+          "$ref": "#/$defs/floorFunction"
+        },
+        "show-control": {
+          "$ref": "#/$defs/floorFunction"
+        },
+        "score-intervention": {
+          "$ref": "#/$defs/floorFunction"
+        },
+        "report-intake": {
+          "$ref": "#/$defs/assignableFunction"
+        }
+      }
+    },
+    "gameClock": {
+      "description": "B11. ALN is the degenerate case: one phase + overtime threshold. Durations in SECONDS.",
+      "type": "object",
+      "required": [
+        "duration",
+        "phases"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "duration": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "overtimeAt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "phases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label",
+              "start"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "start": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "at"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "at": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "trigger"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "trigger": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "lightingRoles": {
+      "description": "B8: the pack's lighting vocabulary; cues reference these names, the installation profile binds them to instruments. Optional until the role-extraction slice.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "uniqueItems": true
+    },
+    "strings": {
+      "const": "strings.json",
+      "description": "Declares the display-strings sidecar (A3 slice 3a). The value is the CANONICAL filename \u2014 every consumer (manifest role assignment, the scanner's staged-refresh rules set, the engine gate) is keyed to it, so declaring means presence, not naming. Relaxing to a free filename requires role-follows-pointer support in BOTH manifest builders and the scanner loader first."
+    },
+    "theme": {
+      "const": "theme.json",
+      "description": "Names the pack's visual-identity sidecar (theme unit; canonical filename const — the strings/cues pointer pattern; manifest role + scanner loader are keyed to it). A pack declaring this must list theme.identity in `requires` (the surfaces.select gate-lint precedent). Tightened from a loose .json pattern nothing ever read (r1 census)."
+    },
+    "cues": {
+      "const": "cues.json",
+      "description": "Declares the show-cues sidecar (A3 slice 4). The value is the CANONICAL filename — every consumer (manifest role assignment, the engine's pack-file resolution, the gate) is keyed to it, so declaring means presence, not naming (3a strings precedent). A pack declaring cues must also declare the matching `requires` capability ids (cues.standing / cues.timeline / lighting.roles); the gate rule that refuses the incoherent combination lands with slice-4 S2."
+    },
+    "lightingRoleFallbacks": {
+      "description": "TEMPORARY (ledger L7, retires at C4): one concrete venue scene id per lighting role, used ONLY when the installation profile has no binding for that role — and every such use warns loudly. Keys must be declared in lightingRoles (gate-checked). This block is the sanctioned home for concrete scene ids in a pack; cue payloads themselves are role-only by schema.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "surfaces": {
+      "description": "A3 slice 6 (B12): the pack SELECTS and PARAMETERIZES the three built-in display surfaces (idle loop, scoreboard, video). The surface SET is engine-fixed — a pack cannot define NEW surfaces (the constellation renderer is BILL-era headroom). A pack declaring `surfaces` must list 'surfaces.select' in `requires` (the cues/lightingRoles gate precedent).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "idleLoop": {
+          "description": "The idle-loop surface's venue-channel NAME (Q6-2) — NOT a filename. The installation profile binds the channel to a concrete media file; `config.display.idleLoopFile` is the loud fallback. `null` = this game has no idle loop (Q6-1 opt-out). Absent = the engine default idle loop. The lowercase-dash pattern forbids paths/filenames by construction.",
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "scoreboard": {
+          "description": "The scoreboard surface's selection + parameters.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "description": "false = this game has no scoreboard surface (Q6-1 opt-out); the engine refuses display:scoreboard. Absent = true.",
+              "type": "boolean"
+            },
+            "evidenceCycleMs": {
+              "description": "Q6-3 parameter: the BASE evidence-page cycling interval in ms. The engine speeds up to round(this*2/3) when 4+ pages (engine adaptation, not a pack value). Absent = engine default 18000.",
+              "type": "integer",
+              "minimum": 1000
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "classList": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "personal",
+          "station",
+          "staffed"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "assignableFunction": {
+      "type": "object",
+      "required": [
+        "classes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "classes": {
+          "$ref": "#/$defs/classList"
+        }
+      }
+    },
+    "floorFunction": {
+      "description": "AUTH FLOOR: exactly [\"staffed\"], non-negotiable by packs",
+      "type": "object",
+      "required": [
+        "classes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "classes": {
+          "const": [
+            "staffed"
+          ]
+        }
+      }
+    }
+  }
+}

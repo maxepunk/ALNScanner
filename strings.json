@@ -1,0 +1,24 @@
+{
+  "kind": "strings",
+  "schemaVersion": 2,
+  "scoreboard": {
+    "header": "CASE FILE: ABOUT LAST NIGHT",
+    "emptyTicker": "No scores recorded",
+    "emptyEvidence": "Awaiting evidence...",
+    "unknownOwner": "Unknown"
+  },
+  "scanner": {
+    "appTitle": "Memory Transaction Station",
+    "scanPrompt": "Tap Memory Token",
+    "statLabels": {
+      "score": "Score",
+      "totalValue": "Total Value"
+    }
+  },
+  "scoring": {
+    "awardMessage": "Token scanned successfully. {pointsFormatted} awarded."
+  },
+  "terminology": {
+    "tokenNoun": "Memory"
+  }
+}

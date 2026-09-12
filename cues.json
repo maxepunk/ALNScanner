@@ -1,0 +1,245 @@
+{
+  "kind": "cues",
+  "schemaVersion": 2,
+  "cues": [
+    {
+      "id": "attention-before-video",
+      "label": "Pre-Video Alert",
+      "icon": "alert",
+      "trigger": {
+        "event": "video:loading",
+        "conditions": [
+          {
+            "field": "tokenId",
+            "op": "neq",
+            "value": "policesequencewoverlay"
+          }
+        ]
+      },
+      "commands": [
+        {
+          "action": "sound:play",
+          "payload": {
+            "file": "attention.wav"
+          }
+        },
+        {
+          "action": "lighting:scene:activate",
+          "payload": {
+            "role": "video-playback"
+          }
+        }
+      ]
+    },
+    {
+      "id": "restore-after-video",
+      "label": "Post-Video Restore",
+      "icon": "alert",
+      "trigger": {
+        "event": "video:completed",
+        "conditions": [
+          {
+            "field": "tokenId",
+            "op": "neq",
+            "value": "policesequencewoverlay"
+          }
+        ]
+      },
+      "commands": [
+        {
+          "action": "lighting:scene:activate",
+          "payload": {
+            "role": "gameplay"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tension-hit",
+      "label": "Tension Hit",
+      "icon": "sound",
+      "quickFire": true,
+      "commands": [
+        {
+          "action": "sound:play",
+          "payload": {
+            "file": "tension.wav"
+          }
+        }
+      ]
+    },
+    {
+      "id": "e2e-compound-test",
+      "label": "E2E Compound Test",
+      "quickFire": true,
+      "timeline": [
+        {
+          "at": 0,
+          "action": "sound:play",
+          "payload": {
+            "file": "attention.wav"
+          }
+        },
+        {
+          "at": 1,
+          "action": "lighting:scene:activate",
+          "payload": {
+            "role": "gameplay"
+          }
+        },
+        {
+          "at": 4,
+          "action": "sound:play",
+          "payload": {
+            "file": "tension.wav"
+          }
+        },
+        {
+          "at": 4.5,
+          "action": "lighting:scene:activate",
+          "payload": {
+            "role": "blackout"
+          }
+        }
+      ],
+      "duration": 7
+    },
+    {
+      "id": "e2e-video-compound",
+      "label": "E2E Video Compound",
+      "quickFire": true,
+      "timeline": [
+        {
+          "at": 0,
+          "action": "video:queue:add",
+          "payload": {
+            "videoFile": "test_10sec.mp4"
+          }
+        },
+        {
+          "at": 1,
+          "action": "lighting:scene:activate",
+          "payload": {
+            "role": "video-playback"
+          }
+        }
+      ]
+    },
+    {
+      "id": "warning-90min",
+      "label": "90min WARNING",
+      "quickFire": true,
+      "commands": [
+        {
+          "action": "sound:play",
+          "payload": {
+            "file": "90min.wav"
+          }
+        }
+      ]
+    },
+    {
+      "id": "warning-60min",
+      "label": "60min WARNING",
+      "quickFire": true,
+      "commands": [
+        {
+          "action": "sound:play",
+          "payload": {
+            "file": "60min.wav"
+          }
+        }
+      ]
+    },
+    {
+      "id": "warning-30min",
+      "label": "30min WARNING",
+      "quickFire": true,
+      "commands": [
+        {
+          "action": "sound:play",
+          "payload": {
+            "file": "30min.wav"
+          }
+        }
+      ]
+    },
+    {
+      "id": "warning-15min",
+      "label": "15min WARNING",
+      "quickFire": true,
+      "commands": [
+        {
+          "action": "sound:play",
+          "payload": {
+            "file": "15min.wav"
+          }
+        }
+      ]
+    },
+    {
+      "id": "endgame",
+      "label": "ENDGAME",
+      "quickFire": true,
+      "timeline": [
+        {
+          "at": 1,
+          "action": "video:queue:add",
+          "payload": {
+            "videoFile": "policesequencewoverlay.mp4"
+          }
+        },
+        {
+          "at": 180,
+          "action": "lighting:scene:activate",
+          "payload": {
+            "role": "police-arrival-1"
+          }
+        },
+        {
+          "at": 300,
+          "action": "lighting:scene:activate",
+          "payload": {
+            "role": "police-arrival-2"
+          }
+        },
+        {
+          "at": 1,
+          "action": "lighting:scene:activate",
+          "payload": {
+            "role": "video-playback"
+          }
+        },
+        {
+          "at": 390,
+          "action": "sound:play",
+          "payload": {
+            "file": "policesounds.wav",
+            "target": "bluetooth"
+          }
+        },
+        {
+          "at": 391,
+          "action": "lighting:scene:activate",
+          "payload": {
+            "role": "police-arrival-3"
+          }
+        },
+        {
+          "at": 540,
+          "action": "lighting:scene:activate",
+          "payload": {
+            "role": "police-glitch"
+          }
+        },
+        {
+          "at": 600,
+          "action": "lighting:scene:activate",
+          "payload": {
+            "role": "gameplay"
+          }
+        }
+      ]
+    }
+  ]
+}

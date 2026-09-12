@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aln.tokens/pack-manifest.schema.json",
+  "title": "Game Pack Manifest (pack-manifest.json) — v1",
+  "description": "Inventory + requirements for a game pack (Phase 3 A1; design: docs/plans/2026-06-13-phase3-1-pack-schemas.md in ALN-Ecosystem). files[] is machine-maintained (backend/scripts/build-pack-manifest.js recomputes sha1/size/contentHash and PRESERVES the hand-authored identity + hardware sections); hardware is what the C2 resolution mechanism evaluates against an installation profile. contentHash = sha256 over the sorted 'path:sha1' lines of files[].",
+  "type": "object",
+  "required": ["kind", "schemaVersion", "packId", "version", "contentHash", "engine", "files", "hardware"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "pack-manifest" },
+    "schemaVersion": { "const": 2 },
+    "packId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "contentHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "engine": {
+      "type": "object",
+      "required": ["minVersion"],
+      "additionalProperties": false,
+      "properties": {
+        "minVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "role", "sha1", "size"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "pattern": "^[^/].*" },
+          "role": {
+            "enum": ["game", "tokens", "strings", "theme", "cues", "asset-image", "asset-audio", "asset-video", "other"]
+          },
+          "sha1": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "size": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "hardware": {
+      "description": "Kit-model requirements: what the kit/install must provide. Evaluated by resolve(pack.hardware, installationProfile) — see the C1 design doc.",
+      "type": "object",
+      "required": ["deviceClasses"],
+      "additionalProperties": false,
+      "properties": {
+        "deviceClasses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["class", "min"],
+            "additionalProperties": false,
+            "properties": {
+              "class": { "enum": ["personal", "station", "staffed"] },
+              "min": { "type": "integer", "minimum": 0 },
+              "recommended": { "type": "integer", "minimum": 0 },
+              "rationale": { "type": "string" }
+            }
+          }
+        },
+        "tokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "count": { "type": "integer", "minimum": 1 },
+            "tech": { "type": "string" }
+          }
+        },
+        "stack": {
+          "description": "Orchestrator-stack services this pack's content exercises, with absence behavior. 'degrade' = runs with elements dormant/disabled (C3); 'require' = preflight hard NO-GO.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["onAbsent"],
+            "additionalProperties": false,
+            "properties": {
+              "usedBy": { "type": "string" },
+              "onAbsent": { "enum": ["degrade", "require"] }
+            }
+          }
+        },
+        "endpoints": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "usedBy": { "type": "string" },
+              "roles": { "type": "array", "items": { "type": "string" } },
+              "onAbsent": { "enum": ["degrade", "require"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

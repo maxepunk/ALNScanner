@@ -1,0 +1,90 @@
+{
+  "kind": "pack-manifest",
+  "schemaVersion": 2,
+  "packId": "about-last-night",
+  "version": "1.0.0",
+  "contentHash": "sha256:89bd2981d6ecec33d4165f4e1cd46daa5501b4c3a0c0ada8b8e201a3120a9f97",
+  "engine": {
+    "minVersion": "3.0.0"
+  },
+  "files": [
+    {
+      "path": "cues.json",
+      "role": "cues",
+      "sha1": "dffeb0d6f6016bfb70cb007dd449a073950ba324",
+      "size": 5070
+    },
+    {
+      "path": "game.json",
+      "role": "game",
+      "sha1": "e82dea8c5ab6939fb1ca4506a0769af2894cf277",
+      "size": 3553
+    },
+    {
+      "path": "strings.json",
+      "role": "strings",
+      "sha1": "53a0624487e909c2e0f453a6a28f41dadfee07b1",
+      "size": 565
+    },
+    {
+      "path": "theme.json",
+      "role": "theme",
+      "sha1": "b076234d66f58ccd00c8b27313bd5a98d07b20fc",
+      "size": 85
+    },
+    {
+      "path": "tokens.json",
+      "role": "tokens",
+      "sha1": "d3d9ead117c00c2391554f7be28aa6087e370701",
+      "size": 34081
+    }
+  ],
+  "hardware": {
+    "deviceClasses": [
+      {
+        "class": "staffed",
+        "min": 1,
+        "rationale": "transact + session-lifecycle assigned here (game.json functions)"
+      },
+      {
+        "class": "station",
+        "min": 0,
+        "recommended": 3,
+        "rationale": "intel gathering; scarcity is a design lever (P3)"
+      },
+      {
+        "class": "personal",
+        "min": 0,
+        "rationale": "optional player phones (tap-to-web, Phase 4 Track E)"
+      }
+    ],
+    "tokens": {
+      "count": 81,
+      "tech": "nfc-ntag"
+    },
+    "stack": {
+      "vlc": {
+        "usedBy": "video tokens, idle loop",
+        "onAbsent": "degrade"
+      },
+      "music": {
+        "usedBy": "cue playlists",
+        "onAbsent": "degrade"
+      },
+      "sound": {
+        "usedBy": "cue sound effects",
+        "onAbsent": "degrade"
+      },
+      "lighting": {
+        "usedBy": "lighting cues",
+        "onAbsent": "degrade"
+      }
+    },
+    "endpoints": {
+      "display.main": {
+        "usedBy": "surfaces",
+        "onAbsent": "degrade"
+      }
+    }
+  }
+}

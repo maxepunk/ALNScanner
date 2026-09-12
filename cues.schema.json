@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aln.tokens/cues.schema.json",
+  "title": "Game Pack Show Cues (cues.json) — v1",
+  "description": "The pack's show-control content (Phase 3 A3 slice 4; design: docs/plans/2026-08-29-phase3-a3-slice4-showcontrol-pack.md in ALN-Ecosystem). This schema is the authoring half of the cue contract (capability-matrix row 2.22). The activation gate is the runtime half. The shape is the engine contract as built. A cue has `commands` or a `timeline`, never both. Timeline entries are flat {at, action, payload} objects. `trigger` may be an event object, a clock object, null, or absent; null and absent both mean the cue fires manually only. The trigger event enum and the condition op enum copy the engine tables (standingEvaluator EVENT_NORMALIZERS and CONDITION_OPS); a contract test fails when either side changes alone. One deliberate difference from the pre-slice-4 venue file: `lighting:scene:activate` payloads carry a `role` from game.json `lightingRoles`, never a concrete venue scene id. The installation profile binds each role to an instrument (B8). The gate enforces what this schema cannot express: unique cue ids, roles declared in lightingRoles, actions the engine can drive, at most one video entry per timeline.",
+  "type": "object",
+  "required": ["kind", "schemaVersion", "cues"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "const": "cues"
+    },
+    "schemaVersion": {
+      "const": 2,
+      "description": "The pack-wide schema version (strings sidecar precedent) — one exact-match number for the whole pack, never a per-sidecar series."
+    },
+    "cues": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/cue"
+      }
+    }
+  },
+  "$defs": {
+    "idName": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "roleName": {
+      "description": "A lighting role: a show event the pack names (e.g. 'police-arrival-2'). Must appear in game.json lightingRoles (gate-checked).",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "triggerEvent": {
+      "description": "The engine's cue-triggerable event vocabulary (row 2.22). Drift-tripwired against standingEvaluator EVENT_NORMALIZERS — grow BOTH together.",
+      "enum": [
+        "cue:completed",
+        "gameclock:started",
+        "group:completed",
+        "music:playback:changed",
+        "music:playlist:changed",
+        "music:track:changed",
+        "phase:changed",
+        "player:scan",
+        "session:created",
+        "sound:completed",
+        "transaction:accepted",
+        "video:completed",
+        "video:loading",
+        "video:paused",
+        "video:resumed",
+        "video:started"
+      ]
+    },
+    "conditionOp": {
+      "description": "Condition operators. Drift-tripwired against standingEvaluator CONDITION_OPS.",
+      "enum": ["eq", "gt", "gte", "in", "lt", "lte", "neq"]
+    },
+    "condition": {
+      "type": "object",
+      "required": ["field", "op", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "description": "A flat field from the trigger event's normalizer (e.g. tokenId, teamId, phaseId). Field sets are per-event; see the normalizer table.",
+          "type": "string",
+          "minLength": 1
+        },
+        "op": {
+          "$ref": "#/$defs/conditionOp"
+        },
+        "value": {
+          "description": "The comparison value. For op 'in' this must be an array (a scalar would silently never match at runtime)."
+        }
+      },
+      "if": {
+        "properties": {
+          "op": {
+            "const": "in"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "value": {
+            "type": "array"
+          }
+        }
+      }
+    },
+    "trigger": {
+      "description": "null (or an absent trigger key) = manual fire only. An event trigger fires on a matching engine event; a clock trigger fires once when the game clock reaches HH:MM:SS. Conditions exist only on event triggers — the engine never evaluates them for clock triggers.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": ["event"],
+          "additionalProperties": false,
+          "properties": {
+            "event": {
+              "$ref": "#/$defs/triggerEvent"
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/condition"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["clock"],
+          "additionalProperties": false,
+          "properties": {
+            "clock": {
+              "description": "Game-clock threshold as HH:MM:SS (an unparseable string would throw out of the tick listener at runtime; the gate refuses it first).",
+              "type": "string",
+              "pattern": "^[0-9]{1,2}:[0-5][0-9]:[0-5][0-9]$"
+            }
+          }
+        }
+      ]
+    },
+    "lightingPayloadRule": {
+      "description": "Pack cues address lights by ROLE. A concrete venue sceneId is schema-illegal here — concrete ids live only in the installation profile bindings and the temporary game.json lightingRoleFallbacks block (ledger L7).",
+      "type": "object",
+      "if": {
+        "properties": {
+          "action": {
+            "const": "lighting:scene:activate"
+          }
+        },
+        "required": ["action"]
+      },
+      "then": {
+        "required": ["payload"],
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["role"],
+            "additionalProperties": false,
+            "properties": {
+              "role": {
+                "$ref": "#/$defs/roleName"
+              }
+            }
+          }
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "required": ["action"],
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "description": "An engine cue action (e.g. sound:play, lighting:scene:activate, video:queue:add). Schema-open; the activation gate refuses actions the engine cannot drive.",
+          "type": "string",
+          "minLength": 1
+        },
+        "payload": {
+          "type": "object"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/lightingPayloadRule"
+        }
+      ]
+    },
+    "timelineEntry": {
+      "description": "FLAT {at, action, payload} — never a nested command object. `at` is seconds from cue start (three-segment model, decision E5); entries need not be sorted and `at` values may repeat.",
+      "type": "object",
+      "required": ["at", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "type": "number",
+          "minimum": 0
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "payload": {
+          "type": "object"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/lightingPayloadRule"
+        }
+      ]
+    },
+    "cue": {
+      "type": "object",
+      "required": ["id", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/idName"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "icon": {
+          "description": "A CSS class key on the GM quick-fire grid (NOT a text glyph — contrast game.json modes[].icon). Kept to class-name-safe characters. null means the same as absent (“no icon” — the value the config-tool editor historically wrote for a cleared field); the gate and engine treat both identically, and the pattern binds the string form only.",
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "quickFire": {
+          "description": "Show this cue as a button in the GM quick-fire grid.",
+          "type": "boolean"
+        },
+        "once": {
+          "description": "Fire at most once per game session.",
+          "type": "boolean"
+        },
+        "duration": {
+          "description": "Display length in seconds for the show-designer timeline view. The config-tool timeline editor reads and writes this field. The ENGINE ignores it; runtime timing derives from the entries' `at` values. Only meaningful on compound cues (dependentRequired pins it to `timeline`).",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "trigger": {
+          "$ref": "#/$defs/trigger"
+        },
+        "routing": {
+          "description": "Cue-level audio routing (tier 2 of 3: command target > this map > global route). Keys are the engine's stream names.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "video": {
+              "type": "string",
+              "minLength": 1
+            },
+            "music": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sound": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "commands": {
+          "description": "Flat cue: every command fires immediately. Mutually exclusive with timeline.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/command"
+          }
+        },
+        "timeline": {
+          "description": "Compound cue: timed steps on the three-segment clock (decision E5). Mutually exclusive with commands.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/timelineEntry"
+          }
+        }
+      },
+      "dependentRequired": {
+        "duration": ["timeline"]
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "commands": true
+          },
+          "required": ["commands"]
+        },
+        {
+          "properties": {
+            "timeline": true
+          },
+          "required": ["timeline"]
+        }
+      ]
+    }
+  }
+}

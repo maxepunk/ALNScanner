@@ -1,0 +1,182 @@
+{
+  "kind": "game",
+  "schemaVersion": 2,
+  "requires": [
+    "scoring.tabular",
+    "groupRules.all",
+    "duplicatePolicy.once",
+    "cues.standing",
+    "cues.timeline",
+    "lighting.roles",
+    "surfaces.select",
+    "theme.identity"
+  ],
+  "id": "about-last-night",
+  "title": "About Last Night",
+  "modes": [
+    {
+      "id": "blackmarket",
+      "label": "Black Market",
+      "verbNoun": "Sale",
+      "verb": "Sell",
+      "scoringPolicy": "standard",
+      "entityRole": "ledger",
+      "countsTowardGroups": true,
+      "displayBehavior": {
+        "surface": "scoreboard-rankings",
+        "when": "immediate"
+      },
+      "claimedLabel": "SOLD to {entity}",
+      "icon": "💰"
+    },
+    {
+      "id": "detective",
+      "label": "Detective",
+      "verb": "Expose",
+      "scoringPolicy": "none",
+      "entityRole": "attribution",
+      "defaultEntity": "Nova",
+      "countsTowardGroups": false,
+      "displayBehavior": {
+        "surface": "scoreboard-evidence",
+        "fields": [
+          "summary",
+          "owner"
+        ],
+        "when": "immediate"
+      },
+      "claimedLabel": "EXPOSED by {entity}",
+      "icon": "🔍"
+    }
+  ],
+  "scoring": {
+    "baseValues": {
+      "1": 10000,
+      "2": 25000,
+      "3": 50000,
+      "4": 75000,
+      "5": 150000
+    },
+    "typeMultipliers": {
+      "Personal": 1,
+      "Mention": 3,
+      "Business": 3,
+      "Party": 5,
+      "Technical": 5,
+      "UNKNOWN": 0
+    },
+    "display": {
+      "unit": "currency-usd",
+      "format": "$#,###"
+    },
+    "semantics": {
+      "allowNegative": true
+    }
+  },
+  "groupRules": {
+    "type": "all",
+    "minSize": 2,
+    "completion": {
+      "bonusFormula": "multiplier-minus-one-times-base"
+    }
+  },
+  "groups": {
+    "Marcus Mention": {
+      "multiplier": 1
+    }
+  },
+  "duplicatePolicy": {
+    "claim": "once",
+    "view": "unlimited"
+  },
+  "entities": {
+    "label": {
+      "singular": "Account",
+      "plural": "Accounts"
+    },
+    "creation": "freeform-at-action",
+    "membership": "untracked"
+  },
+  "functions": {
+    "view-content": {
+      "classes": [
+        "personal",
+        "station",
+        "staffed"
+      ]
+    },
+    "transact": {
+      "classes": [
+        "staffed"
+      ],
+      "modes": [
+        "blackmarket",
+        "detective"
+      ]
+    },
+    "entity-binding": {
+      "classes": []
+    },
+    "session-lifecycle": {
+      "classes": [
+        "staffed"
+      ]
+    },
+    "show-control": {
+      "classes": [
+        "staffed"
+      ]
+    },
+    "score-intervention": {
+      "classes": [
+        "staffed"
+      ]
+    },
+    "report-intake": {
+      "classes": [
+        "staffed"
+      ]
+    }
+  },
+  "gameClock": {
+    "duration": 7200,
+    "overtimeAt": 7200,
+    "phases": [
+      {
+        "id": "main",
+        "label": "Game",
+        "start": {
+          "at": 0
+        }
+      }
+    ]
+  },
+  "strings": "strings.json",
+  "cues": "cues.json",
+  "lightingRoles": [
+    "gameplay",
+    "video-playback",
+    "blackout",
+    "police-arrival-1",
+    "police-arrival-2",
+    "police-arrival-3",
+    "police-glitch"
+  ],
+  "lightingRoleFallbacks": {
+    "gameplay": "scene.game",
+    "video-playback": "scene.video",
+    "blackout": "scene.off",
+    "police-arrival-1": "scene.police_1",
+    "police-arrival-2": "scene.police2",
+    "police-arrival-3": "scene.police3",
+    "police-glitch": "scene.policeglitch"
+  },
+  "surfaces": {
+    "idleLoop": "aln-idle",
+    "scoreboard": {
+      "enabled": true,
+      "evidenceCycleMs": 18000
+    }
+  },
+  "theme": "theme.json"
+}

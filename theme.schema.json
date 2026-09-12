@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aln.tokens/theme.schema.json",
+  "title": "ALN Game Pack Theme (theme.json)",
+  "description": "The pack's visual identity file, MINIMAL version (Phase 3 theme unit; design: docs/plans/2026-09-03-phase3-theme-unit.md in ALN-Ecosystem — Q-3c-1 ruling: semantic mode colors, rating glyph/display choice, scoreboard accent; full theming depth waits for the first real second game). game.json's `theme` field names this sidecar file (const 'theme.json'); the manifest builder assigns it the `theme` role; a pack declaring it must list `theme.identity` in `requires`. Every color is STRICT 6-digit hex — hex-only IS the injection-safety rule for the CSS custom-property sinks these values reach (no functions, no var(), no url()). The shape is CLOSED (additionalProperties false): future sections (fonts, ...) arrive by schema evolution plus engine consumption, never by loosening. Every section is optional — a theme may declare only what diverges from the engine's baked identity (ALN declares only the ruled rating star-drop).",
+  "type": "object",
+  "required": [
+    "kind",
+    "schemaVersion"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "const": "theme"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "description": "Exact-match on BOTH sides: the backend gate refuses any other value; the scanner mirror DECLINEs — including when ABSENT (unlike the strings sidecar's legacy tolerance, this artifact is new and headerless files refuse/decline everywhere)."
+    },
+    "colors": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Semantic engine color tokens the theme may re-point. Keys mirror the CONSUMING token names (the engine maps them onto its CSS custom properties): modeScoring/modeEvidence drive the 3c semantic mode classes; accentPrimary the primary action accent; accentValue the mode-decoupled money-value accent. Minimal-era authoring constraint: choose mode colors that read coherently beside the engine's baked status palette (greens/ambers/reds stay baked until theme depth widens the palette).",
+      "properties": {
+        "modeScoring": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "modeEvidence": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "accentPrimary": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "accentValue": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        }
+      }
+    },
+    "rating": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "display"
+      ],
+      "description": "How the GM scanner's three rating display sites render a token's value rating (Q-3b-2: star DISPLAYS are informational-only; the rating stays the bury-value input regardless). 'stars' = glyph repeat (today's form); 'numeric' = the plain digit; 'none' = the rating element is not rendered at all (ALN's ruled choice). Config-tool previews and the session report's contracted star cell are OUT of this choice (program §13.5).",
+      "properties": {
+        "display": {
+          "enum": [
+            "stars",
+            "numeric",
+            "none"
+          ]
+        },
+        "glyph": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The star glyphs used when display is 'stars'. Each is a 1-4 code-point plain TEXT GLYPH (the modes[].icon idiom: no markup characters, rendered as content and ESCAPED at every interpolation regardless; value twins on both engine sides strip control/bidi then re-check). 'empty' pads unearned positions at the padded site; omitting it keeps filled-only rendering there. DEL and bidi controls PASS this pattern but are stripped-then-checked by the VALUE twins (activation gate + scanner DECLINE), which are the runtime authority — the pattern is deliberately no stricter than the values the twins can accept (the verbNoun precedent).",
+          "properties": {
+            "filled": {
+              "type": "string",
+              "maxLength": 4,
+              "pattern": "^[^<>&\"'{}\\u0000-\\u001f]{1,4}$"
+            },
+            "empty": {
+              "type": "string",
+              "maxLength": 4,
+              "pattern": "^[^<>&\"'{}\\u0000-\\u001f]{1,4}$"
+            }
+          }
+        }
+      }
+    },
+    "scoreboard": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The scoreboard page's brand accent pair (the page's --evidence-red / --evidence-red-dark tokens), injected server-side via %%PACK_THEME%% and re-validated at the sink.",
+      "properties": {
+        "accent": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "accentDark": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        }
+      }
+    }
+  }
+}
