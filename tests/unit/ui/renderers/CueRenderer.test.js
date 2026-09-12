@@ -600,6 +600,31 @@ describe('CueRenderer', () => {
         expect(row.querySelector('[data-action="admin.enableCue"]')).toBeNull();
       });
 
+      it('re-renders the dormant note when the door flips profile → operator while disabledBy stays "dormant" (PR #17 review)', () => {
+        // _updateStandingCues()'s guard (isDisabled !== wasDisabled ||
+        // isDormant !== wasDormant) skips the update whenever a row stays
+        // dormant across renders, so the door's wording went stale.
+        const cues = dormantCues();
+        cues.set('standing-lights', {
+          ...cues.get('standing-lights'),
+          dormantCommands: [{ action: 'lighting:scene:activate', service: 'lighting', door: 'profile' }],
+        });
+        renderer.render({ cues, activeCues: new Map(), disabledCues: new Set() });
+        let row = standingListEl.querySelector('[data-cue-id="standing-lights"]');
+        expect(row.textContent).toContain('Not installed tonight');
+
+        const flipped = dormantCues();
+        flipped.set('standing-lights', {
+          ...flipped.get('standing-lights'),
+          dormantCommands: [{ action: 'lighting:scene:activate', service: 'lighting', door: 'operator' }],
+        });
+        renderer.render({ cues: flipped, activeCues: new Map(), disabledCues: new Set() });
+
+        row = standingListEl.querySelector('[data-cue-id="standing-lights"]');
+        expect(row.textContent).toContain('Out of service');
+        expect(row.textContent).not.toContain('Not installed tonight');
+      });
+
       it('a row that LEAVES the dormancy set gets its buttons back', () => {
         renderDormant();
         const revived = dormantCues();
@@ -667,6 +692,47 @@ describe('CueRenderer', () => {
         renderer.render({ cues, activeCues: new Map(), disabledCues: new Set() });
 
         expect(gridEl.querySelector('[data-cue-id="heist-sting"]').disabled).toBe(true);
+      });
+
+      it('the grid REBUILDS when the dormant service/door changes but the skipped-command COUNT stays the same (PR #17 review)', () => {
+        // _gridSignatureOf() used to fold only dormantCommands.length, so a
+        // MIXED cue whose absent SERVICE changed while the count held
+        // steady left the stale service in the badge title.
+        renderDormant();
+        let tile = gridEl.querySelector('[data-cue-id="all-clear-chime"]');
+        expect(tile.querySelector('.cue-tile__badge').getAttribute('title'))
+          .toBe('lighting:scene:activate → lighting (Not installed tonight)');
+
+        const changed = dormantCues();
+        changed.set('all-clear-chime', {
+          ...changed.get('all-clear-chime'),
+          dormantCommands: [{ action: 'lighting:scene:activate', service: 'audio', door: 'profile' }],
+        });
+        renderer.render({ cues: changed, activeCues: new Map(), disabledCues: new Set() });
+
+        tile = gridEl.querySelector('[data-cue-id="all-clear-chime"]');
+        expect(tile.querySelector('.cue-tile__badge').getAttribute('title'))
+          .toBe('lighting:scene:activate → audio (Not installed tonight)');
+      });
+
+      it('the grid REBUILDS when the dormant DOOR changes but the skipped-command COUNT stays the same (PR #17 review)', () => {
+        // Same bug, on the door half of the pair: a disabled tile's title
+        // text is built from the first dormant command's door, and the
+        // count alone does not change when only the door does.
+        renderDormant();
+        let tile = gridEl.querySelector('[data-cue-id="vault-alarm-hit"]');
+        expect(tile.getAttribute('title')).toContain('Not installed tonight');
+
+        const changed = dormantCues();
+        changed.set('vault-alarm-hit', {
+          ...changed.get('vault-alarm-hit'),
+          dormantCommands: [{ action: 'lighting:scene:activate', service: 'lighting', door: 'operator' }],
+        });
+        renderer.render({ cues: changed, activeCues: new Map(), disabledCues: new Set() });
+
+        tile = gridEl.querySelector('[data-cue-id="vault-alarm-hit"]');
+        expect(tile.getAttribute('title')).toContain('Out of service');
+        expect(tile.getAttribute('title')).not.toContain('Not installed tonight');
       });
 
       it('a markup-bearing action name stays INSIDE the badge title attribute', () => {

@@ -69,8 +69,15 @@ export class CueRenderer {
   static _gridSignatureOf(cuesMap) {
     return Array.from(cuesMap.values())
       .filter(cue => cue.quickFire === true)
-      .map(cue => `${cue.id}:${cue.enabled === false ? 1 : 0}:${cue.disabledBy || ''}:`
-        + `${(cue.dormantCommands || []).length}`)
+      .map(cue => {
+        // The count alone is not enough (PR #17 review): a MIXED cue whose
+        // absent service/door changes while the skipped-command COUNT holds
+        // steady must still rebuild — the badge title and the disabled-tile
+        // reason text are both built from the FIRST dormant command.
+        const [first] = cue.dormantCommands || [];
+        return `${cue.id}:${cue.enabled === false ? 1 : 0}:${cue.disabledBy || ''}:`
+          + `${(cue.dormantCommands || []).length}:${first?.service || ''}:${first?.door || ''}`;
+      })
       .join('|');
   }
 
@@ -175,10 +182,24 @@ export class CueRenderer {
       if (item) {
         this._standingEls[cue.id] = {
           item,
-          actionSlot: item.querySelector('.standing-cue-item__actions')
+          actionSlot: item.querySelector('.standing-cue-item__actions'),
+          dormantSig: CueRenderer._dormantNoteSignature(cue)
         };
       }
     }
+  }
+
+  /**
+   * Everything the DORMANT-NOTE half of `_standingActions()` reads: which
+   * door disabled it and (for completeness) which service. Folded into
+   * `_updateStandingCues()`'s rebuild guard so a door change (e.g.
+   * `profile` → `operator`) re-renders the note even though `disabledBy`
+   * stays `'dormant'` across both renders (PR #17 review).
+   * @private
+   */
+  static _dormantNoteSignature(cue) {
+    const [first] = cue.dormantCommands || [];
+    return `${cue.disabledBy || ''}:${first?.door || ''}:${first?.service || ''}`;
   }
 
   /**
@@ -212,12 +233,15 @@ export class CueRenderer {
       const wasDormant = els.item.classList.contains('standing-cue-item--dormant');
       const wasDisabled = wasDormant
         || els.item.classList.contains('standing-cue-item--disabled');
+      const dormantSig = CueRenderer._dormantNoteSignature(cue);
+      const dormantSigChanged = dormantSig !== els.dormantSig;
 
-      if (isDisabled !== wasDisabled || isDormant !== wasDormant) {
+      if (isDisabled !== wasDisabled || isDormant !== wasDormant || dormantSigChanged) {
         els.item.classList.toggle('standing-cue-item--dormant', isDormant);
         els.item.classList.toggle('standing-cue-item--disabled', isDisabled && !isDormant);
         els.item.classList.toggle('standing-cue-item--enabled', !isDisabled);
         els.actionSlot.innerHTML = CueRenderer._standingActions(cue, isDormant, isDisabled);
+        els.dormantSig = dormantSig;
       }
     }
   }
