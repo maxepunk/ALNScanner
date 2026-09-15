@@ -64,6 +64,9 @@ describe('NetworkedSession', () => {
       setTransactions: jest.fn(),
       removeTransaction: jest.fn(),
       removeTransactionFromBroadcast: jest.fn(),
+      getTransactions: jest.fn(() => []),
+      unmarkTokenAsScanned: jest.fn(),
+      clearScannedTokens: jest.fn(),
       clearBackendScores: jest.fn(),
       updateTeamScoreFromBackend: jest.fn(),
       updateSessionState: jest.fn(),
@@ -702,6 +705,25 @@ describe('NetworkedSession', () => {
       messageHandler({ detail: { type: 'scores:reset', payload: {} } });
 
       expect(mockDataManager.clearBackendScores).toHaveBeenCalled();
+      // A-4: the backend also clears transactions + dedup state, so the local
+      // guard must be dropped or every pre-reset token stays refused.
+      expect(mockDataManager.clearScannedTokens).toHaveBeenCalled();
+    });
+
+    it('should free the deleted token on transaction:deleted when nothing else claims it (A-3)', () => {
+      mockDataManager.getTransactions.mockReturnValue([]);
+
+      messageHandler({ detail: { type: 'transaction:deleted', payload: { transactionId: 'tx-1', tokenId: 'X' } } });
+
+      expect(mockDataManager.unmarkTokenAsScanned).toHaveBeenCalledWith('X');
+    });
+
+    it('should keep the token marked when a cached transaction still claims it (A-3)', () => {
+      mockDataManager.getTransactions.mockReturnValue([{ id: 'tx-2', tokenId: 'X' }]);
+
+      messageHandler({ detail: { type: 'transaction:deleted', payload: { transactionId: 'tx-1', tokenId: 'X' } } });
+
+      expect(mockDataManager.unmarkTokenAsScanned).not.toHaveBeenCalled();
     });
 
     it('should forward scoreboard:page as a CustomEvent on the session (P0.4/WS-2)', () => {

@@ -201,7 +201,12 @@ export class NetworkedStorage extends IStorageStrategy {
         baseScore: score.baseScore,
         bonusScore: score.bonusPoints,
         tokenCount: score.tokensScanned,
-        completedGroups: score.completedGroups?.length || 0,
+        // E-2 fix: sessionReportGenerator needs the completed-group NAMES
+        // (for its "[Server Logs, Party Photos]" breakdown), not a count.
+        // No other consumer reads this field as a number today (scoreboard
+        // renders team.tokenCount, not team.completedGroups) so widening
+        // the shape is safe.
+        completedGroups: score.completedGroups || [],
         adminAdjustments: score.adminAdjustments || [],
         isFromBackend: true
       }))
@@ -354,6 +359,22 @@ export class NetworkedStorage extends IStorageStrategy {
    */
   setTransactions(transactions) {
     this.transactions = transactions;
+
+    // A-9: a restored transaction means the token is already claimed session-wide.
+    // Mirror addTransactionFromBroadcast so the guard is correct immediately after
+    // sync:full, instead of showing optimistic success then a transaction:failed
+    // correction. Mutates the Set in place (shared reference with
+    // UnifiedDataManager via _syncScannedTokens).
+    let marked = false;
+    for (const tx of transactions || []) {
+      if (tx?.tokenId) {
+        this.scannedTokens.add(tx.tokenId);
+        marked = true;
+      }
+    }
+    if (marked) {
+      this.persistScannedTokens();
+    }
   }
 
   /**
@@ -445,6 +466,18 @@ export class NetworkedStorage extends IStorageStrategy {
     // UnifiedDataManager shares via _syncScannedTokens. Explicit removals flow
     // through unmarkTokenAsScanned; new sessions clear via resetForNewSession. TQ-7.
     (tokens || []).forEach(t => this.scannedTokens.add(t));
+    this.persistScannedTokens();
+  }
+
+  /**
+   * Empty the dedup guard (A-4: "Reset All Scores" frees every token on the
+   * backend, so every GM station must free them too — otherwise a re-scan is
+   * refused as a duplicate for the rest of the session, persisted across reload).
+   * Clears IN PLACE: the Set reference is shared with UnifiedDataManager via
+   * _syncScannedTokens, so it must never be reassigned.
+   */
+  clearScannedTokens() {
+    this.scannedTokens.clear();
     this.persistScannedTokens();
   }
 

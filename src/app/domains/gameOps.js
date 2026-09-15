@@ -425,7 +425,12 @@ export class GameOpsDomain {
 
   async adminResetScores() {
     const { sessionModeManager, dataManager, uiManager, viewController, debug } = this.app;
-    if (!confirm('Reset all team scores to zero? Transactions will be preserved.')) return;
+    // Networked reset (backend decision A3) also clears transactions and the
+    // dedup guard; standalone LocalStorage.resetScores() keeps transactions.
+    const confirmText = sessionModeManager?.isStandalone()
+      ? 'Reset all team scores to zero? Transactions will be preserved.'
+      : 'Reset all team scores to zero? This also clears all transactions and makes every token scannable again.';
+    if (!confirm(confirmText)) return;
 
     if (sessionModeManager?.isStandalone()) {
       try {

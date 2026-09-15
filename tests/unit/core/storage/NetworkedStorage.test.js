@@ -73,6 +73,47 @@ describe('NetworkedStorage Strategy', () => {
       expect(storage.scannedTokens.has('tok-gap')).toBe(true);
       expect(storage.scannedTokens.has('tok-server')).toBe(true);
     });
+
+    it('clears the guard IN PLACE and persists the empty list (A-4: Reset All Scores)', () => {
+      // Reset All Scores frees every token on the backend. The local guard must
+      // follow, or every pre-reset token stays refused as a duplicate for the
+      // rest of the session (and survives a reload via the persisted key).
+      storage.setSessionId('sess-reset');
+      const ref = storage.scannedTokens;
+      storage.scannedTokens.add('tok-a');
+      storage.scannedTokens.add('tok-b');
+
+      storage.clearScannedTokens();
+
+      expect(storage.scannedTokens).toBe(ref);   // shared reference with UnifiedDataManager
+      expect(storage.scannedTokens.size).toBe(0);
+      expect(JSON.parse(localStorage.getItem('networkedScannedTokens:sess-reset'))).toEqual([]);
+    });
+
+    it('marks restored transaction tokens as scanned on setTransactions (A-9: sync:full restore)', () => {
+      // sync:full replaces the transaction cache; without this the guard is empty
+      // after a reload, so a re-scan shows optimistic success and is then
+      // corrected by transaction:failed.
+      storage.setSessionId('sess-sync');
+
+      storage.setTransactions([
+        { id: 'tx-1', tokenId: 'X' },
+        { id: 'tx-2', tokenId: 'Y' }
+      ]);
+
+      expect(storage.scannedTokens.has('X')).toBe(true);
+      expect(storage.scannedTokens.has('Y')).toBe(true);
+      expect(JSON.parse(localStorage.getItem('networkedScannedTokens:sess-sync')))
+        .toEqual(expect.arrayContaining(['X', 'Y']));
+    });
+
+    it('skips transactions without a tokenId on setTransactions', () => {
+      storage.setSessionId('sess-sync-2');
+
+      storage.setTransactions([{ id: 'tx-1' }, { id: 'tx-2', tokenId: '' }]);
+
+      expect(storage.scannedTokens.size).toBe(0);
+    });
   });
 
   describe('isReady', () => {

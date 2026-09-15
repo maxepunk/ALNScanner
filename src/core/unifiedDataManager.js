@@ -491,6 +491,18 @@ export class UnifiedDataManager extends EventTarget {
   }
 
   /**
+   * Empty the dedup guard entirely (A-4: "Reset All Scores" frees every token
+   * on the backend). Delegates to the active strategy so the clear happens on
+   * the Set this facade shares by reference and gets persisted; a strategy
+   * without the method (LocalStorage) is a documented no-op.
+   */
+  clearScannedTokens() {
+    if (typeof this._activeStrategy?.clearScannedTokens === 'function') {
+      this._activeStrategy.clearScannedTokens();
+    }
+  }
+
+  /**
    * Calculate token value based on rating and type
    * @param {Object} transaction - Transaction with valueRating and memoryType
    * @returns {number}

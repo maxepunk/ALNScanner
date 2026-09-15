@@ -52,6 +52,18 @@
  *
  * Extends EventTarget to allow strategies to emit events that can be
  * forwarded by UnifiedDataManager to consumers.
+ *
+ * OPTIONAL MEMBERS (not declared below; UnifiedDataManager feature-detects them
+ * with `typeof strategy.<name> === 'function'` and no-ops otherwise):
+ * - `scannedTokens: Set<string>` — duplicate-detection guard. UnifiedDataManager
+ *   adopts this Set BY REFERENCE (see its `_syncScannedTokens`), so implementers
+ *   must mutate it in place (`add` / `delete` / `clear`) and persist afterwards.
+ *   Reassigning it (`new Set()`) silently desyncs the facade from the strategy.
+ * - `clearScannedTokens(): void` — empty that guard and persist the empty state.
+ *   NetworkedStorage implements it for "Reset All Scores", which frees every
+ *   token on the backend (A-4). LocalStorage does not implement it.
+ * - `setTransactions` / `addTransactionFromBroadcast` /
+ *   `removeTransactionFromBroadcast` — networked cache updates from broadcasts.
  */
 export class IStorageStrategy extends EventTarget {
   constructor() {
@@ -153,7 +165,10 @@ export class IStorageStrategy extends EventTarget {
   }
 
   /**
-   * Reset all team scores to zero (keeps transactions for audit)
+   * Reset all team scores to zero.
+   * LocalStorage keeps transactions for audit; NetworkedStorage delegates to the
+   * backend, which also clears transactions and the server-side dedup state, so
+   * the local dedup guard must be dropped via clearScannedTokens() (A-4).
    * @returns {Promise<{success: boolean}>}
    */
   async resetScores() {

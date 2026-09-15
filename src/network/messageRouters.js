@@ -48,6 +48,17 @@ export function gameOpsRouter(type, payload, dataManager, session) {
       if (payload.transactionId) {
         dataManager.removeTransactionFromBroadcast(payload.transactionId);
       }
+      // A-3: the backend frees the token when the transaction is deleted. Free it
+      // locally too, or the dedup guard refuses the re-scan for the rest of the
+      // session (and survives a reload via the persisted key). Only unmark when
+      // no OTHER cached transaction still claims the token.
+      if (payload.tokenId) {
+        const stillClaimed = (dataManager.getTransactions?.() || [])
+          .some(tx => tx?.tokenId === payload.tokenId);
+        if (!stillClaimed) {
+          dataManager.unmarkTokenAsScanned(payload.tokenId);
+        }
+      }
       if (payload.updatedTeamScore) {
         dataManager.updateTeamScoreFromBackend(payload.updatedTeamScore);
       }
@@ -55,6 +66,9 @@ export function gameOpsRouter(type, payload, dataManager, session) {
 
     case 'scores:reset':
       dataManager.clearBackendScores();
+      // A-4: reset clears the backend's transactions and dedup state, so every
+      // token becomes scannable again. Drop the local guard to match.
+      dataManager.clearScannedTokens();
       return true;
 
     case 'player:scan':

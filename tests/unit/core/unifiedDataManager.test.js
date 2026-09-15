@@ -77,6 +77,36 @@ describe('UnifiedDataManager', () => {
       manager.unmarkTokenAsScanned('tok-x');
       expect(JSON.parse(localStorage.getItem('networkedScannedTokens:sess-1') || '[]')).not.toContain('tok-x');
     });
+
+    it('clearScannedTokens empties the guard in place and persists (A-4)', async () => {
+      localStorage.setItem('networkedSessionId', 'sess-1');
+      manager = new UnifiedDataManager({ tokenManager: mockTokenManager, sessionModeManager: mockSessionModeManager });
+      await manager.initializeNetworkedMode(mockSocket);
+
+      manager.markTokenAsScanned('tok-x');
+      const ref = manager.scannedTokens;
+
+      manager.clearScannedTokens();
+
+      expect(manager.isTokenScanned('tok-x')).toBe(false);
+      // The facade and the strategy MUST keep sharing one Set (reassigning
+      // either side silently desyncs the guard from the persisted state).
+      expect(manager.scannedTokens).toBe(ref);
+      expect(manager._networkedStrategy.scannedTokens).toBe(ref);
+      expect(JSON.parse(localStorage.getItem('networkedScannedTokens:sess-1') || '[]')).toEqual([]);
+    });
+
+    it('clearScannedTokens is a no-op in standalone mode (LocalStorage owns its own guard)', async () => {
+      mockSessionModeManager.isNetworked.mockReturnValue(false);
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
+      manager = new UnifiedDataManager({ tokenManager: mockTokenManager, sessionModeManager: mockSessionModeManager });
+      await manager.initializeStandaloneMode();
+
+      manager.markTokenAsScanned('tok-local');
+
+      expect(() => manager.clearScannedTokens()).not.toThrow();
+      expect(manager.isTokenScanned('tok-local')).toBe(true);
+    });
   });
 
   describe('strategy initialization', () => {
