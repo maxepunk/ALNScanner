@@ -167,26 +167,29 @@ export class EnvironmentRenderer {
       if (sinkKey !== this._lastSinkKey) {
         this._renderAudioDropdowns(availableSinks);
         this._lastSinkKey = sinkKey;
-        // Re-apply routes after rebuilding dropdowns (they were wiped by rebuild)
-        if (routes) {
-          Object.entries(routes).forEach(([stream, sink]) => {
-            const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${escapeCssAttrValue(stream)}"]`);
-            if (dropdown) this._applyRouteValue(dropdown, sink);
-          });
-        }
+        // Re-apply routes after rebuilding dropdowns (they were wiped by rebuild).
+        // Iterate the known stream ids — NOT Object.keys(routes) — so a stream
+        // absent from the payload still gets a value applied instead of
+        // falling through to the HTML default (L-1: the browser auto-selects
+        // the first non-disabled option, i.e. a real sink, when nothing is
+        // explicitly selected — the disabled placeholder is skipped).
+        Object.keys(this.STREAM_LABELS).forEach((stream) => {
+          const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${escapeCssAttrValue(stream)}"]`);
+          if (dropdown) this._applyRouteValue(dropdown, routes?.[stream]);
+        });
         return; // Routes already applied above — skip duplicate application below
       }
     }
 
     // Update selection values (differential — only change if different)
-    if (routes) {
-      Object.entries(routes).forEach(([stream, sink]) => {
-        const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${escapeCssAttrValue(stream)}"]`);
-        if (dropdown && dropdown.value !== sink) {
-          this._applyRouteValue(dropdown, sink);
-        }
-      });
-    }
+    Object.keys(this.STREAM_LABELS).forEach((stream) => {
+      const sink = routes?.[stream];
+      const compareValue = typeof sink === 'string' ? sink : '';
+      const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${escapeCssAttrValue(stream)}"]`);
+      if (dropdown && dropdown.value !== compareValue) {
+        this._applyRouteValue(dropdown, sink);
+      }
+    });
 
   }
 
@@ -196,11 +199,20 @@ export class EnvironmentRenderer {
    * fell back to an alias with nothing cached — select the disabled
    * "Unknown sink" placeholder instead of silently defaulting to whatever
    * happens to be first in the list (the old options[0] fallback).
+   *
+   * A missing/non-string sink (L-1: the stream's key absent from `routes`
+   * entirely) also selects the placeholder, but is NOT logged as an
+   * anomaly — there is no "unknown value" to report, just nothing yet.
    * @param {HTMLSelectElement} dropdown
-   * @param {string} sink
+   * @param {string|undefined|null} sink
    * @private
    */
   _applyRouteValue(dropdown, sink) {
+    if (typeof sink !== 'string' || sink === '') {
+      dropdown.value = '';
+      return;
+    }
+
     dropdown.value = sink;
     if (dropdown.value === sink) return; // matched — done
 
@@ -239,6 +251,14 @@ export class EnvironmentRenderer {
 
   _renderAudioDropdowns(sinks) {
     if (!this.audioRoutingContainer) return;
+
+    // M-1: a rebuild (sink set changed — e.g. BT speaker reconnect) replaces
+    // every slider via innerHTML. A drag in progress at that moment can
+    // never receive its pointerup/lostpointercapture (the old node is
+    // detached), which would leave _dragging stuck true and that stream
+    // permanently deaf to backend pushes. Reset both maps unconditionally.
+    this._dragging = {};
+    this._pendingVolumes = {};
 
     // Preserve current volume slider values before rebuild
     this.audioRoutingContainer.querySelectorAll('.volume-slider').forEach(slider => {
@@ -288,8 +308,15 @@ export class EnvironmentRenderer {
         const value = this._pendingVolumes[stream.id];
         delete this._pendingVolumes[stream.id];
         this._volumeValues[stream.id] = value;
-        slider.value = String(value);
-        const item = slider.closest('.audio-control-item');
+
+        // M-1: look up the LIVE slider by stream, not the `slider` closed
+        // over at bind time — if a rebuild happened between pointerdown and
+        // this release, that captured element is a detached orphan and
+        // writing to it would be invisible to the GM.
+        const liveSlider = this.audioRoutingContainer?.querySelector(`input[data-stream="${escapeCssAttrValue(stream.id)}"]`);
+        if (!liveSlider) return;
+        liveSlider.value = String(value);
+        const item = liveSlider.closest('.audio-control-item');
         const label = item && item.querySelector('.volume-label');
         if (label) label.textContent = `${value}%`;
       };

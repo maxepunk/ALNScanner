@@ -44,12 +44,8 @@ export class MusicController {
   /**
    * Set music (MPD) volume directly.
    *
-   * W6: cue-engine use only — there is no GM UI control bound to this.
-   * The single music-volume authority for GM operators is the per-stream
-   * audio slider in AudioController.setVolume('music', ...), which drives
-   * PipeWire sink-input volume (the `audio` domain, admin.setStreamVolume).
-   * Do not wire a new UI control to this method; wire it to AudioController
-   * instead.
+   * Kept for contract parity with the backend `music:setVolume` action
+   * (used by the cue engine server-side); no GM UI binds to this.
    * @param {number} volume - 0-100
    */
   async setVolume(volume, timeout = 5000) {

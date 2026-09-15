@@ -404,6 +404,36 @@ describe('EnvironmentRenderer', () => {
       expect(dropdown.value).toBe(sinks[1].name);
     });
 
+    it('L-1: a stream MISSING from routes shows the placeholder, not the HTML default (first non-disabled option)', () => {
+      // 'sound' is entirely absent from the payload — not just unmatched.
+      renderer.renderAudio({
+        availableSinks: sinks,
+        routes: { video: sinks[0].name, music: sinks[0].name },
+      });
+
+      const soundDropdown = document.querySelector('select[data-stream="sound"]');
+      expect(soundDropdown.value).toBe('');
+      expect(soundDropdown.selectedOptions[0].textContent).toBe('Unknown sink');
+    });
+
+    it('L-1: differential path also treats a route that DISAPPEARS as unmatched, not left on the old sink', () => {
+      // Prime with all three streams routed (same sink set both times → differential path).
+      renderer.renderAudio({
+        availableSinks: sinks,
+        routes: { video: sinks[0].name, music: sinks[0].name, sound: sinks[0].name },
+      });
+      expect(document.querySelector('select[data-stream="sound"]').value).toBe(sinks[0].name);
+
+      // Next push omits `sound` entirely (e.g. backend hasn't resolved it yet)
+      renderer.renderAudio({
+        availableSinks: sinks,
+        routes: { video: sinks[0].name, music: sinks[0].name },
+      });
+
+      const soundDropdown = document.querySelector('select[data-stream="sound"]');
+      expect(soundDropdown.value).toBe('');
+    });
+
     it('logs the unmatched value via Debug.log', () => {
       const debugSpy = jest.spyOn(Debug, 'log').mockImplementation(() => {});
 
@@ -547,6 +577,54 @@ describe('EnvironmentRenderer', () => {
       slider.dispatchEvent(new Event('pointerup', { bubbles: true }));
 
       expect(slider.value).toBe('50');
+    });
+
+    test('M-1: a drag in progress does not survive a sink-set rebuild (BT reconnect mid-drag)', () => {
+      const sinks1 = [{ name: 'hdmi-stereo', label: 'HDMI', type: 'hdmi' }];
+      renderer.renderAudio({ availableSinks: sinks1, routes: {}, volumes: { music: 50 } });
+
+      const oldSlider = container.querySelector('input[data-stream="music"]');
+      oldSlider.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      expect(renderer._dragging.music).toBe(true);
+
+      // Sink set changes (BT speaker reconnect) → dropdowns rebuild mid-drag
+      const sinks2 = [...sinks1, { name: 'bluez_output.AA', label: 'BT Speaker', type: 'bluetooth' }];
+      renderer.renderAudio({ availableSinks: sinks2, routes: {}, volumes: { music: 50 } });
+
+      // Drag state must not survive the rebuild — otherwise this stream would
+      // ignore every backend push forever.
+      expect(renderer._dragging.music).toBeFalsy();
+      expect(renderer._pendingVolumes.music).toBeUndefined();
+
+      // A push after the rebuild must reach the NEW live slider normally.
+      renderer.renderAudio({ availableSinks: sinks2, routes: {}, volumes: { music: 70 } });
+      const newSlider = container.querySelector('input[data-stream="music"]');
+      expect(newSlider).not.toBe(oldSlider);
+      expect(newSlider.value).toBe('70');
+    });
+
+    test('M-1: a release event on a stale pre-rebuild element still applies the pending value to the LIVE slider', () => {
+      const sinks1 = [{ name: 'hdmi-stereo', label: 'HDMI', type: 'hdmi' }];
+      renderer.renderAudio({ availableSinks: sinks1, routes: {}, volumes: { music: 40 } });
+      const staleSlider = container.querySelector('input[data-stream="music"]');
+
+      const sinks2 = [...sinks1, { name: 'bluez_output.AA', label: 'BT Speaker', type: 'bluetooth' }];
+      renderer.renderAudio({ availableSinks: sinks2, routes: {}, volumes: { music: 40 } });
+      const liveSlider = container.querySelector('input[data-stream="music"]');
+      expect(liveSlider).not.toBe(staleSlider);
+
+      liveSlider.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      renderer.renderAudio({ availableSinks: sinks2, routes: {}, volumes: { music: 91 } });
+      expect(liveSlider.value).toBe('40'); // held back during drag
+
+      // A stray release fires on the OLD (now-detached) slider whose listener
+      // closure is still bound to `stream.id === 'music'`. If the handler
+      // applied the pending value to its CAPTURED element instead of looking
+      // up the live one, this would silently write into the detached node
+      // and leave the visible slider stuck.
+      staleSlider.dispatchEvent(new Event('pointerup', { bubbles: true }));
+
+      expect(liveSlider.value).toBe('91');
     });
   });
 

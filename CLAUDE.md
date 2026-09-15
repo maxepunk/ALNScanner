@@ -131,6 +131,8 @@ UnifiedDataManager (Facade)
 - `src/core/storage/LocalStorage.js` - Standalone mode implementation
 - `src/core/storage/NetworkedStorage.js` - Networked mode implementation
 
+**Strategy contract additions (2026-09-15):** `getTeamCompletedGroups(teamId)` → `[{name, normalizedName, multiplier}]` on both strategies (shared shaper on the base class); `clearScannedTokens()` empties the dedup guard IN PLACE (the Set is shared by reference with `UnifiedDataManager` — never reassign it); `getTeamScores()[i].completedGroups` is the group-name array in both modes. `UnifiedDataManager.getBackendTeamScore(teamId)` is the only way renderers read the networked `backendScores` map. Backend integration tests use `MockDataManager` (`backend/tests/helpers/browser-mocks.js`) — every new facade method must be mirrored there.
+
 **Strategy Selection:**
 - Mode determined at startup by SessionModeManager
 - `unifiedDataManager.setStrategy(strategy)` called during initialization
@@ -982,7 +984,7 @@ JSON.parse(localStorage.getItem('transactions'))[0]
 
 ### Group Bonuses Not Applied
 - **Cause**: Missing tokens in group OR group has only 1 token
-- **Debug**: Inspect team details screen (NOTE: `getTeamCompletedGroups()` returns `[]` pending F-GMS-02)
+- **Debug**: Inspect team details screen (`getTeamCompletedGroups()` is implemented on both strategies via `IStorageStrategy._shapeCompletedGroups`; Team Details reads backend totals through `UnifiedDataManager.getBackendTeamScore()`)
 - **Rule**: Groups need 2+ tokens AND multiplier > 1x
 
 ## Playwright E2E Testing
