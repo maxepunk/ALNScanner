@@ -4,21 +4,22 @@ import { escapeHtml } from '../../utils/escapeHtml.js';
  * MusicRenderer - Differential DOM Rendering for Music (MPD) Status & Controls
  *
  * First render builds full DOM and caches element references; subsequent
- * renders diff state vs prev and only update changed elements. Volume
- * slider is protected during user drag.
+ * renders diff state vs prev and only update changed elements.
+ *
+ * NOTE (W6): MPD volume has no UI here. The per-stream audio slider in
+ * EnvironmentRenderer (video/music/sound via PipeWire, `audio` domain) is
+ * the single music-volume authority — see EnvironmentRenderer._applyVolumes.
  *
  * Features:
  *   - Playlist picker (<select>) populated from state.playlists
  *   - Transport controls (play/pause/stop/next/previous)
  *   - Shuffle + Loop toggles
- *   - Volume slider with drag protection
  *   - Ducking indicator
  */
 export class MusicRenderer {
   constructor(elements = {}) {
     this.container = elements.container || document.getElementById('music-section');
     this._els = null;
-    this._volumeDragging = false;
     this._playlistsSig = null;  // signature of currently-rendered playlist list
 
     // Progress-bar state. Position is extrapolated client-side: backend pushes
@@ -55,7 +56,6 @@ export class MusicRenderer {
     const track = state.track || {};
     const title = track.title || 'No track';
     const artist = track.artist || '';
-    const volume = state.volume ?? 70;
     const playlist = state.playlist || {};
     const playlists = Array.isArray(state.playlists) ? state.playlists : [];
     const selectedId = playlist.id || '';
@@ -111,14 +111,6 @@ export class MusicRenderer {
             Loop
           </label>
         </div>
-        <div class="music__volume">
-          <label class="music__volume-label">Vol</label>
-          <input type="range" class="music__volume-slider"
-            min="0" max="100" value="${volume}"
-            data-action="admin.musicSetVolume"
-            title="Volume: ${volume}%"${disabled}>
-          <span class="music__volume-value">${volume}%</span>
-        </div>
       </div>
     `;
 
@@ -138,8 +130,6 @@ export class MusicRenderer {
       stopBtn: this.container.querySelector('[data-action="admin.musicStop"]'),
       shuffle: this.container.querySelector('.music__shuffle'),
       loop: this.container.querySelector('.music__loop'),
-      volumeSlider: this.container.querySelector('.music__volume-slider'),
-      volumeValue: this.container.querySelector('.music__volume-value'),
     };
 
     // Cache playlist signature so we only rebuild <option>s when the list changes
@@ -147,17 +137,6 @@ export class MusicRenderer {
 
     // Seed progress-bar extrapolation state and start the timer if already playing.
     this._syncProgressState(state, null);
-
-    // Volume drag protection (so live state pushes don't snap the thumb)
-    this._els.volumeSlider.addEventListener('pointerdown', () => {
-      this._volumeDragging = true;
-    });
-    this._els.volumeSlider.addEventListener('pointerup', () => {
-      this._volumeDragging = false;
-    });
-    this._els.volumeSlider.addEventListener('lostpointercapture', () => {
-      this._volumeDragging = false;
-    });
   }
 
   _updateDOM(state, prev) {
@@ -183,7 +162,7 @@ export class MusicRenderer {
     if (connected !== wasConnected) {
       const all = [
         this._els.prevBtn, this._els.playBtn, this._els.nextBtn, this._els.stopBtn,
-        this._els.picker, this._els.shuffle, this._els.loop, this._els.volumeSlider,
+        this._els.picker, this._els.shuffle, this._els.loop,
       ];
       all.forEach(el => { el.disabled = !connected; });
     }
@@ -196,14 +175,6 @@ export class MusicRenderer {
       const artist = track.artist || '';
       this._els.trackArtist.textContent = artist;
       this._els.trackArtist.style.display = artist ? '' : 'none';
-    }
-
-    // Volume changed (skip if user is dragging)
-    if (!this._volumeDragging && state.volume !== prev?.volume) {
-      const vol = state.volume ?? 70;
-      this._els.volumeSlider.value = vol;
-      this._els.volumeSlider.title = `Volume: ${vol}%`;
-      this._els.volumeValue.textContent = `${vol}%`;
     }
 
     // pausedByGameClock changed

@@ -100,7 +100,8 @@ describe('MonitoringDisplay - Phase 3 Audio Routing', () => {
 
       const videoDropdown = document.querySelector('[data-stream="video"]');
       expect(videoDropdown).toBeTruthy();
-      expect(videoDropdown.options.length).toBe(4);
+      // +1 for the leading disabled "Unknown sink" placeholder (B-1/W5)
+      expect(videoDropdown.options.length).toBe(5);
     });
 
     it('should set correct option labels from availableSinks', () => {

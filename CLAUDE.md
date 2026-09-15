@@ -510,7 +510,7 @@ ALNScanner/
 - [AudioController.js](src/admin/AudioController.js) - Audio routing control (HDMI/Bluetooth via PipeWire)
 - [BluetoothController.js](src/admin/BluetoothController.js) - BT speaker scan/pair/connect/disconnect
 - [LightingController.js](src/admin/LightingController.js) - Home Assistant scene activation/refresh
-- [MusicController.js](src/admin/MusicController.js) - Local music (MPD) playback control: transports, `music:setVolume`, `music:setShuffle`, `music:setLoop`, `music:loadPlaylist`
+- [MusicController.js](src/admin/MusicController.js) - Local music (MPD) playback control: transports, `music:setVolume` (W6: cue-engine use only — no GM UI binds to it; see AudioController for the GM volume control), `music:setShuffle`, `music:setLoop`, `music:loadPlaylist`
 - [ScoreboardController.js](src/admin/ScoreboardController.js) - GM-driven scoreboard-evidence page navigation: sends `scoreboard:page:next`, `scoreboard:page:prev`, `scoreboard:page:owner` via `gm:command` (wired in `adminController.js`)
 
 **Utils Layer ([src/utils/](src/utils/)):**
@@ -728,7 +728,7 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 **BluetoothController:** Scan for speakers, pair/unpair, connect/disconnect. State is delivered via `service:state` domain `bluetooth`; the controller emits commands only: `bluetooth:scan:start`/`bluetooth:scan:stop`, `bluetooth:pair`, `bluetooth:unpair`, `bluetooth:connect`, `bluetooth:disconnect`.
 
-**AudioController:** Route audio streams and set per-stream volume (HDMI and Bluetooth sinks). Routing dropdowns + volume sliders (video/music/sound independently controllable). Volume sliders use `_volumeValues` cache in EnvironmentRenderer to survive dropdown rebuilds (BT speaker reconnect). State delivered via `service:state` domain `audio`.
+**AudioController:** Route audio streams and set per-stream volume (HDMI and Bluetooth sinks). Routing dropdowns + volume sliders (video/music/sound independently controllable). **W6: the per-stream `music` slider is the single music-volume authority in the GM UI** (drives PipeWire sink-input volume via `audio:volume:set`; the old MPD-only slider was removed — see MusicController). Volume sliders use `_volumeValues` cache in EnvironmentRenderer to survive dropdown rebuilds (BT speaker reconnect), and a per-stream drag guard (`_dragging`/`_pendingVolumes`, bound on `pointerdown`/`pointerup`/`lostpointercapture`) defers incoming `service:state` pushes for a stream while its slider is being dragged, applying the last pending value on release. Routing dropdowns carry a concrete sink name in `routes` (B-1: resolved server-side from the `hdmi`/`bluetooth` alias); when a route matches no rendered option (stale/vanished sink) the dropdown selects a disabled "Unknown sink" placeholder instead of silently falling back to the first option. State delivered via `service:state` domain `audio`.
 
 **LightingController:** Activate Home Assistant scenes, refresh scene list. State delivered via `service:state` domain `lighting`.
 
@@ -750,7 +750,7 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 ### HealthRenderer (Phase 4)
 
-Renders service health dashboard in admin panel System Status section. Receives state via StateStore `health` domain subscription in MonitoringDisplay. Shows per-service status (green/red), message, last checked time, and "Check Now" buttons. Collapsed when all healthy, expanded when any service is down. Uses idempotent full-state differential rendering pattern.
+Renders service health dashboard in admin panel System Status section. Receives state via StateStore `health` domain subscription in MonitoringDisplay. Shows per-service status (green/red), message, last checked time (`checked HH:MM:SS`, absolute local time, no relative/ago timer — formatted from the domain's `lastChecked`, which advances on every health probe including the 15s revalidation sweep), and "Check Now" buttons. Collapsed when all healthy, expanded when any service is down. Every field (status, message, checked time, summary count) is diffed against the last-written value before touching the DOM, so a push that only advances one service's `lastChecked` writes just that timestamp text node — not the whole card.
 
 ### HeldItemsRenderer (Phase 4)
 

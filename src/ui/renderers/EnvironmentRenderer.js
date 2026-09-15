@@ -1,5 +1,6 @@
 import { escapeHtml } from '../../utils/escapeHtml.js';
 import { escapeCssAttrValue } from '../../utils/escapeCssAttrValue.js';
+import Debug from '../../utils/debug.js';
 
 /**
  * EnvironmentRenderer - Differential DOM Rendering for Environment State
@@ -45,6 +46,9 @@ export class EnvironmentRenderer {
     this._lastDeviceKey = null;   // serialized device addresses for change detection
     this._deviceEls = null;       // { address: { item, statusEl, actionsEl } }
     this._volumeValues = { video: 100, music: 100, sound: 100 }; // Track last-known slider values
+    this._loggedUnknownSinks = new Set(); // Dedup Debug.log for unmatched route values (B-1)
+    this._dragging = {};        // { [stream]: true } while the user is dragging that slider (B-7)
+    this._pendingVolumes = {};  // { [stream]: value } latest push received during a drag, applied on release
   }
 
   /**
@@ -167,13 +171,7 @@ export class EnvironmentRenderer {
         if (routes) {
           Object.entries(routes).forEach(([stream, sink]) => {
             const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${escapeCssAttrValue(stream)}"]`);
-            if (dropdown) {
-              dropdown.value = sink;
-              // Fallback if sink doesn't match any option (consistent with differential path)
-              if (!dropdown.value && dropdown.options.length > 0) {
-                dropdown.value = dropdown.options[0].value;
-              }
-            }
+            if (dropdown) this._applyRouteValue(dropdown, sink);
           });
         }
         return; // Routes already applied above — skip duplicate application below
@@ -185,15 +183,35 @@ export class EnvironmentRenderer {
       Object.entries(routes).forEach(([stream, sink]) => {
         const dropdown = this.audioRoutingContainer?.querySelector(`select[data-stream="${escapeCssAttrValue(stream)}"]`);
         if (dropdown && dropdown.value !== sink) {
-          dropdown.value = sink;
-          // Fallback if sink doesn't match any option
-          if (!dropdown.value && dropdown.options.length > 0) {
-            dropdown.value = dropdown.options[0].value;
-          }
+          this._applyRouteValue(dropdown, sink);
         }
       });
     }
 
+  }
+
+  /**
+   * Apply a backend-reported route (a concrete sink name, per B-1) to a
+   * dropdown. If it matches no option — the sink vanished, or the backend
+   * fell back to an alias with nothing cached — select the disabled
+   * "Unknown sink" placeholder instead of silently defaulting to whatever
+   * happens to be first in the list (the old options[0] fallback).
+   * @param {HTMLSelectElement} dropdown
+   * @param {string} sink
+   * @private
+   */
+  _applyRouteValue(dropdown, sink) {
+    dropdown.value = sink;
+    if (dropdown.value === sink) return; // matched — done
+
+    // No option has this value: select the placeholder (value="") instead
+    // of leaving selectedIndex at -1 or falling back to a real sink.
+    dropdown.value = '';
+
+    if (!this._loggedUnknownSinks.has(sink)) {
+      this._loggedUnknownSinks.add(sink);
+      Debug.log(`EnvironmentRenderer: audio route references unknown sink "${sink}"`, true);
+    }
   }
 
   /**
@@ -238,6 +256,7 @@ export class EnvironmentRenderer {
       <div class="audio-control-item">
         <label>${stream.label}</label>
         <select class="form-select" data-stream="${stream.id}" data-action="admin.setAudioRoute">
+          <option value="" disabled>Unknown sink</option>
           ${sinks.map(sink => `
             <option value="${escapeHtml(sink.name)}">${escapeHtml(sink.label || sink.description || sink.name)}</option>
           `).join('')}
@@ -251,6 +270,32 @@ export class EnvironmentRenderer {
         </div>
       </div>
     `).join('');
+
+    // Drag guard (B-7): a service:state push mid-drag must not snap the
+    // thumb back under the user's finger. Bound fresh on every rebuild
+    // since the sliders themselves are new elements.
+    streams.forEach(stream => {
+      const slider = this.audioRoutingContainer.querySelector(`input[data-stream="${escapeCssAttrValue(stream.id)}"]`);
+      if (!slider) return;
+
+      slider.addEventListener('pointerdown', () => {
+        this._dragging[stream.id] = true;
+      });
+
+      const release = () => {
+        this._dragging[stream.id] = false;
+        if (!Object.prototype.hasOwnProperty.call(this._pendingVolumes, stream.id)) return;
+        const value = this._pendingVolumes[stream.id];
+        delete this._pendingVolumes[stream.id];
+        this._volumeValues[stream.id] = value;
+        slider.value = String(value);
+        const item = slider.closest('.audio-control-item');
+        const label = item && item.querySelector('.volume-label');
+        if (label) label.textContent = `${value}%`;
+      };
+      slider.addEventListener('pointerup', release);
+      slider.addEventListener('lostpointercapture', release);
+    });
   }
 
   /**
@@ -264,6 +309,13 @@ export class EnvironmentRenderer {
 
     for (const [stream, value] of Object.entries(volumes)) {
       if (typeof value !== 'number') continue;
+
+      if (this._dragging[stream]) {
+        // B-7: don't fight the user's drag — stash it, apply on release.
+        this._pendingVolumes[stream] = value;
+        continue;
+      }
+
       this._volumeValues[stream] = value;
 
       if (!this.audioRoutingContainer) continue;

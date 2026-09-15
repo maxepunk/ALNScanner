@@ -223,6 +223,88 @@ describe('HealthRenderer', () => {
     });
   });
 
+  describe('lastChecked display (W4/B-5)', () => {
+    function expectedTime(iso) {
+      const d = new Date(iso);
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      return `checked ${hh}:${mm}:${ss}`;
+    }
+
+    it('shows "checked HH:MM:SS" (absolute local time) for a service with lastChecked', () => {
+      const iso = '2026-09-15T14:32:07.000Z';
+      renderer.render({
+        serviceHealth: { vlc: { status: 'down', message: 'Connection refused', lastChecked: iso } }
+      });
+
+      const card = container.querySelector('[data-service="vlc"]');
+      expect(card.querySelector('.health-service__checked').textContent).toBe(expectedTime(iso));
+    });
+
+    it('re-renders ONLY the timestamp text when status/message are unchanged but lastChecked advances', () => {
+      const health1 = { vlc: { status: 'down', message: 'err', lastChecked: '2026-09-15T14:00:00.000Z' } };
+      renderer.render({ serviceHealth: health1 });
+
+      const vlcCard = container.querySelector('[data-service="vlc"]');
+      const statusEl = vlcCard.querySelector('.health-service__status');
+      const messageEl = vlcCard.querySelector('.health-service__message');
+      const checkedEl = vlcCard.querySelector('.health-service__checked');
+
+      const statusSpy = jest.spyOn(statusEl, 'textContent', 'set');
+      const messageSpy = jest.spyOn(messageEl, 'textContent', 'set');
+      const checkedSpy = jest.spyOn(checkedEl, 'textContent', 'set');
+
+      const health2 = { vlc: { status: 'down', message: 'err', lastChecked: '2026-09-15T14:00:15.000Z' } };
+      renderer.render({ serviceHealth: health2 }, { serviceHealth: health1 });
+
+      expect(statusSpy).not.toHaveBeenCalled();
+      expect(messageSpy).not.toHaveBeenCalled();
+      expect(checkedSpy).toHaveBeenCalledWith(expectedTime('2026-09-15T14:00:15.000Z'));
+
+      statusSpy.mockRestore();
+      messageSpy.mockRestore();
+      checkedSpy.mockRestore();
+    });
+
+    it('writes no DOM text at all when the pushed state is identical to the previous render', () => {
+      const health = { vlc: { status: 'down', message: 'err', lastChecked: '2026-09-15T14:00:00.000Z' } };
+      renderer.render({ serviceHealth: health });
+
+      const vlcCard = container.querySelector('[data-service="vlc"]');
+      const statusEl = vlcCard.querySelector('.health-service__status');
+      const messageEl = vlcCard.querySelector('.health-service__message');
+      const checkedEl = vlcCard.querySelector('.health-service__checked');
+
+      const statusSpy = jest.spyOn(statusEl, 'textContent', 'set');
+      const messageSpy = jest.spyOn(messageEl, 'textContent', 'set');
+      const checkedSpy = jest.spyOn(checkedEl, 'textContent', 'set');
+      const summaryTextEl = container.querySelector('.health-dashboard__summary-text');
+      const summarySpy = summaryTextEl ? jest.spyOn(summaryTextEl, 'textContent', 'set') : null;
+
+      // Identical state pushed again (e.g. two revalidation probes with no change at all)
+      renderer.render({ serviceHealth: { ...health } }, { serviceHealth: health });
+
+      expect(statusSpy).not.toHaveBeenCalled();
+      expect(messageSpy).not.toHaveBeenCalled();
+      expect(checkedSpy).not.toHaveBeenCalled();
+      if (summarySpy) expect(summarySpy).not.toHaveBeenCalled();
+
+      statusSpy.mockRestore();
+      messageSpy.mockRestore();
+      checkedSpy.mockRestore();
+      if (summarySpy) summarySpy.mockRestore();
+    });
+
+    it('handles missing lastChecked gracefully (empty timestamp, no throw)', () => {
+      expect(() => {
+        renderer.render({ serviceHealth: { vlc: { status: 'down', message: 'err' } } });
+      }).not.toThrow();
+      const card = container.querySelector('[data-service="vlc"]');
+      expect(card.querySelector('.health-service__checked').textContent).toBe('');
+    });
+  });
+
   describe('selector metachar safety (SR-5)', () => {
     it('should cache the service card even when an id contains a selector metachar', () => {
       // Force expanded (degraded) render with a metachar id in SERVICE_NAMES.

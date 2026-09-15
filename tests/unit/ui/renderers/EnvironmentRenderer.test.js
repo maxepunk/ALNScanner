@@ -8,6 +8,7 @@
 
 import { jest } from '@jest/globals';
 import { EnvironmentRenderer } from '../../../../src/ui/renderers/EnvironmentRenderer.js';
+import Debug from '../../../../src/utils/debug.js';
 
 describe('EnvironmentRenderer', () => {
   let renderer;
@@ -208,13 +209,15 @@ describe('EnvironmentRenderer', () => {
       expect(dropdown.dataset.action).toBe('admin.setAudioRoute');
     });
 
-    it('should populate options from sinks', () => {
+    it('should populate options from sinks (plus the leading Unknown-sink placeholder)', () => {
       renderer.renderAudio({ availableSinks: sinks, routes: {} });
 
       const dropdown = document.querySelector('select[data-stream="video"]');
-      expect(dropdown.options).toHaveLength(2);
-      expect(dropdown.options[0].value).toBe('hdmi');
-      expect(dropdown.options[0].textContent.trim()).toBe('HDMI Output');
+      expect(dropdown.options).toHaveLength(3);
+      expect(dropdown.options[0].value).toBe('');
+      expect(dropdown.options[0].disabled).toBe(true);
+      expect(dropdown.options[1].value).toBe('hdmi');
+      expect(dropdown.options[1].textContent.trim()).toBe('HDMI Output');
     });
 
     it('should update route selection values', () => {
@@ -333,7 +336,7 @@ describe('EnvironmentRenderer', () => {
       // Dropdown rebuilt (different element)
       const dropdownAfter = document.querySelector('select[data-stream="video"]');
       expect(dropdownAfter).not.toBe(dropdownBefore);
-      expect(dropdownAfter.options).toHaveLength(3);
+      expect(dropdownAfter.options).toHaveLength(4); // placeholder + 3 sinks
     });
 
     it('should re-apply routes after dropdown rebuild', () => {
@@ -357,6 +360,64 @@ describe('EnvironmentRenderer', () => {
       // Re-render same route — no unnecessary DOM write
       renderer.renderAudio({ availableSinks: sinks, routes: { video: 'hdmi' } });
       expect(dropdown.value).toBe('hdmi');
+    });
+  });
+
+  describe('Audio Routing - unmatched route placeholder (B-1/W5)', () => {
+    const sinks = [
+      { name: 'alsa_output.hdmi-stereo', label: 'HDMI' },
+      { name: 'bluez_output.AA_BB.1', label: 'BT Speaker' },
+    ];
+
+    it('selects the "Unknown sink" placeholder (never a real sink) on the REBUILD path when the route matches nothing', () => {
+      // routes arrive with a sink set the dropdowns don't have — forces the
+      // build+apply-routes path (~L163-180) to hit a non-matching value.
+      renderer.renderAudio({
+        availableSinks: sinks,
+        routes: { video: 'alsa_output.stale-sink-that-vanished' },
+      });
+
+      const dropdown = document.querySelector('select[data-stream="video"]');
+      expect(dropdown.value).toBe('');
+      expect(dropdown.selectedOptions[0].disabled).toBe(true);
+      expect(dropdown.selectedOptions[0].textContent).toBe('Unknown sink');
+      // Never silently falls back to the first real sink
+      expect(dropdown.value).not.toBe(sinks[0].name);
+    });
+
+    it('selects the "Unknown sink" placeholder on the DIFFERENTIAL path when the route matches nothing', () => {
+      // Prime with matching sinks (same sink set both times → differential path ~L184-195)
+      renderer.renderAudio({ availableSinks: sinks, routes: { video: sinks[0].name } });
+      expect(document.querySelector('select[data-stream="video"]').value).toBe(sinks[0].name);
+
+      renderer.renderAudio({ availableSinks: sinks, routes: { video: 'alsa_output.stale-sink-that-vanished' } });
+
+      const dropdown = document.querySelector('select[data-stream="video"]');
+      expect(dropdown.value).toBe('');
+      expect(dropdown.selectedOptions[0].textContent).toBe('Unknown sink');
+    });
+
+    it('selects the matching sink normally when the route DOES match an option', () => {
+      renderer.renderAudio({ availableSinks: sinks, routes: { video: sinks[1].name } });
+
+      const dropdown = document.querySelector('select[data-stream="video"]');
+      expect(dropdown.value).toBe(sinks[1].name);
+    });
+
+    it('logs the unmatched value via Debug.log', () => {
+      const debugSpy = jest.spyOn(Debug, 'log').mockImplementation(() => {});
+
+      renderer.renderAudio({
+        availableSinks: sinks,
+        routes: { video: 'alsa_output.stale-sink-that-vanished' },
+      });
+
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('alsa_output.stale-sink-that-vanished'),
+        expect.anything()
+      );
+
+      debugSpy.mockRestore();
     });
   });
 
@@ -419,6 +480,73 @@ describe('EnvironmentRenderer', () => {
 
       expect(renderer._volumeValues.video).toBe(75);
       expect(container.querySelector('input[data-stream="video"]').value).toBe('75');
+    });
+  });
+
+  describe('Audio Routing - per-stream volume drag guard (B-7/W6)', () => {
+    let renderer;
+    let container;
+
+    beforeEach(() => {
+      document.body.innerHTML = '<div id="audio-routing-dropdowns"></div>';
+      container = document.getElementById('audio-routing-dropdowns');
+      renderer = new EnvironmentRenderer({ audioRoutingContainer: container });
+    });
+
+    const sinks = [{ name: 'hdmi-stereo', label: 'HDMI', type: 'hdmi' }];
+
+    test('a push during drag leaves the slider untouched; releasing applies the LAST pending value', () => {
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: { music: 50 } });
+      const slider = container.querySelector('input[data-stream="music"]');
+      expect(slider.value).toBe('50');
+
+      slider.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: { music: 65 } });
+      expect(slider.value).toBe('50');
+
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: { music: 80 } });
+      expect(slider.value).toBe('50');
+
+      slider.dispatchEvent(new Event('pointerup', { bubbles: true }));
+
+      expect(slider.value).toBe('80');
+      const label = slider.closest('.audio-control-item').querySelector('.volume-label');
+      expect(label.textContent).toBe('80%');
+    });
+
+    test('lostpointercapture also releases the guard and applies the pending value', () => {
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: { sound: 30 } });
+      const slider = container.querySelector('input[data-stream="sound"]');
+
+      slider.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: { sound: 90 } });
+      expect(slider.value).toBe('30');
+
+      slider.dispatchEvent(new Event('lostpointercapture', { bubbles: true }));
+      expect(slider.value).toBe('90');
+    });
+
+    test('drag guard is per-stream: dragging one slider does not block pushes to another', () => {
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: { music: 40, video: 40 } });
+      const musicSlider = container.querySelector('input[data-stream="music"]');
+      const videoSlider = container.querySelector('input[data-stream="video"]');
+
+      musicSlider.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: { music: 55, video: 60 } });
+
+      expect(musicSlider.value).toBe('40'); // held back
+      expect(videoSlider.value).toBe('60'); // applied normally
+    });
+
+    test('release with no pending push is a no-op (slider keeps its current value)', () => {
+      renderer.renderAudio({ availableSinks: sinks, routes: {}, volumes: { music: 50 } });
+      const slider = container.querySelector('input[data-stream="music"]');
+
+      slider.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      slider.dispatchEvent(new Event('pointerup', { bubbles: true }));
+
+      expect(slider.value).toBe('50');
     });
   });
 

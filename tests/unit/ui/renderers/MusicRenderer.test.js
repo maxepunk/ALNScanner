@@ -35,6 +35,13 @@ describe('MusicRenderer', () => {
     expect(container.querySelector('.music__track-artist').textContent).toBe('Artist X');
   });
 
+  test('does NOT render an MPD volume slider (W6: single music-volume authority is the per-stream audio slider)', () => {
+    renderer.render({ connected: true, state: 'playing', volume: 70, playlists: [] });
+    expect(container.querySelector('.music__volume-slider')).toBeNull();
+    expect(container.querySelector('.music__volume-value')).toBeNull();
+    expect(container.querySelector('[data-action="admin.musicSetVolume"]')).toBeNull();
+  });
+
   test('renders paused state with play button', () => {
     renderer.render({ connected: true, state: 'paused', volume: 60, playlists: [] });
     expect(container.querySelector('[data-action="admin.musicPlay"]')).not.toBeNull();
@@ -73,16 +80,6 @@ describe('MusicRenderer', () => {
       { connected: true, state: 'playing', volume: 70, track: { title: 'Old', artist: 'A' }, playlists: [] }
     );
     expect(container.querySelector('.music__track-title').textContent).toBe('New');
-  });
-
-  test('updates volume on second render', () => {
-    renderer.render({ connected: true, state: 'playing', volume: 70, playlists: [] });
-    renderer.render(
-      { connected: true, state: 'playing', volume: 42, playlists: [] },
-      { connected: true, state: 'playing', volume: 70, playlists: [] }
-    );
-    expect(container.querySelector('.music__volume-slider').value).toBe('42');
-    expect(container.querySelector('.music__volume-value').textContent).toBe('42%');
   });
 
   test('preserves picker selection when playlist list changes but selected id remains valid', () => {

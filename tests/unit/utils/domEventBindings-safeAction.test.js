@@ -22,8 +22,7 @@ describe('domEventBindings - safeAdminAction', () => {
     stop: jest.fn(),
     next: jest.fn(),
     previous: jest.fn(),
-    checkService: jest.fn(),
-    setVolume: jest.fn()
+    checkService: jest.fn()
   };
 
   const mockCueController = {
@@ -46,7 +45,8 @@ describe('domEventBindings - safeAdminAction', () => {
   };
 
   const mockAudioController = {
-    setVideoOutput: jest.fn()
+    setVideoOutput: jest.fn(),
+    setVolume: jest.fn()
   };
 
   const mockLightingController = {
@@ -215,12 +215,13 @@ describe('domEventBindings - safeAdminAction', () => {
     expect(() => clickAction(btn)).not.toThrow();
   });
 
-  it('should catch rejected promise inside debounced volume callback', async () => {
-    mockMusicController.setVolume.mockRejectedValueOnce(new Error('Volume failed'));
+  it('should catch rejected promise inside debounced per-stream volume callback', async () => {
+    mockAudioController.setVolume.mockRejectedValueOnce(new Error('Volume failed'));
 
     const slider = document.createElement('input');
     slider.type = 'range';
-    slider.dataset.action = 'admin.musicSetVolume';
+    slider.dataset.action = 'admin.setStreamVolume';
+    slider.dataset.stream = 'music';
     slider.value = '50';
     document.body.appendChild(slider);
 
@@ -228,7 +229,7 @@ describe('domEventBindings - safeAdminAction', () => {
     jest.advanceTimersByTime(150);
     await flushMicrotasks();
 
-    expect(mockMusicController.setVolume).toHaveBeenCalledWith(50);
+    expect(mockAudioController.setVolume).toHaveBeenCalledWith('music', 50);
     expect(mockDebug.log).toHaveBeenCalledWith(
       expect.stringContaining('Volume failed'),
       true

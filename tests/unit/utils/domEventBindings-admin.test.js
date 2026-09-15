@@ -24,6 +24,10 @@ describe('domEventBindings - admin actions', () => {
     activateScene: jest.fn()
   };
 
+  const mockAdminOperations = {
+    checkService: jest.fn()
+  };
+
   const mockAdminController = {
     initialized: true,
     getModule: jest.fn((name) => {
@@ -31,6 +35,7 @@ describe('domEventBindings - admin actions', () => {
         case 'bluetoothController': return mockBluetoothController;
         case 'audioController': return mockAudioController;
         case 'lightingController': return mockLightingController;
+        case 'adminOperations': return mockAdminOperations;
         default: throw new Error(`Unknown module: ${name}`);
       }
     })
@@ -46,9 +51,14 @@ describe('domEventBindings - admin actions', () => {
     log: jest.fn()
   };
 
+  const mockUiManager = {
+    showToast: jest.fn(),
+    showError: jest.fn()
+  };
+
   // Bind listeners once (document-level listeners persist across tests)
   beforeAll(() => {
-    bindDOMEvents(mockApp, {}, {}, mockDebug, {}, {}, {});
+    bindDOMEvents(mockApp, {}, {}, mockDebug, mockUiManager, {}, {});
   });
 
   beforeEach(() => {
@@ -71,6 +81,12 @@ describe('domEventBindings - admin actions', () => {
 
   function changeAction(element) {
     element.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  /** Flush microtask queue so .then()/.catch() callbacks execute */
+  async function flushMicrotasks() {
+    await Promise.resolve();
+    await Promise.resolve();
   }
 
   describe('admin.startBtScan', () => {
@@ -160,6 +176,55 @@ describe('domEventBindings - admin actions', () => {
       clickAction(btn);
 
       expect(mockLightingController.activateScene).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('admin.serviceCheck (W4/B-5: "Check Now" feedback)', () => {
+    it('should call adminOperations.checkService with the data-service-id', () => {
+      const btn = document.createElement('button');
+      btn.dataset.action = 'admin.serviceCheck';
+      btn.setAttribute('data-service-id', 'music');
+      document.body.appendChild(btn);
+
+      mockAdminOperations.checkService.mockResolvedValueOnce({ action: 'service:check', success: true, message: 'MPD reconnected' });
+
+      clickAction(btn);
+
+      expect(mockAdminOperations.checkService).toHaveBeenCalledWith('music');
+    });
+
+    it('should show the ack message as a toast on resolve', async () => {
+      const btn = document.createElement('button');
+      btn.dataset.action = 'admin.serviceCheck';
+      btn.setAttribute('data-service-id', 'lighting');
+      document.body.appendChild(btn);
+
+      mockAdminOperations.checkService.mockResolvedValueOnce({
+        action: 'service:check', success: true, message: 'Lighting still unreachable'
+      });
+
+      clickAction(btn);
+      await flushMicrotasks();
+
+      expect(mockUiManager.showToast).toHaveBeenCalledWith('Lighting still unreachable');
+      expect(mockUiManager.showError).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to showError (existing rejection path) when the command rejects', async () => {
+      const btn = document.createElement('button');
+      btn.dataset.action = 'admin.serviceCheck';
+      btn.setAttribute('data-service-id', 'vlc');
+      document.body.appendChild(btn);
+
+      mockAdminOperations.checkService.mockRejectedValueOnce(new Error('service:check timeout after 5000ms'));
+
+      clickAction(btn);
+      await flushMicrotasks();
+
+      expect(mockUiManager.showError).toHaveBeenCalledWith(
+        expect.stringContaining('service:check timeout after 5000ms')
+      );
+      expect(mockUiManager.showToast).not.toHaveBeenCalled();
     });
   });
 

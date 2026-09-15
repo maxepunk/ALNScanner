@@ -31,17 +31,11 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
     }
   }
 
-  // Debounced volume setter for the music (MPD) slider.
-  // Prevents pile-up of D-Bus calls and slider DOM destruction during drag
-  // (renderer replaces innerHTML on state push). 150ms trailing debounce.
-  const debouncedMusicVolume = debounce((volume) => {
-    const adminController = app.networkedSession?.getService('adminController');
-    if (adminController?.initialized) {
-      safeAdminAction(adminController.getModule('musicController').setVolume(volume), 'musicSetVolume');
-    }
-  }, 150);
+  // Debounced stream volume setter (video, music, sound via PipeWire).
+  // W6: this is the SOLE music-volume UI — the old MPD-only slider
+  // (admin.musicSetVolume) was removed; MusicController.setVolume remains
+  // for cue-engine use only.
 
-  // Debounced stream volume setter (video, music, sound via PipeWire)
   const debouncedStreamVolume = debounce((stream, volume) => {
     const adminController = app.networkedSession?.getService('adminController');
     if (adminController?.initialized) {
@@ -127,8 +121,20 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
         safeAdminAction(adminController.getModule('cueController').discardAllHeld(), 'discardAllHeld');
         break;
       case 'serviceCheck': {
+        // B-5: a "Check Now" probe against a still-down service used to give
+        // zero feedback (no health:changed transition to trigger a re-render).
+        // checkService resolves with the gm:command:ack shape {action, success,
+        // message} — surface that message as a toast so the GM sees the probe
+        // landed even when nothing changed. Rejections keep the existing
+        // showError path via safeAdminAction.
         const serviceId = actionElement.getAttribute('data-service-id');
-        safeAdminAction(adminController.getModule('adminOperations').checkService(serviceId), 'serviceCheck');
+        const checkPromise = adminController.getModule('adminOperations').checkService(serviceId)
+          .then((ack) => {
+            if (ack && ack.message) {
+              uiManager?.showToast?.(ack.message);
+            }
+          });
+        safeAdminAction(checkPromise, 'serviceCheck');
         break;
       }
       case 'musicPlay': {
@@ -162,13 +168,6 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
       case 'musicPrevious':
         safeAdminAction(adminController.getModule('musicController').previous(), 'musicPrevious');
         break;
-      case 'musicSetVolume': {
-        const volume = parseInt(actionElement.value, 10);
-        if (!isNaN(volume)) {
-          debouncedMusicVolume(volume);
-        }
-        break;
-      }
       case 'musicSetShuffle': {
         const enabled = !!actionElement.checked;
         safeAdminAction(adminController.getModule('musicController').setShuffle(enabled), 'musicSetShuffle');

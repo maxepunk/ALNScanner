@@ -3,9 +3,14 @@
  *
  * Music event binding tests for the music (MPD) controls:
  * - Transport clicks (play/pause/stop/next/previous)
- * - Volume slider with debounce
  * - Checkbox toggles for shuffle/loop (boolean payload)
  * - Playlist picker (<select> change → loadPlaylist)
+ *
+ * NOTE (W6): MPD volume (admin.musicSetVolume) was removed from the GM UI —
+ * the per-stream audio slider (admin.setStreamVolume, tested in
+ * domEventBindings-admin.test.js / AudioController tests) is the single
+ * music-volume authority. MusicController.setVolume remains for cue-engine
+ * use only, with no UI binding here.
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, jest } from '@jest/globals';
@@ -18,7 +23,6 @@ describe('domEventBindings - music actions', () => {
     stop: jest.fn(),
     next: jest.fn(),
     previous: jest.fn(),
-    setVolume: jest.fn(),
     setShuffle: jest.fn(),
     setLoop: jest.fn(),
     loadPlaylist: jest.fn(),
@@ -80,35 +84,6 @@ describe('domEventBindings - music actions', () => {
     document.body.appendChild(btn);
     clickAction(btn);
     expect(mockMusicController[method]).toHaveBeenCalled();
-  });
-
-  it('musicSetVolume slider input is debounced (150ms)', () => {
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.dataset.action = 'admin.musicSetVolume';
-    slider.value = '60';
-    document.body.appendChild(slider);
-
-    inputAction(slider);
-    expect(mockMusicController.setVolume).not.toHaveBeenCalled();
-    jest.advanceTimersByTime(150);
-    expect(mockMusicController.setVolume).toHaveBeenCalledWith(60);
-  });
-
-  it('musicSetVolume debounces rapid slider movements', () => {
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.dataset.action = 'admin.musicSetVolume';
-    document.body.appendChild(slider);
-
-    slider.value = '30'; inputAction(slider); jest.advanceTimersByTime(50);
-    slider.value = '55'; inputAction(slider); jest.advanceTimersByTime(50);
-    slider.value = '80'; inputAction(slider);
-
-    expect(mockMusicController.setVolume).not.toHaveBeenCalled();
-    jest.advanceTimersByTime(150);
-    expect(mockMusicController.setVolume).toHaveBeenCalledTimes(1);
-    expect(mockMusicController.setVolume).toHaveBeenCalledWith(80);
   });
 
   it('musicSetShuffle dispatches with checked=true on change event', () => {
