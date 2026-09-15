@@ -65,7 +65,7 @@ Table columns (in exact order):
 - `Team`: teamId
 - `Amount`: signed currency (`+$N` or `-$N`)
 
-Followed by `### Final Totals` subsection: per-team breakdown of sales total vs adjustments total vs combined final.
+Followed by `### Final Totals` subsection: per-team breakdown of sales total vs adjustments total vs combined final. Since 2026-09-15 a team line may carry an additional `+ $Y group bonuses [Group A, Group B]` term between the sales and adjustments terms when that team has a group-completion bonus; lines for teams without a bonus are byte-identical to v1. Pipeline confirmation pending (owner).
 
 If no scoring events: single italics line `*No scoring events this session.*`
 

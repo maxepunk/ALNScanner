@@ -119,10 +119,11 @@ export class SessionReportGenerator {
     lines.push('|-------|-------|------------|------|----------|');
 
     for (const tx of detective) {
-      const owner = this._getTokenOwner(tx.tokenId);
+      const owner = this._escapeCell(this._getTokenOwner(tx));
+      const teamId = this._escapeCell(tx.teamId);
       const time = this._formatTimestamp(tx.timestamp);
-      const evidence = (tx.summary || '—').replace(/\|/g, '\\|').replace(/\n/g, ' ');
-      lines.push(`| ${tx.tokenId} | ${owner} | ${tx.teamId} | ${time} | ${evidence} |`);
+      const evidence = this._escapeCell(tx.summary || '—');
+      lines.push(`| ${tx.tokenId} | ${owner} | ${teamId} | ${time} | ${evidence} |`);
     }
 
     lines.push('');
@@ -165,24 +166,23 @@ export class SessionReportGenerator {
       '',
     ];
 
-    if (timeline.length === 0) {
+    if (timeline.length > 0) {
+      lines.push('| Time | Type | Detail | Team | Amount |');
+      lines.push('|------|------|--------|------|--------|');
+
+      for (const event of timeline) {
+        const time = this._formatTimestamp(event.timestamp);
+        const amount = this._formatSignedCurrency(event.amount);
+        const team = this._escapeCell(event.team);
+        lines.push(`| ${time} | ${event.type} | ${event.detail} | ${team} | ${amount} |`);
+      }
+    } else {
       lines.push('*No scoring events this session.*');
-      lines.push('');
-      lines.push('---');
-      lines.push('');
-      return lines.join('\n');
     }
 
-    lines.push('| Time | Type | Detail | Team | Amount |');
-    lines.push('|------|------|--------|------|--------|');
-
-    for (const event of timeline) {
-      const time = this._formatTimestamp(event.timestamp);
-      const amount = this._formatSignedCurrency(event.amount);
-      lines.push(`| ${time} | ${event.type} | ${event.detail} | ${event.team} | ${amount} |`);
-    }
-
-    // Final Totals with breakdown
+    // Final Totals with breakdown: sales + group bonuses + adjustments (E-2).
+    // Bonuses carry no timestamp, so they never appear as timeline rows —
+    // a team can still owe a Final Totals line purely from its bonus.
     const salesTotals = {};
     const adjustmentTotals = {};
     for (const event of timeline) {
@@ -193,11 +193,39 @@ export class SessionReportGenerator {
       }
     }
 
-    const allTeams = new Set([...Object.keys(salesTotals), ...Object.keys(adjustmentTotals)]);
+    const scoresByTeam = new Map((scores || []).map(s => [s.teamId, s]));
+    // NetworkedStorage.getTeamScores() names this field `bonusScore`; the
+    // backend's own payloads (and sync:full) name it `bonusPoints`. Accept
+    // either so this doesn't silently read 0 if the field name drifts.
+    const bonusOf = (s) => s?.bonusPoints ?? s?.bonusScore ?? 0;
+
+    const allTeams = new Set([
+      ...Object.keys(salesTotals),
+      ...Object.keys(adjustmentTotals),
+      ...(scores || []).filter(s => bonusOf(s) !== 0).map(s => s.teamId)
+    ]);
+
+    if (allTeams.size === 0) {
+      lines.push('');
+      lines.push('---');
+      lines.push('');
+      return lines.join('\n');
+    }
+
     const teamFinals = [...allTeams].map(team => {
       const salesTotal = salesTotals[team] || 0;
       const adjTotal = adjustmentTotals[team] || 0;
-      return { team, salesTotal, adjTotal, final: salesTotal + adjTotal };
+      const scoreEntry = scoresByTeam.get(team);
+      const bonusPoints = bonusOf(scoreEntry);
+      const completedGroups = Array.isArray(scoreEntry?.completedGroups) ? scoreEntry.completedGroups : [];
+      return {
+        team,
+        salesTotal,
+        adjTotal,
+        bonusPoints,
+        completedGroups,
+        final: salesTotal + adjTotal + bonusPoints
+      };
     }).sort((a, b) => b.final - a.final);
 
     lines.push('');
@@ -209,7 +237,23 @@ export class SessionReportGenerator {
       const finalDisplay = t.final >= 0
         ? this._formatCurrency(t.final)
         : `-${this._formatCurrency(Math.abs(t.final))}`;
-      lines.push(`- **${t.team}:** ${finalDisplay} (${this._formatCurrency(t.salesTotal)} sales ${adjSign} ${this._formatCurrency(adjAbs)} adjustments)`);
+      // v1 contract (tests/contract/sessionReport.contract.test.js): a team
+      // with no bonus must render byte-identical to the pre-E-2 format —
+      // "($X sales + $Y adjustments)" — so the bonus term only appears when
+      // there's something to report.
+      const hasBonus = t.bonusPoints !== 0 || t.completedGroups.length > 0;
+      const groupList = t.completedGroups.length ? ` [${t.completedGroups.join(', ')}]` : '';
+      const bonusSegment = hasBonus
+        ? ` + ${this._formatCurrency(t.bonusPoints)} group bonuses${groupList}`
+        : '';
+      // A raw newline in a team name would otherwise split this bullet
+      // across two markdown lines; collapse it here only (not via
+      // _escapeCell, which would turn a literal "|" into "\|" and change
+      // v1 bytes for a team name containing one).
+      const teamDisplay = t.team.replace(/\r?\n/g, ' ');
+      const line = `- **${teamDisplay}:** ${finalDisplay} (${this._formatCurrency(t.salesTotal)} sales${bonusSegment} `
+        + `${adjSign} ${this._formatCurrency(adjAbs)} adjustments)`;
+      lines.push(line);
     }
 
     lines.push('');
@@ -222,7 +266,7 @@ export class SessionReportGenerator {
    * Format sale detail with parenthetical scoring breakdown.
    */
   _formatSaleDetail(tx) {
-    const owner = this._getTokenOwner(tx.tokenId);
+    const owner = this._getTokenOwner(tx);
     const rating = tx.valueRating || 0;
     const type = tx.memoryType || 'UNKNOWN';
     const baseValue = SCORING_CONFIG.BASE_VALUES[rating] || 0;
@@ -236,7 +280,7 @@ export class SessionReportGenerator {
    * Format adjustment detail with reason and GM station.
    */
   _formatAdjustmentDetail(adj) {
-    const reason = (adj.reason || '—').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+    const reason = this._escapeCell(adj.reason || '—');
     const station = adj.gmStation;
     return station ? `${reason} (${station})` : reason;
   }
@@ -265,9 +309,10 @@ export class SessionReportGenerator {
     lines.push('|-------|-------|--------|------|');
 
     for (const scan of sorted) {
-      const owner = this._getTokenOwner(scan.tokenId);
+      const owner = this._escapeCell(this._getTokenOwner(scan.tokenId));
+      const deviceId = this._escapeCell(scan.deviceId);
       const time = this._formatTimestamp(scan.timestamp);
-      lines.push(`| ${scan.tokenId} | ${owner} | ${scan.deviceId} | ${time} |`);
+      lines.push(`| ${scan.tokenId} | ${owner} | ${deviceId} | ${time} |`);
     }
 
     // Stats
@@ -328,12 +373,32 @@ export class SessionReportGenerator {
 
   /**
    * Look up the character owner name for a token.
-   * @param {string} tokenId
+   * Prefers a backend-resolved owner carried on the transaction/scan (E-3)
+   * over the local token DB, since the local DB can be stale relative to
+   * the session that actually ran.
+   * @param {string|{tokenId: string, owner?: string}} txOrTokenId - A bare
+   *   tokenId (player scans, which carry no resolved owner), or an object
+   *   with `tokenId` and an optional `owner`.
    * @returns {string} Character name or 'Unknown'
    */
-  _getTokenOwner(tokenId) {
+  _getTokenOwner(txOrTokenId) {
+    const isObject = txOrTokenId !== null && typeof txOrTokenId === 'object';
+    const carriedOwner = isObject ? txOrTokenId.owner : undefined;
+    if (typeof carriedOwner === 'string' && carriedOwner.trim().length > 0) {
+      return carriedOwner;
+    }
+    const tokenId = isObject ? txOrTokenId.tokenId : txOrTokenId;
     const token = this.tokenDatabase[tokenId];
     return token?.owner || 'Unknown';
+  }
+
+  /**
+   * Escape markdown table-breaking characters in a cell value (E-4).
+   * @param {*} value
+   * @returns {string}
+   */
+  _escapeCell(value) {
+    return String(value ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
   }
 
   /**

@@ -244,6 +244,31 @@ describe('SessionReportGenerator', () => {
       ]);
       expect(section).toContain('No detective transactions');
     });
+
+    it('should prefer tx.owner over the local database (E-3)', () => {
+      const section = generator._buildDetectiveSection([
+        { ...mockTransactions[0], owner: 'BACKEND_SOFIA' }
+      ]);
+      expect(section).toContain('BACKEND_SOFIA');
+      expect(section).not.toContain('| SOFIA |');
+    });
+
+    it('should fall back to the local database when tx.owner is null (E-3)', () => {
+      const section = generator._buildDetectiveSection([
+        { ...mockTransactions[0], owner: null }
+      ]);
+      expect(section).toContain('SOFIA');
+    });
+
+    it('should escape pipe characters in teamId and owner (E-4)', () => {
+      const dbWithPipe = { ...mockTokenDatabase, sof001: { ...mockTokenDatabase.sof001, owner: 'S|OFIA' } };
+      const gen = new SessionReportGenerator(dbWithPipe);
+      const section = gen._buildDetectiveSection([
+        { ...mockTransactions[0], teamId: 'A|B' }
+      ]);
+      expect(section).toContain('A\\|B');
+      expect(section).toContain('S\\|OFIA');
+    });
   });
 
   describe('_buildScoringTimeline()', () => {
@@ -345,6 +370,113 @@ describe('SessionReportGenerator', () => {
       const section = generator._buildScoringTimeline([], scoresWithPipe);
       expect(section).toContain('Reason \\| with pipe');
     });
+
+    it('should escape pipe characters in teamId (E-4)', () => {
+      const section = generator._buildScoringTimeline(
+        [{ ...mockTransactions[2], teamId: 'A|B' }],
+        [{ teamId: 'A|B', score: 75000 }]
+      );
+      expect(section).toContain('A\\|B');
+    });
+
+    it('should include group bonuses in Final Totals and match the standings score (E-2)', () => {
+      const bonusTransactions = [{
+        id: 'tx-b1', tokenId: 'mab001', teamId: 'Whitemetal Inc.', mode: 'blackmarket',
+        status: 'accepted', points: 165000, timestamp: '2026-02-16T19:45:00.000Z',
+        deviceId: 'GM_STATION_1', memoryType: 'Technical', valueRating: 5, summary: null
+      }];
+      const bonusScores = [{
+        teamId: 'Whitemetal Inc.', score: 825000,
+        bonusPoints: 660000, completedGroups: ['Server Logs', 'Party Photos']
+      }];
+      const section = generator._buildScoringTimeline(bonusTransactions, bonusScores);
+      expect(section).toContain(
+        '**Whitemetal Inc.:** $825,000 ($165,000 sales + $660,000 group bonuses [Server Logs, Party Photos] + $0 adjustments)'
+      );
+    });
+
+    it('should omit the group bonuses term entirely when bonusPoints is 0 and there are no completed groups (v1-identical)', () => {
+      const bonusTransactions = [{
+        id: 'tx-b1', tokenId: 'mab001', teamId: 'Whitemetal Inc.', mode: 'blackmarket',
+        status: 'accepted', points: 165000, timestamp: '2026-02-16T19:45:00.000Z',
+        deviceId: 'GM_STATION_1', memoryType: 'Technical', valueRating: 5, summary: null
+      }];
+      const noGroupScores = [{ teamId: 'Whitemetal Inc.', score: 165000, bonusPoints: 0, completedGroups: [] }];
+      const section = generator._buildScoringTimeline(bonusTransactions, noGroupScores);
+      expect(section).toContain('$165,000 sales + $0 adjustments');
+      expect(section).not.toContain('group bonuses');
+      expect(section).not.toContain('[');
+    });
+
+    it('should give a bonus-only team with no timeline rows its own Final Totals line (E-2)', () => {
+      const bonusOnlyScores = [{ teamId: 'Ghost Team', score: 60000, bonusPoints: 60000, completedGroups: ['Server Logs'] }];
+      const section = generator._buildScoringTimeline([], bonusOnlyScores);
+      expect(section).toContain('**Ghost Team:** $60,000 ($0 sales + $60,000 group bonuses [Server Logs] + $0 adjustments)');
+    });
+
+    it('should render byte-identical to the v1 format for a team with zero bonus (external contract)', () => {
+      // mockTransactions + mockScoresWithAdjustments happen to be internally
+      // consistent (sales + adjustments == score for both teams), so this
+      // exercises the exact pre-E-2 line shape with no bonus term
+      // (external contract: sessionReport.contract.test.js).
+      const section = generator._buildScoringTimeline(mockTransactions, mockScoresWithAdjustments);
+      expect(section).toContain('- **Whitemetal Inc.:** $125,000 ($75,000 sales + $50,000 adjustments)');
+      expect(section).toContain('- **Shadow Corp:** $725,000 ($750,000 sales - $25,000 adjustments)');
+      expect(section).not.toContain('group bonuses');
+    });
+
+    it('does not append a reconciliation figure even when totals disagree with the standings score', () => {
+      // Decision 2026-09-15: no second dollar figure in the Final Totals
+      // line. With real data these reconcile by construction (backend
+      // score = base + bonus; base = sales + adjustments), and a mismatched
+      // synthetic fixture (as below) must not leak a diagnostic into the
+      // pipeline-parsed contract.
+      const bonusTransactions = [{
+        id: 'tx-b1', tokenId: 'mab001', teamId: 'Whitemetal Inc.', mode: 'blackmarket',
+        status: 'accepted', points: 165000, timestamp: '2026-02-16T19:45:00.000Z',
+        deviceId: 'GM_STATION_1', memoryType: 'Technical', valueRating: 5, summary: null
+      }];
+      const mismatchedScores = [{
+        teamId: 'Whitemetal Inc.', score: 999999,
+        bonusPoints: 660000, completedGroups: ['Server Logs']
+      }];
+      const section = generator._buildScoringTimeline(bonusTransactions, mismatchedScores);
+      expect(section).toContain(
+        '**Whitemetal Inc.:** $825,000 ($165,000 sales + $660,000 group bonuses [Server Logs] + $0 adjustments)'
+      );
+      expect(section).not.toContain('⚠');
+      expect(section).not.toContain('differs from standings');
+    });
+
+    it('collapses a newline in a team name to a single space in the Final Totals bullet', () => {
+      const txs = [{
+        id: 'tx-nl', tokenId: 'mab001', teamId: 'A\nB', mode: 'blackmarket',
+        status: 'accepted', points: 5000, timestamp: '2026-02-16T19:45:00.000Z',
+        deviceId: 'GM_STATION_1', memoryType: 'Technical', valueRating: 5, summary: null
+      }];
+      const section = generator._buildScoringTimeline(txs, [{ teamId: 'A\nB', score: 5000 }]);
+      expect(section).toContain('- **A B:** $5,000 ($5,000 sales + $0 adjustments)');
+    });
+
+    it('still shows the bonus term for a negative bonusPoints (not silently omitted)', () => {
+      // bonusPoints < 0 isn't reachable via real scoring today, but the
+      // breakdown must not silently drop it while still counting it in the
+      // final total — only bonusPoints === 0 (or absent) omits the term.
+      const negativeBonusTxs = [{
+        id: 'tx-3', tokenId: 'alr001', teamId: 'Whitemetal Inc.', mode: 'blackmarket',
+        status: 'accepted', points: 75000, timestamp: '2026-02-16T20:00:00.000Z',
+        deviceId: 'GM_STATION_2', memoryType: 'Business', valueRating: 2, summary: null
+      }];
+      const negativeBonusScores = [{ teamId: 'Whitemetal Inc.', score: 70000, bonusPoints: -5000, completedGroups: [] }];
+      const section = generator._buildScoringTimeline(negativeBonusTxs, negativeBonusScores);
+      expect(section).toContain('- **Whitemetal Inc.:** $70,000 ($75,000 sales + $-5,000 group bonuses + $0 adjustments)');
+    });
+
+    it('gives a team with ONLY a negative bonus (no sales/adjustments) its own Final Totals line', () => {
+      const negativeBonusOnlyScores = [{ teamId: 'Ghost Team', score: -5000, bonusPoints: -5000, completedGroups: [] }];
+      const section = generator._buildScoringTimeline([], negativeBonusOnlyScores);
+      expect(section).toContain('- **Ghost Team:** -$5,000 ($0 sales + $-5,000 group bonuses + $0 adjustments)');
+    });
   });
 
   describe('_buildPlayerActivitySection()', () => {
@@ -385,6 +517,15 @@ describe('SessionReportGenerator', () => {
     it('should return a note when no player scans exist', () => {
       const section = generator._buildPlayerActivitySection([], mockTransactions);
       expect(section).toContain('No player scan');
+    });
+
+    it('should escape pipe characters in owner and deviceId (E-4)', () => {
+      const dbWithPipe = { ...mockTokenDatabase, sof001: { ...mockTokenDatabase.sof001, owner: 'S|OFIA' } };
+      const gen = new SessionReportGenerator(dbWithPipe);
+      const scans = [{ tokenId: 'sof001', deviceId: 'GM|1', timestamp: '2026-02-16T19:15:00.000Z' }];
+      const section = gen._buildPlayerActivitySection(scans, []);
+      expect(section).toContain('S\\|OFIA');
+      expect(section).toContain('GM\\|1');
     });
   });
 
@@ -436,6 +577,18 @@ describe('SessionReportGenerator', () => {
     it('should return "Unknown" for tokens without character field', () => {
       generator.tokenDatabase = { 'test': { SF_RFID: 'test' } };
       expect(generator._getTokenOwner('test')).toBe('Unknown');
+    });
+
+    it('should prefer tx.owner when it is a non-empty string (E-3)', () => {
+      expect(generator._getTokenOwner({ tokenId: 'sof001', owner: 'BACKEND_OWNER' })).toBe('BACKEND_OWNER');
+    });
+
+    it('should fall back to the local database when tx.owner is null (E-3)', () => {
+      expect(generator._getTokenOwner({ tokenId: 'sof001', owner: null })).toBe('SOFIA');
+    });
+
+    it('should fall back to the local database when tx.owner is an empty string (E-3)', () => {
+      expect(generator._getTokenOwner({ tokenId: 'sof001', owner: '' })).toBe('SOFIA');
     });
   });
 
