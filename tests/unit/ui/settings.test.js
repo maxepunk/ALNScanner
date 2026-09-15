@@ -85,6 +85,16 @@ describe('Settings - ES6 Module (Event-Driven)', () => {
       expect(() => instance.load()).not.toThrow();
       expect(instance.deviceId).toBe('001'); // Still loads from localStorage
     });
+
+    it('should paint deviceIdDisplay in the DOM (C-7: header must not revert to 001 after reload)', () => {
+      localStorage.setItem('deviceId', 'GM_Station_3');
+      localStorage.setItem('mode', 'blackmarket');
+
+      const instance = new Settings();
+      instance.load();
+
+      expect(document.getElementById('deviceIdDisplay').textContent).toBe('GM_Station_3');
+    });
   });
 
   describe('save() - Event-Driven Behavior', () => {

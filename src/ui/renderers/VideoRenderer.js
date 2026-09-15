@@ -19,6 +19,7 @@ export class VideoRenderer {
     this._progressBar = elements.progressBar || document.getElementById('video-progress-fill');
     this._progressTime = elements.progressTime || document.getElementById('video-progress-time');
     this._queueContainer = elements.queueContainer || document.getElementById('video-queue-list');
+    this._queueWrapper = elements.queueWrapper || document.getElementById('video-queue-container');
 
     // Interpolation state
     this._positionBase = 0;
@@ -230,6 +231,9 @@ export class VideoRenderer {
     const pendingCountEl = document.getElementById('pending-queue-count');
     if (countEl) countEl.textContent = count;
     if (pendingCountEl) pendingCountEl.textContent = count;
+    if (this._queueWrapper) {
+      this._queueWrapper.style.display = count > 0 ? '' : 'none';
+    }
   }
 
   destroy() {

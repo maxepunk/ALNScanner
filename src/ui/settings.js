@@ -28,6 +28,8 @@ class Settings extends EventTarget {
     this.deviceId = localStorage.getItem('deviceId') || '001';
     this.mode = localStorage.getItem('mode') || 'detective';
 
+    this._paintDeviceId();
+
     this.dispatchEvent(new CustomEvent('settings:loaded', {
       detail: { deviceId: this.deviceId, mode: this.mode }
     }));
@@ -44,10 +46,7 @@ class Settings extends EventTarget {
     localStorage.setItem('deviceId', this.deviceId);
     localStorage.setItem('mode', this.mode);
 
-    const deviceIdDisplay = document.getElementById('deviceIdDisplay');
-    if (deviceIdDisplay) {
-      deviceIdDisplay.textContent = this.deviceId;
-    }
+    this._paintDeviceId();
 
     this.dispatchEvent(new CustomEvent('settings:saved', {
       detail: { deviceId: this.deviceId, mode: this.mode }
@@ -57,6 +56,19 @@ class Settings extends EventTarget {
       this.dispatchEvent(new CustomEvent('settings:changed', {
         detail: { deviceId: this.deviceId, mode: this.mode, oldDeviceId, oldMode }
       }));
+    }
+  }
+
+  /**
+   * Paint the current deviceId into the header display (#deviceIdDisplay).
+   * Called by both load() and save() so a reload doesn't revert the header
+   * to the '001' default while scans still submit under the real deviceId (C-7).
+   * @private
+   */
+  _paintDeviceId() {
+    const deviceIdDisplay = document.getElementById('deviceIdDisplay');
+    if (deviceIdDisplay) {
+      deviceIdDisplay.textContent = this.deviceId;
     }
   }
 }

@@ -27,7 +27,9 @@ describe('VideoRenderer', () => {
         <div id="video-progress-container" style="display: none;">
           <div id="video-progress-fill" style="width: 0%"></div>
         </div>
-        <div id="video-queue-list"></div>
+        <div id="video-queue-container" style="margin-top: 20px; display: none;">
+          <div id="video-queue-list"></div>
+        </div>
         <span id="queue-count">0</span>
         <span id="pending-queue-count">0</span>
       </div>
@@ -346,6 +348,36 @@ describe('VideoRenderer', () => {
       const items = queueContainer.querySelectorAll('.queue-item');
       expect(items).toHaveLength(1);
       expect(items[0].querySelector('.queue-item__token').textContent).toBe('q1');
+    });
+  });
+
+  describe('queue container visibility (B-4)', () => {
+    test('renderQueue with items reveals the queue container', () => {
+      const wrapper = document.getElementById('video-queue-container');
+      expect(wrapper.style.display).toBe('none');
+
+      renderer.renderQueue([
+        { tokenId: 'token1', duration: 30 },
+        { tokenId: 'token2', duration: 60 }
+      ]);
+
+      expect(wrapper.style.display).toBe('');
+    });
+
+    test('renderQueue with an empty array hides the queue container', () => {
+      const wrapper = document.getElementById('video-queue-container');
+      renderer.renderQueue([{ tokenId: 'token1', duration: 30 }]);
+      expect(wrapper.style.display).toBe('');
+
+      renderer.renderQueue([]);
+      expect(wrapper.style.display).toBe('none');
+    });
+
+    test('constructor with no queue wrapper element in DOM does not throw', () => {
+      document.getElementById('video-queue-container').remove();
+      const noWrapperRenderer = new VideoRenderer();
+      expect(() => noWrapperRenderer.renderQueue([{ tokenId: 't1', duration: 5 }])).not.toThrow();
+      noWrapperRenderer.destroy();
     });
   });
 });
