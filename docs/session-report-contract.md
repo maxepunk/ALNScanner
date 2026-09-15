@@ -65,7 +65,7 @@ Table columns (in exact order):
 - `Team`: teamId
 - `Amount`: signed currency (`+$N` or `-$N`)
 
-Followed by `### Final Totals` subsection: per-team breakdown of sales total vs adjustments total vs combined final. Since 2026-09-15 a team line may carry an additional `+ $Y group bonuses [Group A, Group B]` term between the sales and adjustments terms when that team has a group-completion bonus; lines for teams without a bonus are byte-identical to v1. Pipeline confirmation pending (owner).
+Followed by `### Final Totals` subsection: per-team breakdown of sales total vs adjustments total vs combined final. Since 2026-09-15 a team line may carry an additional `+ $Y group bonuses [Group A, Group B]` term between the sales and adjustments terms when that team has a group-completion bonus; lines for teams without a bonus are byte-identical to v1. Confirmed safe 2026-09-15: the consumer (`reports/lib/workflow/nodes/input-nodes.js` `parseRawInput`, github.com/maxepunk/aboutlastnight) parses this section with a natural-language instruction to an LLM ("Final Standings or Final Totals section"), not a pattern over the bullet text, and its deterministic financial override derives from the resulting shell accounts.
 
 If no scoring events: single italics line `*No scoring events this session.*`
 
