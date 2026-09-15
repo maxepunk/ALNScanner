@@ -214,6 +214,18 @@ export class NetworkedStorage extends IStorageStrategy {
   }
 
   /**
+   * Get the groups this team has completed, per the backend score payload.
+   * Backend group ids already have the `(xN)` suffix stripped
+   * (tokenService `extractGroupName`); `_shapeCompletedGroups` resolves the
+   * multiplier from the local token DB. See IStorageStrategy for the contract.
+   * @param {string} teamId - Team identifier
+   * @returns {Array<{name: string, normalizedName: string, multiplier: number}>}
+   */
+  getTeamCompletedGroups(teamId) {
+    return this._shapeCompletedGroups(this.backendScores.get(teamId)?.completedGroups);
+  }
+
+  /**
    * Adjust team score - delegates to backend
    * @param {string} teamId - Team identifier
    * @param {number} delta - Score adjustment

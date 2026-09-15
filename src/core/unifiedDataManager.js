@@ -571,9 +571,25 @@ export class UnifiedDataManager extends EventTarget {
   }
 
   /**
+   * Get the backend's authoritative score row for a team.
+   *
+   * A-1: `backendScores` is a NetworkedStorage member, not a facade member.
+   * Consumers (GameOpsRenderer team details) must go through this accessor —
+   * reading `dataManager.backendScores` is always undefined and silently
+   * degrades to the locally recomputed score.
+   *
+   * @param {string} teamId - Team identifier
+   * @returns {Object|null} Backend score payload, or null in standalone mode
+   *   and for a team the backend has not scored
+   */
+  getBackendTeamScore(teamId) {
+    return this._networkedStrategy?.backendScores?.get(teamId) ?? null;
+  }
+
+  /**
    * Get team completed groups
    * @param {string} teamId
-   * @returns {Array} Completed group names
+   * @returns {Array<{name: string, normalizedName: string, multiplier: number}>}
    */
   getTeamCompletedGroups(teamId) {
     // Delegate to strategy if available

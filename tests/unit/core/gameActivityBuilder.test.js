@@ -1,12 +1,16 @@
 import { buildGameActivity } from '../../../src/core/gameActivityBuilder.js';
 
+// E-1: the real TokenManager.findToken() returns a { token, matchedId } WRAPPER.
+// The mock must mirror that, or the builder's unwrapping bug stays invisible.
+const DB_TOKEN = {
+  SF_MemoryType: 'Technical',
+  SF_ValueRating: 3,
+  SF_Group: 'Test Group (x3)',
+  summary: 'Test summary'
+};
+
 const mockTokenManager = {
-  findToken: jest.fn((id) => ({
-    SF_MemoryType: 'Technical',
-    SF_ValueRating: 3,
-    SF_Group: 'Test Group (x3)',
-    summary: 'Test summary'
-  }))
+  findToken: jest.fn((id) => ({ token: { ...DB_TOKEN }, matchedId: id }))
 };
 
 describe('buildGameActivity', () => {
@@ -93,5 +97,45 @@ describe('buildGameActivity', () => {
     });
     expect(result.tokens[0].events[0].type).toBe('claim');
     expect(result.tokens[0].events[1].type).toBe('discovery');
+  });
+
+  describe('token DB lookup for GM-claimed tokens (E-1)', () => {
+    it('unwraps findToken() so a claim with no player scan carries DB metadata', () => {
+      const txs = [{
+        tokenId: 'tok-db', teamId: 'TeamA', mode: 'blackmarket',
+        timestamp: '2026-01-01T00:00:00Z', points: 0
+      }];
+
+      const result = buildGameActivity({
+        transactions: txs, playerScans: [], tokenManager: mockTokenManager
+      });
+
+      const activity = result.tokens[0];
+      expect(activity.tokenData.SF_MemoryType).toBe('Technical');
+      expect(activity.tokenData.SF_ValueRating).toBe(3);
+      expect(activity.tokenData.SF_Group).toBe('Test Group (x3)');
+      expect(activity.tokenData.summary).toBe('Test summary');
+      // rating 3 (50000) x Technical (5x)
+      expect(activity.potentialValue).toBe(250000);
+      expect(activity.events[0].summary).toBe('Test summary');
+    });
+
+    it('falls back to transaction-carried metadata when the token is not in the DB', () => {
+      mockTokenManager.findToken.mockReturnValueOnce(null);
+      const txs = [{
+        tokenId: 'tok-missing', teamId: 'TeamA', mode: 'blackmarket',
+        timestamp: '2026-01-01T00:00:00Z', points: 0,
+        memoryType: 'Personal', valueRating: 2
+      }];
+
+      const result = buildGameActivity({
+        transactions: txs, playerScans: [], tokenManager: mockTokenManager
+      });
+
+      const activity = result.tokens[0];
+      expect(activity.tokenData.SF_MemoryType).toBe('Personal');
+      expect(activity.tokenData.SF_ValueRating).toBe(2);
+      expect(activity.potentialValue).toBe(25000);
+    });
   });
 });

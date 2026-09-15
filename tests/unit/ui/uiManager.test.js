@@ -28,7 +28,9 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       transactions: [
         { id: '1', tokenId: 'token1', teamId: '001', timestamp: '2025-11-11T10:00:00Z', mode: 'blackmarket', valueRating: 3, memoryType: 'Technical', rfid: 'token1', group: 'Server Logs (x5)', isUnknown: false, points: 5000 }
       ],
-      backendScores: new Map(),
+      // NOTE: UnifiedDataManager has NO `backendScores` property — that Map lives
+      // on NetworkedStorage. The facade exposes it through getBackendTeamScore()
+      // (A-1); mirroring the real surface here is what kept the dead branch hidden.
       SCORING_CONFIG: {
         BASE_VALUES: { 1: 10000, 2: 25000, 3: 50000, 4: 75000, 5: 150000 },
         TYPE_MULTIPLIERS: { 'Personal': 1, 'Mention': 3, 'Business': 3, 'Party': 5, 'Technical': 5, 'UNKNOWN': 0 }
@@ -46,7 +48,10 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
       })),
       calculateTeamScoreWithBonuses: jest.fn(() => ({ baseScore: 5000, bonusScore: 0, totalScore: 5000 })),
       calculateTokenValue: jest.fn(() => 5000),
-      parseGroupInfo: jest.fn((group) => ({ groupId: 'Server Logs', multiplier: 5 })),
+      parseGroupInfo: jest.fn((group) => ({ name: 'Server Logs', multiplier: 5 })),
+      normalizeGroupName: jest.fn((name) => String(name).toLowerCase().trim()),
+      getBackendTeamScore: jest.fn(() => null),
+      getTeamCompletedGroups: jest.fn(() => []),
       getActiveStrategyType: jest.fn(() => 'local')
     };
 
@@ -438,11 +443,11 @@ describe('UIManager - ES6 Module (Pure Rendering Layer)', () => {
 
     it('should use backend scores when available in networked mode', () => {
       mockSessionModeManager.isNetworked.mockReturnValue(true);
-      mockDataManager.backendScores.set('001', {
-        baseScore: 10000,
-        bonusPoints: 5000,
-        currentScore: 15000
-      });
+      mockDataManager.getBackendTeamScore.mockImplementation((teamId) => (
+        teamId === '001'
+          ? { baseScore: 10000, bonusPoints: 5000, currentScore: 15000 }
+          : null
+      ));
 
       uiManager.renderTeamDetails('001', mockDataManager.transactions);
 

@@ -312,6 +312,71 @@ describe('NetworkedStorage Strategy', () => {
       expect(scores[1].teamId).toBe('001');
       expect(scores[1].bonusScore).toBe(10000);
     });
+
+    it('exposes completedGroups as the NAME ARRAY, not a count (E-2)', () => {
+      storage.backendScores.set('001', {
+        currentScore: 50000, baseScore: 40000, bonusPoints: 10000,
+        tokensScanned: 3, completedGroups: ['Server Logs', 'Party Photos']
+      });
+
+      const scores = storage.getTeamScores();
+
+      expect(Array.isArray(scores[0].completedGroups)).toBe(true);
+      expect(scores[0].completedGroups).toEqual(['Server Logs', 'Party Photos']);
+    });
+  });
+
+  describe('getTeamCompletedGroups (A-2)', () => {
+    beforeEach(() => {
+      mockTokenManager.getGroupInventory.mockReturnValue({
+        'server logs': {
+          displayName: 'Server Logs',
+          normalizedName: 'server logs',
+          multiplier: 5,
+          tokens: new Set(['g1', 'g2'])
+        }
+      });
+    });
+
+    it('returns [] for a team with no backend row', () => {
+      expect(storage.getTeamCompletedGroups('001')).toEqual([]);
+    });
+
+    it('returns [] when the backend reports no completed groups', () => {
+      storage.backendScores.set('001', { currentScore: 0, completedGroups: [] });
+
+      expect(storage.getTeamCompletedGroups('001')).toEqual([]);
+    });
+
+    it('shapes backend group ids into { name, normalizedName, multiplier }', () => {
+      storage.backendScores.set('001', {
+        currentScore: 500000, completedGroups: ['Server Logs']
+      });
+
+      expect(storage.getTeamCompletedGroups('001')).toEqual([
+        { name: 'Server Logs', normalizedName: 'server logs', multiplier: 5 }
+      ]);
+    });
+
+    it('falls back to a 1x multiplier for a group missing from the inventory', () => {
+      storage.backendScores.set('001', {
+        currentScore: 1, completedGroups: ['Unknown Group']
+      });
+
+      expect(storage.getTeamCompletedGroups('001')).toEqual([
+        { name: 'Unknown Group', normalizedName: 'unknown group', multiplier: 1 }
+      ]);
+    });
+
+    it('tolerates a group id that still carries its (xN) suffix', () => {
+      storage.backendScores.set('001', {
+        currentScore: 1, completedGroups: ['Server Logs (x5)']
+      });
+
+      expect(storage.getTeamCompletedGroups('001')).toEqual([
+        { name: 'Server Logs', normalizedName: 'server logs', multiplier: 5 }
+      ]);
+    });
   });
 
   describe('getGameActivity', () => {

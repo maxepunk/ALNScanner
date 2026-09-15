@@ -588,4 +588,165 @@ describe('UnifiedDataManager', () => {
       expect(owners).toContain('Ørjan');
     });
   });
+
+  describe('backend scores and completed groups (A-1, A-2)', () => {
+    const mockSocket = { on: jest.fn(), off: jest.fn(), emit: jest.fn(), connected: true };
+
+    // A two-token group: group completion requires >1 token in BOTH modes
+    // (LocalStorage._checkGroupCompletion / backend gameRules isGroupComplete).
+    const GROUP_TOKENS = {
+      g1: { SF_RFID: 'g1', SF_Group: 'Server Logs (x5)', SF_ValueRating: 3, SF_MemoryType: 'Personal' },
+      g2: { SF_RFID: 'g2', SF_Group: 'Server Logs (x5)', SF_ValueRating: 3, SF_MemoryType: 'Personal' }
+    };
+
+    const groupTx = (id, tokenId) => ({
+      id, tokenId, teamId: 'Alpha', mode: 'blackmarket',
+      points: 50000, valueRating: 3, memoryType: 'Personal',
+      group: 'Server Logs (x5)', status: 'accepted',
+      timestamp: new Date().toISOString()
+    });
+
+    beforeEach(() => {
+      localStorage.clear();
+      mockTokenManager.getAllTokens = jest.fn(() => Object.values(GROUP_TOKENS));
+      mockTokenManager.findToken = jest.fn((id) => (
+        GROUP_TOKENS[id] ? { token: GROUP_TOKENS[id], matchedId: id } : null
+      ));
+      mockTokenManager.getGroupInventory = jest.fn(() => ({
+        'server logs': {
+          displayName: 'Server Logs',
+          normalizedName: 'server logs',
+          multiplier: 5,
+          tokens: new Set(['g1', 'g2'])
+        }
+      }));
+    });
+
+    const newManager = () => new UnifiedDataManager({
+      tokenManager: mockTokenManager,
+      sessionModeManager: mockSessionModeManager
+    });
+
+    const networkedManager = async () => {
+      mockSessionModeManager.isNetworked.mockReturnValue(true);
+      mockSessionModeManager.isStandalone.mockReturnValue(false);
+      const m = newManager();
+      await m.initializeNetworkedMode(mockSocket);
+      return m;
+    };
+
+    const standaloneManager = async () => {
+      mockSessionModeManager.isNetworked.mockReturnValue(false);
+      mockSessionModeManager.isStandalone.mockReturnValue(true);
+      const m = newManager();
+      await m.initializeStandaloneMode();
+      return m;
+    };
+
+    describe('getBackendTeamScore', () => {
+      it('returns the cached backend row for a known team', async () => {
+        manager = await networkedManager();
+        manager._networkedStrategy.setBackendScores('Alpha', {
+          currentScore: 15000, baseScore: 10000, bonusPoints: 5000
+        });
+
+        expect(manager.getBackendTeamScore('Alpha')).toEqual({
+          currentScore: 15000, baseScore: 10000, bonusPoints: 5000
+        });
+      });
+
+      it('returns null for a team the backend has not scored', async () => {
+        manager = await networkedManager();
+
+        expect(manager.getBackendTeamScore('Nobody')).toBeNull();
+      });
+
+      it('returns null in standalone mode (no networked strategy exists)', async () => {
+        manager = await standaloneManager();
+
+        expect(manager.getBackendTeamScore('Alpha')).toBeNull();
+      });
+    });
+
+    describe('getTeamCompletedGroups feeds the two consumers', () => {
+      it('networked: a backend-completed group renders as completed, not in progress', async () => {
+        manager = await networkedManager();
+        manager._networkedStrategy.setTransactions([groupTx('tx-1', 'g1'), groupTx('tx-2', 'g2')]);
+        manager._networkedStrategy.setBackendScores('Alpha', {
+          currentScore: 500000, baseScore: 100000, bonusPoints: 400000,
+          tokensScanned: 2, completedGroups: ['Server Logs'], adminAdjustments: []
+        });
+
+        const enhanced = manager.getEnhancedTeamTransactions('Alpha');
+
+        expect(enhanced.hasCompletedGroups).toBe(true);
+        expect(enhanced.hasIncompleteGroups).toBe(false);
+        expect(enhanced.completedGroups).toHaveLength(1);
+        expect(enhanced.completedGroups[0].displayName).toBe('Server Logs');
+        expect(enhanced.completedGroups[0].normalizedName).toBe('server logs');
+        expect(enhanced.completedGroups[0].multiplier).toBe(5);
+        expect(enhanced.completedGroups[0].tokens).toHaveLength(2);
+        // (multiplier - 1) x base, per token: 4 x 50000 x 2
+        expect(enhanced.completedGroups[0].bonusValue).toBe(400000);
+      });
+
+      it('standalone: a locally-completed group renders as completed, not in progress', async () => {
+        manager = await standaloneManager();
+        await manager.addTransaction(groupTx('tx-1', 'g1'));
+        await manager.addTransaction(groupTx('tx-2', 'g2'));
+
+        const enhanced = manager.getEnhancedTeamTransactions('Alpha');
+
+        expect(enhanced.hasCompletedGroups).toBe(true);
+        expect(enhanced.hasIncompleteGroups).toBe(false);
+        expect(enhanced.completedGroups[0].displayName).toBe('Server Logs');
+        expect(enhanced.completedGroups[0].normalizedName).toBe('server logs');
+        expect(enhanced.completedGroups[0].multiplier).toBe(5);
+        expect(enhanced.completedGroups[0].bonusValue).toBe(400000);
+      });
+
+      it('networked: calculateTeamScoreWithBonuses pays the group bonus', async () => {
+        manager = await networkedManager();
+        manager._networkedStrategy.setTransactions([groupTx('tx-1', 'g1'), groupTx('tx-2', 'g2')]);
+        manager._networkedStrategy.setBackendScores('Alpha', {
+          currentScore: 500000, baseScore: 100000, bonusPoints: 400000,
+          tokensScanned: 2, completedGroups: ['Server Logs'], adminAdjustments: []
+        });
+
+        const score = manager.calculateTeamScoreWithBonuses('Alpha');
+
+        expect(score.baseScore).toBe(100000);
+        expect(score.bonusScore).toBe(400000);
+        expect(score.groupBreakdown['Server Logs'].tokens).toBe(2);
+        expect(score.groupBreakdown['Server Logs'].multiplier).toBe(5);
+      });
+
+      it('standalone: calculateTeamScoreWithBonuses pays the group bonus', async () => {
+        manager = await standaloneManager();
+        await manager.addTransaction(groupTx('tx-1', 'g1'));
+        await manager.addTransaction(groupTx('tx-2', 'g2'));
+
+        const score = manager.calculateTeamScoreWithBonuses('Alpha');
+
+        expect(score.baseScore).toBe(100000);
+        expect(score.bonusScore).toBe(400000);
+        expect(score.groupBreakdown['Server Logs'].bonusValue).toBe(400000);
+      });
+
+      it('an incomplete group stays in progress in networked mode', async () => {
+        manager = await networkedManager();
+        manager._networkedStrategy.setTransactions([groupTx('tx-1', 'g1')]);
+        manager._networkedStrategy.setBackendScores('Alpha', {
+          currentScore: 50000, baseScore: 50000, bonusPoints: 0,
+          tokensScanned: 1, completedGroups: [], adminAdjustments: []
+        });
+
+        const enhanced = manager.getEnhancedTeamTransactions('Alpha');
+
+        expect(enhanced.hasCompletedGroups).toBe(false);
+        expect(enhanced.hasIncompleteGroups).toBe(true);
+        expect(enhanced.incompleteGroups[0].progress).toBe('1/2');
+      });
+    });
+  });
 });

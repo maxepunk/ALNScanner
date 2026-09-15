@@ -210,7 +210,7 @@ export class GameOpsRenderer {
     const container = document.getElementById('teamDetailsContainer');
     if (container) container.innerHTML = html;
 
-    const backendScore = isNetworked && this.dataManager?.backendScores?.get(teamId);
+    const backendScore = isNetworked && this.dataManager?.getBackendTeamScore?.(teamId);
 
     let displayBaseScore = scoreData.baseScore;
     let displayBonusScore = scoreData.bonusScore;

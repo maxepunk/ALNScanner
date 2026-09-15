@@ -52,7 +52,9 @@ export function buildGameActivity({ transactions, playerScans, tokenManager, opt
     let activity = tokenMap.get(tx.tokenId);
 
     if (!activity) {
-      const lookedUpToken = tokenManager?.findToken(tx.tokenId);
+      // findToken() returns a { token, matchedId } WRAPPER — unwrap it or every
+      // SF_* read below is undefined (E-1).
+      const lookedUpToken = tokenManager?.findToken(tx.tokenId)?.token;
       const tokenData = lookedUpToken ? {
         SF_MemoryType: lookedUpToken.SF_MemoryType,
         SF_ValueRating: lookedUpToken.SF_ValueRating,

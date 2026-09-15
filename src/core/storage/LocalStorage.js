@@ -132,10 +132,24 @@ export class LocalStorage extends IStorageStrategy {
         baseScore: team.baseScore,
         bonusScore: team.bonusPoints,
         tokenCount: team.tokensScanned,
-        completedGroups: team.completedGroups?.length || 0,
+        // A-2: the NAME ARRAY, matching NetworkedStorage.getTeamScores(). A
+        // count here silently broke every consumer that reads the names
+        // (sessionReportGenerator's group breakdown).
+        completedGroups: team.completedGroups || [],
         isFromBackend: false
       }))
       .sort((a, b) => b.score - a.score);
+  }
+
+  /**
+   * Get the groups this team has completed, per the local team record.
+   * `_checkGroupCompletion` pushes `parseGroupInfo(tx.group).name`, so the
+   * stored names are already suffix-free. See IStorageStrategy for the contract.
+   * @param {string} teamId - Team identifier
+   * @returns {Array<{name: string, normalizedName: string, multiplier: number}>}
+   */
+  getTeamCompletedGroups(teamId) {
+    return this._shapeCompletedGroups(this.sessionData.teams[teamId]?.completedGroups);
   }
 
   /**

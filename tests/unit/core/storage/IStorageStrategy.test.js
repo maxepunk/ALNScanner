@@ -28,6 +28,32 @@ describe('IStorageStrategy Interface', () => {
     expect(() => strategy.getTeamScores()).toThrow('must be implemented');
   });
 
+  it('should throw on getTeamCompletedGroups() if not implemented', () => {
+    const strategy = new IStorageStrategy();
+    expect(() => strategy.getTeamCompletedGroups('001')).toThrow('must be implemented');
+  });
+
+  it('_shapeCompletedGroups() produces the shape both UDM consumers destructure', () => {
+    const strategy = new IStorageStrategy();
+    strategy.tokenManager = {
+      getGroupInventory: () => ({
+        'server logs': { displayName: 'Server Logs', normalizedName: 'server logs', multiplier: 5 }
+      })
+    };
+
+    expect(strategy._shapeCompletedGroups(['Server Logs', 'Other Group (x2)'])).toEqual([
+      { name: 'Server Logs', normalizedName: 'server logs', multiplier: 5 },
+      { name: 'Other Group', normalizedName: 'other group', multiplier: 2 }
+    ]);
+  });
+
+  it('_shapeCompletedGroups() is null-safe and drops blank names', () => {
+    const strategy = new IStorageStrategy();
+
+    expect(strategy._shapeCompletedGroups(undefined)).toEqual([]);
+    expect(strategy._shapeCompletedGroups(['', '  ', null])).toEqual([]);
+  });
+
   it('should throw on adjustTeamScore() if not implemented', async () => {
     const strategy = new IStorageStrategy();
     await expect(strategy.adjustTeamScore('001', 100, 'test')).rejects.toThrow('must be implemented');

@@ -232,6 +232,29 @@ describe('LocalStorage Strategy', () => {
       expect(storage.getTeamScores()[0].bonusScore).toBe(0);
     });
 
+    it('exposes completedGroups as the NAME ARRAY, matching NetworkedStorage (A-2)', async () => {
+      mockTokenManager.getAllTokens.mockReturnValue([
+        { SF_RFID: 'g1t1', SF_Group: 'GroupA (x2)' },
+        { SF_RFID: 'g1t2', SF_Group: 'GroupA (x2)' }
+      ]);
+
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'g1t1', teamId: '001',
+        mode: 'blackmarket', points: 10000, group: 'GroupA (x2)',
+        timestamp: new Date().toISOString()
+      });
+      await storage.addTransaction({
+        id: 'tx-2', tokenId: 'g1t2', teamId: '001',
+        mode: 'blackmarket', points: 10000, group: 'GroupA (x2)',
+        timestamp: new Date().toISOString()
+      });
+
+      const scores = storage.getTeamScores();
+
+      expect(Array.isArray(scores[0].completedGroups)).toBe(true);
+      expect(scores[0].completedGroups).toEqual(['GroupA']);
+    });
+
     it('should NOT award a bonus for a 1-token group (A1/F-SCAN-09: groups need 2+ tokens)', async () => {
       // Backend rule (transactionService.isGroupComplete): groups with <= 1
       // token never complete. Standalone previously paid a x2 single-token
@@ -699,6 +722,51 @@ describe('LocalStorage Strategy', () => {
 
         expect(result.success).toBe(true);
       });
+    });
+  });
+
+  describe('getTeamCompletedGroups (A-2)', () => {
+    const completeGroupA = async () => {
+      mockTokenManager.getAllTokens.mockReturnValue([
+        { SF_RFID: 'g1t1', SF_Group: 'GroupA (x2)' },
+        { SF_RFID: 'g1t2', SF_Group: 'GroupA (x2)' }
+      ]);
+      await storage.addTransaction({
+        id: 'tx-1', tokenId: 'g1t1', teamId: '001',
+        mode: 'blackmarket', points: 10000, group: 'GroupA (x2)',
+        timestamp: new Date().toISOString()
+      });
+      await storage.addTransaction({
+        id: 'tx-2', tokenId: 'g1t2', teamId: '001',
+        mode: 'blackmarket', points: 10000, group: 'GroupA (x2)',
+        timestamp: new Date().toISOString()
+      });
+    };
+
+    it('returns [] for an unknown team', () => {
+      expect(storage.getTeamCompletedGroups('nope')).toEqual([]);
+    });
+
+    it('shapes the team record into { name, normalizedName, multiplier }', async () => {
+      mockTokenManager.getGroupInventory = jest.fn(() => ({
+        groupa: {
+          displayName: 'GroupA', normalizedName: 'groupa',
+          multiplier: 2, tokens: new Set(['g1t1', 'g1t2'])
+        }
+      }));
+      await completeGroupA();
+
+      expect(storage.getTeamCompletedGroups('001')).toEqual([
+        { name: 'GroupA', normalizedName: 'groupa', multiplier: 2 }
+      ]);
+    });
+
+    it('works without a group inventory (multiplier parsed from the name)', async () => {
+      await completeGroupA();
+
+      expect(storage.getTeamCompletedGroups('001')).toEqual([
+        { name: 'GroupA', normalizedName: 'groupa', multiplier: 1 }
+      ]);
     });
   });
 });

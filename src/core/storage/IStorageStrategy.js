@@ -65,6 +65,8 @@
  * - `setTransactions` / `addTransactionFromBroadcast` /
  *   `removeTransactionFromBroadcast` — networked cache updates from broadcasts.
  */
+
+import { parseGroupInfo, normalizeGroupName } from '../scoring.js';
 export class IStorageStrategy extends EventTarget {
   constructor() {
     super();
@@ -109,6 +111,62 @@ export class IStorageStrategy extends EventTarget {
    */
   getTeamScores() {
     throw new Error('IStorageStrategy.getTeamScores() must be implemented');
+  }
+
+  /**
+   * Get the groups a team has completed.
+   *
+   * Both `UnifiedDataManager.getEnhancedTeamTransactions()` and
+   * `calculateTeamScoreWithBonuses()` destructure the returned elements as
+   * `{ name, normalizedName, multiplier }`:
+   * - `name` keys the score breakdown and is matched against
+   *   `parseGroupInfo(transaction.group).name`, so it must be the RAW group
+   *   name with the `(xN)` suffix stripped — never the normalized form.
+   * - `normalizedName` is what the "completed vs in progress" set lookup uses.
+   * - `multiplier` is display only; the paid bonus is always recomputed from
+   *   the transaction's own group string.
+   *
+   * Implementations differ only in where the raw names come from (backend
+   * score payload vs local team record) and share `_shapeCompletedGroups()`.
+   *
+   * @param {string} teamId - Team identifier
+   * @returns {Array<{name: string, normalizedName: string, multiplier: number}>}
+   */
+  getTeamCompletedGroups(teamId) {
+    throw new Error('IStorageStrategy.getTeamCompletedGroups() must be implemented');
+  }
+
+  /**
+   * Shape raw completed-group names into the element shape both
+   * UnifiedDataManager consumers expect. Single home for that shape so the two
+   * strategies cannot drift (A-2).
+   *
+   * Accepts names with or without an `(xN)` suffix: the backend strips it
+   * (tokenService `extractGroupName`) and LocalStorage stores the already
+   * parsed `groupInfo.name`, but parsing again is free and keeps a raw
+   * `SF_Group` string safe to pass in.
+   *
+   * @protected
+   * @param {Array<string>} [rawNames] - Completed group names
+   * @returns {Array<{name: string, normalizedName: string, multiplier: number}>}
+   */
+  _shapeCompletedGroups(rawNames) {
+    const inventory = this.tokenManager?.getGroupInventory?.() || {};
+
+    return (rawNames || [])
+      .filter(raw => typeof raw === 'string' && raw.trim() !== '')
+      .map(raw => {
+        const parsed = parseGroupInfo(raw);
+        const normalizedName = normalizeGroupName(parsed.name);
+
+        return {
+          name: parsed.name,
+          normalizedName,
+          // The token DB knows the real multiplier; the parsed one is only a
+          // fallback for a name that arrived without its suffix.
+          multiplier: inventory[normalizedName]?.multiplier ?? parsed.multiplier
+        };
+      });
   }
 
   /**
