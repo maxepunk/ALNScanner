@@ -166,3 +166,34 @@
   font-weight: 600;
   color: var(--color-text-primary);
 }
+
+/* ============================================
+   MUSIC PANEL - OFFLINE STATE (F2)
+   MPD dying mid-show used to be invisible: the transport buttons kept their
+   browser-default look, so "disabled" read as "nothing happened". The offline
+   banner names the outage and the dimming makes the dead controls obvious.
+   ============================================ */
+.music__offline {
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  border-left: 3px solid var(--color-accent-warning);
+  background: var(--duplicate-bg);
+  color: var(--color-accent-warning);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.music--offline .music__track,
+.music--offline .music__progress,
+.music--offline .music__controls,
+.music--offline .music__toggles,
+.music--offline .music__playlist-row {
+  opacity: 0.45;
+}
+
+.music button:disabled,
+.music select:disabled,
+.music input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

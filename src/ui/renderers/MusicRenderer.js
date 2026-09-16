@@ -52,7 +52,10 @@ export class MusicRenderer {
   _buildDOM(state) {
     const connected = !!state.connected;
     const disabled = connected ? '' : ' disabled';
-    const isPlaying = state.state === 'playing';
+    // Connection gates playback everywhere (F2): a snapshot can still carry the
+    // pre-crash state string, and a Pause button over a dead MPD is exactly the
+    // "looks fine, does nothing" the venue outage produced.
+    const isPlaying = state.state === 'playing' && connected;
     const track = state.track || {};
     const title = track.title || 'No track';
     const artist = track.artist || '';
@@ -70,7 +73,8 @@ export class MusicRenderer {
     const pct = duration > 0 ? Math.min(100, (position / duration) * 100) : 0;
 
     this.container.innerHTML = `
-      <div class="music music--connected ${isPlaying ? 'music--playing' : 'music--paused'}">
+      <div class="music ${connected ? 'music--connected' : 'music--offline'} ${isPlaying ? 'music--playing' : 'music--paused'}">
+        <div class="music__offline" id="music-offline" style="${connected ? 'display:none' : ''}">Music offline &mdash; reconnecting&hellip;</div>
         <div class="music__clock-paused" style="${state.pausedByGameClock ? '' : 'display:none'}">&#9208; Paused by Game Clock</div>
         <div class="music__playlist-row">
           <label class="music__playlist-label">Playlist</label>
@@ -116,6 +120,7 @@ export class MusicRenderer {
 
     this._els = {
       root: this.container.querySelector('.music'),
+      offline: this.container.querySelector('#music-offline'),
       clockPaused: this.container.querySelector('.music__clock-paused'),
       picker: this.container.querySelector('.music__playlist-picker'),
       queueCounter: this.container.querySelector('.music__queue-counter'),
@@ -142,7 +147,7 @@ export class MusicRenderer {
   _updateDOM(state, prev) {
     const connected = !!state.connected;
     const wasConnected = !!prev?.connected;
-    const isPlaying = state.state === 'playing';
+    const isPlaying = state.state === 'playing' && connected;  // see _buildDOM
     const track = state.track || {};
     const prevTrack = prev?.track || {};
     const playlist = state.playlist || {};
@@ -158,13 +163,19 @@ export class MusicRenderer {
       this._els.playBtn.innerHTML = isPlaying ? '&#10074;&#10074;' : '&#9654;';
     }
 
-    // Connected → enable/disable everything that requires MPD
+    // Connected → enable/disable everything that requires MPD, and make the
+    // outage itself visible. Disabled controls alone read as "nothing is
+    // happening" (F2, venue 2026-09-15): a GM mid-show has no way to tell a
+    // dead MPD from an unresponsive UI, so say it in words.
     if (connected !== wasConnected) {
       const all = [
         this._els.prevBtn, this._els.playBtn, this._els.nextBtn, this._els.stopBtn,
         this._els.picker, this._els.shuffle, this._els.loop,
       ];
       all.forEach(el => { el.disabled = !connected; });
+      this._els.root.classList.toggle('music--connected', connected);
+      this._els.root.classList.toggle('music--offline', !connected);
+      this._els.offline.style.display = connected ? 'none' : '';
     }
 
     // Track changed
@@ -273,7 +284,9 @@ export class MusicRenderer {
   _syncProgressState(state, prev) {
     const track = state.track || null;
     const prevTrack = prev?.track || null;
-    const nowPlaying = state.state === 'playing';
+    // Extrapolating from a stale 'playing' is how the venue's panel kept
+    // animating a track that MPD was no longer playing.
+    const nowPlaying = state.state === 'playing' && !!state.connected;  // see _buildDOM
     const wasPlaying = this._isPlaying;
     this._isPlaying = nowPlaying;
 

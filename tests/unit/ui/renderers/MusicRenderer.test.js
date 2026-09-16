@@ -17,7 +17,11 @@ describe('MusicRenderer', () => {
 
   test('renders disabled controls when disconnected', () => {
     renderer.render({ connected: false, state: 'stopped', volume: 70, playlists: [] });
-    expect(container.querySelector('.music--connected')).not.toBeNull();
+    // The root class must follow the connection flag — it used to be
+    // hard-coded 'music--connected' on every build, so a cold or crashed MPD
+    // looked identical to a healthy one (F2, venue 2026-09-15).
+    expect(container.querySelector('.music--connected')).toBeNull();
+    expect(container.querySelector('.music--offline')).not.toBeNull();
     container.querySelectorAll('button, select, input').forEach(el => {
       expect(el.disabled).toBe(true);
     });
@@ -295,6 +299,120 @@ describe('MusicRenderer', () => {
       expect(renderer._formatTime(undefined)).toBe('0:00');
       expect(renderer._formatTime(65)).toBe('1:05');
       expect(renderer._formatTime(125)).toBe('2:05');
+    });
+  });
+
+  // ── Offline state (F2) ───────────────────────────────────────────────────
+  // Venue 2026-09-15: MPD was SIGKILLed mid-show and the panel gave no sign of
+  // it — the progress bar kept animating a stale 'playing' track and the only
+  // clue was that the (browser-default-styled) buttons had stopped responding.
+  describe('offline state', () => {
+    afterEach(() => {
+      if (renderer._progressTimer) clearInterval(renderer._progressTimer);
+      jest.useRealTimers();
+    });
+
+    test('first render while disconnected shows the offline line', () => {
+      renderer.render({ connected: false, state: 'stopped', volume: 70, playlists: [] });
+      const line = container.querySelector('#music-offline');
+      expect(line).not.toBeNull();
+      expect(line.textContent).toContain('Music offline');
+      expect(line.style.display).not.toBe('none');
+    });
+
+    test('first render while connected hides the offline line', () => {
+      renderer.render({ connected: true, state: 'playing', volume: 70, playlists: [] });
+      expect(container.querySelector('.music--connected')).not.toBeNull();
+      expect(container.querySelector('.music--offline')).toBeNull();
+      expect(container.querySelector('#music-offline').style.display).toBe('none');
+    });
+
+    test('disconnected push stops the progress timer and swaps the class', () => {
+      jest.useFakeTimers();
+      const connected = {
+        connected: true, state: 'playing', volume: 70, playlists: [],
+        track: { title: 'A', artist: '', file: 'a.mp3', position: 10, duration: 100 },
+      };
+      renderer.render(connected);
+      expect(renderer._progressTimer).not.toBeNull();
+      const stopSpy = jest.spyOn(renderer, '_stopProgressTimer');
+
+      renderer.render(
+        { connected: false, state: 'stopped', volume: 70, playlists: [], track: null },
+        connected
+      );
+
+      expect(stopSpy).toHaveBeenCalled();
+      expect(renderer._progressTimer).toBeNull();
+      expect(container.querySelector('.music--offline')).not.toBeNull();
+      expect(container.querySelector('.music--connected')).toBeNull();
+      expect(container.querySelector('#music-offline').style.display).not.toBe('none');
+      container.querySelectorAll('button, select, input').forEach(el => {
+        expect(el.disabled).toBe(true);
+      });
+    });
+
+    test('a disconnected push carrying a stale state:playing does NOT run the timer', () => {
+      // Defence in depth for the exact venue symptom: even if a snapshot
+      // arrives with connected:false but the pre-crash state still reading
+      // 'playing', the bar must freeze rather than extrapolate.
+      jest.useFakeTimers();
+      const startTime = Date.now();
+      jest.setSystemTime(startTime);
+
+      renderer.render({
+        connected: false, state: 'playing', volume: 70, playlists: [],
+        track: { title: 'A', artist: '', file: 'a.mp3', position: 10, duration: 100 },
+      });
+
+      expect(renderer._progressTimer).toBeNull();
+      jest.setSystemTime(startTime + 5000);
+      jest.advanceTimersByTime(1000);
+      expect(container.querySelector('.music__time-current').textContent).toBe('0:10');
+    });
+
+    test('a disconnected push carrying a stale state:playing paints Play, not Pause', () => {
+      // The progress timer already ignores a stale 'playing'; the transport
+      // must too, or the panel shows a Pause button for a dead MPD.
+      renderer.render({
+        connected: false, state: 'playing', volume: 70, playlists: [],
+        track: { title: 'A', artist: '', file: 'a.mp3' },
+      });
+
+      expect(container.querySelector('[data-action="admin.musicPause"]')).toBeNull();
+      expect(container.querySelector('[data-action="admin.musicPlay"]')).not.toBeNull();
+      expect(container.querySelector('.music--playing')).toBeNull();
+    });
+
+    test('a disconnect with a stale state:playing repaints Play differentially', () => {
+      const connected = {
+        connected: true, state: 'playing', volume: 70, playlists: [],
+        track: { title: 'A', artist: '', file: 'a.mp3' },
+      };
+      renderer.render(connected);
+      expect(container.querySelector('[data-action="admin.musicPause"]')).not.toBeNull();
+
+      renderer.render({ ...connected, connected: false }, connected);
+
+      expect(container.querySelector('[data-action="admin.musicPause"]')).toBeNull();
+      expect(container.querySelector('[data-action="admin.musicPlay"]')).not.toBeNull();
+      expect(container.querySelector('.music--playing')).toBeNull();
+    });
+
+    test('reconnect push hides the offline line and restores the class', () => {
+      const disconnected = { connected: false, state: 'stopped', volume: 70, playlists: [], track: null };
+      renderer.render(disconnected);
+      renderer.render(
+        { connected: true, state: 'stopped', volume: 70, playlists: [], track: null },
+        disconnected
+      );
+
+      expect(container.querySelector('#music-offline').style.display).toBe('none');
+      expect(container.querySelector('.music--connected')).not.toBeNull();
+      expect(container.querySelector('.music--offline')).toBeNull();
+      container.querySelectorAll('button, select, input').forEach(el => {
+        expect(el.disabled).toBe(false);
+      });
     });
   });
 });
