@@ -375,7 +375,7 @@ When a Playwright test fails:
 
 3. **Check mode lock**:
    ```javascript
-   const mode = await page.evaluate(() => localStorage.getItem('aln_game_session_mode'));
+   const mode = await page.evaluate(() => localStorage.getItem('gameSessionMode'));
    console.log('Locked mode:', mode);
    ```
 

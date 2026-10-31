@@ -369,7 +369,10 @@ export class MonitoringDisplay {
 
 
   /**
-   * Manually refresh all displays from cached data
+   * Refresh the admin displays from the backend. Repaints the orchestrator
+   * status dot, then calls _requestInitialState(), which emits sync:request
+   * while the socket is connected. The backend replies with sync:full, and the
+   * panels repaint from that snapshot.
    */
   refreshAllDisplays() {
     Debug.log('[MonitoringDisplay] refreshAllDisplays called');
