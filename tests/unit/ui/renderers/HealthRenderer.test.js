@@ -6,7 +6,8 @@ describe('HealthRenderer', () => {
 
   const allHealthy = () => {
     const health = {};
-    ['vlc', 'music', 'lighting', 'bluetooth', 'audio', 'sound', 'gameclock', 'cueengine'].forEach(s => {
+    // T1a D13: `display` is the ninth service (pin P16)
+    ['vlc', 'music', 'lighting', 'bluetooth', 'audio', 'sound', 'gameclock', 'cueengine', 'display'].forEach(s => {
       health[s] = { status: 'healthy', message: 'OK' };
     });
     return health;
@@ -28,7 +29,7 @@ describe('HealthRenderer', () => {
       renderer.render({ serviceHealth: allHealthy() });
 
       expect(container.querySelector('.health-dashboard--ok')).toBeTruthy();
-      expect(container.textContent).toContain('8/8');
+      expect(container.textContent).toContain('9/9');
     });
 
     it('should render music service entry', () => {
@@ -79,12 +80,12 @@ describe('HealthRenderer', () => {
       expect(btns).toHaveLength(0);
     });
 
-    it('should render all 8 service names in expanded mode', () => {
+    it('should render all 9 service names in expanded mode', () => {
       // All unknown (no health data) → all degraded → expanded
       renderer.render({ serviceHealth: {} });
 
       const serviceNames = container.querySelectorAll('.health-service__name');
-      expect(serviceNames).toHaveLength(8);
+      expect(serviceNames).toHaveLength(9);
 
       const names = Array.from(serviceNames).map(el => el.textContent);
       expect(names).toContain('VLC Player');
@@ -95,6 +96,7 @@ describe('HealthRenderer', () => {
       expect(names).toContain('Sound Effects');
       expect(names).toContain('Game Clock');
       expect(names).toContain('Cue Engine');
+      expect(names).toContain('Display (kiosk)');
     });
 
     it('should treat unknown status as unhealthy', () => {
@@ -186,12 +188,12 @@ describe('HealthRenderer', () => {
       // Start with 2 services down, rest healthy
       const health1 = { ...allHealthy(), vlc: { status: 'down', message: 'Failed' }, music: { status: 'down', message: 'Failed' } };
       renderer.render({ serviceHealth: health1 });
-      expect(container.textContent).toContain('6/8');
+      expect(container.textContent).toContain('7/9');
 
       // One recovers, still expanded (1 down)
       const health2 = { ...allHealthy(), music: { status: 'down', message: 'Failed' } };
       renderer.render({ serviceHealth: health2 }, { serviceHealth: health1 });
-      expect(container.textContent).toContain('7/8');
+      expect(container.textContent).toContain('8/9');
     });
 
     it('should add Check Now button when service goes down', () => {
@@ -232,6 +234,161 @@ describe('HealthRenderer', () => {
       // Cache lookup must have found the card (no querySelector throw / no miss).
       expect(renderer._serviceEls['vlc"x']).toBeDefined();
       expect(renderer._serviceEls['vlc"x'].card).toBeTruthy();
+    });
+  });
+  // ══════════════════════════════════════════════════════════════════
+  // Block 2 T1a D13 — the third word on the dashboard (pins P5/P16).
+  //
+  // Uninstalled equipment must NEVER show red. A red that is always red
+  // trains GMs to ignore red, and then the night VLC really dies nobody
+  // looks. Dormant is grey, it names its door, and — when it is the
+  // PROFILE's door, i.e. a venue fact — it does not even force the
+  // dashboard open. The OPERATOR's door does: a human latched that, and
+  // somebody should see it.
+  // ══════════════════════════════════════════════════════════════════
+  describe('dormancy (T1a D13)', () => {
+    const dormant = (door) => ({ status: 'dormant', message: 'x', door });
+
+    it('renders a dormant service GREY, never as a down card', () => {
+      renderer.render({ serviceHealth: { ...allHealthy(), lighting: dormant('operator') } });
+
+      const card = container.querySelector('[data-service="lighting"]');
+      expect(card.classList.contains('health-service--dormant')).toBe(true);
+      expect(card.classList.contains('health-service--down')).toBe(false);
+      expect(card.classList.contains('health-service--ok')).toBe(false);
+    });
+
+    it('shows the door wording instead of the raw status word', () => {
+      renderer.render({ serviceHealth: { ...allHealthy(), lighting: dormant('profile'), vlc: { status: 'down', message: 'x' } } });
+      expect(container.querySelector('[data-service="lighting"]').textContent)
+        .toContain('Not installed tonight');
+
+      renderer.render({ serviceHealth: { ...allHealthy(), lighting: dormant('operator'), vlc: { status: 'down', message: 'x' } } },
+        { serviceHealth: {} });
+      expect(container.querySelector('[data-service="lighting"]').textContent)
+        .toContain('Out of service');
+    });
+
+    it('offers no Check Now button for a dormant service — there is nothing to probe', () => {
+      renderer.render({ serviceHealth: { ...allHealthy(), lighting: dormant('operator') } });
+      const card = container.querySelector('[data-service="lighting"]');
+      expect(card.querySelector('[data-action="admin.serviceCheck"]')).toBeNull();
+    });
+
+    describe('the collapse rule', () => {
+      it('stays COLLAPSED when everything is healthy or dormant by profile', () => {
+        renderer.render({ serviceHealth: { ...allHealthy(), lighting: dormant('profile') } });
+        expect(container.querySelector('.health-dashboard--ok')).toBeTruthy();
+        expect(container.querySelector('.health-dashboard--degraded')).toBeNull();
+      });
+
+      it('EXPANDS when a service is dormant by the OPERATOR door', () => {
+        renderer.render({ serviceHealth: { ...allHealthy(), lighting: dormant('operator') } });
+        expect(container.querySelector('.health-dashboard--degraded')).toBeTruthy();
+      });
+
+      it('EXPANDS when any service is down, dormancy notwithstanding', () => {
+        renderer.render({
+          serviceHealth: { ...allHealthy(), lighting: dormant('profile'), vlc: { status: 'down', message: 'x' } },
+        });
+        expect(container.querySelector('.health-dashboard--degraded')).toBeTruthy();
+      });
+    });
+
+    describe('the collapsed summary', () => {
+      it('counts the dormant services separately from the healthy ones', () => {
+        renderer.render({ serviceHealth: { ...allHealthy(), lighting: dormant('profile') } });
+        expect(container.textContent.replace(/\s+/g, ' ')).toContain(
+          'All installed systems operational (8/9, 1 not installed tonight)'
+        );
+      });
+
+      it('keeps the old wording when nothing is dormant', () => {
+        renderer.render({ serviceHealth: allHealthy() });
+        expect(container.textContent).toContain('All Systems Operational (9/9)');
+      });
+    });
+
+    describe('the summary is a toggle', () => {
+      it('expands to show the grey rows, and collapses again', () => {
+        const health = { ...allHealthy(), lighting: dormant('profile') };
+        renderer.render({ serviceHealth: health });
+        expect(container.querySelector('.health-dashboard--ok')).toBeTruthy();
+        expect(container.querySelector('[data-service="lighting"]')).toBeNull();
+
+        renderer.toggleDetail();
+        expect(container.querySelector('.health-dashboard--degraded')).toBeTruthy();
+        expect(container.querySelector('[data-service="lighting"]')
+          .classList.contains('health-service--dormant')).toBe(true);
+
+        renderer.toggleDetail();
+        expect(container.querySelector('.health-dashboard--ok')).toBeTruthy();
+      });
+
+      it('the collapsed summary carries the toggle data-action', () => {
+        renderer.render({ serviceHealth: allHealthy() });
+        const summary = container.querySelector('.health-dashboard__summary');
+        expect(summary.dataset.action).toBe('admin.toggleHealthDetail');
+      });
+
+      it('the collapsed summary is a real <button>, not a div playing one (PR #17 review)', () => {
+        // A `div role="button" tabindex="0"` gets Tab focus but never an
+        // Enter/Space click from the browser — domEventBindings only
+        // delegates 'click'. A real button gets that activation for free.
+        renderer.render({ serviceHealth: allHealthy() });
+        const summary = container.querySelector('.health-dashboard__summary');
+        expect(summary.tagName).toBe('BUTTON');
+        expect(summary.getAttribute('type')).toBe('button');
+        expect(summary.hasAttribute('role')).toBe(false);
+        expect(summary.hasAttribute('tabindex')).toBe(false);
+        expect(summary.dataset.action).toBe('admin.toggleHealthDetail');
+      });
+
+      it('the EXPANDED summary is also a real <button> (PR #17 review)', () => {
+        renderer.render({ serviceHealth: { ...allHealthy(), lighting: dormant('operator') } });
+        const summary = container.querySelector('.health-dashboard__summary');
+        expect(summary.tagName).toBe('BUTTON');
+        expect(summary.hasAttribute('role')).toBe(false);
+        expect(summary.hasAttribute('tabindex')).toBe(false);
+      });
+
+      it('a click on the <button> summary still toggles the dashboard open', () => {
+        renderer.render({ serviceHealth: { ...allHealthy(), lighting: dormant('profile') } });
+        const summary = container.querySelector('.health-dashboard__summary');
+        // Mirrors what domEventBindings' click delegation does for
+        // data-action elements, without pulling in the whole wiring module.
+        summary.addEventListener('click', () => renderer.toggleDetail());
+
+        summary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+        expect(container.querySelector('.health-dashboard--degraded')).toBeTruthy();
+      });
+
+      it('a later render keeps the forced-open state', () => {
+        const health = { ...allHealthy(), lighting: dormant('profile') };
+        renderer.render({ serviceHealth: health });
+        renderer.toggleDetail();
+
+        renderer.render({ serviceHealth: health }, { serviceHealth: health });
+
+        expect(container.querySelector('.health-dashboard--degraded')).toBeTruthy();
+      });
+    });
+
+    it('a hostile door value is never rendered — the helper answers "Dormant"', () => {
+      // `door` arrives from the backend health map. doorWording() maps
+      // anything outside the two doors to the literal 'Dormant', so a
+      // markup-bearing value never reaches the DOM at all.
+      renderer.render({
+        serviceHealth: {
+          ...allHealthy(),
+          lighting: { status: 'dormant', message: 'x', door: '<img src=x onerror=alert(1)>' },
+          vlc: { status: 'down', message: 'x' },
+        },
+      });
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.querySelector('[data-service="lighting"]').textContent)
+        .toContain('Dormant');
     });
   });
 });

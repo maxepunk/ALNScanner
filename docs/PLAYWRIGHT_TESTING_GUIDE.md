@@ -318,9 +318,10 @@ uiManager.showScreen('teamEntry');  // Maps to #teamEntryScreen
 // ❌ WRONG
 const transactions = await page.evaluate(() => window.DataManager.transactions);
 
-// ✅ CORRECT
+// ✅ CORRECT (standalone mode only: the saved session holds the transactions.
+// Networked mode keeps them in memory, so read the DOM there, for example #historyBadge)
 const transactions = await page.evaluate(() => {
-  return JSON.parse(localStorage.getItem('transactions') || '[]');
+  return JSON.parse(localStorage.getItem('standaloneSession') || '{}').transactions || [];
 });
 ```
 
@@ -372,16 +373,16 @@ When a Playwright test fails:
    console.log('Button action:', action);
    ```
 
-3. **Check mode lock**:
+3. **Check the saved mode** (the lock itself lives only in memory, in `SessionModeManager`):
    ```javascript
-   const mode = await page.evaluate(() => localStorage.getItem('aln_game_session_mode'));
-   console.log('Locked mode:', mode);
+   const mode = await page.evaluate(() => localStorage.getItem('gameSessionMode'));
+   console.log('Saved mode:', mode);
    ```
 
-4. **Inspect localStorage**:
+4. **Inspect localStorage** (standalone mode saves its session, with the transactions, under `standaloneSession`):
    ```javascript
-   const transactions = await page.evaluate(() => localStorage.getItem('transactions'));
-   console.log('Stored transactions:', transactions);
+   const session = await page.evaluate(() => localStorage.getItem('standaloneSession'));
+   console.log('Stored standalone session:', session);
    ```
 
 5. **Verify view visibility** (networked mode):
@@ -392,8 +393,8 @@ When a Playwright test fails:
 
 ## Testing Resources
 
-- **Page Object**: `tests/e2e/page-objects/GMScannerPage.js` (316 lines)
-- **L2 E2E Tests**: `tests/e2e/specs/02-standalone-mode.spec.js` (299 lines)
+- **Page Object**: `tests/e2e/page-objects/GMScannerPage.js`
+- **L2 E2E Tests**: `tests/e2e/specs/02-standalone-mode.spec.js`
 - **L3 Full Stack**: `../../backend/tests/e2e/flows/07b-gm-scanner-networked-blackmarket.test.js`
 - **Test Helpers**: `../../backend/tests/e2e/fixtures/` (token data, session setup)
 

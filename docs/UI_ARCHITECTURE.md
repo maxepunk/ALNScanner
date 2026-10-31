@@ -219,9 +219,11 @@ Phase 1C:  Determine initial screen (restoration logic)
              │
              ├─── No saved mode → gameModeScreen
              │
-             ├─── Saved + connection lost → clear mode, gameModeScreen
+             ├─── Saved standalone → reload today's session, teamEntryScreen
              │
-             └─── Saved + connection valid → teamEntryScreen
+             ├─── Saved networked + validation fails → clear mode, connection wizard
+             │
+             └─── Saved networked + validation passes → connect, teamEntryScreen
 ```
 
 **Key File:** `src/app/initializationSteps.js`

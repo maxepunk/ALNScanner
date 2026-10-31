@@ -13,7 +13,7 @@
  * Phase 1E: Create SessionModeManager
  * Phase 1F: Initialize view controller
  * Phase 1G: Load settings
- * Phase 1H: Load DataManager
+ * Phase 1H: Refresh the history badge (no data loads here)
  * Phase 1I: Detect NFC support
  * Phase 1J: Register service worker
  */
@@ -72,7 +72,10 @@ export function loadSettings(settings) {
 }
 
 /**
- * Initialize DataManager UI state (data loading deferred to sync:full / loadLocalSession)
+ * Phase 1H: refresh the history badge. No data loads here, because no storage
+ * strategy exists yet. Standalone mode loads its saved session later, in
+ * LocalStorage.initialize() (via UnifiedDataManager.initializeStandaloneMode()).
+ * Networked mode receives its data in sync:full.
  */
 export function loadDataManager(dataManager, uiManager) {
   uiManager.updateHistoryBadge();

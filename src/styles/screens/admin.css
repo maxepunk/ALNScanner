@@ -1083,3 +1083,49 @@ body.standalone-mode [data-requires="networked"] {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
+
+/* ============================================
+   SERVICE HEALTH — the third word (Block 2 T1a D13)
+
+   Dormant equipment is GREY and muted, never red. Red is reserved for
+   things that are broken, and that reservation is what makes red mean
+   something: a dashboard that is always red is a dashboard nobody reads.
+   The dormant row is legible but visibly out of play — the same posture as
+   a disabled control, because that is what it is.
+   ============================================ */
+.health-service--dormant {
+  border-left: 4px solid var(--color-text-muted);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+  opacity: 0.75;
+}
+
+.health-service--dormant .health-service__status {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* The collapsed summary is clickable: it opens to show the grey rows even
+   when nothing is wrong (with the venue's rig uninstalled, nothing ever
+   forces it open, and a GM still wants to look). */
+.health-dashboard__summary[data-action] {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* The summary is a real <button> now (PR #17 review — a `div role="button"`
+   never gets Enter/Space activation from the browser; domEventBindings
+   only delegates 'click'). This undoes the browser's default button
+   chrome so the row still reads and lays out exactly like the plain text
+   row it replaces. */
+.health-dashboard__summary {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}

@@ -62,7 +62,15 @@ export function bindDOMEvents(app, dataManager, settings, debug, uiManager, conn
 
     switch (method) {
       case 'startGame':
-        safeAdminAction(adminController.getModule('sessionManager').startGame(), 'startGame');
+        // T1a D13 (R12): routed through the app layer, which owns the typed
+        // NO-GO dialog. The SessionManager call itself still happens there.
+        safeAdminAction(app.adminStartGame(), 'startGame');
+        break;
+      case 'toggleHealthDetail':
+        // T1a D13: open the collapsed health summary to show the grey
+        // (dormant) rows. With the venue's rig uninstalled the dashboard
+        // stays collapsed all night; this is how a GM looks anyway.
+        adminController.getModule('monitoringDisplay')?.toggleHealthDetail?.();
         break;
       case 'fireCue': {
         const cueId = actionElement.dataset.cueId;
