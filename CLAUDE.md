@@ -655,7 +655,7 @@ DataManager emits events (`transaction:added`, `transaction:deleted`, `team-scor
 - `Technical` - 5x multiplier
 - Any other value → treated as `UNKNOWN` (0x multiplier)
 
-### Fuzzy Matching (tokenManager.js:207-233)
+### Fuzzy Matching (`TokenManager.findToken()` in `tokenManager.js`)
 
 Handles various RFID formats:
 - Case insensitive (`ABC123` matches `abc123`)

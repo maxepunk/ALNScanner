@@ -111,7 +111,9 @@ class App {
     // Load settings (Phase 1G)
     this.initializationSteps.loadSettings(this.settings);
 
-    // Load transaction history (Phase 1H)
+    // Refresh the history badge (Phase 1H). loadDataManager only calls
+    // uiManager.updateHistoryBadge(); no data loads here. Transactions load
+    // later, when the chosen mode starts its storage strategy.
     this.initializationSteps.loadDataManager(this.dataManager, this.uiManager);
 
     // Check NFC support (Phase 1I)

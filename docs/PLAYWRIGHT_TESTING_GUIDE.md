@@ -318,9 +318,10 @@ uiManager.showScreen('teamEntry');  // Maps to #teamEntryScreen
 // ❌ WRONG
 const transactions = await page.evaluate(() => window.DataManager.transactions);
 
-// ✅ CORRECT
+// ✅ CORRECT (standalone mode only: the saved session holds the transactions.
+// Networked mode keeps them in memory, so read the DOM there, for example #historyBadge)
 const transactions = await page.evaluate(() => {
-  return JSON.parse(localStorage.getItem('transactions') || '[]');
+  return JSON.parse(localStorage.getItem('standaloneSession') || '{}').transactions || [];
 });
 ```
 
@@ -378,10 +379,10 @@ When a Playwright test fails:
    console.log('Locked mode:', mode);
    ```
 
-4. **Inspect localStorage**:
+4. **Inspect localStorage** (standalone mode saves its session, with the transactions, under `standaloneSession`):
    ```javascript
-   const transactions = await page.evaluate(() => localStorage.getItem('transactions'));
-   console.log('Stored transactions:', transactions);
+   const session = await page.evaluate(() => localStorage.getItem('standaloneSession'));
+   console.log('Stored standalone session:', session);
    ```
 
 5. **Verify view visibility** (networked mode):

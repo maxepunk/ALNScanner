@@ -72,7 +72,10 @@ export function loadSettings(settings) {
 }
 
 /**
- * Initialize DataManager UI state (data loading deferred to sync:full / loadLocalSession)
+ * Phase 1H: refresh the history badge. No data loads here, because no storage
+ * strategy exists yet. Standalone mode loads its saved session later, in
+ * LocalStorage.initialize() (via UnifiedDataManager.initializeStandaloneMode()).
+ * Networked mode receives its data in sync:full.
  */
 export function loadDataManager(dataManager, uiManager) {
   uiManager.updateHistoryBadge();
