@@ -952,11 +952,13 @@ localStorage.getItem('standaloneSession') returns null after reload
   - localStorage quota exceeded or privacy mode
   - The GM picked standalone mode on the mode screen. That fresh selection calls `App._initializeStandaloneMode({ preserveSession: false })`, which removes the `standaloneSession` key before it loads anything. A reload that restores the saved mode passes `preserveSession: true` and does not remove the key.
   - The saved session started on an earlier day. `LocalStorage._loadSession()` loads a saved session only if its `startTime` is today, so a game that started before midnight is ignored after midnight. The key is not null in this case: the old data stays until the next save overwrites it.
+  - The saved session does not parse as JSON. `LocalStorage._loadSession()` catches the parse error, logs "Failed to load session" to the debug panel, and starts empty. The key is not null in this case either.
 - **Fix**:
   1. Check quota: `navigator.storage.estimate()`
   2. Clear old data: `localStorage.clear()` (loses all data)
   3. Disable privacy/incognito mode (blocks localStorage)
-  4. The last two causes are how the code works today. A reload keeps the standalone session only when it restores the saved mode and the session started today.
+  4. The second and third causes are how the code works today. A reload keeps the standalone session only when it restores the saved mode and the session started today.
+  5. For the last cause, open the debug view and look for "Failed to load session".
 
 **Problem: Group completion bonuses not calculating**
 ```

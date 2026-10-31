@@ -393,8 +393,8 @@ When a Playwright test fails:
 
 ## Testing Resources
 
-- **Page Object**: `tests/e2e/page-objects/GMScannerPage.js` (316 lines)
-- **L2 E2E Tests**: `tests/e2e/specs/02-standalone-mode.spec.js` (299 lines)
+- **Page Object**: `tests/e2e/page-objects/GMScannerPage.js`
+- **L2 E2E Tests**: `tests/e2e/specs/02-standalone-mode.spec.js`
 - **L3 Full Stack**: `../../backend/tests/e2e/flows/07b-gm-scanner-networked-blackmarket.test.js`
 - **Test Helpers**: `../../backend/tests/e2e/fixtures/` (token data, session setup)
 
