@@ -132,8 +132,10 @@ UnifiedDataManager (Facade)
 - `src/core/storage/NetworkedStorage.js` - Networked mode implementation
 
 **Strategy Selection:**
-- Mode determined at startup by SessionModeManager
-- `unifiedDataManager.setStrategy(strategy)` called during initialization
+- `SessionModeManager` only holds, locks, saves, and restores the mode (localStorage key `gameSessionMode`). It never picks a strategy.
+- `App` picks the strategy when it starts the chosen mode. `_initializeStandaloneMode()` calls `unifiedDataManager.initializeStandaloneMode()`, which creates `LocalStorage`. `_initializeNetworkedMode()` calls `initializeNetworkedMode()`, which creates `NetworkedStorage`.
+- Two things start a mode: the GM picks one (`App.selectGameMode()`), or startup restores a saved one (Phase 1C, `applyInitialScreenDecision()`).
+- There is no `setStrategy()` method. Until an initializer has run, the facade has no active strategy, and calls such as `addTransaction()` throw.
 - Once set, strategy handles all data operations for the session
 
 ### StateStore (Service Domain State)
@@ -143,18 +145,21 @@ UnifiedDataManager (Facade)
 **Architectural boundary:** StateStore handles service domains with snapshot/shallow-merge semantics. Session/transaction data stays in UnifiedDataManager + storage strategies (list/accumulator semantics — different data pattern).
 
 **Key files:**
-- `src/core/stateStore.js` — StateStore class (update, get, getAll, on, off)
+- `src/core/stateStore.js`: StateStore class (update, replace, get, getAll, on, off)
 - `src/network/networkedSession.js` — Routes `service:state` and `sync:full` to store
 - `src/main.js` — Creates StateStore instance, passes to App
 
 **API:**
 ```javascript
 store.update('music', { connected: true, state: 'playing' }); // shallow merge
+store.replace('music', { connected: true, state: 'playing' }); // wholesale replace: drops keys missing from the new state
 store.get('music');        // returns defensive copy or null
 store.getAll();              // returns snapshot of all domains
 store.on('music', (state, prev) => { ... });  // domain-filtered subscription
 store.off('music', callback);
 ```
+
+`sync:full` restores each domain with `replace()`. `service:state` pushes use `update()`. Both calls live in `sharedInfraRouter` (`src/network/messageRouters.js`).
 
 ## Testing Architecture
 
@@ -318,7 +323,11 @@ Example: 5-star Technical token = $150,000 × 5 = $750,000
 **Scope (per mode):**
 - The RULE is first-come-first-served across ALL teams, but the CLIENT only
   knows what it has seen: `DataManager.scannedTokens` tracks THIS device's
-  scans (persisted in localStorage)
+  scans. Networked mode saves the Set in localStorage under
+  `networkedScannedTokens:<sessionId>` (`persistScannedTokens()`).
+  Standalone mode does not save it: `LocalStorage` rebuilds it from the
+  saved session's transactions (`standaloneSession` key,
+  `_repopulateScannedTokens()`), and only for a session that started today
 - Standalone mode: this device IS the authority, so the local Set enforces
   the full cross-team rule
 - Networked mode: the BACKEND is authoritative (per-device + FCFS in
@@ -661,17 +670,20 @@ Handles various RFID formats:
 3. **Phase 1E**: Create SessionModeManager (CRITICAL: before viewController)
 4. **Phase 1F**: Initialize view controller
 5. **Phase 1G**: Load settings
-6. **Phase 1H**: Load DataManager (transactions + scannedTokens)
+6. **Phase 1H**: Refresh the history badge (loads no data, see the note below the list)
 7. **Phase 1I**: Detect NFC support
 8. **Phase 1A**: Load token database (CRITICAL: fails if missing)
 9. **Phase 1B**: Apply URL mode override (?mode=blackmarket)
 10. **Phase 1J**: Register service worker
 11. **Phase 1C**: Determine initial screen (connection restoration logic)
 
-**Connection Restoration Logic (initializationSteps.js:187-224):**
-- No saved mode → Show game mode selection
-- Saved mode + connection lost → Clear mode, show wizard
-- Saved mode + connection ready → Proceed to team entry
+Phase 1H loads no data. No storage strategy exists yet, so the history badge stays hidden. Transactions and `scannedTokens` load when `App` starts the chosen mode (see Strategy Selection). Standalone mode reads the `standaloneSession` key in `LocalStorage.initialize()`. Networked mode receives both in `sync:full`.
+
+**Connection Restoration Logic (`validateAndDetermineInitialScreen()` decides, `applyInitialScreenDecision()` acts; both are in `initializationSteps.js`):**
+- No saved mode: show the game mode screen.
+- Saved standalone mode: no validation runs. `App._initializeStandaloneMode({ preserveSession: true })` reloads the standalone session if it started today, then shows team entry.
+- Saved networked mode: `StateValidationService.validateAll()` checks for a valid token, a reachable orchestrator (`/health`), and an existing session (`/api/session`). If all three pass, the app locks networked mode, connects, and shows team entry.
+- Saved networked mode, validation fails or the connect throws: the app clears the saved mode and shows the connection wizard.
 
 ## Admin Panel (Networked Mode Only)
 
@@ -739,7 +751,7 @@ Three controllers manage venue environment via `gm:command` WebSocket commands. 
 
 **MonitoringDisplay** handles all environment and show control status display updates. Uses `data-action` attributes wired in `domEventBindings.js`. Subscribes to StateStore domains via `_wireStoreSubscriptions()` and delegates to specialized differential renderers: `HealthRenderer` (service health), `HeldItemsRenderer` (blocked cues/videos), `MusicRenderer` (MPD playback + playlist picker + ducking), `CueRenderer` (active cues + quick fire), `VideoRenderer` (queue + now playing), `EnvironmentRenderer` (BT/audio/lighting). Also handles discrete game events (`cue:fired`, `cue:completed`, `display:mode`) via `_handleMessage()`. The audio-domain subscription forwards `ducking.music` sources from `audioRoutingService.getState()` to `MusicRenderer.renderDucking()`.
 
-**GOTCHA**: `MonitoringDisplay.refreshAllDisplays()` re-renders the template, destroying dynamic DOM state (active cue elements, now-playing). It calls `_requestInitialState()` afterward to restore state from the backend.
+**GOTCHA**: `MonitoringDisplay.refreshAllDisplays()` renders no template. It repaints the orchestrator status dot (`updateSystemDisplay()`), then calls `_requestInitialState()`, which emits `sync:request` when the socket is connected. The backend replies with `sync:full`, and the panels repaint from that snapshot. While the socket is connected, each call costs one full-state round trip.
 
 **GOTCHA**: CSS variables use `--color-text-primary`, `--color-text-secondary` (NOT `--text-primary`/`--text-secondary`). All design tokens in `src/styles/variables.css` use the `--color-` prefix.
 
@@ -798,8 +810,8 @@ document.querySelector('.screen.active')?.id
 
 **LocalStorage Debugging:**
 ```javascript
-// View stored transactions
-JSON.parse(localStorage.getItem('transactions') || '[]')
+// View stored transactions (standalone mode only; networked mode holds them in memory and gets them from sync:full)
+JSON.parse(localStorage.getItem('standaloneSession') || '{}').transactions || []
 
 // Check game mode
 localStorage.getItem('gameSessionMode')
@@ -932,9 +944,9 @@ SecurityError: Web NFC is only available in secure contexts
   3. Click "Advanced" → "Proceed to localhost (unsafe)"
   4. Certificate trusted, NFC now works
 
-**Problem: Transactions not persisting after reload**
+**Problem: Standalone transactions not persisting after reload**
 ```
-localStorage.getItem('transactions') returns null after reload
+localStorage.getItem('standaloneSession') returns null after reload
 ```
 - **Cause**: localStorage quota exceeded or privacy mode
 - **Fix**:
@@ -948,10 +960,10 @@ Expected bonus: $120,000, Received: $0
 ```
 - **Cause**: Field name inconsistency (tx.tokenGroup vs tx.group)
 - **Fix**: Already fixed in LocalStorage.js `_checkGroupCompletion` (uses `tx.group` consistently)
-- **Verification**: Check transaction object structure in localStorage:
+- **Verification**: Check transaction object structure in localStorage (standalone mode):
 ```javascript
-JSON.parse(localStorage.getItem('transactions'))[0]
-// Should have 'group' field, not 'tokenGroup'
+JSON.parse(localStorage.getItem('standaloneSession')).transactions[0]
+// Should have a 'group' field (_checkGroupCompletion reads tx.group)
 ```
 
 ## Common Issues
