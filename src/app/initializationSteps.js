@@ -13,7 +13,7 @@
  * Phase 1E: Create SessionModeManager
  * Phase 1F: Initialize view controller
  * Phase 1G: Load settings
- * Phase 1H: Load DataManager
+ * Phase 1H: Refresh the history badge (no data loads here)
  * Phase 1I: Detect NFC support
  * Phase 1J: Register service worker
  */

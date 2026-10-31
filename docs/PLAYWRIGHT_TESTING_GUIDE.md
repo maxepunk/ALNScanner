@@ -373,10 +373,10 @@ When a Playwright test fails:
    console.log('Button action:', action);
    ```
 
-3. **Check mode lock**:
+3. **Check the saved mode** (the lock itself lives only in memory, in `SessionModeManager`):
    ```javascript
    const mode = await page.evaluate(() => localStorage.getItem('gameSessionMode'));
-   console.log('Locked mode:', mode);
+   console.log('Saved mode:', mode);
    ```
 
 4. **Inspect localStorage** (standalone mode saves its session, with the transactions, under `standaloneSession`):
